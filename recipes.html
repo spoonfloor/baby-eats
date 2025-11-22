@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
+    <title>Favorite Eats - Recipes</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+
+    <!-- ✅ Local SQL.js (offline) -->
+    <script src="js/sql-wasm.js"></script>
+  </head>
+
+  <body class="recipes-page">
+    <div class="app-bar-wrapper no-select">
+      <!-- Centered search bar layer -->
+      <div class="app-bar-search-layer">
+        <div class="search-bar">
+          <input type="text" placeholder="Search" id="recipeSearch" />
+          <span class="clear-search">&times;</span>
+        </div>
+      </div>
+
+      <!-- Left/Right elements layer -->
+      <div class="app-bar-elements-layer">
+        <div>
+          <span class="title title-recipes">Recipes</span>
+        </div>
+        <div class="actions">
+          <button class="button" id="recipesActionBtn">Action</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="recipe-list-wrapper">
+      <ul id="recipeList"></ul>
+    </div>
+
+    <!-- JS Modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/ingredientRenderer.js"></script>
+    <script src="js/recipeEditor.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

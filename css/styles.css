@@ -1,0 +1,366 @@
+:root {
+  --main-font: 'Red Hat Mono', monospace;
+  --body-font-size: 15.5px;
+  --body-font-weight: 400;
+  --headline-font-size: 16px;
+  --theme-primary: #6d49ff;
+  --theme-secondary: #7f5cff;
+  --theme-light: hsl(252, 100%, 97%);
+  --font-color-near-black: #191919;
+  --app-bar-height: 64px;
+  --header-font-size: 16px;
+  --section-card-offset: 24px;
+
+  --step-line-height: 1.8;
+  --step-vertical-gap: 0px;
+
+  --step-padding-top: 0px;
+  --step-padding-bottom: 12px;
+}
+
+/* --- Body / Layout Defaults --- */
+.centered-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 22px;
+  background: var(--theme-light);
+  color: white;
+}
+
+/* --- Buttons --- */
+.button {
+  font-family: inherit;
+  /* font-size: inherit; */
+  font-weight: inherit;
+  line-height: inherit;
+  padding: 0 1.5rem;
+  background: var(--theme-secondary);
+  color: white;
+  border: none;
+  border-radius: 9999px;
+  outline: none;
+  height: 44px;
+  cursor: pointer;
+}
+
+/* Disabled state overrides */
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  /* Remove pointer-events so cursor still changes on hover */
+  pointer-events: none;
+}
+
+#loadDbBtn {
+  background: var(--theme-primary);
+}
+
+/* --- File Input --- */
+.file-input-hidden {
+  display: none;
+}
+
+/* --- Section headings / spacing --- */
+.section-heading {
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* .section { */
+/* margin-bottom: 2rem; */
+/* } */
+
+/* --- Ingredient lines --- */
+.ingredient-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+/* --- Recipe list item hover --- */
+#recipeList {
+  width: 100%;
+  max-width: calc(600px - 22px); /* adjust to your preference */
+  margin: 22px auto; /* center horizontally */
+  padding: 0;
+}
+
+#recipeList li {
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+
+#recipeList li:hover {
+  /* background-color: var(--theme-light); */
+  background-color: hsl(270, 0%, 96%);
+}
+
+/* --- App Bar Wrapper --- */
+.app-bar-wrapper {
+  position: fixed;
+  background: var(--theme-primary);
+  width: 100vw;
+  height: var(--app-bar-height);
+  top: 0;
+  left: 0;
+  padding: 0.75rem 1.5rem;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--headline-font-size);
+}
+
+/* --- Left/Right Elements Layer --- */
+.app-bar-elements-layer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+/* Title */
+.title {
+  color: white;
+}
+
+/* Actions */
+.app-bar .actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+/* --- Centered Search Bar Layer (overlapping) --- */
+.app-bar-search-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* allow clicks through empty space */
+}
+
+.app-bar-search-layer .search-bar {
+  pointer-events: all; /* allow interaction with input */
+  width: 100%;
+  max-width: 600px; /* match recipe list */
+}
+
+.app-bar-search-layer .search-bar input {
+  width: 100%;
+  height: 44px;
+  padding: 0 1.5rem;
+  font-weight: inherit;
+  line-height: inherit;
+  border: none;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  background-color: var(--theme-secondary);
+  color: #fff;
+  text-align: left;
+}
+
+/* White placeholder text */
+.app-bar-search-layer .search-bar input::placeholder {
+  color: #fff;
+  opacity: 1;
+}
+
+.title-and-back {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.back-arrow {
+  cursor: pointer;
+  color: white;
+}
+
+.search-bar {
+  position: relative;
+  display: inline-block;
+}
+
+.search-bar input {
+  padding-right: 20px; /* make space for the × */
+}
+
+.clear-search {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 24px;
+  color: hsl(252, 63%, 78%);
+  user-select: none;
+  display: none; /* hidden by default */
+}
+
+.clear-search:hover {
+  color: white;
+}
+
+.recipe-list-wrapper {
+  position: absolute;
+  top: var(--app-bar-height);
+  left: 0;
+  width: 100vw;
+}
+
+.recipe-wrapper {
+  position: absolute;
+  top: var(--app-bar-height);
+  left: 0;
+  width: 100vw;
+}
+
+#recipeView {
+  width: 100%;
+  max-width: 680px;
+  margin: 40px auto;
+}
+
+/* Proper hanging indent for steps */
+.instruction-line {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: var(--step-vertical-gap);
+  padding-top: var(--step-padding-top);
+  padding-bottom: var(--step-padding-bottom);
+}
+
+.instruction-line .step-num {
+  flex: 0 0 2em; /* reserve fixed width for numbers */
+}
+
+.instruction-line .step-text {
+  flex: 1;
+  line-height: var(--step-line-height);
+}
+
+/* Quill v1.1 — full-width inline step editor */
+.step-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.section-header {
+  color: black;
+  font-size: var(--header-font-size);
+  margin-top: 30px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.subsection-header {
+  color: var(--theme-primary);
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.nav-text {
+  font-size: var(--headline-font-size);
+}
+
+h1.nav-text {
+  color: black;
+}
+
+.servings-line {
+  margin-bottom: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Highlight selected step for keyboard reordering */
+.instruction-line.selected {
+  background-color: var(--theme-light);
+  border-radius: 8px;
+  position: relative;
+  left: -10px;
+  padding-left: 10px;
+  width: calc(100% + 20px);
+}
+
+/* ✨ NEW: Freeze layout of an instruction row while editing */
+.instruction-line.editing {
+  position: relative;
+  overflow: visible; /* allow textarea to grow downward */
+}
+
+.app-bar-elements-layer .title-recipes {
+  position: relative;
+  top: -1px; /* try -1px or -2px */
+}
+
+.app-bar-elements-layer .title-editor {
+  position: relative;
+  top: 0px; /* try -1px or -2px */
+}
+
+.back-arrow {
+  width: 24px;
+  height: 24px;
+  /* filter: brightness(0) invert(1); */
+  user-select: none;
+}
+
+.you-will-need-card {
+  padding-top: var(--section-card-offset);
+  padding-bottom: var(--section-card-offset);
+  padding-left: var(--section-card-offset);
+  padding-right: var(--section-card-offset);
+  border-radius: 12px;
+  margin: 24px 0;
+  background: var(--theme-light);
+  position: relative;
+  left: calc(-1 * var(--section-card-offset));
+  width: calc(100% + (2 * var(--section-card-offset)));
+}
+
+.you-will-need-card .section-header {
+  margin-top: 4px;
+}
+
+.ingredient-line a {
+  color: var(--theme-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ingredient-line a:hover {
+  text-decoration: underline;
+  color: var(--theme-secondary);
+}
+
+/* 🔍 Debug: highlight active editing line text in purple */
+.instruction-line.debug-editing {
+  color: var(--theme-primary); /* #6d49ff */
+}
+
+/* Selection highlight inside step textarea */
+.step-textarea::selection {
+  background: var(--theme-light); /* hsl(252, 100%, 97%) */
+  color: inherit; /* keep text color unchanged */
+}
+
+.step-textarea::-moz-selection {
+  background: var(--theme-light);
+  color: inherit;
+}
+
+.instruction-line .step-text[contenteditable='true'] {
+  outline: none;
+}

@@ -1,0 +1,7 @@
+dist/
+design/
+node_modules/
+.DS_Store
+*.dmg
+*.zip
+*.psd
