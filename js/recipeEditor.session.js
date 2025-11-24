@@ -155,10 +155,13 @@ if (saveBtn) {
         );
 
         // 🧠 After a successful save, the "truth" is now the DB-backed recipe.
-        // Use this as the new baseline so Cancel reverts to the post-save state.
+        // Use this as the new baseline so Cancel + future loads see post-save data,
+        // but keep the current StepNode/heading view intact in this session.
         window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
         window.recipeData = JSON.parse(JSON.stringify(refreshed));
-        renderRecipe(window.recipeData);
+        // NOTE: Intentionally do NOT call renderRecipe() here.
+        // Re-rendering would rebuild window.stepNodes from DB-only steps
+        // and drop heading promotions immediately after save.
       }
 
       isDirty = false;

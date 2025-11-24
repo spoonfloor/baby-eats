@@ -34,25 +34,23 @@ function setupStepReordering(container, recipeId) {
         '.instruction-line.numbered'
       ) || [];
 
-    const counters = new Map();
+    let displayIndex = 0;
 
     all.forEach((line) => {
       const num = line.querySelector('.step-num');
       if (!num) return;
 
-      // Headings are unnumbered and do not consume a counter slot.
       const type = line.dataset.stepType || 'step';
+
       if (type === 'heading') {
+        // Headings: unnumbered and start a new numbering group.
         num.textContent = '';
+        displayIndex = 0;
         return;
       }
 
-      const sectionId = line.dataset.sectionId || '';
-      const current = counters.get(sectionId) || 0;
-      const next = current + 1;
-      counters.set(sectionId, next);
-
-      num.textContent = `${next}.`;
+      displayIndex += 1;
+      num.textContent = `${displayIndex}.`;
     });
   }
 
@@ -355,7 +353,8 @@ function attachStepInlineEditor(textEl) {
       stepReorderCtx.activeStep = lineEl;
     }
 
-    lineEl.classList.add('debug-editing');
+    // Visual editing state
+    lineEl.classList.add('editing');
 
     const original = textEl.textContent || '';
 
@@ -430,7 +429,7 @@ function attachStepInlineEditor(textEl) {
       window._activeStepInput = null;
       window._hasPendingEdit = false;
 
-      lineEl.classList.remove('debug-editing');
+      lineEl.classList.remove('editing');
 
       textEl.removeEventListener('keydown', onKeyDown);
       textEl.removeEventListener('blur', onBlur);
@@ -935,7 +934,7 @@ function attachStepInlineEditor(textEl) {
         window._activeStepInput = null;
         window._hasPendingEdit = false;
 
-        lineEl.classList.remove('debug-editing');
+        lineEl.classList.remove('editing');
 
         textEl.removeEventListener('keydown', onKeyDown);
         textEl.removeEventListener('blur', onBlur);
@@ -996,7 +995,7 @@ function attachStepInlineEditor(textEl) {
       window._activeStepInput = null;
       window._hasPendingEdit = false;
 
-      lineEl.classList.remove('debug-editing');
+      lineEl.classList.remove('editing');
 
       textEl.removeEventListener('keydown', onKeyDown);
       textEl.removeEventListener('blur', onBlur);
@@ -1094,16 +1093,22 @@ function attachStepInlineEditor(textEl) {
             const allLines =
               stepsContainer.querySelectorAll('.instruction-line.numbered') ||
               [];
-            let counter = 0;
+
+            let displayIndex = 0;
+
             allLines.forEach((ln) => {
               const n = ln.querySelector('.step-num');
               if (!n) return;
-              if ((ln.dataset.stepType || 'step') === 'heading') {
+
+              const type = ln.dataset.stepType || 'step';
+              if (type === 'heading') {
+                // Headings: unnumbered and start a new numbering group.
                 n.textContent = '';
+                displayIndex = 0;
                 return;
               }
-              counter += 1;
-              n.textContent = `${counter}.`;
+              displayIndex += 1;
+              n.textContent = `${displayIndex}.`;
             });
           }
         }

@@ -16,6 +16,10 @@ Key rules of the future model:
 - Exactly two levels: headings at level 0, steps at level 1.
 - Headings are plain list items, not DB sections.
 - Steps are numbered automatically from order; numbering is never stored.
+- Step numbers are grouped by heading:
+  • After each heading, steps restart numbering at 1 (1, 2, 3, …).
+  • If the document begins with steps (no heading), that leading run of steps
+  forms an implicit first numbering group.
 - TAB converts a heading to a step.
 - SHIFT+TAB converts a step to a heading.
 - No deeper indentation (TAB on step and SHIFT+TAB on heading are no-ops).
@@ -49,7 +53,9 @@ using the old database layout underneath.
    • TAB on heading → becomes step.
    • SHIFT+TAB on step → becomes heading.
    • No deeper nesting.
-   • Step numbers derived freshly each render.
+   • Step numbers are derived freshly each render, grouped by heading:
+   numbers restart after each heading; any leading run of steps (before the
+   first heading) forms its own numbering group.
 
 5. Reordering
    • Reorder modifies order values in StepNode.
@@ -61,7 +67,8 @@ using the old database layout underneath.
    • section_id is always written as NULL.
    • recipe_sections and section_contexts untouched.
 
-Phase 1 is complete when the editor behaves consistently under the two-level model despite the old DB still being present.
+Phase 1 is complete when the editor behaves consistently under the two-level
+grouped-numbering model despite the old DB still being present.
 
 ==============================================
 PHASE 2 — DATABASE CLEANUP (AFTER EDITOR IS STABLE)
@@ -72,7 +79,8 @@ Goal: simplify the database so it reflects the StepNode model exactly.
 1. Remove legacy section structures
    • Drop recipe_sections.
    • Drop section_contexts.
-   • Remove section_id from recipe_steps and recipe_ingredient_map if ingredients no longer need sections.
+   • Remove section_id from recipe_steps and recipe_ingredient_map if
+   ingredients no longer need sections.
 
 2. Add type column to recipe_steps
    • New column: type = heading | step.
@@ -82,7 +90,7 @@ Goal: simplify the database so it reflects the StepNode model exactly.
 3. Normalize ordering field
    • Either rename step_number → order
    OR keep step_number but reinterpret purely as ordering.
-   • Derived display numbers always computed in UI.
+   • Derived display numbers (grouped by heading) are always computed in UI.
 
 4. Simplify load/save adapters
    • With type and order present, DB ↔ StepNode is 1:1.
@@ -100,7 +108,7 @@ GUIDING PRINCIPLES
 - All transformations should be small, testable, reversible.
 - StepNode is always the mental model.
 - Blank lines are real nodes and persist across BLUR/SAVE unless removed by DELETE or ESC.
-- Display numbers are never stored in DB; always derived.
+- Display numbers (grouped per heading) are never stored in DB; always derived.
 
 ==============================================
 MIGRATION STATUS
@@ -111,7 +119,9 @@ PHASE 1 — EDITOR FIRST (no DB changes)
 [x] 1. Unified StepNode model created
 
 [x] 2. Load adapter (DB → StepNode) implemented
-We still need to clean up the legacy section/step merging logic so we only load the steps from the active section, or from all sections but without duplicates — depending on the future architecture.
+We still need to clean up the legacy section/step merging logic so we only load
+the steps from the active section, or from all sections but without duplicates —
+depending on the future architecture.
 
 [x] 3. Editor reads/writes exclusively through StepNode
 

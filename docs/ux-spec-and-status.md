@@ -1,163 +1,206 @@
-UX SPEC + CURRENT STATUS
+# UX SPEC + CURRENT STATUS
 
 ---
 
 ## STRUCTURE & LINE TYPES
 
-Two-level hierarchy only
-Spec: Instructions are represented as a flat, ordered list of lines with exactly two types: `heading` (level 0) and `step` (level 1, numbered). No deeper nesting.
+Two-level hierarchy only  
+Spec: Instructions are represented as a flat, ordered list of lines with exactly two types: `heading` (level 0) and `step` (level 1, numbered). No deeper nesting.  
 Status: `TBD`
 
-Heading lines
-Spec: Heading lines are unnumbered, structural labels (e.g., “FILLING”) that visually separate groups of steps. They are stored as plain text (not forced uppercase) and rendered in a distinct style.
+Heading lines  
+Spec: Heading lines are unnumbered, structural labels (e.g., “FILLING”) that visually separate groups of steps. They are stored as plain text (not forced uppercase) and rendered in a distinct style.  
 Status: `TBD`
 
-Step lines
-Spec: Step lines are numbered instructions that follow headings or other steps. Numbers are derived from the line order, not stored text.
+Step lines  
+Spec: Step lines are numbered instructions that follow headings or other steps.  
+Numbers are **derived**, not stored.  
 Status: `TBD`
 
-Numbering model
-Spec: Step numbers recompute from top to bottom, ignoring headings; each contiguous run of steps is numbered 1, 2, 3, … based on visual order.
-Status: `PASS`
+Numbering model  
+Spec: Step numbers are **grouped**.  
+Each heading starts a **new numbering group**.  
+Steps within each group number **1, 2, 3 …** based on visual order.  
+If the document begins with steps (no heading), those steps form an implicit first group.  
+Status: `TBD`
 
 ---
 
 ## TAB / SHIFT+TAB
 
-Heading + TAB → convert to step
-Spec: Pressing TAB at the start of a heading converts it into a step and renumbers the surrounding steps. Example:
+SHIFT+TAB — promote step → heading  
+Spec:
 
-- Before:
-
-  - `filling`
-  - `1. foo`
-  - `2. bar`
-  - `3. baz`
-
-- After TAB on “filling”: - `1. filling` - `2. foo` - `3. bar` - `4. baz`
+- Convert line to `type = heading`.
+- Remove number.
+- Align heading text with the number column.
+- While the line is being edited:
+  - Editing color applies (per global visual rules).
+  - Heading color is fully suppressed, even though the line is now `type = heading`.
+- After BLUR:
+  - Editing color is removed.
+  - Heading color applies based on `type = heading`.
+- **Steps below form a new numbering group, starting at 1.**
+- Caret position stays in place.  
   Status: `TBD`
 
-Step + SHIFT+TAB → convert to heading
-Spec: Pressing SHIFT+TAB at the start of a step converts that line into a heading. Steps below it may become a new numbered run under that heading. Example:
+TAB — demote heading → step  
+Spec:
 
-- Before:
-
-  - `filling`
-  - `1. foo`
-  - `2. bar`
-  - `3. baz`
-
-- After SHIFT+TAB on “bar”: - `filling` - `1. foo` - `bar` (now a heading) - `1. baz` (first step under new heading)
+- Convert line to `type = step`.
+- Restore normal step indent.
+- While the line is being edited:
+  - Editing color applies (per global visual rules).
+  - Step-at-rest color is suppressed, even though the line is now `type = step`.
+- After BLUR:
+  - Editing color is removed.
+  - Step text color reverts to normal step color.
+- **Demoting merges this line into the previous numbering group, and steps renumber within that group starting at 1.**
+- Caret position stays in place.  
   Status: `TBD`
 
-No deeper indentation
-Spec: TAB on a step (already level 1) is a no-op. SHIFT+TAB on a heading (already level 0) is a no-op. There is no level 2 or beyond.
-Status: `TBD`
+No-op cases  
+Spec:
+
+- TAB on a step is a no-op.
+- SHIFT+TAB on a heading is a no-op.
+- No deeper nesting exists beyond heading (level 0) and step (level 1).  
+  Status: `TBD`
+
+Visual / color rules  
+Spec:
+
+- Headings (at rest):
+
+  - Unnumbered.
+  - Use the heading text color variable.
+  - Aligned with number column.
+
+- Steps (at rest):
+
+  - Numbered.
+  - Use the normal step text color variable.
+
+- While editing (both headings and steps):
+
+  - Editing color applies unconditionally.
+  - Heading/step colors are fully suppressed during editing.
+  - Matches CSS:  
+    `.instruction-line.editing .step-text` overrides base colors.
+
+- After BLUR:
+
+  - Editing color is removed.
+  - Heading/step colors re-apply based on `type`.
+
+- Renumbering:
+  - **Step numbers restart after every heading (new numbering group).**
+  - Steps within each group number 1, 2, 3 … in visual order.
 
 ---
 
 ## ENTER
 
-Start-of-line
-Spec: Pressing Return at the start of a line moves the caret and any content down to a new line, leaving a blank line above (blank step is real).
-Status: `FAIL` - Caret stays with the blank line above
+Start-of-line  
+Spec: Pressing Return at the start of a line moves the caret and any content down to a new line, leaving a blank line above (blank step is real).  
+Status: `FAIL` — caret currently stays with the blank line above
 
-Mid-line
-Spec: Split step; right side becomes new step below; caret moves to start of new step
+Mid-line  
+Spec: Split step; right side becomes a new step below; caret moves to start of new step  
 Status: `PASS`
 
-End-of-line
-Spec: Insert blank step below; caret moves there
+End-of-line  
+Spec: Insert blank step below; caret moves there  
 Status: `PASS`
 
 ---
 
 ## BLANK STEPS
 
-Blank steps are real steps during editing
-Spec: Blank steps should exist as true steps during editing
+Blank steps are real steps during editing  
+Spec: Blank steps should exist as true steps during editing  
 Status: `PASS`
 
-Blank steps are clickable
-Spec: Caret can be placed (via click) into a blank line
+Blank steps are clickable  
+Spec: Caret can be placed (via click) into a blank line  
 Status: `PASS`
 
-Blank steps persist after committing (BLUR or SAVE)
-Spec: All created blank steps should remain after BLUR or SAVE
+Blank steps persist after committing (BLUR or SAVE)  
+Spec: All created blank steps should remain after BLUR or SAVE  
 Status: `PASS`
 
-Blank steps removed only by explicit deletion or ESC/CANCEL
-Spec: Blank steps should only disappear via delete or ESC/CANCEL
+Blank steps removed only by explicit deletion or ESC/CANCEL  
+Spec: Blank steps should only disappear via delete or ESC  
 Status: `PASS`
 
 ---
 
 ## MERGE / BACKSPACE
 
-Backspace at index 0 merges with previous step
-Spec: Merge previous step into current; caret preserved intuitively
+Backspace at index 0 merges with previous step  
+Spec: Merge previous step into current; caret preserved intuitively  
 Status: `PASS`
 
-Split/Merge reversible via ESC during session
-Spec: ESC should undo split/merge operations done in this edit session
+Split/Merge reversible via ESC during session  
+Spec: ESC should undo split/merge operations done in this edit session  
 Status: `PASS`
 
 ---
 
 ## ESC
 
-Single ESC only
-Spec: One ESC press should revert changes (no double-ESC)
+Single ESC only  
+Spec: One ESC press should revert changes (no double-ESC)  
 Status: `PASS`
 
-ESC discards all changes since last SAVE and exits editing
-Spec: ESC should fully revert to last saved state and exit edit mode
+ESC discards all changes since last SAVE and exits editing  
+Spec: ESC should fully revert to last saved state and exit edit mode  
 Status: `PASS`
 
-ESC removes all blank steps created during the edit session
-Spec: Temporary blank steps must be removed on ESC
+ESC removes all blank steps created during the edit session  
+Spec: Temporary blank steps must be removed on ESC  
 Status: `PASS`
 
 ---
 
 ## BLUR, SAVE, COMMIT
 
-Blur commits edits and exits edit mode
-Spec: BLUR should commit edits to in-memory/session state and exit edit mode
+Blur commits edits and exits edit mode  
+Spec: BLUR should commit edits to in-memory/session state only  
 Status: `PASS`
 
-SAVE persists to DB; BLUR only commits in memory/UI
-Spec: SAVE writes to DB; BLUR commits only to UI/session state
+SAVE persists to DB; BLUR does not  
+Spec: SAVE writes to DB; BLUR commits only to UI/session state  
 Status: `PASS`
 
 ---
 
 ## EDITING + ACTIVE STEP + REORDER
 
-Reordering is allowed during editing
-Spec: User can reorder steps without exiting edit mode
+Reordering allowed during editing  
+Spec: User can reorder steps without exiting edit mode  
 Status: `PASS`
 
-Caret stays in same logical position after reorder
-Spec: Caret must not jump unexpectedly after reordering
+Caret stays in same logical position after reorder  
+Spec: Caret must not jump unexpectedly  
 Status: `PASS`
 
-Clicking makes a step active at caret position
-Spec: Clicking anywhere in a step should place caret exactly there
+Clicking makes a step active at caret position  
+Spec: Clicking anywhere in a step places caret exactly there  
 Status: `PASS`
 
-Step numbers update live on structural changes
-Spec: Step numbers must re-render correctly after inserts, deletes, etc.
+Step numbers update live  
+Spec: Step numbers must re-render correctly after inserts, deletes, etc.  
 Status: `PASS`
 
 ---
 
 ## INGREDIENTS PARALLEL STRUCTURE
 
-Ingredients hierarchy
-Spec: Ingredients list can optionally use the same two-level model as instructions: headings for groups (e.g., “FILLING”, “CASHEW CREAM”) plus ingredient lines under each heading.
+Ingredients hierarchy  
+Spec: Ingredients list can optionally use the same two-level model as instructions — headings for groups + ingredient lines.  
 Status: `TBD`
 
-Ingredients TAB / SHIFT+TAB (if implemented)
-Spec: Ingredients headings and lines follow the same TAB/SHIFT+TAB behavior as instructions, maintaining consistency between the two editors.
+Ingredients TAB / SHIFT+TAB (if implemented)  
+Spec: Ingredients follow same promotion/demotion rules for consistency.  
 Status: `TBD`

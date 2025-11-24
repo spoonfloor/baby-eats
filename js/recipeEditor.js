@@ -350,8 +350,9 @@ function renderRecipe(recipe) {
       num.className = 'step-num';
 
       if (type === 'heading') {
-        // Headings: visually unnumbered and do not consume a counter slot.
+        // Headings: visually unnumbered and start a new numbering group.
         num.textContent = '';
+        displayIndex = 0; // next steps under this heading start at 1
       } else {
         displayIndex += 1;
         num.textContent = `${displayIndex}.`;

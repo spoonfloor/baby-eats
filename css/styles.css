@@ -7,6 +7,8 @@
   --theme-secondary: #7f5cff;
   --theme-light: hsl(252, 100%, 97%);
   --font-color-near-black: #191919;
+  --theme-editing-mode: #2184ff;
+
   --app-bar-height: 64px;
   --header-font-size: 16px;
   --section-card-offset: 24px;
@@ -275,7 +277,15 @@
 }
 
 .instruction-line[data-step-type='heading'] .step-text {
+  /* Default: headings are purple when no inline edit is active */
   color: var(--theme-primary);
+}
+
+/* While any line is being edited, suppress purple on other headings */
+.recipe-wrapper:has(.instruction-line.editing)
+  .instruction-line[data-step-type='heading']:not(.editing)
+  .step-text {
+  color: var(--font-color-near-black);
 }
 
 .nav-text {
@@ -353,10 +363,10 @@ h1.nav-text {
   color: var(--theme-secondary);
 }
 
-/* Highlight active editing line text in purple */
-.instruction-line.debug-editing {
-  color: var(--theme-primary); /* #6d49ff */
-  color: yellowgreen;
+/* Highlight active editing line text */
+.instruction-line.editing .step-text,
+.instruction-line.editing .step-textarea {
+  color: var(--theme-editing-mode);
 }
 
 /* Selection highlight inside step textarea */
@@ -372,10 +382,4 @@ h1.nav-text {
 
 .instruction-line .step-text[contenteditable='true'] {
   outline: none;
-}
-
-.instruction-line.editing .step-text,
-.instruction-line.editing .step-textarea {
-  color: var(--theme-primary); /* or any other color you want */
-  color: yellow;
 }
