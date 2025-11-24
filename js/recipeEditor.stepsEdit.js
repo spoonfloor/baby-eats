@@ -37,13 +37,22 @@ function setupStepReordering(container, recipeId) {
     const counters = new Map();
 
     all.forEach((line) => {
+      const num = line.querySelector('.step-num');
+      if (!num) return;
+
+      // Headings are unnumbered and do not consume a counter slot.
+      const type = line.dataset.stepType || 'step';
+      if (type === 'heading') {
+        num.textContent = '';
+        return;
+      }
+
       const sectionId = line.dataset.sectionId || '';
       const current = counters.get(sectionId) || 0;
       const next = current + 1;
       counters.set(sectionId, next);
 
-      const num = line.querySelector('.step-num');
-      if (num) num.textContent = `${next}.`;
+      num.textContent = `${next}.`;
     });
   }
 
@@ -392,11 +401,20 @@ function attachStepInlineEditor(textEl) {
         } else {
           const stepsContainer = document.getElementById('stepsSection');
           if (stepsContainer) {
-            const allLines = stepsContainer.querySelectorAll(
-              '.instruction-line.numbered .step-num'
-            );
-            allLines.forEach((numEl, idx) => {
-              numEl.textContent = `${idx + 1}.`;
+            const allLines =
+              stepsContainer.querySelectorAll('.instruction-line.numbered') ||
+              [];
+            let counter = 0;
+            allLines.forEach((line) => {
+              const numEl = line.querySelector('.step-num');
+              if (!numEl) return;
+              // Headings are unnumbered and do not consume a counter slot.
+              if ((line.dataset.stepType || 'step') === 'heading') {
+                numEl.textContent = '';
+                return;
+              }
+              counter += 1;
+              numEl.textContent = `${counter}.`;
             });
           }
         }
@@ -991,6 +1009,108 @@ function attachStepInlineEditor(textEl) {
     };
 
     const onKeyDown = (e) => {
+      // --- TAB / SHIFT+TAB → toggle heading/step (model + DOM + renumber) ---
+      if (e.key === 'Tab') {
+        const stepId =
+          window.editingStepId ||
+          (textEl && textEl.dataset && textEl.dataset.stepId);
+
+        const stepNodeModelRef =
+          window.StepNodeModel && typeof window.StepNodeModel === 'object'
+            ? window.StepNodeModel
+            : null;
+        const stepNodeTypeRef =
+          window.StepNodeType && typeof window.StepNodeType === 'object'
+            ? window.StepNodeType
+            : null;
+        const nodes = Array.isArray(window.stepNodes) ? window.stepNodes : null;
+        const line = lineEl || textEl.closest('.instruction-line');
+
+        // If wiring isn't present, let browser handle TAB normally.
+        if (
+          !stepId ||
+          !stepNodeModelRef ||
+          !stepNodeTypeRef ||
+          !nodes ||
+          !line
+        ) {
+          return;
+        }
+
+        // Structural-only TAB: no real tab chars, no focus change.
+        e.preventDefault();
+
+        const idStr = String(stepId);
+        const idx = nodes.findIndex((n) => String(n.id) === idStr);
+        if (idx === -1) return;
+
+        const node = nodes[idx];
+        let nextType = node.type;
+
+        if (e.shiftKey) {
+          // SHIFT+TAB: step → heading; heading → no-op.
+          if (node.type !== stepNodeTypeRef.STEP) {
+            return;
+          }
+          nextType = stepNodeTypeRef.HEADING;
+          if (typeof stepNodeModelRef.convertNodeToHeading === 'function') {
+            window.stepNodes = stepNodeModelRef.convertNodeToHeading(
+              nodes,
+              stepId
+            );
+          }
+        } else {
+          // TAB: heading → step; step → no-op.
+          if (node.type !== stepNodeTypeRef.HEADING) {
+            return;
+          }
+          nextType = stepNodeTypeRef.STEP;
+          if (typeof stepNodeModelRef.convertNodeToStep === 'function') {
+            window.stepNodes = stepNodeModelRef.convertNodeToStep(
+              nodes,
+              stepId
+            );
+          }
+        }
+
+        // Mirror new type into DOM for this line.
+        line.dataset.stepType = nextType || 'step';
+        const numEl = line.querySelector('.step-num');
+        if (numEl && nextType === stepNodeTypeRef.HEADING) {
+          // Headings are visually unnumbered.
+          numEl.textContent = '';
+        }
+
+        // Re-number all lines, skipping headings.
+        if (
+          typeof stepReorderCtx !== 'undefined' &&
+          stepReorderCtx &&
+          typeof stepReorderCtx.renumber === 'function'
+        ) {
+          stepReorderCtx.renumber();
+        } else {
+          const stepsContainer = document.getElementById('stepsSection');
+          if (stepsContainer) {
+            const allLines =
+              stepsContainer.querySelectorAll('.instruction-line.numbered') ||
+              [];
+            let counter = 0;
+            allLines.forEach((ln) => {
+              const n = ln.querySelector('.step-num');
+              if (!n) return;
+              if ((ln.dataset.stepType || 'step') === 'heading') {
+                n.textContent = '';
+                return;
+              }
+              counter += 1;
+              n.textContent = `${counter}.`;
+            });
+          }
+        }
+
+        return;
+      }
+
       if (e.key === 'Backspace') {
         console.log('[BKS] keydown Backspace');
         // Backspace at the *very start* of the step merges with previous (Docs-style)

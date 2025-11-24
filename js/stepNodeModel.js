@@ -96,11 +96,59 @@
       );
   }
 
+  /**
+   * Internal helper: convert a single node's type by id.
+   * Returns a new array if a change is made; otherwise returns the original.
+   * @param {StepNode[]} nodes
+   * @param {string|number} targetId
+   * @param {StepNodeType} nextType
+   * @returns {StepNode[]}
+   */
+  function convertNodeType(nodes, targetId, nextType) {
+    if (!Array.isArray(nodes)) return nodes;
+    if (nextType !== StepNodeType.HEADING && nextType !== StepNodeType.STEP) {
+      return nodes;
+    }
+
+    const idStr = String(targetId);
+    let changed = false;
+
+    const updated = nodes.map((node) => {
+      if (String(node.id) !== idStr) return node;
+      if (node.type === nextType) return node;
+      changed = true;
+      return { ...node, type: nextType };
+    });
+
+    return changed ? updated : nodes;
+  }
+
+  /**
+   * Convert a node to a STEP (TAB behavior).
+   * @param {StepNode[]} nodes
+   * @param {string|number} targetId
+   */
+  function convertNodeToStep(nodes, targetId) {
+    return convertNodeType(nodes, targetId, StepNodeType.STEP);
+  }
+
+  /**
+   * Convert a node to a HEADING (SHIFT+TAB behavior).
+   * @param {StepNode[]} nodes
+   * @param {string|number} targetId
+   */
+  function convertNodeToHeading(nodes, targetId) {
+    return convertNodeType(nodes, targetId, StepNodeType.HEADING);
+  }
+
   global.StepNodeType = StepNodeType;
   global.StepNodeModel = {
     createStepNode,
     cloneStepNodes,
     normalizeStepNodeOrder,
+
+    convertNodeToStep,
+    convertNodeToHeading,
 
     fromFlatStepsArray,
   };

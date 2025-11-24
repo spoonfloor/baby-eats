@@ -341,10 +341,21 @@ function renderRecipe(recipe) {
       const line = document.createElement('div');
       line.className = 'instruction-line numbered';
 
+      // Attach identity + type for editor + renumbering.
+      line.dataset.stepId = String(node.id);
+      const type = node.type || 'step';
+      line.dataset.stepType = type;
+
       const num = document.createElement('span');
       num.className = 'step-num';
-      displayIndex += 1;
-      num.textContent = `${displayIndex}.`;
+
+      if (type === 'heading') {
+        // Headings: visually unnumbered and do not consume a counter slot.
+        num.textContent = '';
+      } else {
+        displayIndex += 1;
+        num.textContent = `${displayIndex}.`;
+      }
 
       const text = document.createElement('span');
       text.className = 'step-text';
@@ -407,6 +418,10 @@ function renderRecipe(recipe) {
         if (sectionId != null) {
           line.dataset.sectionId = String(sectionId);
         }
+        // Attach identity to the line itself for StepNode lookups.
+        line.dataset.stepId = String(step.ID ?? step.id);
+        // Default type is 'step' unless StepNode model says otherwise.
+        line.dataset.stepType = 'step';
 
         const num = document.createElement('span');
         num.className = 'step-num';
@@ -419,6 +434,32 @@ function renderRecipe(recipe) {
           text.dataset.sectionId = String(sectionId);
         }
         text.textContent = step.instructions ?? '';
+
+        // If StepNode model is present, mirror node.type → DOM.
+        try {
+          const nodes = Array.isArray(window.stepNodes)
+            ? window.stepNodes
+            : null;
+          const stepNodeTypeRef =
+            window.StepNodeType && typeof window.StepNodeType === 'object'
+              ? window.StepNodeType
+              : null;
+
+          if (nodes && stepNodeTypeRef) {
+            const idStr = String(step.ID ?? step.id);
+            const node = nodes.find((n) => String(n.id) === idStr);
+            if (node && node.type === stepNodeTypeRef.HEADING) {
+              line.dataset.stepType = 'heading';
+              // Headings are unnumbered; keep the num span for layout but clear text.
+              num.textContent = '';
+            }
+          }
+        } catch (err) {
+          console.warn(
+            'StepNode type sync failed; falling back to step type.',
+            err
+          );
+        }
 
         ensureStepTextNotEmpty(text);
 

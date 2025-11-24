@@ -32,5 +32,3 @@ overrides.css
 
 /docs
 local-tree.md
-
-// ignore this comment, for reals
