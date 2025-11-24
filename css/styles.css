@@ -248,6 +248,10 @@
   line-height: var(--step-line-height);
 }
 
+.instruction-line[data-step-type='heading'] .step-text {
+  margin-left: calc(-2em);
+}
+
 /* Quill v1.1 — full-width inline step editor */
 .step-input {
   width: 100%;
