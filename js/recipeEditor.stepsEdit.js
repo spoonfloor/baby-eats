@@ -1113,6 +1113,11 @@ function attachStepInlineEditor(textEl) {
           }
         }
 
+        // Structural promotion/demotion is a real edit → enable Save/Cancel.
+        if (typeof markDirty === 'function') {
+          markDirty();
+        }
+
         return;
       }
 

@@ -168,6 +168,7 @@ function renderRecipe(recipe) {
         id: s.ID || s.id,
         instructions: s.instructions,
         step_number: s.step_number,
+        type: s.type || 'step',
       }));
 
       // Phase 1 — Load adapter: DB/bridge → StepNode model.

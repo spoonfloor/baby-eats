@@ -179,7 +179,7 @@ async function saveRecipeToDB() {
   const db = window.dbInstance;
   const recipe = window.recipeData;
 
-  bridge.saveRecipeToDB(db, recipe);
+  bridge.saveRecipeStepsFromStepNodes(db, window.recipeId, window.stepNodes);
 
   // Re-read from DB to return a fully refreshed object
   return bridge.loadRecipeFromDB(db, window.recipeId);

@@ -70,7 +70,12 @@
     const nodes = rawSteps.map((s, index) =>
       createStepNode({
         id: s.ID ?? s.id ?? `tmp-${index + 1}`,
-        type: StepNodeType.STEP,
+
+        type:
+          s.type === StepNodeType.HEADING || s.type === 'heading'
+            ? StepNodeType.HEADING
+            : StepNodeType.STEP,
+
         text: s.instructions ?? '',
         order:
           typeof s.step_number === 'number' && !Number.isNaN(s.step_number)

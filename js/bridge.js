@@ -1,7 +1,32 @@
 // bridge.js
 // A single place for translating between the SQL.js database and in-memory objects.
 
-window.bridge = { loadRecipeFromDB, saveRecipeToDB };
+// --- StepNode → DB save adapter (Option A: minimal) ---
+function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
+  // Remove existing rows for this recipe
+  activeDb.exec(`DELETE FROM recipe_steps WHERE recipe_id = ${recipeId};`);
+
+  // Insert fresh rows from StepNode model
+  const stmt = activeDb.prepare(`
+
+    INSERT INTO recipe_steps (ID, recipe_id, section_id, step_number, instructions, type)
+    VALUES (?, ?, NULL, ?, ?, ?);
+
+    `);
+
+  stepNodes.forEach((node) => {
+    const dbType = node.type === 'heading' ? 'heading' : 'step';
+    stmt.run([node.id, recipeId, node.order, node.text, dbType]);
+  });
+
+  stmt.free();
+}
+
+window.bridge = {
+  loadRecipeFromDB,
+  saveRecipeToDB,
+  saveRecipeStepsFromStepNodes,
+};
 
 // Load a recipe and all its pieces from the database into a full JS object.
 function loadRecipeFromDB(db, recipeId) {
@@ -24,20 +49,23 @@ function loadRecipeFromDB(db, recipeId) {
     ? sectionsQ[0].values.map(([ID, name]) => ({ ID, name }))
     : [];
 
-  // --- Load steps
+  // --- Load steps (including type)
   const stepsQ = db.exec(`
-    SELECT ID, section_id, step_number, instructions
+    SELECT ID, section_id, step_number, instructions, type
     FROM recipe_steps
     WHERE recipe_id = ${id}
     ORDER BY step_number;
   `);
   const steps = stepsQ.length
-    ? stepsQ[0].values.map(([ID, section_id, step_number, instructions]) => ({
-        ID,
-        section_id,
-        step_number,
-        instructions,
-      }))
+    ? stepsQ[0].values.map(
+        ([ID, section_id, step_number, instructions, type]) => ({
+          ID,
+          section_id,
+          step_number,
+          instructions,
+          type,
+        })
+      )
     : [];
 
   // --- Load ingredients (borrowed from formatter)

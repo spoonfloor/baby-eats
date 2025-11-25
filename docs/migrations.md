@@ -137,7 +137,7 @@ depending on the future architecture.
         ESC healing, BLUR/SAVE session logic, reordering) with
         legacy model updated only for backward compatibility.
 
-[ ] 4. TAB / SHIFT+TAB logic implemented
+[x] 4. TAB / SHIFT+TAB logic implemented
 
 [x] 5. Reordering updates StepNode order consistently
 
