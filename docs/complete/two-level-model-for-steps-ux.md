@@ -144,7 +144,7 @@ depending on the future architecture.
 [x] 6. Save adapter (StepNode → DB) implemented
 
 Phase 1 completion milestone:
-[ ] Editor fully matches the target two-level model and is stable
+[x] Editor fully matches the target two-level model and is stable
 
 ---
 
@@ -156,15 +156,3 @@ PHASE 2 — DATABASE CLEANUP
 [x] 4. Normalize ordering (rename step_number → order, or clearly
 document that step_number is “pure ordering only”)
 [x] 5. Simplify adapters to 1:1 mapping (DB ↔ StepNode)
-
----
-
-OPTIONAL — INGREDIENTS TWO-LEVEL MODEL
-
-[ ] Design mirrored IngredientNode structure
-[ ] Implement ingredient headings + lines
-[ ] Ensure behavior matches instruction editor
-
-==============================================
-END OF DOCUMENT
-==============================================
