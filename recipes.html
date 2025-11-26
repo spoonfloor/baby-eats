@@ -42,13 +42,28 @@
           <span class="title title-recipes">Recipes</span>
         </div>
         <div class="actions">
-          <button class="button" id="recipesActionBtn">Action</button>
+          <button class="button" id="recipesActionBtn">Add</button>
         </div>
       </div>
     </div>
 
     <div class="recipe-list-wrapper">
       <ul id="recipeList"></ul>
+    </div>
+
+    <!-- Add Recipe Modal -->
+    <div id="addRecipeModal" class="modal hidden">
+      <div class="modal-content">
+        <h2>New Recipe</h2>
+        <label class="modal-field">
+          <span>Title</span>
+          <input id="newRecipeTitle" type="text" />
+        </label>
+        <div class="modal-actions">
+          <button class="button" id="addRecipeCancel">Cancel</button>
+          <button class="button" id="addRecipeCreate">Create</button>
+        </div>
+      </div>
     </div>
 
     <!-- JS Modules -->

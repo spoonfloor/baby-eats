@@ -32,6 +32,57 @@
   color: white;
 }
 
+/* --- Add Recipe Modal --- */
+.modal.hidden {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  color: var(--font-color-near-black);
+  padding: 24px;
+  border-radius: 12px;
+  min-width: 280px;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  margin: 0 0 12px 0;
+  font-size: var(--header-font-size);
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.modal-field input {
+  font-family: inherit;
+  font-size: inherit;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* --- Buttons --- */
 .button {
   font-family: inherit;

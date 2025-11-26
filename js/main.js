@@ -124,8 +124,35 @@ async function loadRecipesPage() {
 
   // --- Recipes action button stub ---
   const recipesActionBtn = document.getElementById('recipesActionBtn');
+
+  const modal = document.getElementById('addRecipeModal');
+  const cancelBtn = document.getElementById('addRecipeCancel');
+  const createBtn = document.getElementById('addRecipeCreate');
+  const titleInput = document.getElementById('newRecipeTitle');
+
+  function openModal() {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (titleInput) {
+      titleInput.value = '';
+      titleInput.focus();
+    }
+  }
+
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+  }
+
   if (recipesActionBtn) {
-    recipesActionBtn.addEventListener('click', () => {});
+    recipesActionBtn.addEventListener('click', openModal);
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', closeModal);
+  }
+  if (createBtn) {
+    // Placeholder: Step 1 only closes; DB insert comes in Step 2
+    createBtn.addEventListener('click', closeModal);
   }
 
   // --- Search bar logic with clear button ---
