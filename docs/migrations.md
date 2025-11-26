@@ -137,11 +137,11 @@ depending on the future architecture.
         ESC healing, BLUR/SAVE session logic, reordering) with
         legacy model updated only for backward compatibility.
 
-[x] 4. TAB / SHIFT+TAB logic implemented
++[x] 4. Add type column to recipe_steps (type TEXT NOT NULL DEFAULT 'step')
 
 [x] 5. Reordering updates StepNode order consistently
 
-[ ] 6. Save adapter (StepNode → DB) implemented
+[x] 6. Save adapter (StepNode → DB) implemented
 
 Phase 1 completion milestone:
 [ ] Editor fully matches the target two-level model and is stable
@@ -150,12 +150,12 @@ Phase 1 completion milestone:
 
 PHASE 2 — DATABASE CLEANUP
 
-[ ] 1. Drop recipe_sections
-[ ] 2. Drop section_contexts
-[ ] 3. Remove section_id from tables
-[ ] 4. Add type column to recipe_steps
-[ ] 5. Normalize ordering (rename or reinterpret step_number)
-[ ] 6. Simplify adapters to 1:1 mapping
+[x] 1. Drop recipe_sections
+[x] 2. Drop section_contexts
+[x] 3. Remove section_id from: - recipe_steps - recipe_ingredient_map
+[x] 4. Normalize ordering (rename step_number → order, or clearly
+document that step_number is “pure ordering only”)
+[x] 5. Simplify adapters to 1:1 mapping (DB ↔ StepNode)
 
 ---
 

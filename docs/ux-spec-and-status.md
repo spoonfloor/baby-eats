@@ -6,23 +6,23 @@
 
 Two-level hierarchy only  
 Spec: Instructions are represented as a flat, ordered list of lines with exactly two types: `heading` (level 0) and `step` (level 1, numbered). No deeper nesting.  
-Status: `TBD`
+Status: `PASS`
 
 Heading lines  
 Spec: Heading lines are unnumbered, structural labels (e.g., “FILLING”) that visually separate groups of steps. They are stored as plain text (not forced uppercase) and rendered in a distinct style.  
-Status: `TBD`
+Status: `PASS`
 
 Step lines  
 Spec: Step lines are numbered instructions that follow headings or other steps.  
 Numbers are **derived**, not stored.  
-Status: `TBD`
+Status: `PASS`
 
 Numbering model  
 Spec: Step numbers are **grouped**.  
 Each heading starts a **new numbering group**.  
 Steps within each group number **1, 2, 3 …** based on visual order.  
 If the document begins with steps (no heading), those steps form an implicit first group.  
-Status: `TBD`
+Status: `PASS`
 
 ---
 
@@ -42,7 +42,7 @@ Spec:
   - Heading color applies based on `type = heading`.
 - **Steps below form a new numbering group, starting at 1.**
 - Caret position stays in place.  
-  Status: `TBD`
+  Status: `PASS`
 
 TAB — demote heading → step  
 Spec:
@@ -57,7 +57,7 @@ Spec:
   - Step text color reverts to normal step color.
 - **Demoting merges this line into the previous numbering group, and steps renumber within that group starting at 1.**
 - Caret position stays in place.  
-  Status: `TBD`
+  Status: `PASS`
 
 No-op cases  
 Spec:
@@ -65,7 +65,7 @@ Spec:
 - TAB on a step is a no-op.
 - SHIFT+TAB on a heading is a no-op.
 - No deeper nesting exists beyond heading (level 0) and step (level 1).  
-  Status: `TBD`
+  Status: `PASS`
 
 Visual / color rules  
 Spec:
@@ -96,6 +96,7 @@ Spec:
 - Renumbering:
   - **Step numbers restart after every heading (new numbering group).**
   - Steps within each group number 1, 2, 3 … in visual order.
+    Status: `PASS`
 
 ---
 
