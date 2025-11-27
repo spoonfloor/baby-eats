@@ -42,7 +42,6 @@ if (loadDbBtn && dbLoader) {
         await window.electronAPI.loadDB(dbPath);
 
         // 5. Navigate to recipes list
-
         window.location.href = 'recipes.html';
       } catch (err) {
         console.error('❌ Error loading database:', err);
@@ -141,12 +140,6 @@ async function loadRecipesPage() {
   const createBtn = document.getElementById('addRecipeCreate');
   const titleInput = document.getElementById('newRecipeTitle');
 
-  function toTitleCase(str) {
-    return str
-      .toLowerCase()
-      .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
-  }
-
   function openModal() {
     if (!modal) return;
     modal.classList.remove('hidden');
@@ -168,7 +161,7 @@ async function loadRecipesPage() {
     cancelBtn.addEventListener('click', closeModal);
   }
   if (createBtn) {
-    createBtn.addEventListener('click', () => {
+    createBtn.addEventListener('click', async () => {
       if (!titleInput) {
         closeModal();
         return;
@@ -177,7 +170,7 @@ async function loadRecipesPage() {
       const rawTitle = titleInput.value || '';
       const trimmed = rawTitle.trim();
 
-      // Require a non-empty title
+      // Require non-empty
       if (!trimmed) {
         titleInput.focus();
         return;
@@ -197,6 +190,32 @@ async function loadRecipesPage() {
       } catch (err) {
         console.error('❌ Failed to create recipe:', err);
         alert('Failed to create recipe. See console for details.');
+        return;
+      }
+
+      // --- Persist updated DB so editor + list can see the new recipe ---
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after creating recipe.');
+            return;
+          }
+        } else {
+          // Browser fallback — keep DB in localStorage
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after creating recipe:', err);
+        alert(
+          'Failed to save database after creating recipe. See console for details.'
+        );
         return;
       }
 
@@ -308,6 +327,7 @@ async function loadRecipeEditorPage() {
     revertChanges();
   }
 }
+
 document.addEventListener('DOMContentLoaded', () => {
   const backButton = document.getElementById('backButton');
   if (backButton) {
