@@ -25,7 +25,7 @@ Creating a new recipe flows through:
 
 ### 1. Add button (recipes.html)
 
-- [ ] Add button visible in recipe list
+- [x] Add button visible in recipe list
 - [ ] Label = “Add”
 - [ ] Click → opens title dialog
 - [ ] After creation, sorting obeys alphabetical order

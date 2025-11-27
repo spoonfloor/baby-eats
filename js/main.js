@@ -94,12 +94,17 @@ async function loadRecipesPage() {
     db = new SQL.Database(Uints);
   }
 
+  // Expose DB on window so other helpers can optionally reuse it if needed
+  window.dbInstance = db;
+
   // --- Load recipes ---
   const recipes = db.exec(
     'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
   );
   const list = document.getElementById('recipeList');
   list.innerHTML = '';
+
+  window.dbInstance = db;
 
   // 🔹 Keep all recipes in memory for filtering
   let recipeRows = [];
@@ -125,10 +130,22 @@ async function loadRecipesPage() {
   // --- Recipes action button stub ---
   const recipesActionBtn = document.getElementById('recipesActionBtn');
 
+  function toTitleCase(str) {
+    return str
+      .toLowerCase()
+      .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
+  }
+
   const modal = document.getElementById('addRecipeModal');
   const cancelBtn = document.getElementById('addRecipeCancel');
   const createBtn = document.getElementById('addRecipeCreate');
   const titleInput = document.getElementById('newRecipeTitle');
+
+  function toTitleCase(str) {
+    return str
+      .toLowerCase()
+      .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
+  }
 
   function openModal() {
     if (!modal) return;
@@ -151,8 +168,45 @@ async function loadRecipesPage() {
     cancelBtn.addEventListener('click', closeModal);
   }
   if (createBtn) {
-    // Placeholder: Step 1 only closes; DB insert comes in Step 2
-    createBtn.addEventListener('click', closeModal);
+    createBtn.addEventListener('click', () => {
+      if (!titleInput) {
+        closeModal();
+        return;
+      }
+
+      const rawTitle = titleInput.value || '';
+      const trimmed = rawTitle.trim();
+
+      // Require a non-empty title
+      if (!trimmed) {
+        titleInput.focus();
+        return;
+      }
+
+      const title = toTitleCase(trimmed);
+
+      let newId = null;
+      try {
+        // Insert new recipe row (servings fields left NULL / default)
+        db.run('INSERT INTO recipes (title) VALUES (?);', [title]);
+
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        if (idQ.length && idQ[0].values.length) {
+          newId = idQ[0].values[0][0];
+        }
+      } catch (err) {
+        console.error('❌ Failed to create recipe:', err);
+        alert('Failed to create recipe. See console for details.');
+        return;
+      }
+
+      closeModal();
+
+      if (newId != null) {
+        sessionStorage.setItem('selectedRecipeId', newId);
+        window.location.href = 'recipeEditor.html';
+      }
+    });
   }
 
   // --- Search bar logic with clear button ---
@@ -229,7 +283,14 @@ async function loadRecipeEditorPage() {
 
   // Fetch via bridge (single source of truth)
   const recipe = bridge.loadRecipeFromDB(db, recipeId);
+
+  if (!recipe) {
+    alert('Recipe not found.');
+    window.location.href = 'recipes.html';
+    return;
+  }
   // Compatibility shim for existing UI
+
   if (
     !recipe.servingsDefault &&
     recipe.servings &&
