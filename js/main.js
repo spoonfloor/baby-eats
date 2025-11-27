@@ -140,18 +140,37 @@ async function loadRecipesPage() {
   const createBtn = document.getElementById('addRecipeCreate');
   const titleInput = document.getElementById('newRecipeTitle');
 
+  // Start with Create disabled; enable only when there is non-blank text.
+  if (createBtn) {
+    createBtn.disabled = true;
+  }
+
+  function updateCreateButtonState() {
+    if (!createBtn || !titleInput) return;
+    const hasText = !!titleInput.value.trim();
+    createBtn.disabled = !hasText;
+  }
+
   function openModal() {
     if (!modal) return;
     modal.classList.remove('hidden');
     if (titleInput) {
       titleInput.value = '';
       titleInput.focus();
+
+      // Reset disabled state on open
+      updateCreateButtonState();
     }
   }
 
   function closeModal() {
     if (!modal) return;
     modal.classList.add('hidden');
+  }
+
+  // Keep Create button in sync as user types.
+  if (titleInput) {
+    titleInput.addEventListener('input', updateCreateButtonState);
   }
 
   if (recipesActionBtn) {
@@ -223,6 +242,10 @@ async function loadRecipesPage() {
 
       if (newId != null) {
         sessionStorage.setItem('selectedRecipeId', newId);
+
+        // Mark this as a brand-new recipe so the editor can seed placeholders.
+        sessionStorage.setItem('selectedRecipeIsNew', '1');
+
         window.location.href = 'recipeEditor.html';
       }
     });
@@ -291,6 +314,8 @@ async function loadRecipeEditorPage() {
   }
 
   const recipeId = sessionStorage.getItem('selectedRecipeId');
+  const isNewRecipe = sessionStorage.getItem('selectedRecipeIsNew') === '1';
+
   if (!recipeId) {
     alert('No recipe selected.');
     window.location.href = 'recipes.html';
@@ -318,6 +343,40 @@ async function loadRecipeEditorPage() {
     recipe.servingsDefault = recipe.servings.default;
   }
 
+  // Seed a placeholder instruction step for brand-new recipes.
+  if (isNewRecipe) {
+    // One-shot flag, so reloading later doesn’t re-seed.
+    sessionStorage.removeItem('selectedRecipeIsNew');
+
+    if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
+      recipe.sections = [
+        {
+          ID: null,
+          id: null,
+          name: '',
+          steps: [],
+          ingredients: [],
+        },
+      ];
+    }
+
+    const firstSection = recipe.sections[0];
+
+    if (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0) {
+      const tempId = `tmp-step-${Date.now()}`;
+      firstSection.steps = [
+        {
+          ID: null,
+          id: tempId,
+          section_id: firstSection.ID ?? firstSection.id ?? null,
+          step_number: 1,
+          instructions: 'Add a step',
+          type: 'step',
+        },
+      ];
+    }
+  }
+
   const titleEl = document.getElementById('recipeTitle');
   if (titleEl) titleEl.textContent = recipe.title;
   renderRecipe(recipe);
@@ -325,6 +384,13 @@ async function loadRecipeEditorPage() {
   // ✅ One-time reset after first render
   if (typeof revertChanges === 'function') {
     revertChanges();
+  }
+
+  // --- Always scroll editor to top on load ---
+  try {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  } catch (_) {
+    window.scrollTo(0, 0);
   }
 }
 

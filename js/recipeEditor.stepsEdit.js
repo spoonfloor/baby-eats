@@ -379,7 +379,19 @@ function attachStepInlineEditor(textEl) {
 
       if (found) {
         const { stepsArr, idx } = found;
+
+        // 🛑 Never allow zero steps in the model — last step becomes blank instead.
+        let effectiveDelete = shouldDelete;
         if (shouldDelete) {
+          const parent = lineEl.parentElement;
+          const allLines =
+            parent?.querySelectorAll('.instruction-line.numbered') || [];
+          if (allLines.length === 1) {
+            effectiveDelete = false;
+          }
+        }
+
+        if (effectiveDelete) {
           stepsArr.splice(idx, 1);
         } else {
           stepsArr[idx].instructions = normalizedVal;
@@ -389,7 +401,19 @@ function attachStepInlineEditor(textEl) {
       // Delete step from DOM
       if (shouldDelete) {
         const parent = lineEl.parentElement;
-        if (parent) parent.removeChild(lineEl);
+        if (parent) {
+          const allLines =
+            parent.querySelectorAll('.instruction-line.numbered') || [];
+          const isLastLine = allLines.length === 1;
+
+          if (isLastLine) {
+            // Keep last line as a real blank step / placeholder.
+            textEl.textContent = '';
+            ensureStepTextNotEmpty(textEl);
+          } else {
+            parent.removeChild(lineEl);
+          }
+        }
 
         if (
           typeof stepReorderCtx !== 'undefined' &&

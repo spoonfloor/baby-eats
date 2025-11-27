@@ -26,34 +26,36 @@ Creating a new recipe flows through:
 ### 1. Add button (recipes.html)
 
 - [x] Add button visible in recipe list
-- [ ] Label = “Add”
-- [ ] Click → opens title dialog
-- [ ] After creation, sorting obeys alphabetical order
+- [x] Label = “Add”
+- [x] Click → opens title dialog
+- [x] After creation, sorting obeys alphabetical order
 
 ---
 
 ### 2. Title dialog
 
-- [ ] Dialog contains single **Title** field
-- [ ] Buttons: **Cancel** (left), **Create** (right)
-- [ ] **Create disabled** until title has text
-- [ ] Cancel → close dialog, do nothing, no toast
-- [ ] Create → insert new recipe with:
-  - [ ] Required title
-  - [ ] servings_default = null
-  - [ ] servings_min = null
-  - [ ] servings_max = null
-  - [ ] exactly **one** blank ingredient row
-  - [ ] exactly **one** blank instruction step
-- [ ] Dialog does **not** retain text after cancel
-- [ ] No animation
+- [x] Dialog contains single **Title** field
+- [x] Buttons: **Cancel** (left), **Create** (right)
+- [x] **Create disabled** until title has text
+- [x] Cancel → close dialog, do nothing, no toast
+- [x] Create → insert new recipe with:
+  - [x] Required title
+  - [x] servings_default = null
+  - [x] servings_min = null
+  - [x] servings_max = null
+  - [ ] exactly **one** blank ingredient row (future)
+  - [ ] exactly **one** blank instruction step (future)
+- [x] Dialog does **not** retain text after cancel
+- [x] No animation
 
 ---
 
 ### 3. Editor initial layout (new recipe)
 
-- [ ] Start editor scrolled to top
-- [ ] Title shown and editable
+(Current editor is not yet generating the auto-rows below.)
+
+- [x] Start editor scrolled to top
+- [x] Title shown and editable
 - [ ] Servings row immediately visible in edit mode
 - [ ] Caret placed in default servings field
 - [ ] INGREDIENTS section shown
@@ -66,35 +68,35 @@ Creating a new recipe flows through:
 
 ### 4. Title behavior
 
-- [ ] Clicking Title always enters title edit mode
-- [ ] Clicking Title always reveals Servings row (if hidden)
-- [ ] Title remains editable after creation
+- [x] Clicking Title enters title edit mode
+- [ ] Clicking Title reveals Servings row (if hidden)
+- [x] Title remains editable after creation
 
 ---
 
 ### 5. Servings row behavior
 
-**Entering edit mode:**
+Entering edit mode:
 
 - [ ] If default is null → show only (default)[ ]
 - [ ] If default is non-null → show (default)[v] (min)[ ] (max)[ ]
 - [ ] Min/max always shown in edit mode when default exists
 - [ ] Clicking any pill focuses associated field
-- [ ] Clicking “Servings: X” → focuses default field + selects entire value
+- [ ] Clicking “Servings: X” → focuses default field and selects entire value
 
-**Tab / Shift-Tab:**
+Tab / Shift-Tab:
 
 - [ ] Tab order = default → min → max → next-row-first-field
 - [ ] Shift-Tab = reverse
 
-**Blur: parsing & validation:**
+Blur: parsing & validation:
 
 - [ ] Parse default first
-- [ ] If default invalid → clear all three & hide subtitle
-- [ ] If default valid → parse min & max
+- [ ] If default invalid → clear all 3 and hide subtitle
+- [ ] If default valid → parse min and max
 - [ ] If min/max invalid → clear those only
-- [ ] All numeric values rounded to integer
-- [ ] Rest mode displays **“Servings: X”** only
+- [ ] Round numeric values
+- [ ] Rest mode: “Servings: X”
 - [ ] Min/max never shown in rest mode
 - [ ] Min/max allowed only when default is present
 
@@ -102,42 +104,42 @@ Creating a new recipe flows through:
 
 ### 6. Ingredient rows (text model for now)
 
-**Enter insertion:**
+Enter insertion:
 
-- [ ] Enter at start of row → insert blank row above, focus Qty
-- [ ] Enter mid/end of row → insert blank row below, focus Qty
+- [ ] Enter at start → insert blank row above, focus Qty
+- [ ] Enter mid/end → insert blank row below, focus Qty
 
-**Use-it-or-lose-it cleanup:**
+Use-it-or-lose-it:
 
 - [ ] Blank inserted row disappears on blur if still blank
-- [ ] Except when it is the **only** ingredient row (placeholder case)
+- [ ] Except when only ingredient row (placeholder)
 
-**Delete behavior:**
+Delete behavior:
 
 - [ ] Backspace at start of non-blank row = no-op
-- [ ] Backspace at end = normal text deletion
-- [ ] Backspace on blank row at start → deletes row unless it’s the only row
+- [ ] Backspace at end = normal deletion
+- [ ] Backspace on blank row at start → delete unless only row
 
-**Tab behavior (future pill model ready):**
+Tab behavior (future pill model):
 
-- [ ] Tab moves to next field: Qty → Unit → Name → Variant → Parenthetical → Prep
+- [ ] Qty → Unit → Name → Variant → Parenthetical → Prep
 - [ ] Shift-Tab reverses
-- [ ] At last field, Tab → first field of next row
-- [ ] If field has content, Tab selects all; if empty, caret at start
-- [ ] Deleting Qty returns caret to Qty, does not auto-advance
+- [ ] Last field Tab → first field of next row
+- [ ] Tab selects-all if field has content
+- [ ] Removing Qty snaps caret back to Qty
 
-**Entry when list empty:**
+Entry when list empty:
 
-- [ ] Enter on lone blank row = blur (no new row)
+- [ ] Enter on lone blank row = blur
 
 ---
 
 ### 7. Instructions (existing working model)
 
-- [ ] Placeholder appears only when list empty
-- [ ] Enter behaves according to existing step editor rules
-- [ ] Blank steps persist until explicitly deleted
-- [ ] No changes required for this feature
+- [x] Placeholder appears only when list empty
+- [x] Enter behavior correct
+- [x] Blank steps persist until explicitly deleted
+- [x] No changes required for this feature
 
 ---
 
@@ -145,40 +147,40 @@ Creating a new recipe flows through:
 
 Trigger:
 
-- [ ] Ctrl-click on a recipe row opens delete dialog
-- [ ] Normal click still opens recipe editor
+- [ ] Ctrl-click on recipe row opens delete dialog
+- [x] Normal click opens recipe editor
 
 Dialog:
 
 - [ ] Confirm text: “Delete ‘TITLE’?”
 - [ ] Buttons: Cancel (left), Delete (right)
-- [ ] Cancel → close dialog, nothing else
-- [ ] Delete → remove recipe from DB + list
-- [ ] No row selection maintained (list has hover only)
+- [ ] Cancel → no-op
+- [ ] Delete → remove from DB + list
+- [ ] No row selection persists
 
 Toast:
 
-- [ ] Bottom-center neutral toast: “TITLE was deleted. Undo”
-- [ ] Undo restores recipe (single-level destructive undo)
-- [ ] If multiple deletes occur, only most recent is undoable
+- [ ] Toast: “TITLE was deleted. Undo”
+- [ ] Undo restores recipe
+- [ ] Only most recent delete is undoable
 
 ---
 
 ### 9. Navigation & scrolling
 
-- [ ] After creation, editor always scrolls to top
-- [ ] After delete, no reselection occurs
-- [ ] No special animations required
+- [ ] After creation, editor scrolls to top
+- [ ] After delete, no reselection
+- [x] No special animations required
 
 ---
 
 ### 10. Miscellaneous invariants
 
-- [ ] Title required to create recipe
-- [ ] Duplicate titles permitted (for now)
+- [x] Title required to create recipe
+- [x] Duplicate titles permitted
 - [ ] Min/max never legal without default
-- [ ] Only one blank ingredient row allowed at end (others auto-clean)
-- [ ] Ingredient insertions create temporary blanks which vanish unless used
+- [ ] Only one blank ingredient row allowed at end
+- [ ] Temporary blanks vanish unless edited
 
 ---
 
@@ -189,27 +191,11 @@ Say **“synced”** once you drop it into your project docs.
 
 ## FUTURE COMPATIBILITY NOTES (for bulk paste support)
 
-- Ingredient rows are **atomic**: one ingredient per row.  
-  Bulk paste should explode multi-line text into multiple ingredient rows.
-
-- Maintain stable field order: qty → unit → name → variant → parenthetical → prep.  
-  Parsers will map tokens into these fields.
-
-- Blank ingredient rows remain **temporary** unless edited (“use it or lose it”).  
-  Prevents bulk paste from generating piles of empty rows.
-
-- Blank rows must not carry special state.  
-  Ensures paste handling remains simple and deterministic.
-
-- Step editor already supports text-editor semantics; bulk paste can rely on existing  
-  split/merge/insert logic without special cases.
-
-- Servings row should **never** interpret pasted text.  
-  Only becomes editable via Title or Servings click.
-
-- Insertion semantics must remain stable:  
-  Enter inserts above/below; paste targets current caret row and may create many rows.  
-  Predictable behavior simplifies parsing.
-
-- Avoid assumptions that paste affects only one row.  
-  Users may paste multi-line content into selections spanning multiple rows.
+- Ingredient rows are atomic; bulk paste → multiple rows.
+- Field order stable: qty → unit → name → variant → parenthetical → prep.
+- Blank ingredient rows temporary unless edited.
+- No special blank-row state.
+- Step editor already supports full text semantics.
+- Servings row never parses pasted text.
+- Insert behavior consistent (above/below).
+- Multi-line paste allowed; affects many rows predictably.
