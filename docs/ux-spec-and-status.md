@@ -106,6 +106,18 @@ Start-of-line
 Spec: Pressing Return at the start of a line moves the caret and any content down to a new line, leaving a blank line above (blank step is real).  
 Status: `FAIL` — caret currently stays with the blank line above
 
+Placeholder step behavior  
+Spec:
+
+- Placeholder text = “Add a step”.
+- Placeholder uses a lighter, muted color distinct from normal step text.
+- Placeholder is shown only when the step has no valid characters.
+- On focus, placeholder text clears immediately.
+- While editing, step text uses normal editing color (per global editing color rules).
+- On BLUR, if the field is empty after normalization, the placeholder reappears.
+
+Status: `TBD`
+
 Mid-line  
 Spec: Split step; right side becomes a new step below; caret moves to start of new step  
 Status: `PASS`

@@ -118,10 +118,42 @@ async function loadRecipesPage() {
     rows.forEach(([id, title]) => {
       const li = document.createElement('li');
       li.textContent = title;
-      li.addEventListener('click', () => {
+
+      li.addEventListener('click', (event) => {
+        // Ctrl-click → delete dialog; plain click → open editor
+        if (event.ctrlKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          openDeleteModal(id, title);
+          return;
+        }
+
         sessionStorage.setItem('selectedRecipeId', id);
         window.location.href = 'recipeEditor.html';
       });
+
+      // Primary click: open editor, unless modifier indicates delete
+      li.addEventListener('click', (event) => {
+        // Treat Ctrl-click (Windows/Linux) or Cmd-click (macOS) as "delete"
+        const wantsDelete = event.ctrlKey || event.metaKey;
+
+        if (wantsDelete) {
+          event.preventDefault();
+          event.stopPropagation();
+          openDeleteModal(id, title);
+          return;
+        }
+
+        sessionStorage.setItem('selectedRecipeId', id);
+        window.location.href = 'recipeEditor.html';
+      });
+
+      // Right-click / two-finger click → delete dialog as well
+      li.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        openDeleteModal(id, title);
+      });
+
       list.appendChild(li);
     });
   }
@@ -139,6 +171,12 @@ async function loadRecipesPage() {
   const cancelBtn = document.getElementById('addRecipeCancel');
   const createBtn = document.getElementById('addRecipeCreate');
   const titleInput = document.getElementById('newRecipeTitle');
+
+  const deleteModal = document.getElementById('deleteRecipeModal');
+  const deleteTitleSpan = document.getElementById('deleteRecipeTitle');
+  const deleteCancelBtn = document.getElementById('deleteRecipeCancel');
+  const deleteConfirmBtn = document.getElementById('deleteRecipeConfirm');
+  let pendingDeleteId = null;
 
   // Start with Create disabled; enable only when there is non-blank text.
   if (createBtn) {
@@ -166,6 +204,92 @@ async function loadRecipesPage() {
   function closeModal() {
     if (!modal) return;
     modal.classList.add('hidden');
+  }
+
+  function openDeleteModal(id, title) {
+    if (!deleteModal || !deleteTitleSpan) return;
+    pendingDeleteId = id;
+    deleteTitleSpan.textContent = title;
+    deleteModal.classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    if (!deleteModal) return;
+    pendingDeleteId = null;
+    deleteModal.classList.add('hidden');
+  }
+
+  if (deleteCancelBtn) {
+    deleteCancelBtn.addEventListener('click', () => {
+      closeDeleteModal();
+    });
+  }
+
+  // Delete a recipe and all dependent rows in child tables.
+  function deleteRecipeDeep(db, recipeId) {
+    // Remove instructions for this recipe
+    db.run('DELETE FROM recipe_steps WHERE recipe_id = ?;', [recipeId]);
+
+    // Remove any sections owned by this recipe
+    db.run('DELETE FROM recipe_sections WHERE recipe_id = ?;', [recipeId]);
+
+    // Remove ingredient mappings (substitutes are ON DELETE CASCADE from this)
+    db.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [
+      recipeId,
+    ]);
+
+    // Finally remove the recipe itself
+    db.run('DELETE FROM recipes WHERE ID = ?;', [recipeId]);
+  }
+
+  if (deleteConfirmBtn) {
+    deleteConfirmBtn.addEventListener('click', async () => {
+      if (pendingDeleteId == null) {
+        closeDeleteModal();
+        return;
+      }
+
+      try {
+        deleteRecipeDeep(db, pendingDeleteId);
+      } catch (err) {
+        console.error('❌ Failed to delete recipe:', err);
+        alert('Failed to delete recipe. See console for details.');
+        closeDeleteModal();
+        return;
+      }
+
+      // --- Persist updated DB so delete is durable ---
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after deleting recipe.');
+            return;
+          }
+        } else {
+          // Browser fallback — keep DB in localStorage
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after deleting recipe:', err);
+        alert(
+          'Failed to save database after deleting recipe. See console for details.'
+        );
+        return;
+      }
+
+      // Update in-memory list and UI
+      recipeRows = recipeRows.filter(([id]) => id !== pendingDeleteId);
+      renderRecipeList(recipeRows);
+
+      closeDeleteModal();
+    });
   }
 
   // Keep Create button in sync as user types.
@@ -372,6 +496,26 @@ async function loadRecipeEditorPage() {
           step_number: 1,
           instructions: 'Add a step',
           type: 'step',
+        },
+      ];
+    }
+
+    if (
+      !Array.isArray(firstSection.ingredients) ||
+      firstSection.ingredients.length === 0
+    ) {
+      firstSection.ingredients = [
+        {
+          quantity: '',
+          unit: '',
+          name: 'Add an ingredient',
+          variant: '',
+          prepNotes: '',
+          parentheticalNote: '',
+          isOptional: false,
+          substitutes: [],
+          locationAtHome: '',
+          subRecipeId: null,
         },
       ];
     }

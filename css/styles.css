@@ -5,7 +5,8 @@
   --headline-font-size: 16px;
   --theme-primary: #6d49ff;
   --theme-secondary: #7f5cff;
-  --theme-light: hsl(252, 100%, 97%);
+  --theme-light: hsl(252, 100%, 96%);
+  --theme-light-hex: #f1edfd;
   --font-color-near-black: #191919;
   --theme-editing-mode: #2184ff;
   --theme-primary-transparent: #6d49ff20;
@@ -23,8 +24,8 @@
 
 /* --- Body / Layout Defaults --- */
 .centered-container {
-  /* background: white; */
-  background: var(--theme-primary-light);
+  background: var(--theme-light-hex);
+  /* background: var(--theme-light); */
   display: flex;
   align-items: center;
   justify-content: center;

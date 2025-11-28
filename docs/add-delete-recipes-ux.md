@@ -43,8 +43,8 @@ Creating a new recipe flows through:
   - [x] servings_default = null
   - [x] servings_min = null
   - [x] servings_max = null
-  - [ ] exactly **one** blank ingredient row (future)
-  - [ ] exactly **one** blank instruction step (future)
+  - [ ] exactly **one** blank ingredient row
+  - [ ] exactly **one** blank instruction step
 - [x] Dialog does **not** retain text after cancel
 - [x] No animation
 
@@ -63,6 +63,15 @@ Creating a new recipe flows through:
 - [ ] YOU WILL NEED card shown (title only)
 - [ ] INSTRUCTIONS section shown
 - [ ] First step = placeholder “Add a step”
+
+Placeholder step behavior:
+
+- [ ] Placeholder text = “Add a step”.
+- [ ] Placeholder uses a lighter, muted color distinct from normal step text.
+- [ ] Placeholder is shown only when the step has no valid characters.
+- [ ] On focus, placeholder text clears immediately.
+- [ ] While editing, step text uses normal editing color.
+- [ ] On blur, if the field is empty (after normalization), the placeholder reappears.
 
 ---
 
@@ -147,16 +156,16 @@ Entry when list empty:
 
 Trigger:
 
-- [ ] Ctrl-click on recipe row opens delete dialog
+- [x] Ctrl-click on recipe row opens delete dialog
 - [x] Normal click opens recipe editor
 
 Dialog:
 
-- [ ] Confirm text: “Delete ‘TITLE’?”
-- [ ] Buttons: Cancel (left), Delete (right)
-- [ ] Cancel → no-op
-- [ ] Delete → remove from DB + list
-- [ ] No row selection persists
+- [x] Confirm text: “Delete ‘TITLE’?”
+- [x] Buttons: Cancel (left), Delete (right)
+- [x] Cancel → no-op
+- [x] Delete → remove from DB + list
+- [x] No row selection persists
 
 Toast:
 
