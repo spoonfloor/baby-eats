@@ -213,23 +213,33 @@ function renderRecipe(recipe) {
 
   // --- Clear & rebuild container
   const container = document.getElementById('recipeView');
+
   container.innerHTML = `
     <h1 id="recipeTitle" class="recipe-title">${recipe.title || ''}</h1>
+    <div id="servingsRow" class="servings-line"></div>
     <div id="ingredientsSection"></div>
     <div id="stepsSection">
       <h2 class="section-header">Instructions</h2>
     </div>
   `;
 
+  // Enable inline title editing
+  const titleEl = container.querySelector('#recipeTitle');
+  if (typeof attachTitleEditor === 'function') {
+    attachTitleEditor(titleEl);
+  }
+
   const ingredientsSection = container.querySelector('#ingredientsSection');
   const stepsSection = container.querySelector('#stepsSection');
 
-  // Servings
-  if (recipe.servingsDefault) {
-    const servingsLine = document.createElement('div');
-    servingsLine.className = 'servings-line';
-    servingsLine.textContent = `Serves ${recipe.servingsDefault}`;
-    ingredientsSection.appendChild(servingsLine);
+  // New unified servings row under the title
+  const servingsRow = container.querySelector('#servingsRow');
+  if (servingsRow) {
+    if (recipe.servingsDefault != null && recipe.servingsDefault !== '') {
+      servingsRow.textContent = `Serves ${recipe.servingsDefault}`;
+    } else {
+      servingsRow.textContent = 'Servings:';
+    }
   }
 
   // Ingredients list
@@ -264,19 +274,32 @@ function renderRecipe(recipe) {
   }
 
   // --- You will need section ---
-  const allIngredients = Array.isArray(recipe.sections)
+  const allIngredientsRaw = Array.isArray(recipe.sections)
     ? recipe.sections.flatMap((s) => s.ingredients || [])
     : [];
 
-  if (allIngredients.length > 0) {
-    const needWrapper = document.createElement('div');
-    needWrapper.className = 'you-will-need-card';
-    container.insertBefore(needWrapper, stepsSection);
-    const needHeader = document.createElement('h2');
-    needHeader.className = 'section-header';
-    needHeader.textContent = 'You will need';
-    needWrapper.appendChild(needHeader);
+  // Strip out model-only placeholders so "You will need" reflects real ingredients only.
+  const allIngredients = allIngredientsRaw.filter((ing) => !ing.isPlaceholder);
 
+  // Always show the card; content depends on whether we have any real ingredients.
+  const needWrapper = document.createElement('div');
+  needWrapper.className = 'you-will-need-card';
+  container.insertBefore(needWrapper, stepsSection);
+
+  const needHeader = document.createElement('h2');
+  needHeader.className = 'section-header';
+  needHeader.textContent = 'You will need';
+  needWrapper.appendChild(needHeader);
+
+  if (allIngredients.length === 0) {
+    // Read-only placeholder for this section only.
+    const line = document.createElement('div');
+    line.className = 'ingredient-line';
+    const span = document.createElement('span');
+    span.textContent = 'No ingredients yet. Add some above.';
+    line.appendChild(span);
+    needWrapper.appendChild(line);
+  } else {
     const grouped = {};
     allIngredients.forEach((ing) => {
       const loc = ing.locationAtHome || '';
@@ -514,6 +537,65 @@ function renderRecipe(recipe) {
     noSteps.textContent = 'No instructions found.';
     stepsSection.appendChild(noSteps);
   }
+}
+
+// --- Inline editable title (global helper) ---
+function attachTitleEditor(titleEl) {
+  if (!titleEl) return;
+
+  titleEl.addEventListener('click', () => {
+    if (titleEl.isContentEditable) return;
+
+    const original = titleEl.textContent || '';
+    const hadDirty = typeof isDirty !== 'undefined' && isDirty === true;
+
+    titleEl.contentEditable = 'true';
+    titleEl.focus();
+
+    const cleanup = () => {
+      titleEl.contentEditable = 'false';
+      titleEl.removeEventListener('blur', onBlur);
+      titleEl.removeEventListener('keydown', onKeyDown);
+    };
+
+    const commit = () => {
+      const raw = titleEl.textContent || '';
+      const trimmed = raw.trim();
+      const nextTitle = trimmed || 'Untitled';
+
+      if (window.recipeData && window.recipeData.title !== nextTitle) {
+        window.recipeData.title = nextTitle;
+        if (typeof markDirty === 'function') markDirty();
+      }
+      titleEl.textContent = nextTitle;
+    };
+
+    const cancelLocal = () => {
+      titleEl.textContent = original;
+      if (!hadDirty && typeof revertChanges === 'function') {
+        revertChanges();
+      }
+    };
+
+    const onBlur = () => {
+      commit();
+      cleanup();
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        titleEl.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelLocal();
+        cleanup();
+      }
+    };
+
+    titleEl.addEventListener('blur', onBlur);
+    titleEl.addEventListener('keydown', onKeyDown);
+  });
 }
 
 // --- Helpers ---

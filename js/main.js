@@ -483,12 +483,19 @@ async function loadRecipeEditorPage() {
         Array.isArray(section.ingredients) && section.ingredients.length > 0
     );
 
-  const shouldSeedPlaceholders =
+  // 🔍 Decide seeding separately for steps vs ingredients.
+  // - Steps placeholder only for truly empty / brand-new recipes.
+  // - Ingredient placeholder any time there are zero ingredients, even if steps exist
+  //   (e.g., user edited title + saved but never added ingredients).
+  const shouldSeedStepPlaceholder =
     isNewRecipe || (!hasAnySteps && !hasAnyIngredients);
 
-  if (shouldSeedPlaceholders) {
+  const shouldSeedIngredientPlaceholder = !hasAnyIngredients;
+
+  if (shouldSeedStepPlaceholder || shouldSeedIngredientPlaceholder) {
     if (isNewRecipe) {
-      // One-shot flag: once placeholders exist, we never need this again.
+      // One-shot flag: once we've initialized a brand-new recipe,
+      // we don't treat it as "new" again on future opens.
       sessionStorage.removeItem('selectedRecipeIsNew');
     }
 
@@ -506,8 +513,11 @@ async function loadRecipeEditorPage() {
 
     const firstSection = recipe.sections[0];
 
-    // Ensure at least one placeholder step
-    if (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0) {
+    // Ensure at least one placeholder step (new/empty recipes only)
+    if (
+      shouldSeedStepPlaceholder &&
+      (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0)
+    ) {
       const tempId = `tmp-step-${Date.now()}`;
       firstSection.steps = [
         {
@@ -521,10 +531,11 @@ async function loadRecipeEditorPage() {
       ];
     }
 
-    // Ensure at least one placeholder ingredient
+    // Ensure at least one placeholder ingredient whenever there are none
     if (
-      !Array.isArray(firstSection.ingredients) ||
-      firstSection.ingredients.length === 0
+      shouldSeedIngredientPlaceholder &&
+      (!Array.isArray(firstSection.ingredients) ||
+        firstSection.ingredients.length === 0)
     ) {
       firstSection.ingredients = [
         {
@@ -538,6 +549,7 @@ async function loadRecipeEditorPage() {
           substitutes: [],
           locationAtHome: '',
           subRecipeId: null,
+          isPlaceholder: true,
         },
       ];
     }

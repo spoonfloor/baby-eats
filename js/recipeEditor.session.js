@@ -175,9 +175,39 @@ if (saveBtn) {
 }
 
 async function saveRecipeToDB() {
-  // Delegate to the bridge, which now owns all DB write logic
   const db = window.dbInstance;
   const recipe = window.recipeData;
+
+  if (!db || !recipe) {
+    throw new Error('saveRecipeToDB: missing db or recipeData');
+  }
+
+  // --- 1) Persist recipe metadata (title + servings) ---
+  const rid = Number(window.recipeId || recipe.id);
+  if (!Number.isFinite(rid)) {
+    throw new Error('saveRecipeToDB: invalid recipe id');
+  }
+
+  const title = recipe.title || '';
+
+  const servingsDefault =
+    recipe.servingsDefault ??
+    (recipe.servings && recipe.servings.default != null
+      ? recipe.servings.default
+      : null);
+
+  const servingsMin =
+    recipe.servings && recipe.servings.min != null ? recipe.servings.min : null;
+
+  const servingsMax =
+    recipe.servings && recipe.servings.max != null ? recipe.servings.max : null;
+
+  db.run(
+    'UPDATE recipes SET title = ?, servings_default = ?, servings_min = ?, servings_max = ? WHERE ID = ?;',
+    [title, servingsDefault, servingsMin, servingsMax, rid]
+  );
+
+  // --- 2) Persist steps from the StepNode model ---
 
   bridge.saveRecipeStepsFromStepNodes(db, window.recipeId, window.stepNodes);
 
