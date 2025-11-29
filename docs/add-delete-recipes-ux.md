@@ -43,8 +43,8 @@ Creating a new recipe flows through:
   - [x] servings_default = null
   - [x] servings_min = null
   - [x] servings_max = null
-  - [ ] exactly **one** blank ingredient row
-  - [ ] exactly **one** blank instruction step
+  - [x] exactly **one** blank ingredient row
+  - [x] exactly **one** blank instruction step
 - [x] Dialog does **not** retain text after cancel
 - [x] No animation
 

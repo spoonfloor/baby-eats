@@ -134,6 +134,10 @@
   display: none;
 }
 
+.recipe-title {
+  font-size: 22px; /* stronger heading style */
+}
+
 /* --- Section headings / spacing --- */
 .section-heading {
   margin-top: 2rem;
@@ -366,7 +370,7 @@ h1.nav-text {
 }
 
 .servings-line {
-  margin-bottom: 16px;
+  margin: 6px 0 16px 0;
   font-weight: 500;
   color: #333;
 }

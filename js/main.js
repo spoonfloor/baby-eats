@@ -467,10 +467,30 @@ async function loadRecipeEditorPage() {
     recipe.servingsDefault = recipe.servings.default;
   }
 
-  // Seed a placeholder instruction step for brand-new recipes.
-  if (isNewRecipe) {
-    // One-shot flag, so reloading later doesn’t re-seed.
-    sessionStorage.removeItem('selectedRecipeIsNew');
+  // Decide when to seed placeholder rows:
+  // - brand-new recipes (fresh from "Add")
+  // - OR recipes that currently have no steps and no ingredients at all
+  const hasAnySteps =
+    Array.isArray(recipe.sections) &&
+    recipe.sections.some(
+      (section) => Array.isArray(section.steps) && section.steps.length > 0
+    );
+
+  const hasAnyIngredients =
+    Array.isArray(recipe.sections) &&
+    recipe.sections.some(
+      (section) =>
+        Array.isArray(section.ingredients) && section.ingredients.length > 0
+    );
+
+  const shouldSeedPlaceholders =
+    isNewRecipe || (!hasAnySteps && !hasAnyIngredients);
+
+  if (shouldSeedPlaceholders) {
+    if (isNewRecipe) {
+      // One-shot flag: once placeholders exist, we never need this again.
+      sessionStorage.removeItem('selectedRecipeIsNew');
+    }
 
     if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
       recipe.sections = [
@@ -486,6 +506,7 @@ async function loadRecipeEditorPage() {
 
     const firstSection = recipe.sections[0];
 
+    // Ensure at least one placeholder step
     if (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0) {
       const tempId = `tmp-step-${Date.now()}`;
       firstSection.steps = [
@@ -500,6 +521,7 @@ async function loadRecipeEditorPage() {
       ];
     }
 
+    // Ensure at least one placeholder ingredient
     if (
       !Array.isArray(firstSection.ingredients) ||
       firstSection.ingredients.length === 0

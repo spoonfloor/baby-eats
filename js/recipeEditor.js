@@ -214,6 +214,7 @@ function renderRecipe(recipe) {
   // --- Clear & rebuild container
   const container = document.getElementById('recipeView');
   container.innerHTML = `
+    <h1 id="recipeTitle" class="recipe-title">${recipe.title || ''}</h1>
     <div id="ingredientsSection"></div>
     <div id="stepsSection">
       <h2 class="section-header">Instructions</h2>
