@@ -85,6 +85,10 @@ Placeholder step behavior:
 
 ### 5. Servings row behavior
 
+Visibility:
+
+- [ ] Servings row is visible whenever servings data exists, or when the title is in edit mode. (Avoids empty UI; keeps servings discoverable during initial setup.)
+
 Entering edit mode:
 
 - [ ] If default is null → show only (default)[ ]

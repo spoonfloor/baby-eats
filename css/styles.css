@@ -138,6 +138,14 @@
   font-size: 22px; /* stronger heading style */
 }
 
+.recipe-title[contenteditable='true'] {
+  outline: none;
+}
+
+.recipe-title.editing-title {
+  color: var(--theme-editing-mode);
+}
+
 /* --- Section headings / spacing --- */
 .section-heading {
   margin-top: 2rem;

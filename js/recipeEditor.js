@@ -223,23 +223,16 @@ function renderRecipe(recipe) {
     </div>
   `;
 
+  const ingredientsSection = container.querySelector('#ingredientsSection');
+  const stepsSection = container.querySelector('#stepsSection');
+
+  // Unified servings row just under the title
+  renderServingsRow(recipe, container);
+
   // Enable inline title editing
   const titleEl = container.querySelector('#recipeTitle');
   if (typeof attachTitleEditor === 'function') {
     attachTitleEditor(titleEl);
-  }
-
-  const ingredientsSection = container.querySelector('#ingredientsSection');
-  const stepsSection = container.querySelector('#stepsSection');
-
-  // New unified servings row under the title
-  const servingsRow = container.querySelector('#servingsRow');
-  if (servingsRow) {
-    if (recipe.servingsDefault != null && recipe.servingsDefault !== '') {
-      servingsRow.textContent = `Serves ${recipe.servingsDefault}`;
-    } else {
-      servingsRow.textContent = 'Servings:';
-    }
   }
 
   // Ingredients list
@@ -539,35 +532,120 @@ function renderRecipe(recipe) {
   }
 }
 
+// --- Servings helpers (Step 1: rest-mode text + visibility only) ---
+
+function servingsHasData(recipe) {
+  if (!recipe) return false;
+  const v = recipe.servingsDefault;
+  return v !== null && v !== undefined && v !== '';
+}
+
+function updateServingsVisibility(recipe) {
+  const row = document.getElementById('servingsRow');
+  if (!row) return;
+
+  const hasData = servingsHasData(recipe);
+  const isTitleEditing = !!window.isTitleEditing;
+
+  // Spec (visibility piece only):
+  // - visible whenever servings data exists
+  // - OR when the title is in edit mode
+  const shouldShow = hasData || isTitleEditing;
+  row.style.display = shouldShow ? '' : 'none';
+}
+
+function renderServingsRow(recipe, container) {
+  const row =
+    (container && container.querySelector('#servingsRow')) ||
+    document.getElementById('servingsRow');
+  if (!row) return;
+
+  // Step 1: keep existing "rest" behavior, no edit UI yet.
+  if (servingsHasData(recipe)) {
+    row.textContent = `Serves ${recipe.servingsDefault}`;
+  } else {
+    row.textContent = 'Servings:';
+  }
+
+  updateServingsVisibility(recipe);
+}
+
+// --- Title normalization helper (Title Case + fallback to "Untitled") ---
+function normalizeRecipeTitle(raw) {
+  if (raw == null) return 'Untitled';
+  const trimmed = String(raw).trim();
+  if (!trimmed) return 'Untitled';
+
+  // Reuse global helper if it exists (from main.js), for consistency
+  if (typeof window.toTitleCase === 'function') {
+    return window.toTitleCase(trimmed);
+  }
+
+  // Local fallback: simple Title Case
+  return trimmed
+    .toLowerCase()
+    .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
+}
+
 // --- Inline editable title (global helper) ---
 function attachTitleEditor(titleEl) {
   if (!titleEl) return;
+
+  // Ensure flag has a defined default
+  if (typeof window.isTitleEditing === 'undefined')
+    window.isTitleEditing = false;
 
   titleEl.addEventListener('click', () => {
     if (titleEl.isContentEditable) return;
 
     const original = titleEl.textContent || '';
+    let hasPendingEdit = false;
     const hadDirty = typeof isDirty !== 'undefined' && isDirty === true;
 
     titleEl.contentEditable = 'true';
+
+    // Mark title as "in edit mode" so servings visibility can follow spec.
+    window.isTitleEditing = true;
+    if (typeof updateServingsVisibility === 'function') {
+      updateServingsVisibility(window.recipeData);
+    }
+
+    // Match instruction edit state: special editing color, no outline
+    titleEl.classList.add('editing-title');
+
     titleEl.focus();
 
     const cleanup = () => {
       titleEl.contentEditable = 'false';
+      titleEl.classList.remove('editing-title');
       titleEl.removeEventListener('blur', onBlur);
+      titleEl.removeEventListener('input', onInput);
       titleEl.removeEventListener('keydown', onKeyDown);
+
+      window.isTitleEditing = false;
+      if (typeof updateServingsVisibility === 'function') {
+        updateServingsVisibility(window.recipeData);
+      }
     };
 
     const commit = () => {
       const raw = titleEl.textContent || '';
-      const trimmed = raw.trim();
-      const nextTitle = trimmed || 'Untitled';
+      const nextTitle = normalizeRecipeTitle(raw);
 
       if (window.recipeData && window.recipeData.title !== nextTitle) {
         window.recipeData.title = nextTitle;
         if (typeof markDirty === 'function') markDirty();
       }
       titleEl.textContent = nextTitle;
+    };
+
+    const onInput = () => {
+      if (!hasPendingEdit) {
+        hasPendingEdit = true;
+        if (typeof markDirty === 'function') {
+          markDirty();
+        }
+      }
     };
 
     const cancelLocal = () => {
@@ -594,6 +672,7 @@ function attachTitleEditor(titleEl) {
     };
 
     titleEl.addEventListener('blur', onBlur);
+    titleEl.addEventListener('input', onInput);
     titleEl.addEventListener('keydown', onKeyDown);
   });
 }
