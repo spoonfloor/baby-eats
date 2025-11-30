@@ -419,8 +419,9 @@ h1.nav-text {
 }
 
 .row-field {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  gap: 8px;
 }
 
 /* Inline flex wrapper for legacy uses, can be reused inside .row-field */

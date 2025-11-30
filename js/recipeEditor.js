@@ -540,10 +540,19 @@ if (typeof window._servingsEditSkipFocusOnce === 'undefined') {
   window._servingsEditSkipFocusOnce = false;
 }
 
-// One-shot flag: when true, the next blur from the servings input will skip committing
-// changes (used when Enter/Escape exit edit mode without saving).
+// Remember last valid committed value so blur/enter can revert invalid edits
+if (typeof window._servingsLastValid === 'undefined') {
+  window._servingsLastValid = null;
+}
+
+// Track whether we should skip commit on this blur (used only for Escape flows)
 if (typeof window._servingsSkipCommitOnce === 'undefined') {
   window._servingsSkipCommitOnce = false;
+}
+
+function _servingsIsValidNumber(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0;
 }
 
 function servingsHasData(recipe) {
@@ -593,19 +602,15 @@ function renderServingsRow(recipe, container) {
   row.innerHTML = '';
   row.onclick = null;
 
-  // Locked pill strip (visibility via CSS)
-  const labels = document.createElement('div');
-  labels.className = 'row-labels';
+  // Single horizontal row shell; pill is only used in edit mode
+  const field = document.createElement('div');
+  field.className = 'row-field';
   const pill = document.createElement('span');
   pill.className = 'field-pill';
   pill.textContent = 'Servings';
-  labels.appendChild(pill);
-
-  const field = document.createElement('div');
-  field.className = 'row-field';
 
   if (!window.isServingsEditing) {
-    // Rest mode text from same value the field edits
+    // Rest mode: plain subtitle text, no pill
     if (hasData && recipeModel.servingsDefault != null) {
       field.textContent = `Serves ${recipeModel.servingsDefault}`;
     } else {
@@ -614,10 +619,15 @@ function renderServingsRow(recipe, container) {
 
     row.onclick = () => {
       window.isServingsEditing = true;
+      window._servingsLastValid =
+        recipeModel.servingsDefault != null
+          ? recipeModel.servingsDefault
+          : null;
       renderServingsRow(recipe, container);
     };
   } else {
-    // Edit mode: input; pill stays locked above
+    // Edit mode: pill + input inline
+
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'servings-input';
@@ -626,6 +636,8 @@ function renderServingsRow(recipe, container) {
         ? String(recipeModel.servingsDefault)
         : '';
 
+    field.innerHTML = '';
+    field.appendChild(pill);
     field.appendChild(input);
 
     pill.addEventListener('click', () => {
@@ -645,30 +657,49 @@ function renderServingsRow(recipe, container) {
       }, 0);
     }
 
-    input.addEventListener('blur', () => {
-      const prev =
-        recipeModel.servingsDefault != null
-          ? Number(recipeModel.servingsDefault)
-          : null;
-
+    // Live-commit semantics: update in-memory model while typing
+    input.addEventListener('input', () => {
       const raw = (input.value || '').trim();
-      let next = null;
 
-      if (raw) {
-        const parsed = Number(raw);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          next = Math.round(parsed);
-        }
+      if (raw === '') {
+        // Empty while typing → treat as "no servings yet" but don't hide row until blur
+        recipeModel.servingsDefault = null;
+      } else if (_servingsIsValidNumber(raw)) {
+        recipeModel.servingsDefault = Math.round(Number(raw));
+        window._servingsLastValid = recipeModel.servingsDefault;
       }
 
-      if (!window._servingsSkipCommitOnce && prev !== next) {
-        recipeModel.servingsDefault = next;
-        if (typeof markDirty === 'function') {
-          markDirty();
-        }
+      if (typeof markDirty === 'function') {
+        markDirty();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      const raw = (input.value || '').trim();
+
+      // Escape path sets skip flag — skip committing, revert via render.
+      if (window._servingsSkipCommitOnce) {
+        window._servingsSkipCommitOnce = false;
+        recipeModel.servingsDefault = window._servingsLastValid;
+        window.isServingsEditing = false;
+        renderServingsRow(recipeModel, container);
+        return;
       }
 
-      window._servingsSkipCommitOnce = false;
+      // Empty → null + hide row
+      if (raw === '') {
+        recipeModel.servingsDefault = null;
+      }
+      // Valid number → commit normalized
+      else if (_servingsIsValidNumber(raw)) {
+        recipeModel.servingsDefault = Math.round(Number(raw));
+        window._servingsLastValid = recipeModel.servingsDefault;
+      }
+      // Invalid → revert to last valid
+      else {
+        recipeModel.servingsDefault = window._servingsLastValid;
+      }
+
       window.isServingsEditing = false;
       renderServingsRow(recipeModel, container);
     });
@@ -676,20 +707,17 @@ function renderServingsRow(recipe, container) {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-
-        window._servingsSkipCommitOnce = true;
-        window.isServingsEditing = false;
-        renderServingsRow(recipeModel, container);
+        // Treat Enter exactly like blur
+        input.blur();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        // Escape = revert + exit, so tell blur to skip commit
         window._servingsSkipCommitOnce = true;
-        window.isServingsEditing = false;
-        renderServingsRow(recipeModel, container);
+        input.blur();
       }
     });
   }
 
-  row.appendChild(labels);
   row.appendChild(field);
 
   updateServingsVisibility(recipe);
@@ -751,6 +779,14 @@ function attachTitleEditor(titleEl) {
 
       if (typeof renderServingsRow === 'function') {
         renderServingsRow(window.recipeData);
+
+        // Prime last-valid snapshot at start of edit mode
+        if (window.recipeData) {
+          window._servingsLastValid =
+            window.recipeData.servingsDefault != null
+              ? window.recipeData.servingsDefault
+              : null;
+        }
       }
     }
 
