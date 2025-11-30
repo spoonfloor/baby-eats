@@ -56,29 +56,29 @@ Creating a new recipe flows through:
 
 - [x] Start editor scrolled to top
 - [x] Title shown and editable
-- [ ] Servings row immediately visible in edit mode
-- [ ] Caret placed in default servings field
-- [ ] INGREDIENTS section shown
-- [ ] First ingredient row = blank placeholder “Add an ingredient”
-- [ ] YOU WILL NEED card shown (title only)
-- [ ] INSTRUCTIONS section shown
-- [ ] First step = placeholder “Add a step”
+- [x] Servings row immediately visible in edit mode
+- [x] Caret placed in default servings field
+- [x] INGREDIENTS section shown
+- [x] First ingredient row = blank placeholder “Add an ingredient”
+- [x] YOU WILL NEED card shown
+- [x] INSTRUCTIONS section shown
+- [x] First step = placeholder “Add a step.”
 
 Placeholder step behavior:
 
-- [ ] Placeholder text = “Add a step”.
+- [x] Placeholder text = “Add a step.”
 - [ ] Placeholder uses a lighter, muted color distinct from normal step text.
-- [ ] Placeholder is shown only when the step has no valid characters.
+- [x] Placeholder is shown only when the step has no valid characters.
 - [ ] On focus, placeholder text clears immediately.
-- [ ] While editing, step text uses normal editing color.
-- [ ] On blur, if the field is empty (after normalization), the placeholder reappears.
+- [x] While editing, step text uses normal editing color.
+- [x] On blur, if the field is empty (after normalization), the placeholder reappears.
 
 ---
 
 ### 4. Title behavior
 
 - [x] Clicking Title enters title edit mode
-- [ ] Clicking Title reveals Servings row (if hidden)
+- [x] Clicking Title reveals Servings row (if hidden)
 - [x] Title remains editable after creation
 
 ---
@@ -91,11 +91,11 @@ Visibility:
 
 Entering edit mode:
 
-- [ ] If default is null → show only (default)[ ]
+- [x] If default is null → show only (default)[ ]
 - [ ] If default is non-null → show (default)[v] (min)[ ] (max)[ ]
 - [ ] Min/max always shown in edit mode when default exists
-- [ ] Clicking any pill focuses associated field
-- [ ] Clicking “Servings: X” → focuses default field and selects entire value
+- [x] Clicking any pill focuses associated field
+- [x] Clicking “Serves X” → focuses default field and selects entire value
 
 Tab / Shift-Tab:
 
@@ -108,8 +108,8 @@ Blur: parsing & validation:
 - [ ] If default invalid → clear all 3 and hide subtitle
 - [ ] If default valid → parse min and max
 - [ ] If min/max invalid → clear those only
-- [ ] Round numeric values
-- [ ] Rest mode: “Servings: X”
+- [x] Round numeric values
+- [x] Rest mode: “Serves X”
 - [ ] Min/max never shown in rest mode
 - [ ] Min/max allowed only when default is present
 
@@ -176,24 +176,6 @@ Toast:
 - [ ] Toast: “TITLE was deleted. Undo”
 - [ ] Undo restores recipe
 - [ ] Only most recent delete is undoable
-
----
-
-### 9. Navigation & scrolling
-
-- [ ] After creation, editor scrolls to top
-- [ ] After delete, no reselection
-- [x] No special animations required
-
----
-
-### 10. Miscellaneous invariants
-
-- [x] Title required to create recipe
-- [x] Duplicate titles permitted
-- [ ] Min/max never legal without default
-- [ ] Only one blank ingredient row allowed at end
-- [ ] Temporary blanks vanish unless edited
 
 ---
 

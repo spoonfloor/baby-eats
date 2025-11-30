@@ -18,6 +18,15 @@ initSqlJs({
 const loadDbBtn = document.getElementById('loadDbBtn');
 const dbLoader = document.getElementById('dbLoader');
 
+// 🔑 Pressing Enter on the welcome screen behaves like clicking "Load Recipes"
+if (document.body.classList.contains('welcome-page')) {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      loadDbBtn?.click();
+    }
+  });
+}
+
 if (loadDbBtn && dbLoader) {
   loadDbBtn.addEventListener('click', async () => {
     const isElectron = !!window.electronAPI;
@@ -525,7 +534,7 @@ async function loadRecipeEditorPage() {
           id: tempId,
           section_id: firstSection.ID ?? firstSection.id ?? null,
           step_number: 1,
-          instructions: 'Add a step',
+          instructions: 'Add a step.',
           type: 'step',
         },
       ];
@@ -541,7 +550,7 @@ async function loadRecipeEditorPage() {
         {
           quantity: '',
           unit: '',
-          name: 'Add an ingredient',
+          name: 'Add an ingredient.',
           variant: '',
           prepNotes: '',
           parentheticalNote: '',

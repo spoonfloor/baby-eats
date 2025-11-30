@@ -557,7 +557,17 @@ function _servingsIsValidNumber(raw) {
 
 function servingsHasData(recipe) {
   if (!recipe) return false;
-  const v = recipe.servingsDefault;
+
+  let v = recipe.servingsDefault;
+
+  // Fallback to nested servings.default if top-level isn't populated
+  if (v === null || v === undefined || v === '') {
+    if (recipe.servings && recipe.servings.default != null) {
+      v = recipe.servings.default;
+      recipe.servingsDefault = v; // keep model in sync
+    }
+  }
+
   return v !== null && v !== undefined && v !== '';
 }
 
@@ -628,22 +638,83 @@ function renderServingsRow(recipe, container) {
   } else {
     // Edit mode: pill + input inline
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'servings-input';
-    input.value =
+    const servingsObj = recipeModel.servings || {};
+    const defaultVal =
       recipeModel.servingsDefault != null
-        ? String(recipeModel.servingsDefault)
-        : '';
+        ? recipeModel.servingsDefault
+        : servingsObj.default != null
+        ? servingsObj.default
+        : null;
+
+    // Keep top-level + nested default in sync
+    if (defaultVal != null) {
+      recipeModel.servingsDefault = defaultVal;
+    }
+
+    const minVal =
+      servingsObj.min != null && _servingsIsValidNumber(servingsObj.min)
+        ? servingsObj.min
+        : servingsObj.min != null
+        ? servingsObj.min
+        : null;
+
+    const maxVal =
+      servingsObj.max != null && _servingsIsValidNumber(servingsObj.max)
+        ? servingsObj.max
+        : servingsObj.max != null
+        ? servingsObj.max
+        : null;
+
+    const editRow = document.createElement('div');
+    editRow.className = 'servings-edit-row';
+
+    // --- Default input ---
+    const defaultInput = document.createElement('input');
+    defaultInput.type = 'text';
+    defaultInput.className = 'servings-input';
+    defaultInput.value = defaultVal != null ? String(defaultVal) : '';
+
+    // --- Min input ---
+    const minLabel = document.createElement('span');
+    minLabel.textContent = 'min';
+
+    const minInput = document.createElement('input');
+    minInput.type = 'text';
+    minInput.className = 'servings-input';
+    minInput.value = minVal != null ? String(minVal) : '';
+
+    // --- Max input ---
+    const maxLabel = document.createElement('span');
+    maxLabel.textContent = 'max';
+
+    const maxInput = document.createElement('input');
+    maxInput.type = 'text';
+    maxInput.className = 'servings-input';
+    maxInput.value = maxVal != null ? String(maxVal) : '';
 
     field.innerHTML = '';
-    field.appendChild(pill);
-    field.appendChild(input);
+    editRow.appendChild(pill);
+    editRow.appendChild(defaultInput);
+    editRow.appendChild(minLabel);
+    editRow.appendChild(minInput);
+    editRow.appendChild(maxLabel);
+    editRow.appendChild(maxInput);
+    field.appendChild(editRow);
 
     pill.addEventListener('click', () => {
-      input.focus();
-      input.select();
+      defaultInput.focus();
+      defaultInput.select();
     });
+
+    const ensureServingsObj = () => {
+      if (!recipeModel.servings) {
+        recipeModel.servings = {
+          default: recipeModel.servingsDefault ?? null,
+          min: null,
+          max: null,
+        };
+      }
+    };
 
     const skipAutoFocus =
       typeof window !== 'undefined' && window._servingsEditSkipFocusOnce;
@@ -652,21 +723,24 @@ function renderServingsRow(recipe, container) {
       window._servingsEditSkipFocusOnce = false;
     } else {
       setTimeout(() => {
-        input.focus();
-        input.select();
+        defaultInput.focus();
+        defaultInput.select();
       }, 0);
     }
 
-    // Live-commit semantics: update in-memory model while typing
-    input.addEventListener('input', () => {
-      const raw = (input.value || '').trim();
+    // --- Default: live-commit semantics ---
+    defaultInput.addEventListener('input', () => {
+      const raw = (defaultInput.value || '').trim();
+      ensureServingsObj();
 
       if (raw === '') {
-        // Empty while typing → treat as "no servings yet" but don't hide row until blur
         recipeModel.servingsDefault = null;
+        recipeModel.servings.default = null;
       } else if (_servingsIsValidNumber(raw)) {
-        recipeModel.servingsDefault = Math.round(Number(raw));
-        window._servingsLastValid = recipeModel.servingsDefault;
+        const n = Math.round(Number(raw));
+        recipeModel.servingsDefault = n;
+        recipeModel.servings.default = n;
+        window._servingsLastValid = n;
       }
 
       if (typeof markDirty === 'function') {
@@ -674,48 +748,104 @@ function renderServingsRow(recipe, container) {
       }
     });
 
-    input.addEventListener('blur', () => {
-      const raw = (input.value || '').trim();
+    defaultInput.addEventListener('blur', () => {
+      const raw = (defaultInput.value || '').trim();
+      ensureServingsObj();
 
       // Escape path sets skip flag — skip committing, revert via render.
       if (window._servingsSkipCommitOnce) {
         window._servingsSkipCommitOnce = false;
         recipeModel.servingsDefault = window._servingsLastValid;
+        recipeModel.servings.default = window._servingsLastValid;
         window.isServingsEditing = false;
         renderServingsRow(recipeModel, container);
         return;
       }
 
-      // Empty → null + hide row
       if (raw === '') {
         recipeModel.servingsDefault = null;
-      }
-      // Valid number → commit normalized
-      else if (_servingsIsValidNumber(raw)) {
-        recipeModel.servingsDefault = Math.round(Number(raw));
-        window._servingsLastValid = recipeModel.servingsDefault;
-      }
-      // Invalid → revert to last valid
-      else {
+        recipeModel.servings.default = null;
+      } else if (_servingsIsValidNumber(raw)) {
+        const n = Math.round(Number(raw));
+        recipeModel.servingsDefault = n;
+        recipeModel.servings.default = n;
+        window._servingsLastValid = n;
+      } else {
         recipeModel.servingsDefault = window._servingsLastValid;
+        recipeModel.servings.default = window._servingsLastValid;
       }
 
       window.isServingsEditing = false;
       renderServingsRow(recipeModel, container);
     });
 
-    input.addEventListener('keydown', (e) => {
+    defaultInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        // Treat Enter exactly like blur
-        input.blur();
+        defaultInput.blur();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        // Escape = revert + exit, so tell blur to skip commit
         window._servingsSkipCommitOnce = true;
-        input.blur();
+        defaultInput.blur();
       }
     });
+
+    // --- Min/max helpers ---
+    const commitRangeField = (inputEl, key) => {
+      const raw = (inputEl.value || '').trim();
+      ensureServingsObj();
+
+      if (raw === '') {
+        recipeModel.servings[key] = null;
+        return;
+      }
+
+      if (_servingsIsValidNumber(raw)) {
+        recipeModel.servings[key] = Math.round(Number(raw));
+      } else {
+        const current = recipeModel.servings[key];
+        inputEl.value = current != null ? String(current) : '';
+      }
+    };
+
+    const wireRangeInput = (inputEl, key) => {
+      inputEl.addEventListener('input', () => {
+        const raw = (inputEl.value || '').trim();
+        ensureServingsObj();
+
+        if (raw === '') {
+          recipeModel.servings[key] = null;
+        } else if (_servingsIsValidNumber(raw)) {
+          recipeModel.servings[key] = Math.round(Number(raw));
+        }
+
+        if (typeof markDirty === 'function') {
+          markDirty();
+        }
+      });
+
+      inputEl.addEventListener('blur', () => {
+        commitRangeField(inputEl, key);
+      });
+
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          inputEl.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          const current =
+            recipeModel.servings && recipeModel.servings[key] != null
+              ? String(recipeModel.servings[key])
+              : '';
+          inputEl.value = current;
+          inputEl.blur();
+        }
+      });
+    };
+
+    wireRangeInput(minInput, 'min');
+    wireRangeInput(maxInput, 'max');
   }
 
   row.appendChild(field);
