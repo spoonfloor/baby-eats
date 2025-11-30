@@ -532,7 +532,19 @@ function renderRecipe(recipe) {
   }
 }
 
-// --- Servings helpers (Step 1: rest-mode text + visibility only) ---
+// --- Servings helpers (rest-mode text + basic edit-mode structure) ---
+
+// One-shot flag: when true, entering servings edit mode should NOT steal focus
+// from the title (used when the title editor triggers servings edit).
+if (typeof window._servingsEditSkipFocusOnce === 'undefined') {
+  window._servingsEditSkipFocusOnce = false;
+}
+
+// One-shot flag: when true, the next blur from the servings input will skip committing
+// changes (used when Enter/Escape exit edit mode without saving).
+if (typeof window._servingsSkipCommitOnce === 'undefined') {
+  window._servingsSkipCommitOnce = false;
+}
 
 function servingsHasData(recipe) {
   if (!recipe) return false;
@@ -546,11 +558,15 @@ function updateServingsVisibility(recipe) {
 
   const hasData = servingsHasData(recipe);
   const isTitleEditing = !!window.isTitleEditing;
+  const isServingsEditing = !!window.isServingsEditing;
 
   // Spec (visibility piece only):
   // - visible whenever servings data exists
+
   // - OR when the title is in edit mode
-  const shouldShow = hasData || isTitleEditing;
+  // - OR while the servings row itself is actively editing
+  const shouldShow = hasData || isTitleEditing || isServingsEditing;
+
   row.style.display = shouldShow ? '' : 'none';
 }
 
@@ -560,12 +576,121 @@ function renderServingsRow(recipe, container) {
     document.getElementById('servingsRow');
   if (!row) return;
 
-  // Step 1: keep existing "rest" behavior, no edit UI yet.
-  if (servingsHasData(recipe)) {
-    row.textContent = `Serves ${recipe.servingsDefault}`;
-  } else {
-    row.textContent = 'Servings:';
+  const recipeModel = recipe || window.recipeData;
+  if (!recipeModel) return;
+
+  if (typeof window.isServingsEditing === 'undefined') {
+    window.isServingsEditing = false;
   }
+
+  const hasData = servingsHasData(recipe);
+
+  // Shell + editing state
+  row.classList.add('row-shell', 'servings-line');
+  row.classList.toggle('editing', !!window.isServingsEditing);
+
+  // Reset contents/handlers
+  row.innerHTML = '';
+  row.onclick = null;
+
+  // Locked pill strip (visibility via CSS)
+  const labels = document.createElement('div');
+  labels.className = 'row-labels';
+  const pill = document.createElement('span');
+  pill.className = 'field-pill';
+  pill.textContent = 'Servings';
+  labels.appendChild(pill);
+
+  const field = document.createElement('div');
+  field.className = 'row-field';
+
+  if (!window.isServingsEditing) {
+    // Rest mode text from same value the field edits
+    if (hasData && recipeModel.servingsDefault != null) {
+      field.textContent = `Serves ${recipeModel.servingsDefault}`;
+    } else {
+      field.textContent = 'Servings:';
+    }
+
+    row.onclick = () => {
+      window.isServingsEditing = true;
+      renderServingsRow(recipe, container);
+    };
+  } else {
+    // Edit mode: input; pill stays locked above
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'servings-input';
+    input.value =
+      recipeModel.servingsDefault != null
+        ? String(recipeModel.servingsDefault)
+        : '';
+
+    field.appendChild(input);
+
+    pill.addEventListener('click', () => {
+      input.focus();
+      input.select();
+    });
+
+    const skipAutoFocus =
+      typeof window !== 'undefined' && window._servingsEditSkipFocusOnce;
+
+    if (skipAutoFocus) {
+      window._servingsEditSkipFocusOnce = false;
+    } else {
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 0);
+    }
+
+    input.addEventListener('blur', () => {
+      const prev =
+        recipeModel.servingsDefault != null
+          ? Number(recipeModel.servingsDefault)
+          : null;
+
+      const raw = (input.value || '').trim();
+      let next = null;
+
+      if (raw) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          next = Math.round(parsed);
+        }
+      }
+
+      if (!window._servingsSkipCommitOnce && prev !== next) {
+        recipeModel.servingsDefault = next;
+        if (typeof markDirty === 'function') {
+          markDirty();
+        }
+      }
+
+      window._servingsSkipCommitOnce = false;
+      window.isServingsEditing = false;
+      renderServingsRow(recipeModel, container);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+
+        window._servingsSkipCommitOnce = true;
+        window.isServingsEditing = false;
+        renderServingsRow(recipeModel, container);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        window._servingsSkipCommitOnce = true;
+        window.isServingsEditing = false;
+        renderServingsRow(recipeModel, container);
+      }
+    });
+  }
+
+  row.appendChild(labels);
+  row.appendChild(field);
 
   updateServingsVisibility(recipe);
 }
@@ -608,6 +733,25 @@ function attachTitleEditor(titleEl) {
     window.isTitleEditing = true;
     if (typeof updateServingsVisibility === 'function') {
       updateServingsVisibility(window.recipeData);
+    }
+
+    // If there is no default servings value yet, entering title edit
+    // should immediately surface the servings pill + field in edit mode,
+    // instead of the bare "Servings:" label — but without stealing focus
+    // away from the title (caret stays where the user clicked).
+
+    if (
+      typeof servingsHasData === 'function' &&
+      !servingsHasData(window.recipeData)
+    ) {
+      window.isServingsEditing = true;
+
+      // Tell servings row to enter edit mode without focusing the input.
+      window._servingsEditSkipFocusOnce = true;
+
+      if (typeof renderServingsRow === 'function') {
+        renderServingsRow(window.recipeData);
+      }
     }
 
     // Match instruction edit state: special editing color, no outline

@@ -3,14 +3,28 @@
   --body-font-size: 15.5px;
   --body-font-weight: 400;
   --headline-font-size: 16px;
+
+  /* Primary theme colors */
   --theme-primary: #6d49ff;
   --theme-secondary: #7f5cff;
-  --theme-light: hsl(252, 100%, 96%);
-  --theme-light-hex: #f1edfd;
-  --font-color-near-black: #191919;
-  --theme-editing-mode: #2184ff;
   --theme-primary-transparent: #6d49ff20;
 
+  /* Light surfaces */
+  --theme-light: hsl(252, 100%, 96%);
+  --theme-light-hex: #f1edfd;
+
+  /* Neutral text + component roles */
+  --font-color-near-black: #191919;
+  --subtitle: #333333; /* subtitle / secondary text */
+  --pill-bg: var(--theme-light-hex); /* label pill background */
+  --pill-fg: var(--theme-primary); /* label pill text */
+  --field-bg: #f5f5f5; /* editable field background */
+  --field-fg: var(--font-color-near-black); /* field text color */
+
+  /* Interaction / editing state */
+  --theme-editing-mode: #2184ff;
+
+  /* Layout vars */
   --app-bar-height: 64px;
   --header-font-size: 16px;
   --section-card-offset: 24px;
@@ -380,7 +394,71 @@ h1.nav-text {
 .servings-line {
   margin: 6px 0 16px 0;
   font-weight: 500;
-  color: #333;
+  color: var(--subtitle);
+}
+
+/* Generic chip+field row shell (servings, ingredients, etc.) */
+.row-shell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px; /* matches field height */
+}
+
+.row-labels {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.row-shell.editing .row-labels {
+  height: auto;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.row-field {
+  display: flex;
+  align-items: center;
+}
+
+/* Inline flex wrapper for legacy uses, can be reused inside .row-field */
+.servings-edit-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Label pill — uses theme-derived pill vars */
+.field-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  font-size: 0.9em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Editable servings input — uses dedicated field vars */
+.servings-input {
+  width: 4ch;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background-color: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.servings-input:focus {
+  outline: none;
+  border-color: transparent;
 }
 
 /* Highlight selected step for keyboard reordering */
