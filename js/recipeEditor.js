@@ -574,8 +574,8 @@ function servingsHasData(recipe) {
 function updateServingsVisibility(recipe) {
   const row = document.getElementById('servingsRow');
   if (!row) return;
-
-  const hasData = servingsHasData(recipe);
+  const model = recipe || window.recipeData || recipe;
+  const hasData = servingsHasData(model);
   const isTitleEditing = !!window.isTitleEditing;
   const isServingsEditing = !!window.isServingsEditing;
 
@@ -594,15 +594,23 @@ function renderServingsRow(recipe, container) {
     (container && container.querySelector('#servingsRow')) ||
     document.getElementById('servingsRow');
   if (!row) return;
+  // Always prefer the canonical live model
+  const recipeModel = window.recipeData || recipe;
 
-  const recipeModel = recipe || window.recipeData;
   if (!recipeModel) return;
 
   if (typeof window.isServingsEditing === 'undefined') {
     window.isServingsEditing = false;
   }
 
-  const hasData = servingsHasData(recipe);
+  const hasData = servingsHasData(recipeModel);
+  const isTitleEditing = !!window.isTitleEditing;
+
+  // If there is no servings data yet, but the title is in edit mode,
+  // go straight into servings edit instead of showing the old "Servings:" stub.
+  if (!window.isServingsEditing && !hasData && isTitleEditing) {
+    window.isServingsEditing = true;
+  }
 
   // Shell + editing state
   row.classList.add('row-shell', 'servings-line');
@@ -624,7 +632,7 @@ function renderServingsRow(recipe, container) {
     if (hasData && recipeModel.servingsDefault != null) {
       field.textContent = `Serves ${recipeModel.servingsDefault}`;
     } else {
-      field.textContent = 'Servings:';
+      field.textContent = 'Servings';
     }
 
     row.onclick = () => {
@@ -692,6 +700,17 @@ function renderServingsRow(recipe, container) {
     maxInput.className = 'servings-input';
     maxInput.value = maxVal != null ? String(maxVal) : '';
 
+    // Labels behave like <label>: click → focus input
+    minLabel.addEventListener('click', () => {
+      minInput.focus();
+      minInput.select();
+    });
+
+    maxLabel.addEventListener('click', () => {
+      maxInput.focus();
+      maxInput.select();
+    });
+
     field.innerHTML = '';
     editRow.appendChild(pill);
     editRow.appendChild(defaultInput);
@@ -748,17 +767,30 @@ function renderServingsRow(recipe, container) {
       }
     });
 
-    defaultInput.addEventListener('blur', () => {
+    defaultInput.addEventListener('blur', (e) => {
       const raw = (defaultInput.value || '').trim();
       ensureServingsObj();
+
+      // determine where focus is going next
+      const next = e && e.relatedTarget;
+      const stayingInRow =
+        next === defaultInput || next === minInput || next === maxInput;
 
       // Escape path sets skip flag — skip committing, revert via render.
       if (window._servingsSkipCommitOnce) {
         window._servingsSkipCommitOnce = false;
         recipeModel.servingsDefault = window._servingsLastValid;
         recipeModel.servings.default = window._servingsLastValid;
+
+        // If focus is moving to another control in this row (min/max),
+        // stay in edit mode and don't re-render yet.
+        if (stayingInRow) {
+          return;
+        }
+
         window.isServingsEditing = false;
         renderServingsRow(recipeModel, container);
+
         return;
       }
 
@@ -775,7 +807,13 @@ function renderServingsRow(recipe, container) {
         recipeModel.servings.default = window._servingsLastValid;
       }
 
+      // If moving to min/max/default → stay in edit mode
+      if (stayingInRow) {
+        return;
+      }
+
       window.isServingsEditing = false;
+
       renderServingsRow(recipeModel, container);
     });
 
