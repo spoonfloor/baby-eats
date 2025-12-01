@@ -700,7 +700,20 @@ function renderServingsRow(recipe, container) {
     maxInput.className = 'servings-input';
     maxInput.value = maxVal != null ? String(maxVal) : '';
 
+    // Start with range (min/max) hidden if there is no default yet
+    let rangeVisible = defaultVal != null && _servingsIsValidNumber(defaultVal);
+
+    const showRangeInputs = () => {
+      if (rangeVisible) return;
+      rangeVisible = true;
+      editRow.appendChild(minLabel);
+      editRow.appendChild(minInput);
+      editRow.appendChild(maxLabel);
+      editRow.appendChild(maxInput);
+    };
+
     // Labels behave like <label>: click → focus input
+
     minLabel.addEventListener('click', () => {
       minInput.focus();
       minInput.select();
@@ -714,10 +727,14 @@ function renderServingsRow(recipe, container) {
     field.innerHTML = '';
     editRow.appendChild(pill);
     editRow.appendChild(defaultInput);
-    editRow.appendChild(minLabel);
-    editRow.appendChild(minInput);
-    editRow.appendChild(maxLabel);
-    editRow.appendChild(maxInput);
+
+    if (rangeVisible) {
+      editRow.appendChild(minLabel);
+      editRow.appendChild(minInput);
+      editRow.appendChild(maxLabel);
+      editRow.appendChild(maxInput);
+    }
+
     field.appendChild(editRow);
 
     pill.addEventListener('click', () => {
@@ -733,6 +750,47 @@ function renderServingsRow(recipe, container) {
           max: null,
         };
       }
+    };
+
+    // Keep min/max in a sensible relationship to default.
+    // default is source of truth; min/max fall in line.
+    const normalizeServingsTriple = () => {
+      ensureServingsObj();
+
+      let d =
+        recipeModel.servingsDefault != null
+          ? recipeModel.servingsDefault
+          : recipeModel.servings.default;
+
+      if (d == null || !_servingsIsValidNumber(d)) {
+        return;
+      }
+
+      const toNum = (v) =>
+        v == null || v === '' || !_servingsIsValidNumber(v)
+          ? null
+          : Math.round(Number(v));
+
+      const dNum = Math.round(Number(d));
+      recipeModel.servingsDefault = dNum;
+      recipeModel.servings.default = dNum;
+
+      let mn = toNum(recipeModel.servings.min);
+      let mx = toNum(recipeModel.servings.max);
+
+      if (mn == null) mn = dNum;
+      if (mx == null) mx = dNum;
+
+      if (mn > dNum) mn = dNum;
+      if (mx < dNum) mx = dNum;
+
+      recipeModel.servings.min = mn;
+      recipeModel.servings.max = mx;
+
+      // Reflect normalized values into the inputs
+      if (defaultInput) defaultInput.value = String(dNum);
+      if (minInput) minInput.value = mn != null ? String(mn) : '';
+      if (maxInput) maxInput.value = mx != null ? String(mx) : '';
     };
 
     const skipAutoFocus =
@@ -760,6 +818,9 @@ function renderServingsRow(recipe, container) {
         recipeModel.servingsDefault = n;
         recipeModel.servings.default = n;
         window._servingsLastValid = n;
+
+        // once default is valid, reveal min/max
+        showRangeInputs();
       }
 
       if (typeof markDirty === 'function') {
@@ -781,6 +842,8 @@ function renderServingsRow(recipe, container) {
         window._servingsSkipCommitOnce = false;
         recipeModel.servingsDefault = window._servingsLastValid;
         recipeModel.servings.default = window._servingsLastValid;
+
+        normalizeServingsTriple();
 
         // If focus is moving to another control in this row (min/max),
         // stay in edit mode and don't re-render yet.
@@ -806,6 +869,8 @@ function renderServingsRow(recipe, container) {
         recipeModel.servingsDefault = window._servingsLastValid;
         recipeModel.servings.default = window._servingsLastValid;
       }
+
+      normalizeServingsTriple();
 
       // If moving to min/max/default → stay in edit mode
       if (stayingInRow) {
@@ -844,6 +909,8 @@ function renderServingsRow(recipe, container) {
         const current = recipeModel.servings[key];
         inputEl.value = current != null ? String(current) : '';
       }
+
+      normalizeServingsTriple();
     };
 
     const wireRangeInput = (inputEl, key) => {
