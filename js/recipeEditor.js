@@ -753,7 +753,9 @@ function renderServingsRow(recipe, container) {
     };
 
     // Keep min/max in a sensible relationship to default.
-    // default is source of truth; min/max fall in line.
+    // default is source of truth; min/max are only ever *clamped*,
+    // never auto-created from default.
+
     const normalizeServingsTriple = () => {
       ensureServingsObj();
 
@@ -778,11 +780,8 @@ function renderServingsRow(recipe, container) {
       let mn = toNum(recipeModel.servings.min);
       let mx = toNum(recipeModel.servings.max);
 
-      if (mn == null) mn = dNum;
-      if (mx == null) mx = dNum;
-
-      if (mn > dNum) mn = dNum;
-      if (mx < dNum) mx = dNum;
+      if (mn != null && mn > dNum) mn = dNum;
+      if (mx != null && mx < dNum) mx = dNum;
 
       recipeModel.servings.min = mn;
       recipeModel.servings.max = mx;
