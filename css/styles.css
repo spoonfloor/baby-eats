@@ -22,7 +22,7 @@
   --field-fg: var(--font-color-near-black); /* field text color */
 
   /* Interaction / editing state */
-  --theme-editing-mode: #2184ff;
+  --edit-mode-color: #2184ff;
 
   /* Layout vars */
   --app-bar-height: 64px;
@@ -157,7 +157,7 @@
 }
 
 .recipe-title.editing-title {
-  color: var(--theme-editing-mode);
+  color: var(--edit-mode-color);
 }
 
 /* --- Section headings / spacing --- */
@@ -397,6 +397,11 @@ h1.nav-text {
   color: var(--subtitle);
 }
 
+.servings-line.editing {
+  position: relative;
+  left: -9px; /* align pill text with rest-mode label */
+}
+
 /* Generic chip+field row shell (servings, ingredients, etc.) */
 .row-shell {
   display: flex;
@@ -460,6 +465,8 @@ h1.nav-text {
 .servings-input:focus {
   outline: none;
   border-color: transparent;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
 }
 
 /* Highlight selected step for keyboard reordering */
@@ -526,7 +533,7 @@ h1.nav-text {
 /* Highlight active editing line text */
 .instruction-line.editing .step-text,
 .instruction-line.editing .step-textarea {
-  color: var(--theme-editing-mode);
+  color: var(--edit-mode-color);
 }
 
 /* Selection highlight inside step textarea */
