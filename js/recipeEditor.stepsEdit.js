@@ -284,6 +284,13 @@ function syncStepOrderFromDOM(containerRef) {
 
 function ensureStepTextNotEmpty(el) {
   if (!el) return;
+
+  // For placeholder prompts, keep the element truly empty so the CSS
+  // ::before content can act like a real placeholder.
+  if (el.classList && el.classList.contains('placeholder-prompt')) {
+    return;
+  }
+
   const text = (el.textContent || '').trim();
   const html = (el.innerHTML || '').trim();
   if (!text && html === '') {
@@ -358,8 +365,46 @@ function attachStepInlineEditor(textEl) {
 
     const original = textEl.textContent || '';
 
+    const placeholderText =
+      (textEl.dataset && textEl.dataset.placeholder) || 'Add a step.';
+    const startedFromPlaceholder =
+      textEl.classList.contains('placeholder-prompt') &&
+      !normalizeStepText(original);
+    let placeholderActive = startedFromPlaceholder;
+
+    // If this is the "Add a step." placeholder, treat it like an empty field
+    // so clicking anywhere puts the caret at position 0 for easy typing.
+    const isPlaceholder =
+      textEl.classList.contains('placeholder-prompt') &&
+      (original || '').trim() === 'Add a step.';
+
+    if (isPlaceholder) {
+      textEl.classList.remove('placeholder-prompt');
+      textEl.textContent = '';
+      ensureStepTextNotEmpty(textEl);
+    }
+
     textEl.contentEditable = 'true';
     textEl.focus();
+
+    if (startedFromPlaceholder) {
+      try {
+        const sel = window.getSelection();
+        const range = document.createRange();
+
+        // Keep DOM empty; visual prompt comes from CSS ::before.
+        textEl.innerHTML = '';
+        const textNode = document.createTextNode('');
+        textEl.appendChild(textNode);
+
+        range.setStart(textNode, 0);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (err) {
+        // Best-effort; safe to ignore.
+      }
+    }
 
     window._activeStepInput = textEl;
     window._hasPendingEdit = false;
@@ -409,6 +454,12 @@ function attachStepInlineEditor(textEl) {
           if (isLastLine) {
             // Keep last line as a real blank step / placeholder.
             textEl.textContent = '';
+
+            textEl.classList.add('placeholder-prompt');
+            if (textEl.dataset && !textEl.dataset.placeholder) {
+              textEl.dataset.placeholder = 'Add a step.';
+            }
+
             ensureStepTextNotEmpty(textEl);
           } else {
             parent.removeChild(lineEl);
@@ -473,8 +524,15 @@ function attachStepInlineEditor(textEl) {
       const raw = textEl.textContent || '';
       const newVal = normalizeStepText(raw);
 
+      if (startedFromPlaceholder && !newVal) {
+        placeholderActive = true;
+      }
+
+      const effectiveVal =
+        startedFromPlaceholder && placeholderActive ? '' : newVal;
+
       // 🔒 Do NOT auto-delete empty steps on blur/save; blanks are “real” steps.
-      commitWithValue(newVal, { deleteIfEmpty: false });
+      commitWithValue(effectiveVal, { deleteIfEmpty: false });
     };
 
     const handleEnterSplit = () => {
@@ -1012,7 +1070,22 @@ function attachStepInlineEditor(textEl) {
       }
 
       // Default cancel behavior (no split-heal, no new-empty-step case)
+
       textEl.textContent = original;
+
+      if (startedFromPlaceholder && !normalizeStepText(original)) {
+        textEl.classList.add('placeholder-prompt');
+        if (textEl.dataset && !textEl.dataset.placeholder) {
+          textEl.dataset.placeholder = placeholderText;
+        }
+        placeholderActive = true;
+      }
+
+      // Restore placeholder styling if we reverted back to the prompt text.
+      if ((original || '').trim() === 'Add a step.') {
+        textEl.classList.add('placeholder-prompt');
+      }
+
       textEl.contentEditable = 'false';
 
       window.editingStepId = null;
@@ -1032,6 +1105,108 @@ function attachStepInlineEditor(textEl) {
     };
 
     const onKeyDown = (e) => {
+      // Safari-style placeholder behavior for the "Add a step." row.
+      const isPlaceholderMode =
+        startedFromPlaceholder ||
+        (textEl.classList.contains('placeholder-prompt') &&
+          !normalizeStepText(textEl.textContent || ''));
+
+      if (isPlaceholderMode) {
+        const isPrintable =
+          e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
+
+        if (placeholderActive && isPrintable) {
+          // First character: clear placeholder, insert typed char.
+          e.preventDefault();
+
+          textEl.classList.remove('placeholder-prompt');
+          placeholderActive = false;
+
+          textEl.innerHTML = '';
+          const node = document.createTextNode(e.key);
+          textEl.appendChild(node);
+
+          // Make the editor dirty on the *first* real keystroke.
+          if (!window._hasPendingEdit) {
+            window._hasPendingEdit = true;
+            if (typeof markDirty === 'function') {
+              markDirty();
+            }
+          }
+
+          try {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.setStart(node, node.textContent.length);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } catch (err) {
+            // ignore
+          }
+
+          return;
+        }
+
+        if (!placeholderActive && e.key === 'Backspace') {
+          const fullText = textEl.textContent || '';
+          const selInfo = getSelectionOffsetsInStep(textEl);
+          const caretAtEnd =
+            selInfo &&
+            selInfo.start === fullText.length &&
+            selInfo.end === fullText.length;
+
+          // Deleting the single typed char → restore placeholder.
+          if (caretAtEnd && fullText.length === 1) {
+            e.preventDefault();
+
+            textEl.textContent = '';
+            textEl.classList.add('placeholder-prompt');
+
+            if (textEl.dataset) {
+              textEl.dataset.placeholder = placeholderText;
+            }
+
+            placeholderActive = true;
+
+            try {
+              const range = document.createRange();
+              const sel = window.getSelection();
+              if (!textEl.firstChild) {
+                textEl.appendChild(document.createTextNode(''));
+              }
+              range.setStart(textEl.firstChild, 0);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            } catch (err) {
+              // ignore
+            }
+
+            return;
+          }
+        }
+
+        if (placeholderActive && e.key === 'Backspace') {
+          // Nothing real to delete yet; keep caret at 0.
+          e.preventDefault();
+          try {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            if (!textEl.firstChild) {
+              textEl.appendChild(document.createTextNode(''));
+            }
+            range.setStart(textEl.firstChild, 0);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } catch (err) {
+            // ignore
+          }
+          return;
+        }
+      }
+
       // --- TAB / SHIFT+TAB → toggle heading/step (model + DOM + renumber) ---
       if (e.key === 'Tab') {
         const stepId =
@@ -1391,6 +1566,69 @@ function attachStepInlineEditor(textEl) {
         window._hasPendingEdit = true;
         if (typeof markDirty === 'function') {
           markDirty();
+        }
+      }
+
+      const current = textEl.textContent || '';
+
+      // If there's real text, never show the pseudo placeholder.
+      if (
+        current.length > 0 &&
+        textEl.classList &&
+        textEl.classList.contains('placeholder-prompt')
+      ) {
+        textEl.classList.remove('placeholder-prompt');
+      }
+
+      // Safety net for the Safari-style placeholder:
+      // if we started from the placeholder, the user has typed *something*
+      // (placeholderActive === false) and then erased everything so that
+      // the content is now truly empty again, restore the placeholder.
+      if (startedFromPlaceholder && !placeholderActive) {
+        if (current.length === 0) {
+          textEl.classList.add('placeholder-prompt');
+          if (textEl.dataset) {
+            textEl.dataset.placeholder = placeholderText;
+          }
+          placeholderActive = true;
+        }
+      }
+
+      // Single-step recipes: when the only step is cleared, treat it as the
+      // "Add a step." placeholder again.
+      if (!startedFromPlaceholder && current.length === 0) {
+        const parent = lineEl && lineEl.parentElement;
+        if (parent) {
+          const allLines = parent.querySelectorAll('.instruction-line');
+          if (allLines.length === 1) {
+            textEl.classList.add('placeholder-prompt');
+            if (textEl.dataset) {
+              textEl.dataset.placeholder = placeholderText;
+            }
+
+            // Enter placeholder mode for this newly-blank single step.
+            placeholderActive = true;
+
+            // Put caret at position 0 so Backspace behaves like a real placeholder.
+            try {
+              const range = document.createRange();
+              const sel = window.getSelection();
+
+              // Always replace any leftover <br> etc with a clean text node.
+              while (textEl.firstChild) {
+                textEl.removeChild(textEl.firstChild);
+              }
+              const tn = document.createTextNode('');
+              textEl.appendChild(tn);
+              range.setStart(tn, 0);
+
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            } catch (err) {
+              // ignore
+            }
+          }
         }
       }
     };

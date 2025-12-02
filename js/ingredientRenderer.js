@@ -10,6 +10,10 @@ function renderIngredient(line) {
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
 
+  if (line.isPlaceholder) {
+    textSpan.classList.add('placeholder-prompt');
+  }
+
   // Show quantity as fraction if numeric
   let qtyDisplay = line.quantity;
   if (!isNaN(parseFloat(line.quantity))) {

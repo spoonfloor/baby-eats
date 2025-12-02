@@ -7,7 +7,7 @@
   padding: 0;
   border: 0;
   font: inherit;
-  vertical-align: middle;
+  /* vertical-align: middle; */
   font-family: var(--main-font);
   font-weight: var(--main-font-weight);
   line-height: 1.6;

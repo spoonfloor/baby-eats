@@ -259,8 +259,15 @@ function renderRecipe(recipe) {
 
       const unit = ing.unit ? ing.unit + ' ' : '';
       const name = ing.name || '';
+      const text = `${qty || ''}${unit || ''}${name}`.trim();
 
-      span.textContent = `${qty || ''}${unit || ''}${name}`;
+      span.textContent = text;
+
+      // Subdued gray for placeholder prompt row
+      if (ing.isPlaceholder || text === 'Add an ingredient.') {
+        span.classList.add('placeholder-prompt');
+      }
+
       line.appendChild(span);
       ingredientsSection.appendChild(line);
     });
@@ -289,6 +296,9 @@ function renderRecipe(recipe) {
     const line = document.createElement('div');
     line.className = 'ingredient-line';
     const span = document.createElement('span');
+
+    span.className = 'placeholder-prompt';
+
     span.textContent = 'No ingredients yet. Add some above.';
     line.appendChild(span);
     needWrapper.appendChild(line);
@@ -379,7 +389,17 @@ function renderRecipe(recipe) {
       const text = document.createElement('span');
       text.className = 'step-text';
       text.dataset.stepId = String(node.id);
-      text.textContent = node.text ?? '';
+
+      const rawText = node.text ?? '';
+      const isPlaceholder = !rawText || rawText.trim() === 'Add a step.';
+
+      if (isPlaceholder) {
+        text.textContent = '';
+        text.dataset.placeholder = 'Add a step.';
+        text.classList.add('placeholder-prompt');
+      } else {
+        text.textContent = rawText;
+      }
 
       ensureStepTextNotEmpty(text);
 
@@ -512,7 +532,17 @@ function renderRecipe(recipe) {
       const text = document.createElement('span');
       text.className = 'step-text';
       text.dataset.stepId = String(step.id);
-      text.textContent = step.instructions ?? '';
+
+      const rawText = step.instructions ?? '';
+      const isPlaceholder = !rawText || rawText.trim() === 'Add a step.';
+
+      if (isPlaceholder) {
+        text.textContent = '';
+        text.dataset.placeholder = 'Add a step.';
+        text.classList.add('placeholder-prompt');
+      } else {
+        text.textContent = rawText;
+      }
 
       ensureStepTextNotEmpty(text);
 

@@ -1,30 +1,31 @@
 :root {
+  /* --- Typography --- */
   --main-font: 'Red Hat Mono', monospace;
   --body-font-size: 15.5px;
   --body-font-weight: 400;
   --headline-font-size: 16px;
 
-  /* Primary theme colors */
+  /* --- Colors: theme + surfaces + roles --- */
   --theme-primary: #6d49ff;
   --theme-secondary: #7f5cff;
   --theme-primary-transparent: #6d49ff20;
 
-  /* Light surfaces */
   --theme-light: hsl(252, 100%, 96%);
   --theme-light-hex: #f1edfd;
 
-  /* Neutral text + component roles */
   --font-color-near-black: #191919;
-  --subtitle: #333333; /* subtitle / secondary text */
-  --pill-bg: var(--theme-light-hex); /* label pill background */
-  --pill-fg: var(--theme-primary); /* label pill text */
-  --field-bg: #f5f5f5; /* editable field background */
-  --field-fg: var(--font-color-near-black); /* field text color */
+  --subtitle: #333333;
+  /* --placeholder-muted: #533d8c; */
+  --placeholder-muted: hsla(252, 100%, 37%, 0.5);
 
-  /* Interaction / editing state */
+  --pill-bg: var(--theme-light-hex);
+  --pill-fg: var(--theme-primary);
+  --field-bg: #f5f5f5;
+  --field-fg: var(--font-color-near-black);
+
   --edit-mode-color: #2184ff;
 
-  /* Layout vars */
+  /* --- Layout + spacing --- */
   --app-bar-height: 64px;
   --header-font-size: 16px;
   --section-card-offset: 24px;
@@ -34,19 +35,18 @@
   --step-padding-top: 0px;
   --step-padding-bottom: 12px;
 
+  /* --- Servings row layout --- */
   --servings-pill-gap: 3px;
   --servings-set-gap: 8px;
-  --servings-field-height: 28px; /* numeric servings input height */
+  --servings-field-height: 28px;
+  --servings-line-h: 42px;
 
-  /* Pill sizing pipeline */
-  --pill-height: 28px; /* total pill height in px */
+  /* --- Pill sizing pipeline --- */
+  --pill-height: 28px;
   --pill-font-size: var(--body-font-size);
-  --pill-line-height: 1.4; /* unitless */
-  --pill-padding-x: 10px; /* side padding in px */
-  --servings-pill-offset: -10px; /* align pill text with rest-mode label */
-
-  /* Explicit knobs */
-  --servings-line-h: 42px; /* total row height */
+  --pill-line-height: 1.4;
+  --pill-padding-x: 10px;
+  --servings-pill-offset: -10px;
 }
 
 /* --- Body / Layout Defaults --- */
@@ -356,6 +356,16 @@
 .instruction-line .step-text {
   flex: 1;
   line-height: var(--step-line-height);
+}
+
+.placeholder-prompt {
+  color: var(--placeholder-muted);
+}
+
+.step-text.placeholder-prompt::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder-muted);
+  pointer-events: none;
 }
 
 .instruction-line[data-step-type='heading'] .step-text {
