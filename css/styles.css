@@ -31,9 +31,23 @@
 
   --step-line-height: 1.8;
   --step-vertical-gap: 0px;
-
   --step-padding-top: 0px;
   --step-padding-bottom: 12px;
+
+  --servings-pill-gap: 2px;
+  --servings-set-gap: 9px;
+  --servings-field-height: 28px; /* numeric servings input height */
+
+  /* Pill sizing pipeline */
+  --pill-height: 28px; /* total pill height in px */
+  --pill-font-size: var(--body-font-size);
+  --pill-line-height: 1.4; /* unitless */
+  --pill-padding-x: 10px; /* side padding in px */
+  --servings-pill-offset: -10px; /* align pill text with rest-mode label */
+
+  /* Explicit knobs */
+  --servings-line-h: 120px; /* total row height */
+  --servings-field-height: 32px; /* value input height */
 }
 
 /* --- Body / Layout Defaults --- */
@@ -392,14 +406,14 @@ h1.nav-text {
 }
 
 .servings-line {
-  margin: 6px 0 16px 0;
+  margin: 0 0 0 0;
   font-weight: 500;
   color: var(--subtitle);
 }
 
 .servings-line.editing {
   position: relative;
-  left: -9px; /* align pill text with rest-mode label */
+  left: var(--servings-pill-offset);
 }
 
 /* Generic chip+field row shell (servings, ingredients, etc.) */
@@ -407,7 +421,8 @@ h1.nav-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 44px; /* matches field height */
+  height: var(--servings-line-h);
+  overflow: hidden; /* you said you're fine with clipping */
 }
 
 .row-labels {
@@ -426,33 +441,43 @@ h1.nav-text {
 .row-field {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
 }
 
 /* Inline flex wrapper for legacy uses, can be reused inside .row-field */
 .servings-edit-row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--servings-set-gap);
   margin: 0;
+}
+
+.servings-set {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--servings-pill-gap);
 }
 
 /* Label pill — uses theme-derived pill vars */
 .field-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
   border-radius: 9999px;
   background: var(--pill-bg);
   color: var(--pill-fg);
-  font-size: 0.9em;
-  line-height: 1.4;
   white-space: nowrap;
+  padding-inline: var(--pill-padding-x);
+  padding-block: calc(
+    (var(--pill-height) - var(--pill-font-size) * var(--pill-line-height)) / 2
+  );
+  font-size: var(--pill-font-size);
+  line-height: var(--pill-line-height);
 }
 
 /* Editable servings input — uses dedicated field vars */
 .servings-input {
   width: 4ch;
+  height: var(--servings-field-height);
   padding: 4px 8px;
   border-radius: 8px;
   background-color: var(--field-bg);

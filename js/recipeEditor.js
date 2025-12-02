@@ -676,6 +676,15 @@ function renderServingsRow(recipe, container) {
     const editRow = document.createElement('div');
     editRow.className = 'servings-edit-row';
 
+    const defaultSet = document.createElement('div');
+    defaultSet.className = 'servings-set';
+
+    const minSet = document.createElement('div');
+    minSet.className = 'servings-set';
+
+    const maxSet = document.createElement('div');
+    maxSet.className = 'servings-set';
+
     // --- Default input ---
     const defaultInput = document.createElement('input');
     defaultInput.type = 'text';
@@ -684,6 +693,7 @@ function renderServingsRow(recipe, container) {
 
     // --- Min input ---
     const minLabel = document.createElement('span');
+    minLabel.className = 'field-pill';
     minLabel.textContent = 'min';
 
     const minInput = document.createElement('input');
@@ -693,6 +703,7 @@ function renderServingsRow(recipe, container) {
 
     // --- Max input ---
     const maxLabel = document.createElement('span');
+    maxLabel.className = 'field-pill';
     maxLabel.textContent = 'max';
 
     const maxInput = document.createElement('input');
@@ -706,10 +717,8 @@ function renderServingsRow(recipe, container) {
     const showRangeInputs = () => {
       if (rangeVisible) return;
       rangeVisible = true;
-      editRow.appendChild(minLabel);
-      editRow.appendChild(minInput);
-      editRow.appendChild(maxLabel);
-      editRow.appendChild(maxInput);
+      editRow.appendChild(minSet);
+      editRow.appendChild(maxSet);
     };
 
     // Labels behave like <label>: click → focus input
@@ -725,14 +734,21 @@ function renderServingsRow(recipe, container) {
     });
 
     field.innerHTML = '';
-    editRow.appendChild(pill);
-    editRow.appendChild(defaultInput);
+
+    defaultSet.appendChild(pill);
+    defaultSet.appendChild(defaultInput);
+
+    minSet.appendChild(minLabel);
+    minSet.appendChild(minInput);
+
+    maxSet.appendChild(maxLabel);
+    maxSet.appendChild(maxInput);
+
+    editRow.appendChild(defaultSet);
 
     if (rangeVisible) {
-      editRow.appendChild(minLabel);
-      editRow.appendChild(minInput);
-      editRow.appendChild(maxLabel);
-      editRow.appendChild(maxInput);
+      editRow.appendChild(minSet);
+      editRow.appendChild(maxSet);
     }
 
     field.appendChild(editRow);
