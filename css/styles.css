@@ -34,8 +34,8 @@
   --step-padding-top: 0px;
   --step-padding-bottom: 12px;
 
-  --servings-pill-gap: 2px;
-  --servings-set-gap: 9px;
+  --servings-pill-gap: 3px;
+  --servings-set-gap: 8px;
   --servings-field-height: 28px; /* numeric servings input height */
 
   /* Pill sizing pipeline */
@@ -46,8 +46,7 @@
   --servings-pill-offset: -10px; /* align pill text with rest-mode label */
 
   /* Explicit knobs */
-  --servings-line-h: 120px; /* total row height */
-  --servings-field-height: 32px; /* value input height */
+  --servings-line-h: 42px; /* total row height */
 }
 
 /* --- Body / Layout Defaults --- */
@@ -472,6 +471,7 @@ h1.nav-text {
   );
   font-size: var(--pill-font-size);
   line-height: var(--pill-line-height);
+  text-transform: capitalize;
 }
 
 /* Editable servings input — uses dedicated field vars */
