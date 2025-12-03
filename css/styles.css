@@ -372,6 +372,10 @@
   margin-left: calc(-2em);
 }
 
+.instruction-line.editing .step-num {
+  color: var(--edit-mode-color);
+}
+
 /* Quill v1.1 — full-width inline step editor */
 .step-input {
   width: 100%;

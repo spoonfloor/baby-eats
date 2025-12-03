@@ -633,6 +633,19 @@ function renderServingsRow(recipe, container) {
     window.isServingsEditing = false;
   }
 
+  const wireLabelToInput = (labelEl, inputEl) => {
+    if (!labelEl || !inputEl) return;
+
+    labelEl.addEventListener('mousedown', (e) => {
+      // Keep focus inside the servings row so blur logic sees stayingInRow=true.
+      e.preventDefault();
+      inputEl.focus();
+      if (typeof inputEl.select === 'function') {
+        inputEl.select();
+      }
+    });
+  };
+
   const hasData = servingsHasData(recipeModel);
   const isTitleEditing = !!window.isTitleEditing;
 
@@ -774,6 +787,11 @@ function renderServingsRow(recipe, container) {
     maxSet.appendChild(maxLabel);
     maxSet.appendChild(maxInput);
 
+    // Default/min/max labels all act as focus targets for their fields.
+    wireLabelToInput(pill, defaultInput);
+    wireLabelToInput(minLabel, minInput);
+    wireLabelToInput(maxLabel, maxInput);
+
     editRow.appendChild(defaultSet);
 
     if (rangeVisible) {
@@ -877,10 +895,9 @@ function renderServingsRow(recipe, container) {
       const raw = (defaultInput.value || '').trim();
       ensureServingsObj();
 
-      // determine where focus is going next
+      // determine where focus is going next (anywhere inside the servings row)
       const next = e && e.relatedTarget;
-      const stayingInRow =
-        next === defaultInput || next === minInput || next === maxInput;
+      const stayingInRow = row && next && row.contains(next);
 
       // Escape path sets skip flag — skip committing, revert via render.
       if (window._servingsSkipCommitOnce) {
@@ -974,8 +991,19 @@ function renderServingsRow(recipe, container) {
         }
       });
 
-      inputEl.addEventListener('blur', () => {
+      inputEl.addEventListener('blur', (e) => {
+        const next = e && e.relatedTarget;
+
+        // Are we moving focus to another control inside this row?
+        const stayingInRow = row && next && row.contains(next);
+
         commitRangeField(inputEl, key);
+
+        // If focus is leaving the row entirely, exit edit mode
+        if (!stayingInRow) {
+          window.isServingsEditing = false;
+          renderServingsRow(recipeModel, container);
+        }
       });
 
       inputEl.addEventListener('keydown', (e) => {
@@ -1083,6 +1111,7 @@ function attachTitleEditor(titleEl) {
       titleEl.removeEventListener('keydown', onKeyDown);
 
       window.isTitleEditing = false;
+
       if (typeof updateServingsVisibility === 'function') {
         updateServingsVisibility(window.recipeData);
       }
@@ -1115,7 +1144,11 @@ function attachTitleEditor(titleEl) {
       }
     };
 
-    const onBlur = () => {
+    const onBlur = (e) => {
+      const row = document.getElementById('servingsRow');
+      const next = e && e.relatedTarget;
+      const goingIntoServings = row && next && row.contains(next);
+
       commit();
       cleanup();
     };
