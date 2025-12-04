@@ -633,19 +633,6 @@ function renderServingsRow(recipe, container) {
     window.isServingsEditing = false;
   }
 
-  const wireLabelToInput = (labelEl, inputEl) => {
-    if (!labelEl || !inputEl) return;
-
-    labelEl.addEventListener('mousedown', (e) => {
-      // Keep focus inside the servings row so blur logic sees stayingInRow=true.
-      e.preventDefault();
-      inputEl.focus();
-      if (typeof inputEl.select === 'function') {
-        inputEl.select();
-      }
-    });
-  };
-
   const hasData = servingsHasData(recipeModel);
   const isTitleEditing = !!window.isTitleEditing;
 
@@ -764,18 +751,6 @@ function renderServingsRow(recipe, container) {
       editRow.appendChild(maxSet);
     };
 
-    // Labels behave like <label>: click → focus input
-
-    minLabel.addEventListener('click', () => {
-      minInput.focus();
-      minInput.select();
-    });
-
-    maxLabel.addEventListener('click', () => {
-      maxInput.focus();
-      maxInput.select();
-    });
-
     field.innerHTML = '';
 
     defaultSet.appendChild(pill);
@@ -800,11 +775,6 @@ function renderServingsRow(recipe, container) {
     }
 
     field.appendChild(editRow);
-
-    pill.addEventListener('click', () => {
-      defaultInput.focus();
-      defaultInput.select();
-    });
 
     const ensureServingsObj = () => {
       if (!recipeModel.servings) {

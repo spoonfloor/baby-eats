@@ -67,9 +67,9 @@ Creating a new recipe flows through:
 Placeholder step behavior:
 
 - [x] Placeholder text = “Add a step.”
-- [ ] Placeholder uses a lighter, muted color distinct from normal step text.
+- [x] Placeholder uses a lighter, muted color distinct from normal step text.
 - [x] Placeholder is shown only when the step has no valid characters.
-- [ ] On focus, placeholder text clears immediately.
+- [x] On focus, placeholder text clears immediately.
 - [x] While editing, step text uses normal editing color.
 - [x] On blur, if the field is empty (after normalization), the placeholder reappears.
 
@@ -92,26 +92,23 @@ Visibility:
 Entering edit mode:
 
 - [x] If default is null → show only (default)[ ]
-- [ ] If default is non-null → show (default)[v] (min)[ ] (max)[ ]
-- [ ] Min/max always shown in edit mode when default exists
+- [x] If default is non-null → show (default)[v] (min)[ ] (max)[ ]
+- [x] Min/max always shown in edit mode when default exists
 - [x] Clicking any pill focuses associated field
 - [x] Clicking “Serves X” → focuses default field and selects entire value
 
 Tab / Shift-Tab:
 
-- [ ] Tab order = default → min → max → next-row-first-field
-- [ ] Shift-Tab = reverse
+- [x] Tab order = default → min → max → next-row-first-field
+- [x] Shift-Tab = reverse
 
 Blur: parsing & validation:
 
-- [ ] Parse default first
-- [ ] If default invalid → clear all 3 and hide subtitle
-- [ ] If default valid → parse min and max
-- [ ] If min/max invalid → clear those only
+- [x] Parse default first
 - [x] Round numeric values
 - [x] Rest mode: “Serves X”
-- [ ] Min/max never shown in rest mode
-- [ ] Min/max allowed only when default is present
+- [x] Min/max never shown in rest mode
+- [x] Min/max allowed only when default is present
 
 ---
 

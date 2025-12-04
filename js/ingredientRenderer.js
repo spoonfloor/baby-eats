@@ -1,6 +1,8 @@
 // Ingredient editor
 
 function renderIngredient(line) {
+  // NOTE: edit-row scaffold added further down
+
   const div = document.createElement('div');
   div.className = 'ingredient-line';
   div.dataset.quantity = line.quantity;
@@ -10,8 +12,211 @@ function renderIngredient(line) {
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
 
+  // Placeholder row: "Add an ingredient."
   if (line.isPlaceholder) {
     textSpan.classList.add('placeholder-prompt');
+
+    // NEW: click → swap to edit scaffold
+    const onClick = () => {
+      const parent = div.parentNode;
+      if (!parent) return;
+
+      // Mark this as an ingredient edit row (for upcoming inline editor wiring)
+      const row = document.createElement('div');
+      row.className = 'ingredient-edit-row editing';
+
+      row.dataset.isEditing = 'true';
+
+      // Helper to make a pill-like label span
+      const makePill = (text) => {
+        const s = document.createElement('span');
+        s.className = 'ingredient-pill';
+        s.textContent = text;
+        return s;
+      };
+
+      // Container for pill + (later) input
+      const makeCell = (labelText) => {
+        const cell = document.createElement('div');
+        cell.className = 'ingredient-edit-cell';
+
+        const pill = makePill(labelText);
+        cell.appendChild(pill);
+
+        const input = document.createElement('input');
+        input.className = 'ingredient-edit-input';
+        input.type = 'text';
+
+        // NEW: tag input with its logical field name
+        input.dataset.field = labelText;
+
+        if (typeof wireLabelToInput === 'function') {
+          wireLabelToInput(pill, input);
+        }
+
+        cell.appendChild(input);
+        return cell;
+      };
+
+      const labels = [
+        'qty',
+        'unit',
+        'name',
+        'var',
+        'prep',
+        'notes',
+        'opt',
+        'loc',
+      ];
+      labels.forEach((lab) => {
+        const cell = makeCell(lab);
+        row.appendChild(cell);
+      });
+
+      // Helper: swap edit row back to original placeholder row
+      const restorePlaceholder = () => {
+        if (!parent) return;
+        if (parent.contains(row)) {
+          parent.replaceChild(div, row);
+        }
+      };
+
+      // --------------------------------------------
+      // 🔧 Inline editing controller (real wiring)
+      // --------------------------------------------
+      if (typeof setupInlineRowEditing === 'function') {
+        let _isEditing = true; // starts in editing mode
+
+        setupInlineRowEditing({
+          rowElement: row,
+
+          // fields empty means: all inputs blank (spaces ignored)
+          isEmpty() {
+            const inputs = row.querySelectorAll('.ingredient-edit-input');
+            for (const inp of inputs) {
+              if (inp.value && inp.value.trim() !== '') return false;
+            }
+            return true;
+          },
+
+          // Commit: build ingredient object, update model, and swap to read-only line
+          commit() {
+            const inputs = row.querySelectorAll('.ingredient-edit-input');
+            const fields = {};
+
+            inputs.forEach((inp) => {
+              const key = inp.dataset.field || '';
+              if (!key) return;
+              fields[key] = (inp.value || '').trim();
+            });
+
+            const hasData = Object.values(fields).some(
+              (v) => v && v.trim() !== ''
+            );
+
+            // Empty → treat as cancel
+            if (!hasData) {
+              restorePlaceholder();
+              return;
+            }
+
+            const qtyRaw = fields.qty || '';
+            let quantity = qtyRaw;
+            const qtyNum = parseFloat(qtyRaw);
+            if (qtyRaw && !Number.isNaN(qtyNum)) {
+              quantity = qtyNum;
+            }
+
+            const ingredient = {
+              quantity,
+              unit: fields.unit || '',
+              name: fields.name || '',
+              variant: fields.var || '',
+              prepNotes: fields.prep || '',
+              parentheticalNote: fields.notes || '',
+              isOptional: !!(fields.opt && fields.opt.trim()),
+              substitutes: [],
+              locationAtHome: fields.loc || '',
+              subRecipeId: null,
+              isPlaceholder: false,
+            };
+
+            // v1: assume single ingredients section in the model
+            const model = window.recipeData;
+            if (model && Array.isArray(model.sections) && model.sections[0]) {
+              const section = model.sections[0];
+              if (!Array.isArray(section.ingredients)) {
+                section.ingredients = [];
+              }
+
+              // Replace first placeholder in the section, or append if none
+              let placeholderIdx = section.ingredients.findIndex(
+                (ing) => ing && ing.isPlaceholder
+              );
+
+              if (placeholderIdx === -1) {
+                placeholderIdx = section.ingredients.length;
+                section.ingredients.push(ingredient);
+              } else {
+                section.ingredients[placeholderIdx] = ingredient;
+              }
+
+              // Ensure a trailing placeholder exists
+              const hasPlaceholderInModel = section.ingredients.some(
+                (ing) => ing && ing.isPlaceholder
+              );
+
+              if (!hasPlaceholderInModel) {
+                section.ingredients.push({
+                  quantity: '',
+                  unit: '',
+                  name: '',
+                  variant: '',
+                  prepNotes: '',
+                  parentheticalNote: '',
+                  isOptional: false,
+                  substitutes: [],
+                  locationAtHome: '',
+                  subRecipeId: null,
+                  isPlaceholder: true,
+                });
+              }
+            }
+
+            // Re-render just this line as read-only
+            let readOnlyLine = null;
+            if (typeof renderIngredient === 'function') {
+              readOnlyLine = renderIngredient(ingredient);
+            }
+
+            if (readOnlyLine && parent && parent.contains(row)) {
+              parent.replaceChild(readOnlyLine, row);
+            }
+
+            if (typeof markDirty === 'function') {
+              markDirty();
+            }
+          },
+
+          // Cancel: restore original placeholder row
+          cancel() {
+            restorePlaceholder();
+          },
+
+          getIsEditing() {
+            return _isEditing;
+          },
+
+          setIsEditing(flag) {
+            _isEditing = !!flag;
+          },
+        });
+      }
+
+      parent.replaceChild(row, div);
+    };
+
+    div.addEventListener('click', onClick);
   }
 
   // Show quantity as fraction if numeric
@@ -166,4 +371,52 @@ function renderIngredient(line) {
 
   div.appendChild(textSpan);
   return div;
+}
+
+function renderIngredientEditRowScaffold() {
+  const row = document.createElement('div');
+  row.className = 'ingredient-edit-row editing';
+
+  // Helper to make a pill-like label span
+  const makePill = (text) => {
+    const s = document.createElement('span');
+    s.className = 'ingredient-pill';
+    s.textContent = text;
+    return s;
+  };
+
+  // Container for pill + (later) input
+  const makeCell = (labelText) => {
+    const cell = document.createElement('div');
+    cell.className = 'ingredient-edit-cell';
+
+    const pill = makePill(labelText);
+    cell.appendChild(pill);
+
+    // Inputs will be added in next patch.
+    const input = document.createElement('input');
+    input.className = 'ingredient-edit-input';
+    input.type = 'text';
+
+    // NEW: tag input with its logical field name
+    input.dataset.field = labelText;
+
+    if (typeof wireLabelToInput === 'function') {
+      wireLabelToInput(pill, input);
+    }
+
+    cell.appendChild(input);
+
+    return cell;
+  };
+
+  // Order must match UX doc:
+  // qty | unit | name | var | prep | notes | opt | loc
+  const labels = ['qty', 'unit', 'name', 'var', 'prep', 'notes', 'opt', 'loc'];
+
+  labels.forEach((lab) => {
+    row.appendChild(makeCell(lab));
+  });
+
+  return row;
 }
