@@ -7,34 +7,34 @@ Reuse the servings inline-edit pattern for ingredients so fixes/UX polish apply 
 ## Scope (v1)
 
 - [ ] Keep existing servings behavior; just refactor.
-- [ ] Add “Add an ingredient” → full pill/field row.
-- [ ] No subrecipe “link” yet.
+- [x] Add “Add an ingredient” → full pill/field row.
+- [x] No subrecipe “link” yet.
 
 ## Field Map (ingredients)
 
 Display label → schema key:
 
-- [ ] qty → quantity
-- [ ] unit → unit
-- [ ] name → name
-- [ ] var → variant
-- [ ] prep → prepNotes
-- [ ] notes → parentheticalNote
-- [ ] opt → isOptional (toggle)
-- [ ] loc → locationAtHome (dropdown)
-- [ ] link → subRecipeId (skipped in v1)
+- [x] qty → quantity
+- [x] unit → unit
+- [x] name → name
+- [x] var → variant
+- [x] prep → prepNotes
+- [x] notes → parentheticalNote
+- [x] opt → isOptional (toggle)
+- [x] loc → locationAtHome (dropdown)
+- [x] link → subRecipeId (skipped in v1)
 
 ## Shared Concepts
 
-- [ ] Inline row “edit mode” (one row at a time).
-- [ ] Placeholder rows (“Add an ingredient.”).
-- [ ] Use-it-or-lose-it: empty edits revert to placeholder.
-- [ ] Blur guard: only commit/cancel when focus leaves the row.
-- [ ] Label → input click wiring (pills).
+- [x] Inline row “edit mode” (one row at a time).
+- [x] Placeholder rows (“Add an ingredient.”).
+- [x] Use-it-or-lose-it: empty edits revert to placeholder.
+- [x] Blur guard: only commit/cancel when focus leaves the row.
+- [x] Label → input click wiring (pills).
 
 ## New Helpers (utils.js)
 
-- [ ] `setupInlineRowEditing(options)`
+- [x] `setupInlineRowEditing(options)`
 
   - options:
     - rowElement
@@ -48,7 +48,7 @@ Display label → schema key:
     - click-to-enter
     - blur guard (via focusout)
 
-- [ ] `wireLabelToInput(labelEl, inputEl)`
+- [x] `wireLabelToInput(labelEl, inputEl)`
   - Shared by servings and ingredients.
 
 ## Servings (Refactor Only)
@@ -65,19 +65,19 @@ Display label → schema key:
 
 - Initial:
 
-  - [ ] Ingredient list (read-only lines) plus one placeholder line:
+  - [x] Ingredient list (read-only lines) plus one placeholder line:
     - “Add an ingredient.” tagged `isPlaceholder: true`.
 
 - Enter edit:
 
-  - [ ] Click placeholder row:
+  - [x] Click placeholder row:
     - Replace that line with editable ingredient row.
     - Show pills/inputs: qty, unit, name, var, prep, notes, opt, loc.
     - Focus qty.
 
 - Commit vs cancel:
 
-  - [ ] On blur:
+  - [x] On blur:
     - If focus stays inside row: do nothing.
     - Else:
       - If all fields empty: cancel
@@ -89,17 +89,17 @@ Display label → schema key:
         - Ensure new placeholder row exists at bottom.
 
 - Keyboard:
-  - [ ] Enter:
+  - [x] Enter:
     - If current row has any data:
       - commit row if valid enough (TBD simple rule: quantity or name non-empty).
       - create new edit row below, focus qty.
-  - [ ] Escape:
+  - [x] Escape:
     - If new row and empty: same as cancel.
     - If existing row (later v2): revert changes.
 
 ## Ingredients: Rendering
 
-- [ ] `renderIngredientRow(ingredient, index, sectionId)`
+- [x] `renderIngredientRow(ingredient, index, sectionId)`
 
   - Read-only line (current behavior, maybe slightly adjusted).
   - If `ingredient.isPlaceholder`: special styling “Add an ingredient.”, click opens editor.
@@ -113,10 +113,10 @@ Display label → schema key:
 
 ## Data Model Notes
 
-- [ ] New temp ingredient:
+- [x] New temp ingredient:
   - Not saved to recipe until commit.
   - May live in local JS state (e.g. transient object, not yet in ingredients array).
-- [ ] Placeholder:
+- [x] Placeholder:
   - Either:
     - Real ingredient object with `isPlaceholder: true`, or
     - Special synthetic row not stored in DB, only in view layer.
@@ -124,27 +124,27 @@ Display label → schema key:
 
 ## Edge Cases
 
-- [ ] User types only spaces:
+- [x] User types only spaces:
   - Treat as empty.
-- [ ] User deletes all fields then blurs:
+- [x] User deletes all fields then blurs:
   - Row removed → placeholder restored.
 - [ ] Multiple sections:
   - Each section manages its own placeholder row and edit state.
-- [ ] Single active editor:
+- [x] Single active editor:
   - If a second row tries to enter edit:
     - Either block or implicitly commit/cancel first; v1 can block by ignoring clicks while `isEditing == true`.
 
 ## Implementation Steps
 
-- [ ] 1. utils: add `setupInlineRowEditing` and `wireLabelToInput`.
+- [x] 1. utils: add `setupInlineRowEditing` and `wireLabelToInput`.
 - [ ] 2. Servings:
   - [ ] Refactor `renderServingsRow` to use helpers.
   - [ ] Confirm no behavior changes (existing tests).
-- [ ] 3. Ingredients:
-  - [ ] Implement `renderIngredientEditRow` using helpers.
-  - [ ] Wire placeholder “Add an ingredient.” row to open editor.
-  - [ ] Implement commit/cancel + placeholder regeneration.
-- [ ] 4. Wire keyboard handling (Enter, Escape) per UX above.
+- [x] 3. Ingredients:
+  - [x] Implement `renderIngredientEditRow` using helpers.
+  - [x] Wire placeholder “Add an ingredient.” row to open editor.
+  - [x] Implement commit/cancel + placeholder regeneration.
+- [x] 4. Wire keyboard handling (Enter, Escape) per UX above.
 - [ ] 5. Light styling for pills/fields so they align visually with servings row.
 
 ## Testing (super terse)

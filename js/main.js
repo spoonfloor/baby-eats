@@ -12,6 +12,9 @@ initSqlJs({
   if (document.body.classList.contains('recipe-editor-page')) {
     loadRecipeEditorPage();
   }
+
+  // --- Bottom navigation wiring ---
+  initBottomNav();
 });
 
 // Welcome page logic
@@ -417,6 +420,52 @@ async function loadRecipesPage() {
       }
     });
   }
+}
+
+// --- Bottom navigation wiring (list pages only) ---
+function initBottomNav() {
+  const nav = document.querySelector('.bottom-nav');
+  if (!nav) return;
+
+  const pills = Array.from(nav.querySelectorAll('.bottom-nav-pill'));
+  if (!pills.length) return;
+
+  const body = document.body;
+  let activeTab = null;
+
+  if (body.classList.contains('recipes-page')) {
+    activeTab = 'recipes';
+  } else if (body.classList.contains('shopping-page')) {
+    activeTab = 'shopping';
+  } else if (body.classList.contains('units-page')) {
+    activeTab = 'units';
+  } else if (body.classList.contains('stores-page')) {
+    activeTab = 'stores';
+  }
+
+  pills.forEach((pill) => {
+    const tab = pill.dataset.tab;
+    if (!tab) return;
+
+    if (tab === activeTab) {
+      pill.classList.add('bottom-nav-pill--active');
+      pill.disabled = true;
+    }
+
+    pill.addEventListener('click', () => {
+      if (tab === activeTab) return;
+
+      if (tab === 'recipes') {
+        window.location.href = 'recipes.html';
+      } else if (tab === 'shopping') {
+        window.location.href = 'shopping.html';
+      } else if (tab === 'units') {
+        window.location.href = 'units.html';
+      } else if (tab === 'stores') {
+        window.location.href = 'stores.html';
+      }
+    });
+  });
 }
 
 // --- Recipe editor loader ---

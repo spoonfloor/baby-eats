@@ -63,8 +63,15 @@ function decimalToFractionDisplay(value, denominator = 8) {
 function setupInlineRowEditing(options) {
   if (!options || typeof options !== 'object') return null;
 
-  const { rowElement, isEmpty, commit, cancel, getIsEditing, setIsEditing } =
-    options;
+  const {
+    rowElement,
+    isEmpty,
+    commit,
+    cancel,
+    getIsEditing,
+    setIsEditing,
+    onEnterCommit,
+  } = options;
 
   if (
     !rowElement ||
@@ -119,7 +126,21 @@ function setupInlineRowEditing(options) {
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      exitEdit(true);
+
+      const empty = isEmpty();
+      if (!empty) {
+        commit();
+        if (typeof onEnterCommit === 'function') {
+          onEnterCommit();
+        }
+      } else {
+        cancel();
+      }
+
+      setIsEditing(false);
+      if (globalState.activeRow === rowElement) {
+        globalState.activeRow = null;
+      }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       exitEdit(false);

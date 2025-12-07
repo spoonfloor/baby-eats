@@ -245,31 +245,44 @@ function renderRecipe(recipe) {
     const allIngredientsForList = recipe.sections.flatMap(
       (s) => s.ingredients || []
     );
+
     allIngredientsForList.forEach((ing) => {
-      const line = document.createElement('div');
-      line.className = 'ingredient-line';
-      const span = document.createElement('span');
+      let line = null;
 
-      const qty =
-        ing.quantity && !isNaN(parseFloat(ing.quantity))
-          ? decimalToFractionDisplay(parseFloat(ing.quantity)) + ' '
-          : ing.quantity
-          ? ing.quantity + ' '
-          : '';
+      // Prefer shared ingredient renderer (handles placeholders, click-to-edit, etc.)
+      if (typeof renderIngredient === 'function') {
+        line = renderIngredient(ing);
+      } else {
+        // Fallback: legacy manual rendering (no inline-edit wiring)
+        line = document.createElement('div');
+        line.className = 'ingredient-line';
 
-      const unit = ing.unit ? ing.unit + ' ' : '';
-      const name = ing.name || '';
-      const text = `${qty || ''}${unit || ''}${name}`.trim();
+        const span = document.createElement('span');
 
-      span.textContent = text;
+        const qty =
+          ing.quantity && !isNaN(parseFloat(ing.quantity))
+            ? decimalToFractionDisplay(parseFloat(ing.quantity)) + ' '
+            : ing.quantity
+            ? ing.quantity + ' '
+            : '';
 
-      // Subdued gray for placeholder prompt row
-      if (ing.isPlaceholder || text === 'Add an ingredient.') {
-        span.classList.add('placeholder-prompt');
+        const unit = ing.unit ? ing.unit + ' ' : '';
+        const name = ing.name || '';
+        const text = `${qty || ''}${unit || ''}${name}`.trim();
+
+        span.textContent = text;
+
+        // Subdued gray for placeholder prompt row
+        if (ing.isPlaceholder || text === 'Add an ingredient.') {
+          span.classList.add('placeholder-prompt');
+        }
+
+        line.appendChild(span);
       }
 
-      line.appendChild(span);
-      ingredientsSection.appendChild(line);
+      if (line) {
+        ingredientsSection.appendChild(line);
+      }
     });
   }
 
@@ -707,13 +720,13 @@ function renderServingsRow(recipe, container) {
     editRow.className = 'servings-edit-row';
 
     const defaultSet = document.createElement('div');
-    defaultSet.className = 'servings-set';
+    defaultSet.className = 'servings-set servings-set--default';
 
     const minSet = document.createElement('div');
-    minSet.className = 'servings-set';
+    minSet.className = 'servings-set servings-set--min';
 
     const maxSet = document.createElement('div');
-    maxSet.className = 'servings-set';
+    maxSet.className = 'servings-set servings-set--max';
 
     // --- Default input ---
     const defaultInput = document.createElement('input');
@@ -1117,10 +1130,34 @@ function attachTitleEditor(titleEl) {
     const onBlur = (e) => {
       const row = document.getElementById('servingsRow');
       const next = e && e.relatedTarget;
-      const goingIntoServings = row && next && row.contains(next);
 
+      let goingIntoServings = row && next && row.contains(next);
+
+      // FIX: On first render, servings row steals focus momentarily.
+      // If next is *null* or outside both title and row → treat as real blur.
+      if (!next) goingIntoServings = false;
+      if (next && row && !row.contains(next) && next !== titleEl) {
+        goingIntoServings = false;
+      }
+
+      const shouldCollapseServings =
+        !goingIntoServings &&
+        typeof servingsHasData === 'function' &&
+        window.recipeData &&
+        !servingsHasData(window.recipeData);
+
+      // Finish title edit first so isTitleEditing is false before we touch servings.
       commit();
       cleanup();
+
+      // If title lost focus, we didn’t move into servings, and there’s still no data,
+      // hide the servings editor (match console shim behavior).
+      if (shouldCollapseServings) {
+        window.isServingsEditing = false;
+        if (typeof updateServingsVisibility === 'function') {
+          updateServingsVisibility(window.recipeData);
+        }
+      }
     };
 
     const onKeyDown = (e) => {

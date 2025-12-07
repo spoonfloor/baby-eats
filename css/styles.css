@@ -41,12 +41,107 @@
   --servings-field-height: 28px;
   --servings-line-h: 42px;
 
+  /* --- Ingredient column layout --- */
+  --ingredient-col-qty: 100px;
+  --ingredient-col-unit: 100px;
+  --ingredient-col-name: 100px;
+  --ingredient-col-var: 100px;
+  --ingredient-col-prep: 100px;
+  --ingredient-col-notes: 100px;
+  --ingredient-col-opt: 100px;
+  --ingredient-col-loc: 100px;
+
+  /* --- Ingredient field min/max (per-column) --- */
+  --ingredient-field-qty-min: 120px;
+  --ingredient-field-qty-max: 360px;
+  --ingredient-field-unit-min: 120px;
+  --ingredient-field-unit-max: 360px;
+  --ingredient-field-name-min: 120px;
+  --ingredient-field-name-max: 360px;
+  --ingredient-field-var-min: 120px;
+  --ingredient-field-var-max: 360px;
+  --ingredient-field-prep-min: 120px;
+  --ingredient-field-prep-max: 360px;
+  --ingredient-field-notes-min: 120px;
+  --ingredient-field-notes-max: 360px;
+  --ingredient-field-opt-min: 120px;
+  --ingredient-field-opt-max: 360px;
+  --ingredient-field-loc-min: 120px;
+  --ingredient-field-loc-max: 360px;
+
+  /* --- Servings column layout --- */
+
+  --servings-col-default: 6rem;
+  --servings-col-min: 5rem;
+  --servings-col-max: 5rem;
+
   /* --- Pill sizing pipeline --- */
   --pill-height: 28px;
   --pill-font-size: var(--body-font-size);
   --pill-line-height: 1.4;
   --pill-padding-x: 10px;
   --servings-pill-offset: -10px;
+
+  /* --- Bottom navigation --- */
+  --bottom-nav-height: 64px;
+  --pill-min-width: 120px;
+  --pill-max-width: 360px;
+  --pill-padding-horizontal: var(--pill-padding-x);
+}
+
+/* --- Bottom navigation bar --- */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bottom-nav-height);
+  background: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  z-index: 1000;
+}
+
+.bottom-nav-pill-row {
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.bottom-nav-pill {
+  font-family: inherit;
+  font-size: var(--headline-font-size);
+  line-height: 1;
+  border: none;
+  border-radius: 9999px;
+  padding: 0 var(--pill-padding-horizontal);
+  min-width: var(--pill-min-width);
+  max-width: var(--pill-max-width);
+  height: 44px; /* match Add button height */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--theme-secondary);
+  color: #fff;
+  opacity: 0.5; /* mimic disabled Cancel/Save buttons */
+  cursor: pointer;
+}
+
+.bottom-nav-pill--active {
+  opacity: 1;
+}
+
+.bottom-nav-pill--active,
+.bottom-nav-pill--active:disabled {
+  cursor: default;
+}
+
+.bottom-nav-pill:not(.bottom-nav-pill--active):hover {
+  opacity: 0.75; /* subtle tint only */
 }
 
 /* --- Body / Layout Defaults --- */
@@ -325,6 +420,13 @@
   top: var(--app-bar-height);
   left: 0;
   width: 100vw;
+  position: absolute;
+  top: var(--app-bar-height);
+  left: 0;
+  right: 0;
+  width: 100vw;
+  bottom: var(--bottom-nav-height);
+  overflow-y: auto;
 }
 
 .recipe-wrapper {
@@ -457,18 +559,145 @@ h1.nav-text {
   gap: 0;
 }
 
+.servings-line .row-field {
+  display: block;
+}
+
 /* Inline flex wrapper for legacy uses, can be reused inside .row-field */
 .servings-edit-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--servings-set-gap);
   margin: 0;
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .servings-set {
   display: inline-flex;
   align-items: center;
   gap: var(--servings-pill-gap);
+
+  white-space: nowrap;
+}
+
+.servings-set--default {
+  flex: 0 0 var(--servings-col-default);
+}
+
+.servings-set--min {
+  flex: 0 0 var(--servings-col-min);
+}
+
+.servings-set--max {
+  flex: 0 0 var(--servings-col-max);
+}
+
+/* Ingredient inline edit row — mirrors servings row layout */
+.ingredient-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--servings-set-gap);
+  min-height: var(--servings-line-h);
+}
+
+.ingredient-edit-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--servings-pill-gap);
+  white-space: nowrap;
+}
+
+.ingredient-edit-cell--qty {
+  flex: 0 0 var(--ingredient-col-qty);
+}
+
+.ingredient-edit-cell--unit {
+  flex: 0 0 var(--ingredient-col-unit);
+}
+
+.ingredient-edit-cell--name {
+  flex: 0 0 var(--ingredient-col-name);
+}
+
+.ingredient-edit-cell--var {
+  flex: 0 0 var(--ingredient-col-var);
+}
+
+.ingredient-edit-cell--prep {
+  flex: 0 0 var(--ingredient-col-prep);
+}
+
+.ingredient-edit-cell--notes {
+  flex: 0 0 var(--ingredient-col-notes);
+}
+
+.ingredient-edit-cell--opt {
+  flex: 0 0 var(--ingredient-col-opt);
+}
+
+.ingredient-edit-cell--loc {
+  flex: 0 0 var(--ingredient-col-loc);
+}
+
+.ingredient-edit-input {
+  width: 100%;
+  height: var(--servings-field-height);
+  padding: 4px 8px;
+  border-radius: 8px;
+  background-color: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid transparent;
+  font-family: var(--main-font);
+  font-size: var(--body-font-size);
+}
+
+.ingredient-edit-input--qty {
+  min-width: var(--ingredient-field-qty-min);
+  max-width: var(--ingredient-field-qty-max);
+}
+
+.ingredient-edit-input--unit {
+  min-width: var(--ingredient-field-unit-min);
+  max-width: var(--ingredient-field-unit-max);
+}
+
+.ingredient-edit-input--name {
+  min-width: var(--ingredient-field-name-min);
+  max-width: var(--ingredient-field-name-max);
+}
+
+.ingredient-edit-input--var {
+  min-width: var(--ingredient-field-var-min);
+  max-width: var(--ingredient-field-var-max);
+}
+
+.ingredient-edit-input--prep {
+  min-width: var(--ingredient-field-prep-min);
+  max-width: var(--ingredient-field-prep-max);
+}
+
+.ingredient-edit-input--notes {
+  min-width: var(--ingredient-field-notes-min);
+  max-width: var(--ingredient-field-notes-max);
+}
+
+.ingredient-edit-input--opt {
+  min-width: var(--ingredient-field-opt-min);
+  max-width: var(--ingredient-field-opt-max);
+}
+
+.ingredient-edit-input--loc {
+  min-width: var(--ingredient-field-loc-min);
+  max-width: var(--ingredient-field-loc-max);
+}
+
+.ingredient-edit-input:focus {
+  outline: none;
+  border-color: transparent;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
 }
 
 /* Label pill — uses theme-derived pill vars */
@@ -588,4 +817,57 @@ h1.nav-text {
 
 .instruction-line .step-text[contenteditable='true'] {
   outline: none;
+}
+
+/* --- Bottom Navigation --- */
+
+.recipes-page {
+  /* Ensure content never hides behind the bottom nav bar */
+  padding-bottom: var(--bottom-nav-height);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bottom-nav-height);
+  background-color: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-nav-pill-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.bottom-nav-pill {
+  /* Match Add button height + type */
+  height: 44px;
+  border-radius: 9999px;
+  padding: 0 var(--pill-padding-horizontal);
+  min-width: var(--pill-min-width);
+  max-width: var(--pill-max-width);
+  font: inherit;
+  line-height: inherit;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  background: var(--theme-secondary);
+  color: white;
+  opacity: 0.5; /* visually echo disabled Cancel/Save */
+  border: none;
+  cursor: pointer;
+}
+
+.bottom-nav-pill.bottom-nav-pill--active {
+  /* Visually match search bar styling */
+  background-color: var(--theme-secondary);
+  opacity: 1;
 }

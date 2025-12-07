@@ -27,10 +27,12 @@ function renderIngredient(line) {
 
       row.dataset.isEditing = 'true';
 
+      let lastCommittedLine = null;
+
       // Helper to make a pill-like label span
       const makePill = (text) => {
         const s = document.createElement('span');
-        s.className = 'ingredient-pill';
+        s.className = 'field-pill ingredient-pill';
         s.textContent = text;
         return s;
       };
@@ -39,12 +41,14 @@ function renderIngredient(line) {
       const makeCell = (labelText) => {
         const cell = document.createElement('div');
         cell.className = 'ingredient-edit-cell';
+        cell.classList.add(`ingredient-edit-cell--${labelText}`);
 
         const pill = makePill(labelText);
         cell.appendChild(pill);
 
         const input = document.createElement('input');
         input.className = 'ingredient-edit-input';
+        input.classList.add(`ingredient-edit-input--${labelText}`);
         input.type = 'text';
 
         // NEW: tag input with its logical field name
@@ -191,6 +195,8 @@ function renderIngredient(line) {
 
             if (readOnlyLine && parent && parent.contains(row)) {
               parent.replaceChild(readOnlyLine, row);
+
+              lastCommittedLine = readOnlyLine;
             }
 
             if (typeof markDirty === 'function') {
@@ -210,10 +216,66 @@ function renderIngredient(line) {
           setIsEditing(flag) {
             _isEditing = !!flag;
           },
+
+          onEnterCommit() {
+            if (!parent) return;
+
+            const anchor =
+              lastCommittedLine && parent.contains(lastCommittedLine)
+                ? lastCommittedLine
+                : row;
+
+            const placeholderLine =
+              typeof renderIngredient === 'function'
+                ? renderIngredient({
+                    quantity: '',
+                    unit: '',
+                    name: '',
+                    variant: '',
+                    prepNotes: '',
+                    parentheticalNote: '',
+                    isOptional: false,
+                    substitutes: [],
+                    locationAtHome: '',
+                    subRecipeId: null,
+                    isPlaceholder: true,
+                  })
+                : null;
+
+            if (!placeholderLine) return;
+
+            const nextSibling = anchor.nextSibling;
+            if (nextSibling) {
+              parent.insertBefore(placeholderLine, nextSibling);
+            } else {
+              parent.appendChild(placeholderLine);
+            }
+
+            if (typeof placeholderLine.click === 'function') {
+              placeholderLine.click();
+            }
+
+            const newRow = parent.querySelector('.ingredient-edit-row.editing');
+            if (newRow) {
+              const qtyInput = newRow.querySelector(
+                '.ingredient-edit-input[data-field="qty"]'
+              );
+              if (qtyInput) {
+                qtyInput.focus();
+              }
+            }
+          },
         });
       }
 
       parent.replaceChild(row, div);
+
+      const qtyInput = row.querySelector(
+        '.ingredient-edit-input[data-field="qty"]'
+      );
+      if (qtyInput) {
+        qtyInput.focus();
+      }
     };
 
     div.addEventListener('click', onClick);
@@ -380,7 +442,7 @@ function renderIngredientEditRowScaffold() {
   // Helper to make a pill-like label span
   const makePill = (text) => {
     const s = document.createElement('span');
-    s.className = 'ingredient-pill';
+    s.className = 'field-pill ingredient-pill';
     s.textContent = text;
     return s;
   };
@@ -389,13 +451,14 @@ function renderIngredientEditRowScaffold() {
   const makeCell = (labelText) => {
     const cell = document.createElement('div');
     cell.className = 'ingredient-edit-cell';
+    cell.classList.add(`ingredient-edit-cell--${labelText}`);
 
     const pill = makePill(labelText);
     cell.appendChild(pill);
 
-    // Inputs will be added in next patch.
     const input = document.createElement('input');
     input.className = 'ingredient-edit-input';
+    input.classList.add(`ingredient-edit-input--${labelText}`);
     input.type = 'text';
 
     // NEW: tag input with its logical field name
