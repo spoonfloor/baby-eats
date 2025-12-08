@@ -5,12 +5,23 @@ initSqlJs({
 }).then((sql) => {
   SQL = sql;
 
-  // --- existing page load logic ---
-  if (document.body.classList.contains('recipes-page')) {
+  // --- page load routing ---
+  const body = document.body;
+
+  if (body.classList.contains('recipes-page')) {
     loadRecipesPage();
-  }
-  if (document.body.classList.contains('recipe-editor-page')) {
+  } else if (body.classList.contains('recipe-editor-page')) {
     loadRecipeEditorPage();
+  } else if (body.classList.contains('shopping-page')) {
+    loadShoppingPage();
+  } else if (body.classList.contains('shopping-editor-page')) {
+    loadShoppingItemEditorPage();
+  } else if (body.classList.contains('units-page')) {
+    loadUnitsPage();
+  } else if (body.classList.contains('stores-page')) {
+    loadStoresPage();
+  } else if (body.classList.contains('store-editor-page')) {
+    loadStoreEditorPage();
   }
 
   // --- Bottom navigation wiring ---
@@ -420,6 +431,173 @@ async function loadRecipesPage() {
       }
     });
   }
+}
+
+// --- Shopping / Units / Stores loaders (v0 stubs) ---
+async function loadShoppingPage() {
+  const list = document.getElementById('shoppingList');
+  const searchInput = document.getElementById('shoppingSearch');
+  const clearBtn = document.querySelector('.clear-search');
+  const addBtn = document.getElementById('shoppingActionBtn');
+
+  if (!list) return;
+
+  // --- Load DB (mirror recipe loaders) ---
+  const isElectron = !!window.electronAPI;
+  let db;
+
+  if (isElectron) {
+    try {
+      const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+      const bytes = await window.electronAPI.loadDB(pathHint);
+      const Uints = new Uint8Array(bytes);
+      db = new SQL.Database(Uints);
+    } catch (err) {
+      console.error('❌ Failed to load DB from disk:', err);
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+  } else {
+    const stored = localStorage.getItem('favoriteEatsDb');
+    if (!stored) {
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+    const Uints = new Uint8Array(JSON.parse(stored));
+    db = new SQL.Database(Uints);
+  }
+
+  // Expose DB globally for any future helpers
+  window.dbInstance = db;
+
+  // --- Load shopping items from ingredients table ---
+  const result = db.exec(`
+    SELECT ID, name, variant
+    FROM ingredients
+    WHERE hide_from_shopping_list = 0
+    ORDER BY name COLLATE NOCASE;
+  `);
+
+  // Normalize into the same shape the UI already expects
+  let shoppingRows = [];
+  if (result.length > 0) {
+    shoppingRows = result[0].values.map(([id, name, variant]) => ({
+      id,
+      name,
+      variants: variant ? [variant] : [],
+    }));
+  }
+
+  function renderShoppingList(rows) {
+    list.innerHTML = '';
+
+    rows.forEach((item) => {
+      const li = document.createElement('li');
+
+      let line = item.name;
+      if (Array.isArray(item.variants) && item.variants.length > 0) {
+        line += ` (${item.variants.join(', ')})`;
+      }
+
+      li.textContent = line;
+
+      li.addEventListener('click', () => {
+        sessionStorage.setItem('selectedShoppingItemId', String(item.id));
+        sessionStorage.removeItem('selectedShoppingItemIsNew');
+        window.location.href = 'shoppingItem.html';
+      });
+
+      list.appendChild(li);
+    });
+  }
+
+  // Initial render
+  renderShoppingList(shoppingRows);
+
+  // Search: filter by name and variant text (case-insensitive)
+  if (searchInput && clearBtn) {
+    clearBtn.style.display = 'none';
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      clearBtn.style.display = query ? 'inline' : 'none';
+
+      if (!query) {
+        renderShoppingList(shoppingRows);
+        return;
+      }
+
+      const filtered = shoppingRows.filter((item) => {
+        const nameMatch = item.name.toLowerCase().includes(query);
+        const variants = Array.isArray(item.variants) ? item.variants : [];
+        const variantMatch = variants.some((v) =>
+          (v || '').toLowerCase().includes(query)
+        );
+        return nameMatch || variantMatch;
+      });
+
+      renderShoppingList(filtered);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.style.display = 'none';
+      renderShoppingList(shoppingRows);
+      searchInput.focus();
+    });
+
+    // Prevent Enter from doing anything weird
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      }
+    });
+  }
+
+  // Add button → new shopping item editor
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      sessionStorage.removeItem('selectedShoppingItemId');
+      sessionStorage.setItem('selectedShoppingItemIsNew', '1');
+      window.location.href = 'shoppingItem.html';
+    });
+  }
+}
+
+function loadShoppingItemEditorPage() {
+  // Placeholder: real editor wiring will be implemented later.
+  console.info('loadShoppingItemEditorPage() not implemented yet.');
+}
+
+function loadUnitsPage() {
+  const list = document.getElementById('unitsList');
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  const li = document.createElement('li');
+  li.textContent = 'Units manager UI coming soon.';
+  li.className = 'nav-text';
+  list.appendChild(li);
+}
+
+function loadStoresPage() {
+  const list = document.getElementById('storesList');
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  const li = document.createElement('li');
+  li.textContent = 'Stores manager UI coming soon.';
+  li.className = 'nav-text';
+  list.appendChild(li);
+}
+
+function loadStoreEditorPage() {
+  // Placeholder: real editor wiring will be implemented later.
+  console.info('loadStoreEditorPage() not implemented yet.');
 }
 
 // --- Bottom navigation wiring (list pages only) ---

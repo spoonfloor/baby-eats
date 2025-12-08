@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
+    <title>Favorite Eats - Stores</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+
+    <!-- ✅ Local SQL.js (offline) -->
+    <script src="js/sql-wasm.js"></script>
+  </head>
+
+  <body class="stores-page">
+    <div class="app-bar-wrapper no-select">
+      <!-- Centered search bar layer -->
+      <div class="app-bar-search-layer">
+        <div class="search-bar">
+          <input type="text" placeholder="Search" id="storesSearch" />
+          <span class="clear-search">&times;</span>
+        </div>
+      </div>
+
+      <!-- Left/Right elements layer -->
+      <div class="app-bar-elements-layer">
+        <div>
+          <span class="title title-recipes">Stores</span>
+        </div>
+        <div class="actions">
+          <button class="button" id="storesActionBtn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="recipe-list-wrapper">
+      <ul id="storesList"></ul>
+    </div>
+
+    <nav class="bottom-nav no-select" aria-label="Primary">
+      <div class="bottom-nav-pill-row">
+        <button class="bottom-nav-pill" data-tab="recipes" type="button">
+          Recipes
+        </button>
+        <button class="bottom-nav-pill" data-tab="shopping" type="button">
+          Shopping
+        </button>
+        <button class="bottom-nav-pill" data-tab="units" type="button">
+          Units
+        </button>
+        <button
+          class="bottom-nav-pill bottom-nav-pill--active"
+          data-tab="stores"
+          type="button"
+        >
+          Stores
+        </button>
+      </div>
+    </nav>
+
+    <!-- JS Modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

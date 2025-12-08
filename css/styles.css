@@ -41,17 +41,7 @@
   --servings-field-height: 28px;
   --servings-line-h: 42px;
 
-  /* --- Ingredient column layout --- */
-  --ingredient-col-qty: 100px;
-  --ingredient-col-unit: 100px;
-  --ingredient-col-name: 100px;
-  --ingredient-col-var: 100px;
-  --ingredient-col-prep: 100px;
-  --ingredient-col-notes: 100px;
-  --ingredient-col-opt: 100px;
-  --ingredient-col-loc: 100px;
-
-  /* --- Ingredient field min/max (per-column) --- */
+  /* --- Ingredient inline edit field widths (per label) --- */
   --ingredient-field-qty-min: 120px;
   --ingredient-field-qty-max: 360px;
   --ingredient-field-unit-min: 120px;
@@ -642,7 +632,7 @@ h1.nav-text {
 }
 
 .ingredient-edit-input {
-  width: 100%;
+  width: auto;
   height: var(--servings-field-height);
   padding: 4px 8px;
   border-radius: 8px;
@@ -651,8 +641,11 @@ h1.nav-text {
   border: 1px solid transparent;
   font-family: var(--main-font);
   font-size: var(--body-font-size);
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
+/* Per-field min/max widths for ingredient edit inputs */
 .ingredient-edit-input--qty {
   min-width: var(--ingredient-field-qty-min);
   max-width: var(--ingredient-field-qty-max);
@@ -821,7 +814,10 @@ h1.nav-text {
 
 /* --- Bottom Navigation --- */
 
-.recipes-page {
+.recipes-page,
+.shopping-page,
+.units-page,
+.stores-page {
   /* Ensure content never hides behind the bottom nav bar */
   padding-bottom: var(--bottom-nav-height);
 }

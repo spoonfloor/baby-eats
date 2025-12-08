@@ -1,5 +1,33 @@
 // Ingredient editor
 
+function attachIngredientInputAutosize(input) {
+  if (!input) return;
+
+  const MIN_CH = 2;
+  const MAX_CH = 9;
+
+  const clampWidthChars = (len) => {
+    if (!Number.isFinite(len) || len <= 0) return MIN_CH;
+    if (len < MIN_CH) return MIN_CH;
+    if (len > MAX_CH) return MAX_CH;
+    return len;
+  };
+
+  const updateWidth = () => {
+    const text = input.value || input.placeholder || '';
+    const ch = clampWidthChars((text && text.length) || MIN_CH);
+
+    // Inline styles so they override any CSS min/max from styles.css
+    input.style.minWidth = `${MIN_CH}ch`;
+    input.style.maxWidth = `${MAX_CH}ch`;
+    input.style.width = `${ch}ch`;
+  };
+
+  // Size once now, and again on each change
+  input.addEventListener('input', updateWidth);
+  updateWidth();
+}
+
 function renderIngredient(line) {
   // NOTE: edit-row scaffold added further down
 
@@ -56,6 +84,11 @@ function renderIngredient(line) {
 
         if (typeof wireLabelToInput === 'function') {
           wireLabelToInput(pill, input);
+        }
+
+        // Auto-size based on content length (2–9ch)
+        if (typeof attachIngredientInputAutosize === 'function') {
+          attachIngredientInputAutosize(input);
         }
 
         cell.appendChild(input);
@@ -466,6 +499,11 @@ function renderIngredientEditRowScaffold() {
 
     if (typeof wireLabelToInput === 'function') {
       wireLabelToInput(pill, input);
+    }
+
+    // Auto-size based on content length (2–9ch)
+    if (typeof attachIngredientInputAutosize === 'function') {
+      attachIngredientInputAutosize(input);
     }
 
     cell.appendChild(input);
