@@ -15,12 +15,11 @@ function attachIngredientInputAutosize(input) {
 
   const updateWidth = () => {
     const text = input.value || input.placeholder || '';
-    const ch = clampWidthChars((text && text.length) || MIN_CH);
 
-    // Inline styles so they override any CSS min/max from styles.css
-    input.style.minWidth = `${MIN_CH}ch`;
-    input.style.maxWidth = `${MAX_CH}ch`;
-    input.style.width = `${ch}ch`;
+    const len = (text && text.length) || 1;
+
+    // Let CSS control min/max via per-field variables; JS just sets a target width.
+    input.style.width = `${len}ch`;
   };
 
   // Size once now, and again on each change
@@ -86,7 +85,7 @@ function renderIngredient(line) {
           wireLabelToInput(pill, input);
         }
 
-        // Auto-size based on content length (2–9ch)
+        // Auto-size based on content length
         if (typeof attachIngredientInputAutosize === 'function') {
           attachIngredientInputAutosize(input);
         }
@@ -501,7 +500,7 @@ function renderIngredientEditRowScaffold() {
       wireLabelToInput(pill, input);
     }
 
-    // Auto-size based on content length (2–9ch)
+    // Auto-size based on content length
     if (typeof attachIngredientInputAutosize === 'function') {
       attachIngredientInputAutosize(input);
     }

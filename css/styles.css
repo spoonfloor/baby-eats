@@ -42,22 +42,22 @@
   --servings-line-h: 42px;
 
   /* --- Ingredient inline edit field widths (per label) --- */
-  --ingredient-field-qty-min: 120px;
-  --ingredient-field-qty-max: 360px;
-  --ingredient-field-unit-min: 120px;
-  --ingredient-field-unit-max: 360px;
-  --ingredient-field-name-min: 120px;
-  --ingredient-field-name-max: 360px;
-  --ingredient-field-var-min: 120px;
-  --ingredient-field-var-max: 360px;
-  --ingredient-field-prep-min: 120px;
-  --ingredient-field-prep-max: 360px;
-  --ingredient-field-notes-min: 120px;
-  --ingredient-field-notes-max: 360px;
-  --ingredient-field-opt-min: 120px;
-  --ingredient-field-opt-max: 360px;
-  --ingredient-field-loc-min: 120px;
-  --ingredient-field-loc-max: 360px;
+  --ingredient-field-qty-min: 4ch;
+  --ingredient-field-qty-max: 8ch;
+  --ingredient-field-unit-min: 7ch;
+  --ingredient-field-unit-max: 25ch;
+  --ingredient-field-name-min: 14ch;
+  --ingredient-field-name-max: 25ch;
+  --ingredient-field-var-min: 14ch;
+  --ingredient-field-var-max: 25ch;
+  --ingredient-field-prep-min: 18ch;
+  --ingredient-field-prep-max: 25ch;
+  --ingredient-field-notes-min: 18ch;
+  --ingredient-field-notes-max: 25ch;
+  --ingredient-field-opt-min: 6ch;
+  --ingredient-field-opt-max: 25ch;
+  --ingredient-field-loc-min: 6ch;
+  --ingredient-field-loc-max: 25ch;
 
   /* --- Servings column layout --- */
 
@@ -131,7 +131,7 @@
 }
 
 .bottom-nav-pill:not(.bottom-nav-pill--active):hover {
-  opacity: 0.75; /* subtle tint only */
+  opacity: 0.86; /* subtle tint only */
 }
 
 /* --- Body / Layout Defaults --- */
@@ -277,21 +277,22 @@
 }
 
 /* --- Recipe list item hover --- */
-#recipeList {
+
+.recipe-list-wrapper > ul {
   width: 100%;
   max-width: calc(600px - 22px); /* adjust to your preference */
   margin: 22px auto; /* center horizontally */
   padding: 0;
 }
 
-#recipeList li {
+/* Unified list styling for Recipes, Shopping, Units, Stores */
+.list-page li {
   cursor: pointer;
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
 }
 
-#recipeList li:hover {
-  /* background-color: var(--theme-light); */
+.list-page li:hover {
   background-color: hsl(270, 0%, 96%);
 }
 
