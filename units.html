@@ -26,7 +26,7 @@
     <script src="js/sql-wasm.js"></script>
   </head>
 
-  <body class="units-page">
+  <body class="units-page" data-page="units">
     <div class="app-bar-wrapper no-select">
       <!-- Centered search bar layer -->
       <div class="app-bar-search-layer">
@@ -45,9 +45,11 @@
       </div>
     </div>
 
-    <div class="recipe-list-wrapper">
-      <ul id="unitsList" class="list-page"></ul>
-    </div>
+    <main class="page-main">
+      <div class="page-wrapper">
+        <ul id="unitsList" class="list-view list-page"></ul>
+      </div>
+    </main>
 
     <nav class="bottom-nav no-select" aria-label="Primary">
       <div class="bottom-nav-pill-row">

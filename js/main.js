@@ -6,22 +6,40 @@ initSqlJs({
   SQL = sql;
 
   // --- page load routing ---
+
   const body = document.body;
 
-  if (body.classList.contains('recipes-page')) {
-    loadRecipesPage();
-  } else if (body.classList.contains('recipe-editor-page')) {
-    loadRecipeEditorPage();
-  } else if (body.classList.contains('shopping-page')) {
-    loadShoppingPage();
-  } else if (body.classList.contains('shopping-editor-page')) {
-    loadShoppingItemEditorPage();
-  } else if (body.classList.contains('units-page')) {
-    loadUnitsPage();
-  } else if (body.classList.contains('stores-page')) {
-    loadStoresPage();
-  } else if (body.classList.contains('store-editor-page')) {
-    loadStoreEditorPage();
+  // Prefer data-page; fall back to legacy body classes for now.
+  const pageId =
+    body.dataset.page ||
+    (body.classList.contains('recipes-page')
+      ? 'recipes'
+      : body.classList.contains('recipe-editor-page')
+      ? 'recipe-editor'
+      : body.classList.contains('shopping-page')
+      ? 'shopping'
+      : body.classList.contains('shopping-editor-page')
+      ? 'shopping-editor'
+      : body.classList.contains('units-page')
+      ? 'units'
+      : body.classList.contains('stores-page')
+      ? 'stores'
+      : body.classList.contains('store-editor-page')
+      ? 'store-editor'
+      : null);
+
+  const pageLoaders = {
+    recipes: loadRecipesPage,
+    'recipe-editor': loadRecipeEditorPage,
+    shopping: loadShoppingPage,
+    'shopping-editor': loadShoppingItemEditorPage,
+    units: loadUnitsPage,
+    stores: loadStoresPage,
+    'store-editor': loadStoreEditorPage,
+  };
+
+  if (pageId && pageLoaders[pageId]) {
+    pageLoaders[pageId]();
   }
 
   // --- Bottom navigation wiring ---
@@ -505,6 +523,7 @@ async function loadShoppingPage() {
 
       li.addEventListener('click', () => {
         sessionStorage.setItem('selectedShoppingItemId', String(item.id));
+        sessionStorage.setItem('selectedShoppingItemName', item.name || '');
         sessionStorage.removeItem('selectedShoppingItemIsNew');
         window.location.href = 'shoppingItem.html';
       });
@@ -560,15 +579,44 @@ async function loadShoppingPage() {
   if (addBtn) {
     addBtn.addEventListener('click', () => {
       sessionStorage.removeItem('selectedShoppingItemId');
+
+      sessionStorage.removeItem('selectedShoppingItemName');
       sessionStorage.setItem('selectedShoppingItemIsNew', '1');
+
       window.location.href = 'shoppingItem.html';
     });
   }
 }
 
 function loadShoppingItemEditorPage() {
-  // Placeholder: real editor wiring will be implemented later.
-  console.info('loadShoppingItemEditorPage() not implemented yet.');
+  const backBtn = document.getElementById('shoppingBackButton');
+  const cancelBtn = document.getElementById('shoppingCancelBtn');
+  const saveBtn = document.getElementById('shoppingSaveBtn');
+
+  const view = document.getElementById('pageContent');
+
+  if (!view) return;
+
+  const isNew = sessionStorage.getItem('selectedShoppingItemIsNew') === '1';
+  const storedName = sessionStorage.getItem('selectedShoppingItemName') || '';
+
+  let titleText = storedName.trim();
+  if (!titleText && !isNew) {
+    titleText = 'Shopping item';
+  }
+
+  const titleEl = document.createElement('h1');
+  titleEl.className = 'recipe-title';
+  titleEl.textContent = titleText;
+  view.appendChild(titleEl);
+
+  const goBack = () => {
+    window.location.href = 'shopping.html';
+  };
+
+  if (backBtn) backBtn.addEventListener('click', goBack);
+  if (cancelBtn) cancelBtn.addEventListener('click', goBack);
+  if (saveBtn) saveBtn.addEventListener('click', goBack);
 }
 
 function loadUnitsPage() {

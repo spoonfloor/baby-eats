@@ -3,23 +3,50 @@
 function attachIngredientInputAutosize(input) {
   if (!input) return;
 
-  const MIN_CH = 2;
-  const MAX_CH = 9;
+  // Measure "1ch" in pixels for this font, once per page.
+  let pxPerCh = window.__ingredientPxPerCh;
+  if (!pxPerCh || !Number.isFinite(pxPerCh) || pxPerCh <= 0) {
+    const probe = document.createElement('span');
+    probe.textContent = '0';
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    probe.style.whiteSpace = 'pre';
 
-  const clampWidthChars = (len) => {
-    if (!Number.isFinite(len) || len <= 0) return MIN_CH;
-    if (len < MIN_CH) return MIN_CH;
-    if (len > MAX_CH) return MAX_CH;
-    return len;
+    const cs = window.getComputedStyle(input);
+    probe.style.fontFamily = cs.fontFamily;
+    probe.style.fontSize = cs.fontSize;
+
+    document.body.appendChild(probe);
+    const rect = probe.getBoundingClientRect();
+    document.body.removeChild(probe);
+
+    pxPerCh = rect.width || 8; // sensible fallback
+    window.__ingredientPxPerCh = pxPerCh;
+  }
+
+  const getMinMaxCh = () => {
+    const styles = window.getComputedStyle(input);
+    const minPx = parseFloat(styles.minWidth) || 0;
+    const maxPx = parseFloat(styles.maxWidth) || 0;
+
+    const minCh = minPx > 0 ? minPx / pxPerCh : 0;
+    const maxCh = maxPx > 0 ? maxPx / pxPerCh : Infinity;
+
+    return { minCh, maxCh };
   };
 
   const updateWidth = () => {
     const text = input.value || input.placeholder || '';
 
-    const len = (text && text.length) || 1;
+    let ch = (text && text.length) || 1;
 
-    // Let CSS control min/max via per-field variables; JS just sets a target width.
-    input.style.width = `${len}ch`;
+    const { minCh, maxCh } = getMinMaxCh();
+
+    if (minCh && ch < minCh) ch = minCh;
+    if (Number.isFinite(maxCh) && ch > maxCh) ch = maxCh;
+
+    // Let CSS own min/max (via vars); JS only picks a target width in ch units.
+    input.style.width = `${ch}ch`;
   };
 
   // Size once now, and again on each change

@@ -26,7 +26,7 @@
     <script src="js/sql-wasm.js"></script>
   </head>
 
-  <body class="recipes-page">
+  <body class="recipes-page" data-page="recipes">
     <div class="app-bar-wrapper no-select">
       <!-- Centered search bar layer -->
       <div class="app-bar-search-layer">
@@ -47,10 +47,11 @@
       </div>
     </div>
 
-    <div class="recipe-list-wrapper">
-      <ul id="recipeList" class="list-page"></ul>
-    </div>
-
+    <main class="page-main">
+      <div class="page-wrapper">
+        <ul id="recipeList" class="list-view list-page"></ul>
+      </div>
+    </main>
     <!-- Add Recipe Modal -->
     <div id="addRecipeModal" class="modal hidden">
       <div class="modal-content">

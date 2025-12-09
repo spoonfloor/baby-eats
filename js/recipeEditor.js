@@ -134,6 +134,10 @@ function mergeByIngredient(list) {
   return merged;
 }
 
+// --- Shared page content resolver (non-breaking during migration) ---
+
+const getPageContentContainer = () => document.getElementById('pageContent');
+
 // --- Main render function (bridge edition: safe, data-driven, backward compatible) ---
 
 function renderRecipe(recipe) {
@@ -212,7 +216,7 @@ function renderRecipe(recipe) {
   }
 
   // --- Clear & rebuild container
-  const container = document.getElementById('recipeView');
+  const container = getPageContentContainer();
 
   container.innerHTML = `
     <h1 id="recipeTitle" class="recipe-title">${recipe.title || ''}</h1>

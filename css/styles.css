@@ -27,6 +27,9 @@
 
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
+  --page-top-gap: 16px;
+  --page-content-width: 680px;
+
   --header-font-size: 16px;
   --section-card-offset: 24px;
 
@@ -43,21 +46,21 @@
 
   /* --- Ingredient inline edit field widths (per label) --- */
   --ingredient-field-qty-min: 4ch;
-  --ingredient-field-qty-max: 8ch;
-  --ingredient-field-unit-min: 7ch;
-  --ingredient-field-unit-max: 25ch;
-  --ingredient-field-name-min: 14ch;
-  --ingredient-field-name-max: 25ch;
-  --ingredient-field-var-min: 14ch;
-  --ingredient-field-var-max: 25ch;
-  --ingredient-field-prep-min: 18ch;
-  --ingredient-field-prep-max: 25ch;
-  --ingredient-field-notes-min: 18ch;
-  --ingredient-field-notes-max: 25ch;
-  --ingredient-field-opt-min: 6ch;
-  --ingredient-field-opt-max: 25ch;
-  --ingredient-field-loc-min: 6ch;
-  --ingredient-field-loc-max: 25ch;
+  --ingredient-field-qty-max: 9ch;
+  --ingredient-field-unit-min: 4ch;
+  --ingredient-field-unit-max: 9ch;
+  --ingredient-field-name-min: 4ch;
+  --ingredient-field-name-max: 9ch;
+  --ingredient-field-var-min: 4ch;
+  --ingredient-field-var-max: 9ch;
+  --ingredient-field-prep-min: 4ch;
+  --ingredient-field-prep-max: 9ch;
+  --ingredient-field-notes-min: 4ch;
+  --ingredient-field-notes-max: 9ch;
+  --ingredient-field-opt-min: 4ch;
+  --ingredient-field-opt-max: 9ch;
+  --ingredient-field-loc-min: 4ch;
+  --ingredient-field-loc-max: 9ch;
 
   /* --- Servings column layout --- */
 
@@ -246,6 +249,38 @@
   display: none;
 }
 
+.page-main {
+  padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
+}
+
+.page-wrapper {
+  width: 100%;
+  max-width: var(--page-content-width);
+  margin: 0px auto;
+  padding: 0 0px;
+}
+
+.page-title {
+  font-size: 22px;
+}
+
+.list-view {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 600px;
+}
+
+.list-view li {
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+
+.list-view li:hover {
+  background-color: hsl(270, 0%, 96%);
+}
+
 .recipe-title {
   font-size: 22px; /* stronger heading style */
 }
@@ -278,12 +313,12 @@
 
 /* --- Recipe list item hover --- */
 
-.recipe-list-wrapper > ul {
+/* .recipe-list-wrapper > ul {
   width: 100%;
-  max-width: calc(600px - 22px); /* adjust to your preference */
-  margin: 22px auto; /* center horizontally */
+  max-width: calc(600px - 22px); 
+  margin: 22px auto; 
   padding: 0;
-}
+} */
 
 /* Unified list styling for Recipes, Shopping, Units, Stores */
 .list-page li {
@@ -406,7 +441,7 @@
   color: white;
 }
 
-.recipe-list-wrapper {
+/* .recipe-list-wrapper {
   position: absolute;
   top: var(--app-bar-height);
   left: 0;
@@ -418,19 +453,14 @@
   width: 100vw;
   bottom: var(--bottom-nav-height);
   overflow-y: auto;
-}
+} */
 
-.recipe-wrapper {
-  position: absolute;
-  top: var(--app-bar-height);
-  left: 0;
-  width: 100vw;
-}
-
-#recipeView {
+/* New universal page-content container */
+.page-content {
   width: 100%;
   max-width: 680px;
   margin: 40px auto;
+  padding: 0 24px; /* matches existing spacing expectations */
 }
 
 /* Proper hanging indent for steps */
@@ -814,14 +844,6 @@ h1.nav-text {
 }
 
 /* --- Bottom Navigation --- */
-
-.recipes-page,
-.shopping-page,
-.units-page,
-.stores-page {
-  /* Ensure content never hides behind the bottom nav bar */
-  padding-bottom: var(--bottom-nav-height);
-}
 
 .bottom-nav {
   position: fixed;
