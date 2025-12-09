@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-eva...tps://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
     />
-    <title>Favorite Eats - Recipe</title>
+    <title>Favorite Eats - Unit Editor</title>
 
     <!-- Load Red Hat Mono font -->
     <link
@@ -26,14 +26,14 @@
     <script src="js/sql-wasm.js"></script>
   </head>
 
-  <body class="recipe-editor-page" data-page="recipe-editor">
+  <body class="unit-editor-page" data-page="unit-editor">
     <div class="app-bar-wrapper no-select">
       <!-- Left/Right elements layer -->
       <div class="app-bar-elements-layer">
         <div class="title-and-back">
           <button
             class="app-bar-icon-button back-button"
-            id="backButton"
+            id="unitBackButton"
             aria-label="Back"
           >
             <img
@@ -42,13 +42,12 @@
               class="app-bar-icon back-arrow"
             />
           </button>
-
           <!-- removed: title in app bar -->
           <!-- Title removed from app bar; moved to body -->
         </div>
         <div class="actions">
-          <button class="button" id="cancelEditsBtn">Cancel</button>
-          <button class="button" id="editorActionBtn">Save</button>
+          <button class="button" id="unitCancelBtn">Cancel</button>
+          <button class="button" id="unitSaveBtn">Save</button>
         </div>
       </div>
     </div>
@@ -61,16 +60,6 @@
 
     <!-- JS Modules -->
     <script src="js/utils.js"></script>
-    <script src="js/ingredientRenderer.js"></script>
-    <script src="js/formatter.js"></script>
-    <script src="js/bridge.js"></script>
-
-    <script src="js/stepNodeModel.js"></script>
-
-    <script src="js/recipeEditor.session.js"></script>
-    <script src="js/recipeEditor.stepsEdit.js"></script>
-    <script src="js/recipeEditor.js"></script>
-
     <script src="js/main.js"></script>
   </body>
 </html>

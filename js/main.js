@@ -34,6 +34,7 @@ initSqlJs({
     shopping: loadShoppingPage,
     'shopping-editor': loadShoppingItemEditorPage,
     units: loadUnitsPage,
+    'unit-editor': loadUnitEditorPage,
     stores: loadStoresPage,
     'store-editor': loadStoreEditorPage,
   };
@@ -643,6 +644,11 @@ function loadStoresPage() {
   list.appendChild(li);
 }
 
+function loadUnitEditorPage() {
+  // Placeholder: real editor wiring will be implemented later.
+  console.info('loadUnitEditorPage() not implemented yet.');
+}
+
 function loadStoreEditorPage() {
   // Placeholder: real editor wiring will be implemented later.
   console.info('loadStoreEditorPage() not implemented yet.');
@@ -653,6 +659,14 @@ function initBottomNav() {
   const nav = document.querySelector('.bottom-nav');
   if (!nav) return;
 
+  +(
+    // Hidden-by-default sheet model
+    (+nav.classList.add('bottom-nav--hidden'))
+  );
+
+  // Hidden-by-default sheet model: start fully hidden.
+  nav.style.display = 'none';
+
   const pills = Array.from(nav.querySelectorAll('.bottom-nav-pill'));
   if (!pills.length) return;
 
@@ -661,12 +675,24 @@ function initBottomNav() {
 
   if (body.classList.contains('recipes-page')) {
     activeTab = 'recipes';
+    nav.style.display = '';
   } else if (body.classList.contains('shopping-page')) {
     activeTab = 'shopping';
+    nav.style.display = '';
   } else if (body.classList.contains('units-page')) {
     activeTab = 'units';
+    nav.style.display = '';
   } else if (body.classList.contains('stores-page')) {
     activeTab = 'stores';
+    nav.style.display = '';
+  }
+
+  // Menu icon toggles bottom nav visibility on list pages.
+  const menuButton = document.getElementById('menuButton');
+  if (menuButton) {
+    menuButton.addEventListener('click', () => {
+      nav.classList.toggle('bottom-nav--hidden');
+    });
   }
 
   pills.forEach((pill) => {

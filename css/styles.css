@@ -28,7 +28,7 @@
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
   --page-top-gap: 16px;
-  --page-content-width: 680px;
+  --page-content-width: 574px;
 
   --header-font-size: 16px;
   --section-card-offset: 24px;
@@ -332,6 +332,24 @@
 }
 
 /* --- App Bar Wrapper --- */
+
+.app-bar-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-bar-icon-button img.app-bar-icon {
+  width: 24px;
+  height: 24px;
+  user-select: none;
+  pointer-events: none;
+}
+
 .app-bar-wrapper {
   position: fixed;
   background: var(--theme-primary);
@@ -339,7 +357,9 @@
   height: var(--app-bar-height);
   top: 0;
   left: 0;
-  padding: 0.75rem 1.5rem;
+  /* padding: 0.75rem 1.5rem; */
+  padding-left: 14px;
+  padding-right: 22px;
   z-index: 1000;
   display: flex;
   justify-content: space-between;
@@ -408,7 +428,7 @@
 .title-and-back {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 6px;
 }
 
 .back-arrow {
@@ -779,7 +799,7 @@ h1.nav-text {
 
 .app-bar-elements-layer .title-recipes {
   position: relative;
-  top: -1px; /* try -1px or -2px */
+  font-size: 18px;
 }
 
 .app-bar-elements-layer .title-editor {
@@ -855,6 +875,10 @@ h1.nav-text {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.bottom-nav--hidden {
+  display: none;
 }
 
 .bottom-nav-pill-row {
