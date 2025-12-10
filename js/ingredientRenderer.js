@@ -50,8 +50,61 @@ function attachIngredientInputAutosize(input) {
   };
 
   // Size once now, and again on each change
+
   input.addEventListener('input', updateWidth);
   updateWidth();
+}
+
+// --- Unit display helper (DB-aware when available) ---
+function getUnitDisplay(unitText, numericVal) {
+  let unit = unitText || '';
+  const codeLower = unit.toLowerCase();
+
+  // Optional: use DB-backed metadata if present (populated elsewhere).
+  let meta = null;
+  if (window.unitsDisplayMap && window.unitsDisplayMap[codeLower]) {
+    meta = window.unitsDisplayMap[codeLower];
+  } else if (window.unitsMeta && window.unitsMeta[codeLower]) {
+    meta = window.unitsMeta[codeLower];
+  }
+
+  if (meta) {
+    // Prefer explicit short label, then singular name, then original code.
+    unit =
+      meta.abbrev ||
+      meta.abbreviation ||
+      meta.name_singular ||
+      meta.name ||
+      unit;
+  }
+
+  // U.S. cookbook style: abbreviations never pluralize based on quantity.
+  if (unit && numericVal && numericVal !== 1) {
+    const abbrevUnits = [
+      'tsp',
+      'tbsp',
+      'cup',
+      'oz',
+      'lb',
+      'pt',
+      'qt',
+      'gal',
+      'ml',
+      'l',
+      'g',
+      'kg',
+    ];
+
+    if (!abbrevUnits.includes(codeLower) && !unit.endsWith('s')) {
+      unit = unit + 's';
+    }
+  }
+
+  return unit;
+}
+
+if (typeof window !== 'undefined' && !window.getUnitDisplay) {
+  window.getUnitDisplay = getUnitDisplay;
 }
 
 function renderIngredient(line) {
@@ -359,34 +412,8 @@ function renderIngredient(line) {
 
   let mainText;
   if (isNumericQty && line.quantity !== '') {
-    // Handle pluralization of unit
-    let unitText = line.unit || '';
     const numericVal = parseFloat(line.quantity);
-
-    // U.S. cookbook style: abbreviations (tsp, tbsp, cup, oz, lb, etc.) never pluralize
-    // Only pluralize if it's a long-form unit word (e.g., "teaspoon" → "teaspoons")
-    if (unitText && numericVal && numericVal !== 1) {
-      const abbrevUnits = [
-        'tsp',
-        'tbsp',
-        'cup',
-        'oz',
-        'lb',
-        'pt',
-        'qt',
-        'gal',
-        'ml',
-        'l',
-        'g',
-        'kg',
-      ];
-      if (
-        !abbrevUnits.includes(unitText.toLowerCase()) &&
-        !unitText.endsWith('s')
-      ) {
-        unitText = unitText + 's';
-      }
-    }
+    const unitText = getUnitDisplay(line.unit || '', numericVal);
     mainText = [qtyDisplay, unitText, baseName].filter(Boolean).join(' ');
   } else if (line.quantity) {
     // Free-text quantity like "to taste" or "as needed"

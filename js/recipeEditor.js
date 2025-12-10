@@ -361,7 +361,7 @@ function renderRecipe(recipe) {
         const line = document.createElement('div');
         line.className = 'ingredient-line';
         const span = document.createElement('span');
-        span.textContent = m;
+        span.textContent = formatMeasureLabel(m);
         line.appendChild(span);
         needWrapper.appendChild(line);
       });
@@ -1184,6 +1184,32 @@ function attachTitleEditor(titleEl) {
 // --- Helpers ---
 function capitalizeWords(str) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// --- Measure formatting helper (DB-aware when available) ---
+function formatMeasureLabel(measureKey) {
+  if (!measureKey || typeof measureKey !== 'string') return measureKey;
+
+  const parts = measureKey.split(' ');
+  if (parts.length < 2) return measureKey;
+
+  const amount = parts[0];
+  const unitCode = parts.slice(1).join(' ');
+
+  // Best-effort numeric value for pluralization (e.g., "2 cup")
+  let numericVal = null;
+  const numericMatch = amount.match(/^\d+(\.\d+)?/);
+  if (numericMatch) {
+    numericVal = parseFloat(numericMatch[0]);
+  }
+
+  let unitText = unitCode;
+
+  if (typeof window.getUnitDisplay === 'function') {
+    unitText = window.getUnitDisplay(unitCode, numericVal);
+  }
+
+  return [amount, unitText].filter(Boolean).join(' ');
 }
 
 // --- Compute Measures ---

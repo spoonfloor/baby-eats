@@ -631,28 +631,249 @@ function loadShoppingItemEditorPage() {
   if (saveBtn) saveBtn.addEventListener('click', goBack);
 }
 
-function loadUnitsPage() {
+async function loadUnitsPage() {
   const list = document.getElementById('unitsList');
+  const searchInput = document.getElementById('unitsSearch');
+  const clearBtn = document.querySelector('.clear-search');
+
   if (!list) return;
 
-  list.innerHTML = '';
+  // --- Load DB (mirror recipe/shopping loaders) ---
+  const isElectron = !!window.electronAPI;
+  let db;
 
-  const li = document.createElement('li');
-  li.textContent = 'Units manager UI coming soon.';
-  li.className = 'nav-text';
-  list.appendChild(li);
+  if (isElectron) {
+    try {
+      const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+      const bytes = await window.electronAPI.loadDB(pathHint);
+      const Uints = new Uint8Array(bytes);
+      db = new SQL.Database(Uints);
+    } catch (err) {
+      console.error('❌ Failed to load DB from disk:', err);
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+  } else {
+    const stored = localStorage.getItem('favoriteEatsDb');
+    if (!stored) {
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+    const Uints = new Uint8Array(JSON.parse(stored));
+    db = new SQL.Database(Uints);
+  }
+
+  // Expose DB globally for any future helpers
+  window.dbInstance = db;
+
+  // --- Load units from units table ---
+  const result = db.exec(`
+    SELECT code, name_singular, name_plural, category, sort_order
+    FROM units
+    ORDER BY sort_order ASC, code COLLATE NOCASE;
+  `);
+
+  let unitRows = [];
+  if (result.length > 0) {
+    unitRows = result[0].values.map(
+      ([code, nameSingular, namePlural, category, sortOrder]) => ({
+        code,
+        nameSingular,
+        namePlural,
+        category,
+        sortOrder,
+      })
+    );
+  }
+
+  function renderUnitsList(rows) {
+    list.innerHTML = '';
+
+    rows.forEach((unit) => {
+      const li = document.createElement('li');
+
+      // Force initial cap on the primary label (code)
+      let line = unit.code || '';
+      if (line && line.length > 0) {
+        line = line.charAt(0).toUpperCase() + line.slice(1);
+      }
+
+      // If we have a human-friendly singular name different from the code, append it
+      if (
+        unit.nameSingular &&
+        unit.nameSingular.toLowerCase() !== (unit.code || '').toLowerCase()
+      ) {
+        const label =
+          unit.nameSingular.charAt(0).toUpperCase() +
+          unit.nameSingular.slice(1);
+        line += ` (${label})`;
+      }
+
+      li.textContent = line;
+      list.appendChild(li);
+    });
+  }
+
+  // Initial render
+  renderUnitsList(unitRows);
+
+  // Search: filter by code/name/category (case-insensitive)
+  if (searchInput && clearBtn) {
+    clearBtn.style.display = 'none';
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      clearBtn.style.display = query ? 'inline' : 'none';
+
+      if (!query) {
+        renderUnitsList(unitRows);
+        return;
+      }
+
+      const filtered = unitRows.filter((u) => {
+        const haystack = [
+          u.code || '',
+          u.nameSingular || '',
+          u.namePlural || '',
+          u.category || '',
+        ]
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+
+      renderUnitsList(filtered);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.style.display = 'none';
+      renderUnitsList(unitRows);
+      searchInput.focus();
+    });
+
+    // Prevent Enter from doing anything weird
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      }
+    });
+  }
 }
 
-function loadStoresPage() {
+async function loadStoresPage() {
   const list = document.getElementById('storesList');
+  const searchInput = document.getElementById('storesSearch');
+  const clearBtn = document.querySelector('.clear-search');
+
   if (!list) return;
 
-  list.innerHTML = '';
+  // --- Load DB (mirror recipe loaders) ---
+  const isElectron = !!window.electronAPI;
+  let db;
 
-  const li = document.createElement('li');
-  li.textContent = 'Stores manager UI coming soon.';
-  li.className = 'nav-text';
-  list.appendChild(li);
+  if (isElectron) {
+    try {
+      const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+      const bytes = await window.electronAPI.loadDB(pathHint);
+      const Uints = new Uint8Array(bytes);
+      db = new SQL.Database(Uints);
+    } catch (err) {
+      console.error('❌ Failed to load DB from disk:', err);
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+  } else {
+    const stored = localStorage.getItem('favoriteEatsDb');
+    if (!stored) {
+      alert('No database loaded. Please go back to the welcome page.');
+      window.location.href = 'index.html';
+      return;
+    }
+    const Uints = new Uint8Array(JSON.parse(stored));
+    db = new SQL.Database(Uints);
+  }
+
+  // Expose DB globally for any future helpers
+  window.dbInstance = db;
+
+  // --- Load stores from stores table ---
+  const result = db.exec(`
+    SELECT ID, chain_name, location_name
+    FROM stores
+    ORDER BY chain_name COLLATE NOCASE, location_name COLLATE NOCASE;
+  `);
+
+  let storeRows = [];
+  if (result.length > 0) {
+    storeRows = result[0].values.map(([id, chain, location]) => ({
+      id,
+      chain,
+      location,
+    }));
+  }
+
+  function renderStoresList(rows) {
+    list.innerHTML = '';
+
+    rows.forEach((store) => {
+      const li = document.createElement('li');
+
+      const chain =
+        store.chain && store.chain.length > 0
+          ? store.chain.charAt(0).toUpperCase() + store.chain.slice(1)
+          : store.chain;
+
+      const location = store.location || '';
+
+      li.textContent = location ? `${chain} (${location})` : chain || '';
+
+      list.appendChild(li);
+    });
+  }
+
+  // Initial render
+  renderStoresList(storeRows);
+
+  // Search: filter by chain and location (case-insensitive)
+  if (searchInput && clearBtn) {
+    clearBtn.style.display = 'none';
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      clearBtn.style.display = query ? 'inline' : 'none';
+
+      if (!query) {
+        renderStoresList(storeRows);
+        return;
+      }
+
+      const filtered = storeRows.filter((store) => {
+        const chain = (store.chain || '').toLowerCase();
+        const location = (store.location || '').toLowerCase();
+        return chain.includes(query) || location.includes(query);
+      });
+
+      renderStoresList(filtered);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.style.display = 'none';
+      renderStoresList(storeRows);
+      searchInput.focus();
+    });
+
+    // Prevent Enter from doing anything weird
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      }
+    });
+  }
 }
 
 function loadUnitEditorPage() {
