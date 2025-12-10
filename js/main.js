@@ -505,14 +505,63 @@ async function loadShoppingPage() {
     ORDER BY name COLLATE NOCASE;
   `);
 
-  // Normalize into the same shape the UI already expects
+  // Normalize into the same shape the UI already expects, but
+  // aggregate variants by ingredient name so each name appears once.
   let shoppingRows = [];
   if (result.length > 0) {
-    shoppingRows = result[0].values.map(([id, name, variant]) => ({
+    const rawRows = result[0].values.map(([id, name, variant]) => ({
       id,
       name,
-      variants: variant ? [variant] : [],
+      variant: variant || '',
     }));
+
+    const byName = new Map();
+
+    rawRows.forEach((row) => {
+      const key = (row.name || '').toLowerCase();
+
+      if (!byName.has(key)) {
+        byName.set(key, {
+          id: row.id,
+          name: row.name || '',
+          variants: [],
+        });
+      }
+
+      if (row.variant) {
+        byName.get(key).variants.push(row.variant);
+      }
+    });
+
+    // Dedupe + sort variants, then flatten into an array
+    shoppingRows = Array.from(byName.values()).map((item) => {
+      if (Array.isArray(item.variants) && item.variants.length > 0) {
+        const unique = Array.from(
+          new Set(
+            item.variants
+              .map((v) => (v || '').trim())
+              .filter((v) => v.length > 0)
+          )
+        );
+
+        unique.sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: 'base' })
+        );
+
+        item.variants = unique;
+      } else {
+        item.variants = [];
+      }
+
+      return item;
+    });
+
+    // Keep list stable + alphabetical by name
+    shoppingRows.sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', undefined, {
+        sensitivity: 'base',
+      })
+    );
   }
 
   function renderShoppingList(rows) {
@@ -528,7 +577,24 @@ async function loadShoppingPage() {
           : item.name;
 
       if (Array.isArray(item.variants) && item.variants.length > 0) {
-        line += ` (${item.variants.join(', ')})`;
+        const MAX_VISIBLE = 3;
+
+        // item.variants is already deduped + alpha-sorted above
+        const variants = item.variants;
+        const visible = variants.slice(0, MAX_VISIBLE);
+        const remainingCount =
+          variants.length > MAX_VISIBLE ? variants.length - MAX_VISIBLE : 0;
+
+        let variantLabel = visible.join(', ');
+
+        if (remainingCount > 0) {
+          variantLabel += `, +${remainingCount} other${
+            remainingCount === 1 ? '' : 's'
+          }`;
+        }
+
+        // e.g. "Basil (dried, fresh, lemon, +2 others)"
+        line += ` (${variantLabel})`;
       }
 
       li.textContent = line;
@@ -537,7 +603,7 @@ async function loadShoppingPage() {
         sessionStorage.setItem('selectedShoppingItemId', String(item.id));
         sessionStorage.setItem('selectedShoppingItemName', item.name || '');
         sessionStorage.removeItem('selectedShoppingItemIsNew');
-        window.location.href = 'shoppingItem.html';
+        window.location.href = 'shoppingEditor.html';
       });
 
       list.appendChild(li);
@@ -595,7 +661,7 @@ async function loadShoppingPage() {
       sessionStorage.removeItem('selectedShoppingItemName');
       sessionStorage.setItem('selectedShoppingItemIsNew', '1');
 
-      window.location.href = 'shoppingItem.html';
+      window.location.href = 'shoppingEditor.html';
     });
   }
 }
@@ -617,9 +683,15 @@ function loadShoppingItemEditorPage() {
     titleText = 'Shopping item';
   }
 
+  // Force initial capital so editor title always looks correct
+  const fixedTitle =
+    titleText && titleText.length > 0
+      ? titleText.charAt(0).toUpperCase() + titleText.slice(1)
+      : titleText;
+
   const titleEl = document.createElement('h1');
   titleEl.className = 'recipe-title';
-  titleEl.textContent = titleText;
+  titleEl.textContent = fixedTitle;
   view.appendChild(titleEl);
 
   const goBack = () => {

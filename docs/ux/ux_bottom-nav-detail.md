@@ -15,7 +15,7 @@
 ### Files to create
 
 - [ ] shopping.html (Shopping list)
-- [ ] shoppingItem.html (Shopping item editor, placeholder)
+- [ ] shoppingEditor.html (Shopping item editor, placeholder)
 - [ ] units.html (Units list, inline edit)
 - [ ] stores.html (Stores list)
 - [ ] storeEditor.html (Store editor, placeholder)
@@ -25,7 +25,7 @@
 - [ ] recipes.html → body.recipes-page (verify existing)
 - [ ] recipeEditor.html → body.recipe-editor-page (verify existing)
 - [ ] shopping.html → body.shopping-page
-- [ ] shoppingItem.html → body.shopping-editor-page
+- [ ] shoppingEditor.html → body.shopping-editor-page
 - [ ] units.html → body.units-page
 - [ ] stores.html → body.stores-page
 - [ ] storeEditor.html → body.store-editor-page
@@ -90,7 +90,7 @@ Show bottom nav on:
 Hide bottom nav on:
 
 - [ ] recipeEditor.html
-- [ ] shoppingItem.html
+- [ ] shoppingEditor.html
 - [ ] storeEditor.html
 
 ### Tabs and labels
@@ -167,18 +167,18 @@ Row interactions:
 
   - [ ] Save the selected item id in sessionStorage (e.g., 'selectedShoppingItemId').
   - [ ] Clear 'selectedShoppingItemIsNew'.
-  - [ ] Navigate to 'shoppingItem.html'.
+  - [ ] Navigate to 'shoppingEditor.html'.
 
 - [ ] Clicking Add:
   - [ ] Clear 'selectedShoppingItemId'.
   - [ ] Set 'selectedShoppingItemIsNew' = '1'.
-  - [ ] Navigate to 'shoppingItem.html'.
+  - [ ] Navigate to 'shoppingEditor.html'.
 
 Bottom nav:
 
 - [ ] Visible and functional as defined in the nav section.
 
-### shoppingItem.html — editor placeholder
+### shoppingEditor.html — editor placeholder
 
 App bar:
 
