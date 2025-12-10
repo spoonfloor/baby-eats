@@ -674,6 +674,7 @@ function wireChildEditorPage({
   titleEl,
   initialTitle,
   backHref,
+  onSave,
 }) {
   if (!titleEl) return;
 
@@ -710,11 +711,17 @@ function wireChildEditorPage({
     titleEl.classList.add('editing-title');
     titleEl.focus();
 
+    const onInput = () => {
+      // First keystroke in the title should mark the page dirty.
+      markDirty();
+    };
+
     const cleanup = () => {
       titleEl.contentEditable = 'false';
       titleEl.classList.remove('editing-title');
       titleEl.removeEventListener('blur', onBlur);
       titleEl.removeEventListener('keydown', onKeyDown);
+      titleEl.removeEventListener('input', onInput);
     };
 
     const commit = () => {
@@ -745,6 +752,7 @@ function wireChildEditorPage({
       }
     };
 
+    titleEl.addEventListener('input', onInput);
     titleEl.addEventListener('blur', onBlur);
     titleEl.addEventListener('keydown', onKeyDown);
   });
@@ -773,10 +781,22 @@ function wireChildEditorPage({
   }
 
   if (saveBtn) {
-    saveBtn.addEventListener('click', (e) => {
+    saveBtn.addEventListener('click', async (e) => {
       e.preventDefault();
 
-      // TODO: wire to DB once per-editor fields are defined.
+      const nextTitle = normalize(titleEl.textContent);
+      titleEl.textContent = nextTitle;
+
+      try {
+        if (typeof onSave === 'function') {
+          await onSave({ title: nextTitle, originalTitle });
+        }
+      } catch (err) {
+        console.error('❌ Failed to save child editor:', err);
+        alert('Failed to save changes. See console for details.');
+        return;
+      }
+
       isDirty = false;
       updateButtons();
       window.location.href = backHref;
@@ -811,17 +831,100 @@ function loadShoppingItemEditorPage() {
   }
   titleEl.textContent = titleText;
 
-  const goBack = () => {
-    window.location.href = 'shopping.html';
-  };
-
   wireChildEditorPage({
     backBtn,
     cancelBtn,
     saveBtn,
     titleEl,
     initialTitle: titleText,
+
     backHref: 'shopping.html',
+    onSave: async ({ title }) => {
+      const nameForDb = (title || '').trim();
+      if (!nameForDb) {
+        // Nothing to persist; treat as no-op.
+        return;
+      }
+
+      const isElectron = !!window.electronAPI;
+      let db;
+
+      if (isElectron) {
+        try {
+          const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+          const bytes = await window.electronAPI.loadDB(pathHint);
+          const Uints = new Uint8Array(bytes);
+          db = new SQL.Database(Uints);
+        } catch (err) {
+          console.error(
+            '❌ Failed to load DB from disk for shopping editor:',
+            err
+          );
+          alert('No database loaded. Please go back to the welcome page.');
+          throw err;
+        }
+      } else {
+        const stored = localStorage.getItem('favoriteEatsDb');
+        if (!stored) {
+          alert('No database loaded. Please go back to the welcome page.');
+          throw new Error('No DB in localStorage for shopping editor.');
+        }
+        const Uints = new Uint8Array(JSON.parse(stored));
+        db = new SQL.Database(Uints);
+      }
+
+      window.dbInstance = db;
+
+      const idStr = sessionStorage.getItem('selectedShoppingItemId');
+      const isNewItem =
+        sessionStorage.getItem('selectedShoppingItemIsNew') === '1';
+
+      try {
+        if (isNewItem || !idStr) {
+          // New shopping item → insert bare ingredient row
+          db.run('INSERT INTO ingredients (name) VALUES (?);', [nameForDb]);
+        } else {
+          const id = Number(idStr);
+          if (Number.isFinite(id)) {
+            db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [
+              nameForDb,
+              id,
+            ]);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to upsert shopping item ingredient:', err);
+        alert('Failed to save shopping item. See console for details.');
+        throw err;
+      }
+
+      // Persist DB so the shopping list sees the change
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after editing shopping item.');
+            throw new Error('electronAPI.saveDB returned false');
+          }
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after shopping edit:', err);
+        alert('Failed to save database. See console for details.');
+        throw err;
+      }
+
+      // Keep session in sync for the next editor visit
+      sessionStorage.setItem('selectedShoppingItemName', nameForDb);
+      sessionStorage.removeItem('selectedShoppingItemIsNew');
+    },
   });
 }
 
