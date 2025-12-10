@@ -159,7 +159,13 @@ async function loadRecipesPage() {
     list.innerHTML = '';
     rows.forEach(([id, title]) => {
       const li = document.createElement('li');
-      li.textContent = title;
+
+      // Capitalize initial letter for top-level list display
+      const fixedTitle =
+        title && title.length > 0
+          ? title.charAt(0).toUpperCase() + title.slice(1)
+          : title;
+      li.textContent = fixedTitle;
 
       li.addEventListener('click', (event) => {
         // Ctrl-click → delete dialog; plain click → open editor
@@ -515,7 +521,12 @@ async function loadShoppingPage() {
     rows.forEach((item) => {
       const li = document.createElement('li');
 
-      let line = item.name;
+      // Capitalize initial letter for top-level shopping list display
+      let line =
+        item.name && item.name.length > 0
+          ? item.name.charAt(0).toUpperCase() + item.name.slice(1)
+          : item.name;
+
       if (Array.isArray(item.variants) && item.variants.length > 0) {
         line += ` (${item.variants.join(', ')})`;
       }
@@ -659,13 +670,8 @@ function initBottomNav() {
   const nav = document.querySelector('.bottom-nav');
   if (!nav) return;
 
-  +(
-    // Hidden-by-default sheet model
-    (+nav.classList.add('bottom-nav--hidden'))
-  );
-
-  // Hidden-by-default sheet model: start fully hidden.
-  nav.style.display = 'none';
+  // Hidden-by-default sheet model: rely on CSS class.
+  nav.classList.add('bottom-nav--hidden');
 
   const pills = Array.from(nav.querySelectorAll('.bottom-nav-pill'));
   if (!pills.length) return;
@@ -675,25 +681,52 @@ function initBottomNav() {
 
   if (body.classList.contains('recipes-page')) {
     activeTab = 'recipes';
-    nav.style.display = '';
   } else if (body.classList.contains('shopping-page')) {
     activeTab = 'shopping';
-    nav.style.display = '';
   } else if (body.classList.contains('units-page')) {
     activeTab = 'units';
-    nav.style.display = '';
   } else if (body.classList.contains('stores-page')) {
     activeTab = 'stores';
-    nav.style.display = '';
   }
 
-  // Menu icon toggles bottom nav visibility on list pages.
+  // Shared toggle handler for menu icon + app-bar title.
   const menuButton = document.getElementById('menuButton');
+
+  const titleToggle = document.querySelector(
+    '.app-bar-elements-layer .title-recipes'
+  );
+
+  const toggleNavVisibility = () => {
+    nav.classList.toggle('bottom-nav--hidden');
+  };
+
+  // Menu icon toggles bottom nav visibility on list pages.
   if (menuButton) {
-    menuButton.addEventListener('click', () => {
-      nav.classList.toggle('bottom-nav--hidden');
-    });
+    menuButton.addEventListener('click', toggleNavVisibility);
   }
+
+  // App-bar title also acts as a nav toggle.
+  if (titleToggle) {
+    titleToggle.addEventListener('click', toggleNavVisibility);
+  }
+
+  // Click-outside / blur-to-dismiss behavior.
+  document.addEventListener('click', (event) => {
+    if (nav.classList.contains('bottom-nav--hidden')) return;
+
+    const target = event.target;
+
+    // Ignore clicks inside nav or on the toggle controls.
+    if (
+      nav.contains(target) ||
+      (menuButton && (menuButton === target || menuButton.contains(target))) ||
+      (titleToggle && (titleToggle === target || titleToggle.contains(target)))
+    ) {
+      return;
+    }
+
+    nav.classList.add('bottom-nav--hidden');
+  });
 
   pills.forEach((pill) => {
     const tab = pill.dataset.tab;

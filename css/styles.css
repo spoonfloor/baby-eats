@@ -82,61 +82,6 @@
   --pill-padding-horizontal: var(--pill-padding-x);
 }
 
-/* --- Bottom navigation bar --- */
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--bottom-nav-height);
-  background: var(--theme-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  z-index: 1000;
-}
-
-.bottom-nav-pill-row {
-  display: inline-flex;
-  align-items: stretch;
-  justify-content: center;
-  gap: 8px;
-  max-width: 100%;
-}
-
-.bottom-nav-pill {
-  font-family: inherit;
-  font-size: var(--headline-font-size);
-  line-height: 1;
-  border: none;
-  border-radius: 9999px;
-  padding: 0 var(--pill-padding-horizontal);
-  min-width: var(--pill-min-width);
-  max-width: var(--pill-max-width);
-  height: 44px; /* match Add button height */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--theme-secondary);
-  color: #fff;
-  opacity: 0.5; /* mimic disabled Cancel/Save buttons */
-  cursor: pointer;
-}
-
-.bottom-nav-pill--active {
-  opacity: 1;
-}
-
-.bottom-nav-pill--active,
-.bottom-nav-pill--active:disabled {
-  cursor: default;
-}
-
-.bottom-nav-pill:not(.bottom-nav-pill--active):hover {
-  opacity: 0.86; /* subtle tint only */
-}
-
 /* --- Body / Layout Defaults --- */
 .centered-container {
   background: var(--theme-light-hex);
@@ -378,6 +323,10 @@
 /* Title */
 .title {
   color: white;
+}
+
+.title-recipes {
+  cursor: pointer;
 }
 
 /* Actions */
@@ -867,14 +816,18 @@ h1.nav-text {
 
 .bottom-nav {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--bottom-nav-height);
+  top: calc(var(--app-bar-height) + 8px); /* hangs just below app bar */
+  left: 8px; /* gap from left edge */
+  right: auto;
+  bottom: auto;
+  height: auto;
   background-color: var(--theme-primary);
+  padding: 12px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--theme-primary-transparent);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .bottom-nav--hidden {
@@ -882,9 +835,10 @@ h1.nav-text {
 }
 
 .bottom-nav-pill-row {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -892,19 +846,17 @@ h1.nav-text {
   /* Match Add button height + type */
   height: 44px;
   border-radius: 9999px;
-  padding: 0 var(--pill-padding-horizontal);
-  min-width: var(--pill-min-width);
-  max-width: var(--pill-max-width);
+  padding-left: 22px;
+  width: 120px;
   font: inherit;
   line-height: inherit;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-
-  background: var(--theme-secondary);
+  background: none;
   color: white;
-  opacity: 0.5; /* visually echo disabled Cancel/Save */
+  opacity: 0.9; /* visually echo disabled Cancel/Save */
   border: none;
   cursor: pointer;
 }
@@ -913,4 +865,10 @@ h1.nav-text {
   /* Visually match search bar styling */
   background-color: var(--theme-secondary);
   opacity: 1;
+}
+
+/* Hover / rollover for non-active top-level nav pills */
+.bottom-nav-pill:not(.bottom-nav-pill--active):hover {
+  opacity: 0.9;
+  background: var(--theme-secondary);
 }
