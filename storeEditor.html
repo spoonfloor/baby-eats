@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
+    <title>Favorite Eats - Store Editor</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+
+    <!-- ✅ Local SQL.js (offline) -->
+    <script src="js/sql-wasm.js"></script>
+  </head>
+
+  <body class="store-editor-page" data-page="store-editor">
+    <div class="app-bar-wrapper no-select">
+      <!-- Left/Right elements layer -->
+      <div class="app-bar-elements-layer">
+        <div class="title-and-back">
+          <button
+            class="app-bar-icon-button back-button"
+            id="storeBackButton"
+            aria-label="Back"
+          >
+            <img
+              src="assets/back_arrow_light.svg"
+              alt="Back"
+              class="app-bar-icon back-arrow"
+            />
+          </button>
+          <!-- Title removed from app bar; moved to body -->
+        </div>
+        <div class="actions">
+          <button class="button" id="storeCancelBtn">Cancel</button>
+          <button class="button" id="storeSaveBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="page-main">
+      <div class="page-wrapper editor-page">
+        <div id="pageContent" class="page-content"></div>
+      </div>
+    </main>
+
+    <!-- JS Modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

@@ -666,6 +666,124 @@ async function loadShoppingPage() {
   }
 }
 
+// --- Shared helper for child editor pages (shopping, units, stores, …) ---
+function wireChildEditorPage({
+  backBtn,
+  cancelBtn,
+  saveBtn,
+  titleEl,
+  initialTitle,
+  backHref,
+}) {
+  if (!titleEl) return;
+
+  const normalize = (value) => (value || '').trim();
+  const originalTitle = normalize(initialTitle);
+
+  if (originalTitle) {
+    titleEl.textContent = originalTitle;
+  }
+
+  let isDirty = false;
+
+  const updateButtons = () => {
+    if (cancelBtn) cancelBtn.disabled = !isDirty;
+    if (saveBtn) saveBtn.disabled = !isDirty;
+  };
+
+  updateButtons(); // page starts clean
+
+  const markDirty = () => {
+    if (!isDirty) {
+      isDirty = true;
+      updateButtons();
+    }
+  };
+
+  // Inline title editing: click → edit, Enter/blur → commit, Esc → cancel
+  titleEl.addEventListener('click', () => {
+    if (titleEl.isContentEditable) return;
+
+    const starting = titleEl.textContent || '';
+
+    titleEl.contentEditable = 'true';
+    titleEl.classList.add('editing-title');
+    titleEl.focus();
+
+    const cleanup = () => {
+      titleEl.contentEditable = 'false';
+      titleEl.classList.remove('editing-title');
+      titleEl.removeEventListener('blur', onBlur);
+      titleEl.removeEventListener('keydown', onKeyDown);
+    };
+
+    const commit = () => {
+      const next = normalize(titleEl.textContent);
+      const changed = next !== starting;
+      titleEl.textContent = next;
+      if (changed) markDirty();
+    };
+
+    const cancelEdit = () => {
+      titleEl.textContent = starting;
+    };
+
+    const onBlur = () => {
+      commit();
+      cleanup();
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+        cleanup();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEdit();
+        cleanup();
+      }
+    };
+
+    titleEl.addEventListener('blur', onBlur);
+    titleEl.addEventListener('keydown', onKeyDown);
+  });
+
+  const doBack = () => {
+    if (!isDirty || window.confirm('Discard unsaved changes?')) {
+      window.location.href = backHref;
+    }
+  };
+
+  if (backBtn) {
+    backBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      doBack();
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!isDirty) return;
+      titleEl.textContent = originalTitle;
+      isDirty = false;
+      updateButtons();
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      // TODO: wire to DB once per-editor fields are defined.
+      isDirty = false;
+      updateButtons();
+      window.location.href = backHref;
+    });
+  }
+}
+
 function loadShoppingItemEditorPage() {
   const backBtn = document.getElementById('shoppingBackButton');
   const cancelBtn = document.getElementById('shoppingCancelBtn');
@@ -683,24 +801,50 @@ function loadShoppingItemEditorPage() {
     titleText = 'Shopping item';
   }
 
-  // Force initial capital so editor title always looks correct
-  const fixedTitle =
-    titleText && titleText.length > 0
-      ? titleText.charAt(0).toUpperCase() + titleText.slice(1)
-      : titleText;
-
   const titleEl = document.createElement('h1');
   titleEl.className = 'recipe-title';
-  titleEl.textContent = fixedTitle;
   view.appendChild(titleEl);
+
+  // Force initial capital so editor title always looks correct
+  if (titleText && titleText.length > 0) {
+    titleText = titleText.charAt(0).toUpperCase() + titleText.slice(1);
+  }
+  titleEl.textContent = titleText;
 
   const goBack = () => {
     window.location.href = 'shopping.html';
   };
 
-  if (backBtn) backBtn.addEventListener('click', goBack);
-  if (cancelBtn) cancelBtn.addEventListener('click', goBack);
-  if (saveBtn) saveBtn.addEventListener('click', goBack);
+  wireChildEditorPage({
+    backBtn,
+    cancelBtn,
+    saveBtn,
+    titleEl,
+    initialTitle: titleText,
+    backHref: 'shopping.html',
+  });
+}
+
+function loadUnitEditorPage() {
+  const backBtn = document.getElementById('unitBackButton');
+  const cancelBtn = document.getElementById('unitCancelBtn');
+  const saveBtn = document.getElementById('unitSaveBtn');
+  const view = document.getElementById('pageContent');
+
+  if (!view) return;
+
+  const titleEl = document.createElement('h1');
+  titleEl.className = 'recipe-title';
+  view.appendChild(titleEl);
+
+  wireChildEditorPage({
+    backBtn,
+    cancelBtn,
+    saveBtn,
+    titleEl,
+    initialTitle: 'New unit',
+    backHref: 'units.html',
+  });
 }
 
 async function loadUnitsPage() {
@@ -948,14 +1092,83 @@ async function loadStoresPage() {
   }
 }
 
-function loadUnitEditorPage() {
-  // Placeholder: real editor wiring will be implemented later.
-  console.info('loadUnitEditorPage() not implemented yet.');
+function loadStoreEditorPage() {
+  const backBtn = document.getElementById('storeBackButton');
+  const cancelBtn = document.getElementById('storeCancelBtn');
+  const saveBtn = document.getElementById('storeSaveBtn');
+
+  const view = document.getElementById('pageContent');
+
+  if (!view) {
+    console.warn('No #pageContent found; skipping store-editor wiring.');
+    return;
+  }
+
+  const titleEl = document.createElement('h1');
+  titleEl.className = 'recipe-title';
+  view.appendChild(titleEl);
+
+  wireChildEditorPage({
+    backBtn,
+    cancelBtn,
+    saveBtn,
+    titleEl,
+    initialTitle: 'New store',
+    backHref: 'stores.html',
+  });
 }
 
-function loadStoreEditorPage() {
-  // Placeholder: real editor wiring will be implemented later.
-  console.info('loadStoreEditorPage() not implemented yet.');
+// Shared helper for *all* editor pages (shopping, units, stores, future)
+
+// Usage inside any load*EditorPage():
+//   const editor = initEditorPage({ saveBtn, cancelBtn, root: view });
+//   editor.markDirty();  // optional manual trigger
+// ---------------------------------------------------------------------------
+function initEditorPage({ saveBtn, cancelBtn, root }) {
+  // Each editor gets its own dirty flag; starts clean.
+  let isDirty = false;
+
+  // Disable buttons until the user edits.
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (saveBtn) saveBtn.disabled = true;
+
+  const enableButtons = () => {
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (saveBtn) saveBtn.disabled = false;
+  };
+
+  const markDirty = () => {
+    if (isDirty) return;
+    isDirty = true;
+    enableButtons();
+  };
+
+  // Common-sense rule: anything the user can change marks the page dirty.
+  const wireDirtyTracking = (node) => {
+    if (!node) return;
+    const editables = node.querySelectorAll(
+      'input, textarea, select, [contenteditable="true"]'
+    );
+    editables.forEach((el) => {
+      el.addEventListener('input', markDirty);
+      el.addEventListener('change', markDirty);
+    });
+  };
+
+  wireDirtyTracking(root);
+
+  // Expose a tiny API for pages that need manual control later.
+  return {
+    markDirty,
+    resetDirty() {
+      isDirty = false;
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (saveBtn) saveBtn.disabled = true;
+    },
+    get isDirty() {
+      return isDirty;
+    },
+  };
 }
 
 // --- Bottom navigation wiring (list pages only) ---
