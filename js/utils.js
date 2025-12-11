@@ -1,5 +1,50 @@
 // Utility functions
 
+function initAppBar(options = {}) {
+  const {
+    mode = 'list',
+    titleText = '',
+    onBack = null,
+    onCancel = null,
+    onSave = null,
+  } = options;
+
+  const bar = document.querySelector('.app-bar');
+  if (!bar) return;
+
+  const backBtn = bar.querySelector('#appBarBackBtn');
+  const cancelBtn = bar.querySelector('#appBarCancelBtn');
+  const saveBtn = bar.querySelector('#appBarSaveBtn');
+  const titleEl = bar.querySelector('#appBarTitle');
+
+  if (titleEl && titleText) {
+    titleEl.textContent = titleText;
+  }
+
+  // back always exists
+  if (backBtn && onBack) {
+    backBtn.onclick = onBack;
+  }
+
+  // editor-only actions
+  if (mode === 'editor') {
+    if (cancelBtn && onCancel) {
+      cancelBtn.onclick = onCancel;
+    }
+    if (saveBtn && onSave) {
+      saveBtn.onclick = onSave;
+    }
+  }
+
+  // hide actions section entirely for list mode
+  if (mode === 'list') {
+    const actions = bar.querySelector('.actions');
+    if (actions) actions.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (saveBtn) saveBtn.style.display = 'none';
+  }
+}
+
 /**
  * Round a number to the nearest fraction denominator
  * @param {number} value

@@ -799,15 +799,21 @@ function wireChildEditorPage({
 
       isDirty = false;
       updateButtons();
-      window.location.href = backHref;
+      // NOTE: no navigation here; Save just persists and stays on page
     });
   }
 }
 
 function loadShoppingItemEditorPage() {
-  const backBtn = document.getElementById('shoppingBackButton');
-  const cancelBtn = document.getElementById('shoppingCancelBtn');
-  const saveBtn = document.getElementById('shoppingSaveBtn');
+  const backBtn =
+    document.getElementById('appBarBackBtn') ||
+    document.getElementById('shoppingBackButton');
+  const cancelBtn =
+    document.getElementById('appBarCancelBtn') ||
+    document.getElementById('shoppingCancelBtn');
+  const saveBtn =
+    document.getElementById('appBarSaveBtn') ||
+    document.getElementById('shoppingSaveBtn');
 
   const view = document.getElementById('pageContent');
 
@@ -821,15 +827,97 @@ function loadShoppingItemEditorPage() {
     titleText = 'Shopping item';
   }
 
-  const titleEl = document.createElement('h1');
-  titleEl.className = 'recipe-title';
-  view.appendChild(titleEl);
-
-  // Force initial capital so editor title always looks correct
+  // Shared app bar now owns the title
   if (titleText && titleText.length > 0) {
     titleText = titleText.charAt(0).toUpperCase() + titleText.slice(1);
   }
-  titleEl.textContent = titleText;
+
+  initAppBar({
+    mode: 'editor',
+    titleText,
+    onBack: () => {
+      window.location.href = 'shopping.html';
+    },
+    onCancel: () => {
+      // restore original
+      const original = sessionStorage.getItem('selectedShoppingItemName') || '';
+      const el = document.getElementById('appBarTitle');
+      if (el) el.textContent = original;
+    },
+    onSave: async () => {
+      const el = document.getElementById('appBarTitle');
+      const next = (el?.textContent || '').trim();
+      if (!next) return;
+
+      const isElectron = !!window.electronAPI;
+      let db;
+
+      if (isElectron) {
+        try {
+          const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+          const bytes = await window.electronAPI.loadDB(pathHint);
+          const Uints = new Uint8Array(bytes);
+          db = new SQL.Database(Uints);
+        } catch (err) {
+          console.error(
+            '❌ Failed to load DB from disk for shopping editor:',
+            err
+          );
+          alert('No database loaded. Please go back to the welcome page.');
+          throw err;
+        }
+      } else {
+        const stored = localStorage.getItem('favoriteEatsDb');
+        if (!stored)
+          throw new Error('No DB in localStorage for shopping editor.');
+        const Uints = new Uint8Array(JSON.parse(stored));
+        db = new SQL.Database(Uints);
+      }
+
+      window.dbInstance = db;
+
+      const idStr = sessionStorage.getItem('selectedShoppingItemId');
+      const isNewItem =
+        sessionStorage.getItem('selectedShoppingItemIsNew') === '1';
+
+      try {
+        if (isNewItem || !idStr) {
+          db.run('INSERT INTO ingredients (name) VALUES (?);', [next]);
+        } else {
+          const id = Number(idStr);
+          if (Number.isFinite(id)) {
+            db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [next, id]);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to upsert shopping item ingredient:', err);
+        alert('Failed to save shopping item. See console for details.');
+        throw err;
+      }
+
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false)
+            throw new Error('electronAPI.saveDB returned false');
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after shopping edit:', err);
+        alert('Failed to save database. See console for details.');
+        throw err;
+      }
+
+      sessionStorage.setItem('selectedShoppingItemName', next);
+      sessionStorage.removeItem('selectedShoppingItemIsNew');
+    },
+  });
 
   wireChildEditorPage({
     backBtn,
@@ -1009,7 +1097,6 @@ async function loadUnitsPage() {
 
   function renderUnitsList(rows) {
     list.innerHTML = '';
-
     rows.forEach((unit) => {
       const li = document.createElement('li');
 
@@ -1031,6 +1118,20 @@ async function loadUnitsPage() {
       }
 
       li.textContent = line;
+
+      li.addEventListener('click', () => {
+        // Stash selected unit in session for future editor wiring
+        sessionStorage.setItem('selectedUnitCode', unit.code || '');
+        sessionStorage.setItem(
+          'selectedUnitNameSingular',
+          unit.nameSingular || ''
+        );
+        sessionStorage.setItem('selectedUnitNamePlural', unit.namePlural || '');
+        sessionStorage.setItem('selectedUnitCategory', unit.category || '');
+
+        window.location.href = 'unitEditor.html';
+      });
+
       list.appendChild(li);
     });
   }
@@ -1530,5 +1631,47 @@ document.addEventListener('DOMContentLoaded', () => {
     backButton.addEventListener('click', () => {
       window.location.href = 'recipes.html';
     });
+  }
+
+  // Bridge shared app bar controls → existing editor actions (additive only).
+  const body = document.body;
+
+  if (body && body.classList.contains('recipe-editor-page')) {
+    const appBackBtn = document.getElementById('appBarBackBtn');
+    const appCancelBtn = document.getElementById('appBarCancelBtn');
+    const appSaveBtn = document.getElementById('appBarSaveBtn');
+
+    const cancelBtn = document.getElementById('cancelEditsBtn');
+    const saveBtn = document.getElementById('editorActionBtn');
+
+    if (appBackBtn && backButton) {
+      appBackBtn.addEventListener('click', () => backButton.click());
+    }
+    if (appCancelBtn && cancelBtn) {
+      appCancelBtn.addEventListener('click', () => cancelBtn.click());
+    }
+    if (appSaveBtn && saveBtn) {
+      appSaveBtn.addEventListener('click', () => saveBtn.click());
+    }
+  }
+
+  if (body && body.classList.contains('shopping-editor-page')) {
+    const appBackBtn = document.getElementById('appBarBackBtn');
+    const appCancelBtn = document.getElementById('appBarCancelBtn');
+    const appSaveBtn = document.getElementById('appBarSaveBtn');
+
+    const shoppingBack = document.getElementById('shoppingBackButton');
+    const shoppingCancel = document.getElementById('shoppingCancelBtn');
+    const shoppingSave = document.getElementById('shoppingSaveBtn');
+
+    if (appBackBtn && shoppingBack) {
+      appBackBtn.addEventListener('click', () => shoppingBack.click());
+    }
+    if (appCancelBtn && shoppingCancel) {
+      appCancelBtn.addEventListener('click', () => shoppingCancel.click());
+    }
+    if (appSaveBtn && shoppingSave) {
+      appSaveBtn.addEventListener('click', () => shoppingSave.click());
+    }
   }
 });
