@@ -1024,17 +1024,23 @@ function loadUnitEditorPage() {
 
   if (!view) return;
 
-  const titleEl = document.createElement('h1');
-  titleEl.className = 'recipe-title';
-  view.appendChild(titleEl);
-
-  wireChildEditorPage({
-    backBtn,
-    cancelBtn,
-    saveBtn,
-    titleEl,
-    initialTitle: 'New unit',
-    backHref: 'units.html',
+  // Shared app bar now owns the title ("New unit")
+  initAppBar({
+    mode: 'editor',
+    titleText: 'New unit',
+    onBack: () => {
+      window.location.href = 'units.html';
+    },
+    onCancel: () => {
+      const el = document.getElementById('appBarTitle');
+      if (el) el.textContent = 'New unit';
+    },
+    onSave: () => {
+      // Unit editor save not implemented yet — placeholder for future DB work.
+      const el = document.getElementById('appBarTitle');
+      const next = (el?.textContent || '').trim();
+      console.log('Unit editor save (placeholder) — new title:', next);
+    },
   });
 }
 
@@ -1308,17 +1314,26 @@ function loadStoreEditorPage() {
     return;
   }
 
-  const titleEl = document.createElement('h1');
-  titleEl.className = 'recipe-title';
-  view.appendChild(titleEl);
+  // Shared app bar now owns the title ("New store")
+  initAppBar({
+    mode: 'editor',
+    titleText: 'New store',
 
-  wireChildEditorPage({
-    backBtn,
-    cancelBtn,
-    saveBtn,
-    titleEl,
-    initialTitle: 'New store',
-    backHref: 'stores.html',
+    onBack: () => {
+      window.location.href = 'stores.html';
+    },
+
+    onCancel: () => {
+      const el = document.getElementById('appBarTitle');
+      if (el) el.textContent = 'New store';
+    },
+
+    onSave: () => {
+      // Store editor save not implemented yet — placeholder for future DB work.
+      const el = document.getElementById('appBarTitle');
+      const next = (el?.textContent || '').trim();
+      console.log('Store editor save (placeholder) — new title:', next);
+    },
   });
 }
 
@@ -1610,6 +1625,27 @@ async function loadRecipeEditorPage() {
 
   const titleEl = document.getElementById('recipeTitle');
   if (titleEl) titleEl.textContent = recipe.title;
+
+  // Shared app bar for recipe editor
+  initAppBar({
+    mode: 'editor',
+    titleText: recipe.title || '',
+    onBack: () => {
+      window.location.href = 'recipes.html';
+    },
+    onCancel: () => {
+      // Restore original recipe title
+      const el = document.getElementById('appBarTitle');
+      if (el) el.textContent = recipe.title || '';
+    },
+    onSave: async () => {
+      const el = document.getElementById('appBarTitle');
+      const next = (el?.textContent || '').trim();
+      if (!next) return;
+      recipe.title = next;
+    },
+  });
+
   renderRecipe(recipe);
 
   // ✅ One-time reset after first render

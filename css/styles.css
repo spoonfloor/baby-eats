@@ -753,7 +753,9 @@ h1.nav-text {
 
 .app-bar-elements-layer .title-editor {
   position: relative;
-  top: 0px; /* try -1px or -2px */
+  top: 0px;
+  font-size: var(--headline-font-size);
+  color: white;
 }
 
 .back-arrow {
