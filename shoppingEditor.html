@@ -27,36 +27,8 @@
   </head>
 
   <body class="shopping-editor-page" data-page="shopping-editor">
-    <!-- Shared App Bar v1 (additive) -->
-    <div class="app-bar">
-      <button class="back" id="appBarBackBtn">←</button>
-      <h1 class="title" id="appBarTitle"></h1>
-      <div class="actions">
-        <button id="appBarCancelBtn">Cancel</button>
-        <button id="appBarSaveBtn">Save</button>
-      </div>
-    </div>
-
-    <div class="app-bar-wrapper no-select">
-      <!-- Left/Right elements layer -->
-      <div class="app-bar-elements-layer">
-        <div class="title-and-back">
-          <div class="back-button" id="shoppingBackButton">
-            <img
-              src="assets/back_arrow_light.svg"
-              alt="Back"
-              class="back-arrow"
-            />
-          </div>
-          <!-- removed: title in app bar -->
-          <!-- Title removed from app bar; moved to body -->
-        </div>
-        <div class="actions">
-          <button class="button" id="shoppingCancelBtn">Cancel</button>
-          <button class="button" id="shoppingSaveBtn">Save</button>
-        </div>
-      </div>
-    </div>
+    <!-- App Bar (injected) -->
+    <div id="appBarMount"></div>
 
     <main class="page-main">
       <div class="page-wrapper editor-page">

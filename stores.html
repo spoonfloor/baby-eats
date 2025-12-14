@@ -27,36 +27,7 @@
   </head>
 
   <body class="stores-page" data-page="stores">
-    <!-- Shared App Bar v1 (additive) -->
-    <div class="app-bar">
-      <button class="back" id="appBarBackBtn">←</button>
-      <h1 class="title" id="appBarTitle"></h1>
-      <div class="actions"></div>
-    </div>
-
-    <div class="app-bar-wrapper no-select">
-      <!-- Centered search bar layer -->
-      <div class="app-bar-search-layer">
-        <div class="search-bar">
-          <input type="text" placeholder="Search" id="storesSearch" />
-          <span class="clear-search">&times;</span>
-        </div>
-      </div>
-
-      <!-- Left/Right elements layer -->
-      <div class="app-bar-elements-layer">
-        <div class="title-and-back">
-          <button class="app-bar-icon-button" id="menuButton" aria-label="Menu">
-            <img src="assets/menu_light.svg" alt="Menu" class="app-bar-icon" />
-          </button>
-          <span class="title title-recipes">Stores</span>
-        </div>
-
-        <div class="actions">
-          <button class="button" id="storesActionBtn">Add</button>
-        </div>
-      </div>
-    </div>
+    <div id="appBarMount"></div>
 
     <main class="page-main">
       <div class="page-wrapper">

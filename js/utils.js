@@ -1,24 +1,155 @@
 // Utility functions
 
+function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
+  const mount = document.getElementById('appBarMount');
+  const start =
+    typeof performance !== 'undefined' && performance.now
+      ? performance.now()
+      : Date.now();
+
+  return new Promise((resolve) => {
+    const tick = () => {
+      // Once the title exists, the fragment is present and safe to wire.
+      const titleEl = document.getElementById('appBarTitle');
+      if (titleEl) return resolve(true);
+
+      // If we have a mount with an injected flag, trust it.
+      if (mount?.dataset?.injected === '1') return resolve(true);
+
+      const now =
+        typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now();
+
+      if (now - start > timeoutMs) return resolve(false);
+
+      requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function ensureAppBarInjected() {
+  const already = document.getElementById('appBarTitle');
+
+  if (already) return Promise.resolve(false);
+
+  const mount = document.getElementById('appBarMount');
+  if (!mount) return Promise.resolve(false);
+
+  // Prevent double-injection if initAppBar is called multiple times quickly.
+  if (mount.dataset && mount.dataset.injecting === '1') {
+    // Injection already in progress — wait for the fragment to be present.
+
+    return waitForAppBarReady();
+  }
+
+  if (mount.dataset) mount.dataset.injecting = '1';
+
+  return fetch('fragments/appBar.shell.html')
+    .then((r) => {
+      if (!r.ok)
+        throw new Error(`Failed to load app bar fragment (${r.status})`);
+      return r.text();
+    })
+    .then((html) => {
+      mount.innerHTML = html;
+      if (mount.dataset) {
+        mount.dataset.injected = '1';
+        mount.dataset.injecting = '0';
+      }
+
+      return waitForAppBarReady();
+    })
+    .catch((err) => {
+      console.error('❌ App bar inject failed:', err);
+      if (mount.dataset) mount.dataset.injecting = '0';
+      return false;
+    });
+}
+
 function initAppBar(options = {}) {
   const {
     mode = 'list',
     titleText = '',
+
+    showSearch = true,
+    showAdd = true,
+    onMenu = null,
+    onAdd = null,
+
     onBack = null,
     onCancel = null,
     onSave = null,
+
+    _skipEnsure = false,
   } = options;
 
-  const bar = document.querySelector('.app-bar');
-  if (!bar) return;
+  // If a page uses the mount-based fragment, inject it before wiring.
+  // IMPORTANT: do not continue wiring until the fragment exists.
 
-  const backBtn = bar.querySelector('#appBarBackBtn');
-  const cancelBtn = bar.querySelector('#appBarCancelBtn');
-  const saveBtn = bar.querySelector('#appBarSaveBtn');
-  const titleEl = bar.querySelector('#appBarTitle');
+  if (!_skipEnsure) {
+    const mount = document.getElementById('appBarMount');
+
+    const already = document.getElementById('appBarTitle');
+    const shouldEnsure = !!mount && !already;
+
+    if (shouldEnsure) {
+      // Block wiring until the fragment is actually present.
+
+      ensureAppBarInjected().then((ok) => {
+        if (!ok) {
+          console.warn('⚠️ initAppBar: app bar injection did not complete.');
+          return;
+        }
+        initAppBar({ ...options, _skipEnsure: true });
+      });
+
+      return;
+    }
+  }
+
+  // NOTE: The visible app bar can live either inside `.app-bar` (legacy v1)
+  // or inside `.app-bar-wrapper` (list-page SoT visuals). Use global IDs.
+
+  const menuBtn = document.getElementById('appBarMenuBtn');
+
+  const backBtn = document.getElementById('appBarBackBtn');
+
+  const addBtn = document.getElementById('appBarAddBtn');
+
+  const cancelBtn = document.getElementById('appBarCancelBtn');
+  const saveBtn = document.getElementById('appBarSaveBtn');
+  const titleEl = document.getElementById('appBarTitle');
+
+  const searchLayer = document.getElementById('appBarSearchLayer');
+
+  // If we got here but the fragment still isn't present, bail quietly.
+  // (This avoids wiring nulls and makes failures obvious in the console.)
+
+  if (!titleEl && document.getElementById('appBarMount')) {
+    const mount = document.getElementById('appBarMount');
+    if (mount?.dataset?.injecting === '1') {
+      // In-flight injection: schedule a single re-entry to wire once present.
+
+      waitForAppBarReady().then((ok) => {
+        if (ok) initAppBar({ ...options, _skipEnsure: true });
+      });
+      return;
+    }
+
+    console.warn('⚠️ initAppBar: app bar not present (missing #appBarTitle).');
+    return;
+  }
 
   if (titleEl && titleText) {
     titleEl.textContent = titleText;
+  }
+
+  // menu (list)
+  if (menuBtn && onMenu) {
+    menuBtn.onclick = onMenu;
   }
 
   // back always exists
@@ -26,22 +157,34 @@ function initAppBar(options = {}) {
     backBtn.onclick = onBack;
   }
 
-  // editor-only actions
-  if (mode === 'editor') {
-    if (cancelBtn && onCancel) {
-      cancelBtn.onclick = onCancel;
-    }
-    if (saveBtn && onSave) {
-      saveBtn.onclick = onSave;
-    }
+  // add (list)
+  if (addBtn && onAdd) {
+    addBtn.onclick = onAdd;
   }
 
-  // hide actions section entirely for list mode
+  // Mode visibility + wiring (single shell, explicit differences)
   if (mode === 'list') {
-    const actions = bar.querySelector('.actions');
-    if (actions) actions.style.display = 'none';
+    if (menuBtn) menuBtn.style.display = '';
+    if (backBtn) backBtn.style.display = 'none';
+    if (searchLayer) searchLayer.style.display = showSearch ? '' : 'none';
+
+    if (addBtn) addBtn.style.display = showAdd ? '' : 'none';
     if (cancelBtn) cancelBtn.style.display = 'none';
     if (saveBtn) saveBtn.style.display = 'none';
+  } else {
+    if (menuBtn) menuBtn.style.display = 'none';
+    if (backBtn) backBtn.style.display = '';
+    if (searchLayer) searchLayer.style.display = 'none';
+
+    if (addBtn) addBtn.style.display = 'none';
+    if (cancelBtn) {
+      cancelBtn.style.display = '';
+      if (onCancel) cancelBtn.onclick = onCancel;
+    }
+    if (saveBtn) {
+      saveBtn.style.display = '';
+      if (onSave) saveBtn.onclick = onSave;
+    }
   }
 }
 

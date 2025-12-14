@@ -11,14 +11,16 @@ window.originalRecipeSnapshot = null;
 // --- Display / selection helpers shared across editor ---
 
 function enableSave() {
-  const saveBtn = document.getElementById('editorActionBtn');
+  const saveBtn = document.getElementById('appBarSaveBtn');
+
   if (saveBtn) {
     saveBtn.disabled = false;
   }
 }
 
 function disableSave() {
-  const saveBtn = document.getElementById('editorActionBtn');
+  const saveBtn = document.getElementById('appBarSaveBtn');
+
   if (saveBtn) {
     saveBtn.disabled = true;
   }
@@ -46,7 +48,7 @@ function setActiveStep(lineEl) {
 
 // --- Cancel / Dirty state tracking ---
 let isDirty = false;
-const cancelBtn = document.getElementById('cancelEditsBtn');
+const cancelBtn = document.getElementById('appBarCancelBtn');
 
 if (cancelBtn) {
   cancelBtn.disabled = true; // ✅ start disabled
@@ -102,10 +104,6 @@ if (cancelBtn) {
   cancelBtn.addEventListener('click', () => {
     if (isDirty) {
       revertChanges();
-      const saveBtn = document.getElementById('editorActionBtn');
-      if (saveBtn) {
-        // no-op: intentionally left without logging
-      }
     }
   });
 }
@@ -115,64 +113,6 @@ document.addEventListener('keydown', (e) => {
     revertChanges();
   }
 });
-
-// --- Save / Cancel Integration (Option A: robust fix) ---
-const saveBtn = document.getElementById('editorActionBtn');
-if (saveBtn) {
-  saveBtn.addEventListener('click', async () => {
-    if (!isDirty) return;
-
-    try {
-      const savedRecipe = await saveRecipeToDB();
-
-      // ✨ Persist SQL.js memory to disk (Electron or browser fallback)
-      const binaryArray = window.dbInstance.export();
-      const isElectron = !!window.electronAPI;
-      if (isElectron) {
-        const ok = await window.electronAPI.saveDB(binaryArray, {
-          // pre-overwrite backup + write
-          overwriteOnly: false,
-        });
-
-        if (ok) alert('Database saved successfully.');
-        else alert('Save failed — check console for details.');
-      } else {
-        const blob = new Blob([binaryArray], {
-          type: 'application/octet-stream',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'favorite_eats_updated.sqlite';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-      if (savedRecipe) {
-        const refreshed = bridge.loadRecipeFromDB(
-          window.dbInstance,
-          window.recipeId
-        );
-
-        // 🧠 After a successful save, the "truth" is now the DB-backed recipe.
-        // Use this as the new baseline so Cancel + future loads see post-save data,
-        // but keep the current StepNode/heading view intact in this session.
-        window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
-        window.recipeData = JSON.parse(JSON.stringify(refreshed));
-        // NOTE: Intentionally do NOT call renderRecipe() here.
-        // Re-rendering would rebuild window.stepNodes from DB-only steps
-        // and drop heading promotions immediately after save.
-      }
-
-      isDirty = false;
-      cancelBtn.disabled = true;
-      disableSave();
-      clearSelectedStep(); // 🧹 remove highlight after save
-    } catch (err) {
-      console.error('❌ Save failed:', err);
-    }
-  });
-}
 
 async function saveRecipeToDB() {
   const db = window.dbInstance;

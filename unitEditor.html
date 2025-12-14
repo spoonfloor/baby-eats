@@ -27,30 +27,8 @@
   </head>
 
   <body class="unit-editor-page" data-page="unit-editor">
-    <div class="app-bar-wrapper no-select">
-      <!-- Left/Right elements layer -->
-      <div class="app-bar-elements-layer">
-        <div class="title-and-back">
-          <button
-            class="app-bar-icon-button back-button"
-            id="unitBackButton"
-            aria-label="Back"
-          >
-            <img
-              src="assets/back_arrow_light.svg"
-              alt="Back"
-              class="app-bar-icon back-arrow"
-            />
-          </button>
-          <!-- removed: title in app bar -->
-          <!-- Title removed from app bar; moved to body -->
-        </div>
-        <div class="actions">
-          <button class="button" id="unitCancelBtn">Cancel</button>
-          <button class="button" id="unitSaveBtn">Save</button>
-        </div>
-      </div>
-    </div>
+    <!-- App Bar (injected) -->
+    <div id="appBarMount"></div>
 
     <main class="page-main">
       <div class="page-wrapper editor-page">

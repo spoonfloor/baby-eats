@@ -138,6 +138,11 @@ async function loadRecipesPage() {
   // Expose DB on window so other helpers can optionally reuse it if needed
   window.dbInstance = db;
 
+  initAppBar({
+    mode: 'list',
+    titleText: 'Recipes',
+  });
+
   // --- Load recipes ---
   const recipes = db.exec(
     'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
@@ -207,7 +212,8 @@ async function loadRecipesPage() {
   }
 
   // --- Recipes action button stub ---
-  const recipesActionBtn = document.getElementById('recipesActionBtn');
+
+  const recipesActionBtn = document.getElementById('appBarAddBtn');
 
   function toTitleCase(str) {
     return str
@@ -424,8 +430,9 @@ async function loadRecipesPage() {
   }
 
   // --- Search bar logic with clear button ---
-  const searchInput = document.getElementById('recipeSearch');
-  const clearBtn = document.querySelector('.clear-search');
+
+  const searchInput = document.getElementById('appBarSearchInput');
+  const clearBtn = document.getElementById('appBarSearchClear');
 
   if (searchInput && clearBtn) {
     clearBtn.style.display = 'none';
@@ -461,9 +468,15 @@ async function loadRecipesPage() {
 // --- Shopping / Units / Stores loaders (v0 stubs) ---
 async function loadShoppingPage() {
   const list = document.getElementById('shoppingList');
-  const searchInput = document.getElementById('shoppingSearch');
-  const clearBtn = document.querySelector('.clear-search');
-  const addBtn = document.getElementById('shoppingActionBtn');
+
+  initAppBar({
+    mode: 'list',
+    titleText: 'Shopping',
+  });
+
+  const searchInput = document.getElementById('appBarSearchInput');
+  const clearBtn = document.getElementById('appBarSearchClear');
+  const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
 
@@ -805,16 +818,6 @@ function wireChildEditorPage({
 }
 
 function loadShoppingItemEditorPage() {
-  const backBtn =
-    document.getElementById('appBarBackBtn') ||
-    document.getElementById('shoppingBackButton');
-  const cancelBtn =
-    document.getElementById('appBarCancelBtn') ||
-    document.getElementById('shoppingCancelBtn');
-  const saveBtn =
-    document.getElementById('appBarSaveBtn') ||
-    document.getElementById('shoppingSaveBtn');
-
   const view = document.getElementById('pageContent');
 
   if (!view) return;
@@ -918,108 +921,9 @@ function loadShoppingItemEditorPage() {
       sessionStorage.removeItem('selectedShoppingItemIsNew');
     },
   });
-
-  wireChildEditorPage({
-    backBtn,
-    cancelBtn,
-    saveBtn,
-    titleEl,
-    initialTitle: titleText,
-
-    backHref: 'shopping.html',
-    onSave: async ({ title }) => {
-      const nameForDb = (title || '').trim();
-      if (!nameForDb) {
-        // Nothing to persist; treat as no-op.
-        return;
-      }
-
-      const isElectron = !!window.electronAPI;
-      let db;
-
-      if (isElectron) {
-        try {
-          const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
-          const bytes = await window.electronAPI.loadDB(pathHint);
-          const Uints = new Uint8Array(bytes);
-          db = new SQL.Database(Uints);
-        } catch (err) {
-          console.error(
-            '❌ Failed to load DB from disk for shopping editor:',
-            err
-          );
-          alert('No database loaded. Please go back to the welcome page.');
-          throw err;
-        }
-      } else {
-        const stored = localStorage.getItem('favoriteEatsDb');
-        if (!stored) {
-          alert('No database loaded. Please go back to the welcome page.');
-          throw new Error('No DB in localStorage for shopping editor.');
-        }
-        const Uints = new Uint8Array(JSON.parse(stored));
-        db = new SQL.Database(Uints);
-      }
-
-      window.dbInstance = db;
-
-      const idStr = sessionStorage.getItem('selectedShoppingItemId');
-      const isNewItem =
-        sessionStorage.getItem('selectedShoppingItemIsNew') === '1';
-
-      try {
-        if (isNewItem || !idStr) {
-          // New shopping item → insert bare ingredient row
-          db.run('INSERT INTO ingredients (name) VALUES (?);', [nameForDb]);
-        } else {
-          const id = Number(idStr);
-          if (Number.isFinite(id)) {
-            db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [
-              nameForDb,
-              id,
-            ]);
-          }
-        }
-      } catch (err) {
-        console.error('❌ Failed to upsert shopping item ingredient:', err);
-        alert('Failed to save shopping item. See console for details.');
-        throw err;
-      }
-
-      // Persist DB so the shopping list sees the change
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after editing shopping item.');
-            throw new Error('electronAPI.saveDB returned false');
-          }
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
-      } catch (err) {
-        console.error('❌ Failed to persist DB after shopping edit:', err);
-        alert('Failed to save database. See console for details.');
-        throw err;
-      }
-
-      // Keep session in sync for the next editor visit
-      sessionStorage.setItem('selectedShoppingItemName', nameForDb);
-      sessionStorage.removeItem('selectedShoppingItemIsNew');
-    },
-  });
 }
 
 function loadUnitEditorPage() {
-  const backBtn = document.getElementById('unitBackButton');
-  const cancelBtn = document.getElementById('unitCancelBtn');
-  const saveBtn = document.getElementById('unitSaveBtn');
   const view = document.getElementById('pageContent');
 
   if (!view) return;
@@ -1045,9 +949,17 @@ function loadUnitEditorPage() {
 }
 
 async function loadUnitsPage() {
+  initAppBar({
+    mode: 'list',
+    titleText: 'Units',
+    // Units has no top-right Add in current UX.
+    showAdd: false,
+  });
+
   const list = document.getElementById('unitsList');
-  const searchInput = document.getElementById('unitsSearch');
-  const clearBtn = document.querySelector('.clear-search');
+
+  const searchInput = document.getElementById('appBarSearchInput');
+  const clearBtn = document.getElementById('appBarSearchClear');
 
   if (!list) return;
 
@@ -1190,9 +1102,16 @@ async function loadUnitsPage() {
 }
 
 async function loadStoresPage() {
+  initAppBar({
+    mode: 'list',
+    titleText: 'Stores',
+  });
+
   const list = document.getElementById('storesList');
-  const searchInput = document.getElementById('storesSearch');
-  const clearBtn = document.querySelector('.clear-search');
+
+  const searchInput = document.getElementById('appBarSearchInput');
+  const clearBtn = document.getElementById('appBarSearchClear');
+  const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
 
@@ -1303,10 +1222,6 @@ async function loadStoresPage() {
 }
 
 function loadStoreEditorPage() {
-  const backBtn = document.getElementById('storeBackButton');
-  const cancelBtn = document.getElementById('storeCancelBtn');
-  const saveBtn = document.getElementById('storeSaveBtn');
-
   const view = document.getElementById('pageContent');
 
   if (!view) {
@@ -1415,11 +1330,9 @@ function initBottomNav() {
   }
 
   // Shared toggle handler for menu icon + app-bar title.
-  const menuButton = document.getElementById('menuButton');
 
-  const titleToggle = document.querySelector(
-    '.app-bar-elements-layer .title-recipes'
-  );
+  const menuButton = document.getElementById('appBarMenuBtn');
+  const titleToggle = document.getElementById('appBarTitle');
 
   const toggleNavVisibility = () => {
     nav.classList.toggle('bottom-nav--hidden');
@@ -1642,7 +1555,57 @@ async function loadRecipeEditorPage() {
       const el = document.getElementById('appBarTitle');
       const next = (el?.textContent || '').trim();
       if (!next) return;
+
+      // Keep in-memory model + visible title in sync
       recipe.title = next;
+      if (window.recipeData) window.recipeData.title = next;
+      const titleEl = document.getElementById('recipeTitle');
+      if (titleEl) titleEl.textContent = next;
+
+      // Real save path (DB + persist-to-disk/localStorage), reusing existing helpers
+      try {
+        if (typeof saveRecipeToDB === 'function') {
+          await saveRecipeToDB();
+        }
+
+        // Persist SQL.js memory to disk (Electron) or localStorage (browser fallback)
+        if (!window.dbInstance) throw new Error('No active database found');
+        const binaryArray = window.dbInstance.export();
+        const isElectron = !!window.electronAPI;
+
+        if (isElectron) {
+          const ok = await window.electronAPI.saveDB(binaryArray, {
+            overwriteOnly: false,
+          });
+          if (ok) alert('Database saved successfully.');
+          else alert('Save failed — check console for details.');
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+
+        // Refresh Cancel baseline after a successful save
+        if (window.bridge && typeof bridge.loadRecipeFromDB === 'function') {
+          const refreshed = bridge.loadRecipeFromDB(
+            window.dbInstance,
+            window.recipeId
+          );
+          window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
+          window.recipeData = JSON.parse(JSON.stringify(refreshed));
+        }
+
+        // Reset editor UI state after save
+        const appCancel = document.getElementById('appBarCancelBtn');
+        if (appCancel) appCancel.disabled = true;
+        if (typeof disableSave === 'function') disableSave();
+        if (typeof clearSelectedStep === 'function') clearSelectedStep();
+      } catch (err) {
+        console.error('❌ Save failed:', err);
+        alert('Save failed — check console for details.');
+        throw err;
+      }
     },
   });
 
@@ -1662,52 +1625,5 @@ async function loadRecipeEditorPage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const backButton = document.getElementById('backButton');
-  if (backButton) {
-    backButton.addEventListener('click', () => {
-      window.location.href = 'recipes.html';
-    });
-  }
-
-  // Bridge shared app bar controls → existing editor actions (additive only).
-  const body = document.body;
-
-  if (body && body.classList.contains('recipe-editor-page')) {
-    const appBackBtn = document.getElementById('appBarBackBtn');
-    const appCancelBtn = document.getElementById('appBarCancelBtn');
-    const appSaveBtn = document.getElementById('appBarSaveBtn');
-
-    const cancelBtn = document.getElementById('cancelEditsBtn');
-    const saveBtn = document.getElementById('editorActionBtn');
-
-    if (appBackBtn && backButton) {
-      appBackBtn.addEventListener('click', () => backButton.click());
-    }
-    if (appCancelBtn && cancelBtn) {
-      appCancelBtn.addEventListener('click', () => cancelBtn.click());
-    }
-    if (appSaveBtn && saveBtn) {
-      appSaveBtn.addEventListener('click', () => saveBtn.click());
-    }
-  }
-
-  if (body && body.classList.contains('shopping-editor-page')) {
-    const appBackBtn = document.getElementById('appBarBackBtn');
-    const appCancelBtn = document.getElementById('appBarCancelBtn');
-    const appSaveBtn = document.getElementById('appBarSaveBtn');
-
-    const shoppingBack = document.getElementById('shoppingBackButton');
-    const shoppingCancel = document.getElementById('shoppingCancelBtn');
-    const shoppingSave = document.getElementById('shoppingSaveBtn');
-
-    if (appBackBtn && shoppingBack) {
-      appBackBtn.addEventListener('click', () => shoppingBack.click());
-    }
-    if (appCancelBtn && shoppingCancel) {
-      appCancelBtn.addEventListener('click', () => shoppingCancel.click());
-    }
-    if (appSaveBtn && shoppingSave) {
-      appSaveBtn.addEventListener('click', () => shoppingSave.click());
-    }
-  }
+  // (intentionally empty) legacy DOMContentLoaded wiring removed
 });
