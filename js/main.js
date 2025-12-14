@@ -972,8 +972,52 @@ function loadUnitEditorPage() {
         initialTitle: titleText,
         backHref: 'units.html',
         onSave: async ({ title: next }) => {
-          // Unit editor save not implemented yet — placeholder for future DB work.
-          console.log('Unit editor save (placeholder) — new title:', next);
+          const code = sessionStorage.getItem('selectedUnitCode') || '';
+          const isNewUnit = sessionStorage.getItem('selectedUnitIsNew') === '1';
+
+          // For now, Units editor is used for existing units (opened from list).
+          // Avoid unsafe inserts because we don't yet collect required fields.
+          if (isNewUnit || !code) return;
+
+          const isElectron = !!window.electronAPI;
+          let db;
+
+          if (isElectron) {
+            const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+            const bytes = await window.electronAPI.loadDB(pathHint);
+            const Uints = new Uint8Array(bytes);
+            db = new SQL.Database(Uints);
+          } else {
+            const stored = localStorage.getItem('favoriteEatsDb');
+            if (!stored)
+              throw new Error('No DB in localStorage for unit editor.');
+            const Uints = new Uint8Array(JSON.parse(stored));
+            db = new SQL.Database(Uints);
+          }
+
+          window.dbInstance = db;
+
+          // Persist: update the singular name for this unit code.
+          db.run('UPDATE units SET name_singular = ? WHERE code = ?;', [
+            next || '',
+            code,
+          ]);
+
+          // Persist DB to disk/localStorage.
+          const binaryArray = db.export();
+          if (isElectron) {
+            const ok = await window.electronAPI.saveDB(binaryArray);
+            if (ok === false)
+              throw new Error('Failed to save DB for unit editor.');
+          } else {
+            localStorage.setItem(
+              'favoriteEatsDb',
+              JSON.stringify(Array.from(binaryArray))
+            );
+          }
+
+          // Update session so reload reflects the new title immediately.
+          sessionStorage.setItem('selectedUnitNameSingular', next || '');
         },
       });
     });
@@ -1315,8 +1359,66 @@ function loadStoreEditorPage() {
         initialTitle: titleText,
         backHref: 'stores.html',
         onSave: async ({ title: next }) => {
-          // Store editor save not implemented yet — placeholder for future DB work.
-          console.log('Store editor save (placeholder) — new title:', next);
+          const idStr = sessionStorage.getItem('selectedStoreId');
+          const isNewStore =
+            sessionStorage.getItem('selectedStoreIsNew') === '1';
+
+          const isElectron = !!window.electronAPI;
+          let db;
+
+          if (isElectron) {
+            const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+            const bytes = await window.electronAPI.loadDB(pathHint);
+            const Uints = new Uint8Array(bytes);
+            db = new SQL.Database(Uints);
+          } else {
+            const stored = localStorage.getItem('favoriteEatsDb');
+            if (!stored)
+              throw new Error('No DB in localStorage for store editor.');
+            const Uints = new Uint8Array(JSON.parse(stored));
+            db = new SQL.Database(Uints);
+          }
+
+          window.dbInstance = db;
+
+          if (isNewStore || !idStr) {
+            // Stores schema requires both chain_name and location_name.
+            db.run(
+              'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
+              [next || '', '']
+            );
+
+            const idQ = db.exec('SELECT last_insert_rowid();');
+            if (idQ.length && idQ[0].values.length) {
+              const newId = idQ[0].values[0][0];
+              sessionStorage.setItem('selectedStoreId', String(newId));
+            }
+            sessionStorage.removeItem('selectedStoreIsNew');
+          } else {
+            const id = Number(idStr);
+            if (Number.isFinite(id)) {
+              db.run('UPDATE stores SET chain_name = ? WHERE ID = ?;', [
+                next || '',
+                id,
+              ]);
+            }
+          }
+
+          // Persist DB to disk/localStorage.
+          const binaryArray = db.export();
+          if (isElectron) {
+            const ok = await window.electronAPI.saveDB(binaryArray);
+            if (ok === false)
+              throw new Error('Failed to save DB for store editor.');
+          } else {
+            localStorage.setItem(
+              'favoriteEatsDb',
+              JSON.stringify(Array.from(binaryArray))
+            );
+          }
+
+          // Update session so reload reflects the new title immediately.
+          sessionStorage.setItem('selectedStoreChain', next || '');
         },
       });
     });
