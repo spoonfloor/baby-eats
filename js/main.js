@@ -693,19 +693,19 @@ function wireChildEditorPage({
   backBtn,
   cancelBtn,
   saveBtn,
-  titleEl,
+  appBarTitleEl,
+  bodyTitleEl,
   initialTitle,
   backHref,
   onSave,
 }) {
-  if (!titleEl) return;
+  if (!appBarTitleEl || !bodyTitleEl) return;
 
   const normalize = (value) => (value || '').trim();
   let baselineTitle = normalize(initialTitle);
 
-  if (baselineTitle) {
-    titleEl.textContent = baselineTitle;
-  }
+  bodyTitleEl.textContent = baselineTitle || '';
+  appBarTitleEl.textContent = baselineTitle || '';
 
   let isDirty = false;
 
@@ -723,15 +723,15 @@ function wireChildEditorPage({
     }
   };
 
-  // Inline title editing: click → edit, Enter/blur → commit, Esc → cancel
-  titleEl.addEventListener('click', () => {
-    if (titleEl.isContentEditable) return;
+  // Title is editable in the page body only (app-bar title is display-only).
+  bodyTitleEl.addEventListener('click', () => {
+    if (bodyTitleEl.isContentEditable) return;
 
-    const starting = titleEl.textContent || '';
+    const starting = bodyTitleEl.textContent || '';
 
-    titleEl.contentEditable = 'true';
-    titleEl.classList.add('editing-title');
-    titleEl.focus();
+    bodyTitleEl.contentEditable = 'true';
+    bodyTitleEl.classList.add('editing-title');
+    bodyTitleEl.focus();
 
     const onInput = () => {
       // First keystroke in the title should mark the page dirty.
@@ -739,22 +739,24 @@ function wireChildEditorPage({
     };
 
     const cleanup = () => {
-      titleEl.contentEditable = 'false';
-      titleEl.classList.remove('editing-title');
-      titleEl.removeEventListener('blur', onBlur);
-      titleEl.removeEventListener('keydown', onKeyDown);
-      titleEl.removeEventListener('input', onInput);
+      bodyTitleEl.contentEditable = 'false';
+      bodyTitleEl.classList.remove('editing-title');
+      bodyTitleEl.removeEventListener('blur', onBlur);
+      bodyTitleEl.removeEventListener('keydown', onKeyDown);
+      bodyTitleEl.removeEventListener('input', onInput);
     };
 
     const commit = () => {
-      const next = normalize(titleEl.textContent);
+      const next = normalize(bodyTitleEl.textContent);
       const changed = next !== starting;
-      titleEl.textContent = next;
+      bodyTitleEl.textContent = next;
+      appBarTitleEl.textContent = next;
       if (changed) markDirty();
     };
 
     const cancelEdit = () => {
-      titleEl.textContent = starting;
+      bodyTitleEl.textContent = starting;
+      appBarTitleEl.textContent = starting;
     };
 
     const onBlur = () => {
@@ -774,9 +776,9 @@ function wireChildEditorPage({
       }
     };
 
-    titleEl.addEventListener('input', onInput);
-    titleEl.addEventListener('blur', onBlur);
-    titleEl.addEventListener('keydown', onKeyDown);
+    bodyTitleEl.addEventListener('input', onInput);
+    bodyTitleEl.addEventListener('blur', onBlur);
+    bodyTitleEl.addEventListener('keydown', onKeyDown);
   });
 
   const doBack = () => {
@@ -796,7 +798,8 @@ function wireChildEditorPage({
     cancelBtn.addEventListener('click', (e) => {
       e.preventDefault();
       if (!isDirty) return;
-      titleEl.textContent = baselineTitle;
+      bodyTitleEl.textContent = baselineTitle;
+      appBarTitleEl.textContent = baselineTitle;
       isDirty = false;
       updateButtons();
     });
@@ -806,8 +809,9 @@ function wireChildEditorPage({
     saveBtn.addEventListener('click', async (e) => {
       e.preventDefault();
 
-      const nextTitle = normalize(titleEl.textContent);
-      titleEl.textContent = nextTitle;
+      const nextTitle = normalize(bodyTitleEl.textContent);
+      bodyTitleEl.textContent = nextTitle;
+      appBarTitleEl.textContent = nextTitle;
 
       try {
         if (typeof onSave === 'function') {
@@ -841,15 +845,17 @@ function loadShoppingItemEditorPage() {
     titleText = 'Shopping item';
   }
 
-  // Shared app bar now owns the title
-  if (titleText && titleText.length > 0) {
-    titleText = titleText.charAt(0).toUpperCase() + titleText.slice(1);
-  }
+  // Page owns the title; app bar mirrors it (display-only).
 
   // App bar: render shell + mode toggles only.
   // Wiring (back/cancel/save + dirty confirm) is handled by wireChildEditorPage
   // after the fragment exists, so there is exactly one path.
   initAppBar({ mode: 'editor', titleText });
+
+  // Body title (single place where editing happens)
+  view.innerHTML = `
+    <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+  `;
 
   const persistShoppingItemTitle = async ({ title: next }) => {
     if (!next) return;
@@ -929,7 +935,8 @@ function loadShoppingItemEditorPage() {
         backBtn: document.getElementById('appBarBackBtn'),
         cancelBtn: document.getElementById('appBarCancelBtn'),
         saveBtn: document.getElementById('appBarSaveBtn'),
-        titleEl: document.getElementById('appBarTitle'),
+        appBarTitleEl: document.getElementById('appBarTitle'),
+        bodyTitleEl: document.getElementById('childEditorTitle'),
         initialTitle: titleText,
         backHref: 'shopping.html',
         onSave: persistShoppingItemTitle,
@@ -943,10 +950,16 @@ function loadUnitEditorPage() {
 
   if (!view) return;
 
-  const titleText = 'New unit';
+  const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
+  const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
+  const titleText = isNew ? 'New unit' : storedName || 'Unit';
 
   // Shell only; shared editor wiring happens after injection.
   initAppBar({ mode: 'editor', titleText });
+
+  view.innerHTML = `
+    <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+  `;
 
   if (typeof waitForAppBarReady === 'function') {
     waitForAppBarReady().then(() => {
@@ -954,7 +967,8 @@ function loadUnitEditorPage() {
         backBtn: document.getElementById('appBarBackBtn'),
         cancelBtn: document.getElementById('appBarCancelBtn'),
         saveBtn: document.getElementById('appBarSaveBtn'),
-        titleEl: document.getElementById('appBarTitle'),
+        appBarTitleEl: document.getElementById('appBarTitle'),
+        bodyTitleEl: document.getElementById('childEditorTitle'),
         initialTitle: titleText,
         backHref: 'units.html',
         onSave: async ({ title: next }) => {
@@ -1279,10 +1293,16 @@ function loadStoreEditorPage() {
     return;
   }
 
-  const titleText = 'New store';
+  const isNew = sessionStorage.getItem('selectedStoreIsNew') === '1';
+  const storedChain = sessionStorage.getItem('selectedStoreChain') || '';
+  const titleText = isNew ? 'New store' : storedChain || 'Store';
 
   // Shell only; shared editor wiring happens after injection.
   initAppBar({ mode: 'editor', titleText });
+
+  view.innerHTML = `
+    <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+  `;
 
   if (typeof waitForAppBarReady === 'function') {
     waitForAppBarReady().then(() => {
@@ -1290,7 +1310,8 @@ function loadStoreEditorPage() {
         backBtn: document.getElementById('appBarBackBtn'),
         cancelBtn: document.getElementById('appBarCancelBtn'),
         saveBtn: document.getElementById('appBarSaveBtn'),
-        titleEl: document.getElementById('appBarTitle'),
+        appBarTitleEl: document.getElementById('appBarTitle'),
+        bodyTitleEl: document.getElementById('childEditorTitle'),
         initialTitle: titleText,
         backHref: 'stores.html',
         onSave: async ({ title: next }) => {

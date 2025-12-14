@@ -38,6 +38,24 @@ function ensureAppBarInjected() {
   const mount = document.getElementById('appBarMount');
   if (!mount) return Promise.resolve(false);
 
+  // Fast path: session cache (avoids flash on navigation after first load).
+  try {
+    const cached =
+      typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem('favoriteEats_appBarShell')
+        : null;
+    if (cached && cached.length > 0) {
+      mount.innerHTML = cached;
+      if (mount.dataset) {
+        mount.dataset.injected = '1';
+        mount.dataset.injecting = '0';
+      }
+      return waitForAppBarReady();
+    }
+  } catch (_) {
+    // ignore cache failures
+  }
+
   // Prevent double-injection if initAppBar is called multiple times quickly.
   if (mount.dataset && mount.dataset.injecting === '1') {
     // Injection already in progress — wait for the fragment to be present.
@@ -55,6 +73,13 @@ function ensureAppBarInjected() {
     })
     .then((html) => {
       mount.innerHTML = html;
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('favoriteEats_appBarShell', html);
+        }
+      } catch (_) {
+        // ignore
+      }
       if (mount.dataset) {
         mount.dataset.injected = '1';
         mount.dataset.injecting = '0';

@@ -201,6 +201,21 @@
   padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
 }
 
+/* Prevent a white flash before the app-bar fragment injects on navigation. */
+#appBarMount {
+  height: var(--app-bar-height);
+}
+
+#appBarMount:empty {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: var(--app-bar-height);
+  background: var(--theme-primary);
+  z-index: 1000;
+}
+
 .page-wrapper {
   width: 100%;
   max-width: var(--page-content-width);
