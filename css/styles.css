@@ -248,6 +248,24 @@
   font-size: 22px; /* stronger heading style */
 }
 
+/* Units editor: display-only initial cap, without changing the stored string. */
+body.unit-editor-page #childEditorTitle::first-letter {
+  text-transform: uppercase;
+}
+
+body.unit-editor-page #appBarTitle::first-letter {
+  text-transform: uppercase;
+}
+
+/* Shopping item editor: display-only initial cap, without changing stored string. */
+body.shopping-editor-page #childEditorTitle::first-letter {
+  text-transform: uppercase;
+}
+
+body.shopping-editor-page #appBarTitle::first-letter {
+  text-transform: uppercase;
+}
+
 .recipe-title[contenteditable='true'] {
   outline: none;
 }

@@ -675,15 +675,88 @@ async function loadShoppingPage() {
     });
   }
 
-  // Add button → new shopping item editor
-  if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      sessionStorage.removeItem('selectedShoppingItemId');
+  // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
+  const addModal = document.getElementById('addShoppingModal');
+  const addCancel = document.getElementById('addShoppingCancel');
+  const addCreate = document.getElementById('addShoppingCreate');
+  const addInput = document.getElementById('newShoppingName');
 
-      sessionStorage.removeItem('selectedShoppingItemName');
-      sessionStorage.setItem('selectedShoppingItemIsNew', '1');
+  const openAddShoppingModal = () => {
+    if (!addModal) return;
+    addModal.classList.remove('hidden');
+    if (addInput) {
+      addInput.value = '';
+      addInput.focus();
+    }
+    if (addCreate) addCreate.disabled = true;
+  };
 
-      window.location.href = 'shoppingEditor.html';
+  const closeAddShoppingModal = () => {
+    if (!addModal) return;
+    addModal.classList.add('hidden');
+  };
+
+  const updateAddShoppingCreateState = () => {
+    if (!addCreate || !addInput) return;
+    addCreate.disabled = !addInput.value.trim();
+  };
+
+  if (addInput)
+    addInput.addEventListener('input', updateAddShoppingCreateState);
+  if (addCancel) addCancel.addEventListener('click', closeAddShoppingModal);
+  if (addBtn) addBtn.addEventListener('click', openAddShoppingModal);
+
+  if (addCreate) {
+    addCreate.addEventListener('click', async () => {
+      const name = (addInput?.value || '').trim();
+      if (!name) return;
+
+      let newId = null;
+      try {
+        db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        if (idQ.length && idQ[0].values.length) {
+          newId = idQ[0].values[0][0];
+        }
+      } catch (err) {
+        console.error('❌ Failed to create shopping item:', err);
+        alert('Failed to create shopping item. See console for details.');
+        return;
+      }
+
+      // Persist updated DB so editor + list can see the new item.
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after creating shopping item.');
+            return;
+          }
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error(
+          '❌ Failed to persist DB after creating shopping item:',
+          err
+        );
+        alert('Failed to save database after creating shopping item.');
+        return;
+      }
+
+      closeAddShoppingModal();
+
+      if (newId != null) {
+        sessionStorage.setItem('selectedShoppingItemId', String(newId));
+        sessionStorage.setItem('selectedShoppingItemName', name);
+        sessionStorage.setItem('selectedShoppingItemIsNew', '1');
+        window.location.href = 'shoppingEditor.html';
+      }
     });
   }
 }
@@ -887,17 +960,20 @@ function loadShoppingItemEditorPage() {
 
     window.dbInstance = db;
 
-    const idStr = sessionStorage.getItem('selectedShoppingItemId');
-    const isNewItem =
-      sessionStorage.getItem('selectedShoppingItemIsNew') === '1';
-
     try {
-      if (isNewItem || !idStr) {
-        db.run('INSERT INTO ingredients (name) VALUES (?);', [next]);
+      const idStr = sessionStorage.getItem('selectedShoppingItemId');
+      const id = Number(idStr);
+
+      // If the row already exists (created from the list-page Create flow),
+      // always UPDATE, even if it is flagged as "new".
+      if (Number.isFinite(id)) {
+        db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [next, id]);
       } else {
-        const id = Number(idStr);
-        if (Number.isFinite(id)) {
-          db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [next, id]);
+        db.run('INSERT INTO ingredients (name) VALUES (?);', [next]);
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        if (idQ.length && idQ[0].values.length) {
+          const newId = idQ[0].values[0][0];
+          sessionStorage.setItem('selectedShoppingItemId', String(newId));
         }
       }
     } catch (err) {
@@ -952,7 +1028,7 @@ function loadUnitEditorPage() {
 
   const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
   const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
-  const titleText = isNew ? 'New unit' : storedName || 'Unit';
+  const titleText = storedName ? storedName : isNew ? 'New unit' : 'Unit';
 
   // Shell only; shared editor wiring happens after injection.
   initAppBar({ mode: 'editor', titleText });
@@ -973,11 +1049,7 @@ function loadUnitEditorPage() {
         backHref: 'units.html',
         onSave: async ({ title: next }) => {
           const code = sessionStorage.getItem('selectedUnitCode') || '';
-          const isNewUnit = sessionStorage.getItem('selectedUnitIsNew') === '1';
-
-          // For now, Units editor is used for existing units (opened from list).
-          // Avoid unsafe inserts because we don't yet collect required fields.
-          if (isNewUnit || !code) return;
+          if (!code) return;
 
           const isElectron = !!window.electronAPI;
           let db;
@@ -1018,6 +1090,7 @@ function loadUnitEditorPage() {
 
           // Update session so reload reflects the new title immediately.
           sessionStorage.setItem('selectedUnitNameSingular', next || '');
+          sessionStorage.removeItem('selectedUnitIsNew');
         },
       });
     });
@@ -1028,8 +1101,7 @@ async function loadUnitsPage() {
   initAppBar({
     mode: 'list',
     titleText: 'Units',
-    // Units has no top-right Add in current UX.
-    showAdd: false,
+    showAdd: true,
   });
 
   const list = document.getElementById('unitsList');
@@ -1042,6 +1114,12 @@ async function loadUnitsPage() {
 
   const searchInput = document.getElementById('appBarSearchInput');
   const clearBtn = document.getElementById('appBarSearchClear');
+  const addBtn = document.getElementById('appBarAddBtn');
+  const addModal = document.getElementById('addUnitModal');
+  const addCancel = document.getElementById('addUnitCancel');
+  const addCreate = document.getElementById('addUnitCreate');
+  const addCode = document.getElementById('newUnitCode');
+  const addName = document.getElementById('newUnitNameSingular');
 
   if (!list) return;
 
@@ -1100,21 +1178,15 @@ async function loadUnitsPage() {
     rows.forEach((unit) => {
       const li = document.createElement('li');
 
-      // Force initial cap on the primary label (code)
+      // Display exactly as stored (no forced capitalization)
       let line = unit.code || '';
-      if (line && line.length > 0) {
-        line = line.charAt(0).toUpperCase() + line.slice(1);
-      }
 
       // If we have a human-friendly singular name different from the code, append it
       if (
         unit.nameSingular &&
         unit.nameSingular.toLowerCase() !== (unit.code || '').toLowerCase()
       ) {
-        const label =
-          unit.nameSingular.charAt(0).toUpperCase() +
-          unit.nameSingular.slice(1);
-        line += ` (${label})`;
+        line += ` (${unit.nameSingular})`;
       }
 
       li.textContent = line;
@@ -1128,6 +1200,7 @@ async function loadUnitsPage() {
         );
         sessionStorage.setItem('selectedUnitNamePlural', unit.namePlural || '');
         sessionStorage.setItem('selectedUnitCategory', unit.category || '');
+        sessionStorage.removeItem('selectedUnitIsNew');
 
         window.location.href = 'unitEditor.html';
       });
@@ -1138,6 +1211,96 @@ async function loadUnitsPage() {
 
   // Initial render
   renderUnitsList(unitRows);
+
+  // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
+  const openAddUnitModal = () => {
+    if (!addModal) return;
+    addModal.classList.remove('hidden');
+    if (addCode) {
+      addCode.value = '';
+      addCode.focus();
+    }
+    if (addName) addName.value = '';
+    if (addCreate) addCreate.disabled = true;
+  };
+
+  const closeAddUnitModal = () => {
+    if (!addModal) return;
+    addModal.classList.add('hidden');
+  };
+
+  const updateAddUnitCreateState = () => {
+    if (!addCreate || !addCode || !addName) return;
+    addCreate.disabled = !addCode.value.trim() || !addName.value.trim();
+  };
+
+  if (addCode) addCode.addEventListener('input', updateAddUnitCreateState);
+  if (addName) addName.addEventListener('input', updateAddUnitCreateState);
+  if (addCancel) addCancel.addEventListener('click', closeAddUnitModal);
+  if (addBtn) addBtn.addEventListener('click', openAddUnitModal);
+
+  if (addCreate) {
+    addCreate.addEventListener('click', async () => {
+      const code = (addCode?.value || '').trim();
+      const nameSingular = (addName?.value || '').trim();
+      if (!code || !nameSingular) return;
+
+      try {
+        // Best-effort sort order: append at end
+        let nextSort = null;
+        try {
+          const q = db.exec(
+            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+          );
+          if (q.length && q[0].values.length) {
+            nextSort = q[0].values[0][0];
+          }
+        } catch (_) {
+          nextSort = null;
+        }
+
+        db.run(
+          'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
+          [code, nameSingular, '', '', nextSort]
+        );
+      } catch (err) {
+        console.error('❌ Failed to create unit:', err);
+        alert('Failed to create unit. (Code must be unique.)');
+        return;
+      }
+
+      // Persist updated DB so editor + list can see the new unit.
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after creating unit.');
+            return;
+          }
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after creating unit:', err);
+        alert('Failed to save database after creating unit.');
+        return;
+      }
+
+      closeAddUnitModal();
+
+      sessionStorage.setItem('selectedUnitCode', code);
+      sessionStorage.setItem('selectedUnitNameSingular', nameSingular);
+      sessionStorage.setItem('selectedUnitNamePlural', '');
+      sessionStorage.setItem('selectedUnitCategory', '');
+      sessionStorage.setItem('selectedUnitIsNew', '1');
+      window.location.href = 'unitEditor.html';
+    });
+  }
 
   // Search: filter by code/name/category (case-insensitive)
   if (searchInput && clearBtn) {
@@ -1255,10 +1418,8 @@ async function loadStoresPage() {
     rows.forEach((store) => {
       const li = document.createElement('li');
 
-      const chain =
-        store.chain && store.chain.length > 0
-          ? store.chain.charAt(0).toUpperCase() + store.chain.slice(1)
-          : store.chain;
+      // Display exactly as stored (no forced capitalization)
+      const chain = store.chain || '';
 
       const location = store.location || '';
 
@@ -1318,13 +1479,90 @@ async function loadStoresPage() {
   }
 
   // Add button → new store editor (stub today, but should not be a no-op)
-  if (addBtn) {
-    addBtn.addEventListener('click', () => {
-      sessionStorage.removeItem('selectedStoreId');
-      sessionStorage.removeItem('selectedStoreChain');
-      sessionStorage.removeItem('selectedStoreLocation');
-      sessionStorage.setItem('selectedStoreIsNew', '1');
-      window.location.href = 'storeEditor.html';
+  const addModal = document.getElementById('addStoreModal');
+  const addCancel = document.getElementById('addStoreCancel');
+  const addCreate = document.getElementById('addStoreCreate');
+  const addInput = document.getElementById('newStoreChain');
+
+  const openAddStoreModal = () => {
+    if (!addModal) return;
+    addModal.classList.remove('hidden');
+    if (addInput) {
+      addInput.value = '';
+      addInput.focus();
+    }
+    if (addCreate) addCreate.disabled = true;
+  };
+
+  const closeAddStoreModal = () => {
+    if (!addModal) return;
+    addModal.classList.add('hidden');
+  };
+
+  const updateAddStoreCreateState = () => {
+    if (!addCreate || !addInput) return;
+    addCreate.disabled = !addInput.value.trim();
+  };
+
+  if (addInput) addInput.addEventListener('input', updateAddStoreCreateState);
+  if (addCancel) addCancel.addEventListener('click', closeAddStoreModal);
+
+  if (addBtn) addBtn.addEventListener('click', openAddStoreModal);
+
+  if (addCreate) {
+    addCreate.addEventListener('click', async () => {
+      if (!addInput) return closeAddStoreModal();
+      const chain = addInput.value.trim();
+      if (!chain) return;
+
+      let newId = null;
+      try {
+        // Store schema requires both chain_name and location_name.
+        db.run(
+          'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
+          [chain, '']
+        );
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        if (idQ.length && idQ[0].values.length) {
+          newId = idQ[0].values[0][0];
+        }
+      } catch (err) {
+        console.error('❌ Failed to create store:', err);
+        alert('Failed to create store. See console for details.');
+        return;
+      }
+
+      // Persist updated DB so editor + list can see the new store.
+      try {
+        const binaryArray = db.export();
+        const isElectronEnv = !!window.electronAPI;
+        if (isElectronEnv) {
+          const ok = await window.electronAPI.saveDB(binaryArray);
+          if (ok === false) {
+            alert('Failed to save database after creating store.');
+            return;
+          }
+        } else {
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(binaryArray))
+          );
+        }
+      } catch (err) {
+        console.error('❌ Failed to persist DB after creating store:', err);
+        alert('Failed to save database after creating store.');
+        return;
+      }
+
+      closeAddStoreModal();
+
+      if (newId != null) {
+        sessionStorage.setItem('selectedStoreId', String(newId));
+        sessionStorage.setItem('selectedStoreChain', chain);
+        sessionStorage.setItem('selectedStoreLocation', '');
+        sessionStorage.setItem('selectedStoreIsNew', '1');
+        window.location.href = 'storeEditor.html';
+      }
     });
   }
 }
@@ -1339,7 +1577,7 @@ function loadStoreEditorPage() {
 
   const isNew = sessionStorage.getItem('selectedStoreIsNew') === '1';
   const storedChain = sessionStorage.getItem('selectedStoreChain') || '';
-  const titleText = isNew ? 'New store' : storedChain || 'Store';
+  const titleText = storedChain ? storedChain : isNew ? 'New store' : 'Store';
 
   // Shell only; shared editor wiring happens after injection.
   initAppBar({ mode: 'editor', titleText });
@@ -1381,7 +1619,16 @@ function loadStoreEditorPage() {
 
           window.dbInstance = db;
 
-          if (isNewStore || !idStr) {
+          const id = Number(idStr);
+
+          // If the row already exists (created from the list-page Create flow),
+          // always UPDATE, even if it is flagged as "new".
+          if (Number.isFinite(id)) {
+            db.run('UPDATE stores SET chain_name = ? WHERE ID = ?;', [
+              next || '',
+              id,
+            ]);
+          } else if (isNewStore || !idStr) {
             // Stores schema requires both chain_name and location_name.
             db.run(
               'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
@@ -1392,15 +1639,6 @@ function loadStoreEditorPage() {
             if (idQ.length && idQ[0].values.length) {
               const newId = idQ[0].values[0][0];
               sessionStorage.setItem('selectedStoreId', String(newId));
-            }
-            sessionStorage.removeItem('selectedStoreIsNew');
-          } else {
-            const id = Number(idStr);
-            if (Number.isFinite(id)) {
-              db.run('UPDATE stores SET chain_name = ? WHERE ID = ?;', [
-                next || '',
-                id,
-              ]);
             }
           }
 
@@ -1419,6 +1657,7 @@ function loadStoreEditorPage() {
 
           // Update session so reload reflects the new title immediately.
           sessionStorage.setItem('selectedStoreChain', next || '');
+          sessionStorage.removeItem('selectedStoreIsNew');
         },
       });
     });
