@@ -42,9 +42,6 @@ initSqlJs({
   if (pageId && pageLoaders[pageId]) {
     pageLoaders[pageId]();
   }
-
-  // --- Bottom navigation wiring ---
-  initBottomNav();
 });
 
 // Welcome page logic
@@ -142,6 +139,12 @@ async function loadRecipesPage() {
     mode: 'list',
     titleText: 'Recipes',
   });
+
+  // App bar is injected async; wait before wiring menu/search/add.
+  if (typeof waitForAppBarReady === 'function') {
+    await waitForAppBarReady();
+  }
+  initBottomNav();
 
   // --- Load recipes ---
   const recipes = db.exec(
@@ -474,6 +477,12 @@ async function loadShoppingPage() {
     titleText: 'Shopping',
   });
 
+  // App bar is injected async; wait before wiring menu/search/add.
+  if (typeof waitForAppBarReady === 'function') {
+    await waitForAppBarReady();
+  }
+  initBottomNav();
+
   const searchInput = document.getElementById('appBarSearchInput');
   const clearBtn = document.getElementById('appBarSearchClear');
   const addBtn = document.getElementById('appBarAddBtn');
@@ -692,10 +701,10 @@ function wireChildEditorPage({
   if (!titleEl) return;
 
   const normalize = (value) => (value || '').trim();
-  const originalTitle = normalize(initialTitle);
+  let baselineTitle = normalize(initialTitle);
 
-  if (originalTitle) {
-    titleEl.textContent = originalTitle;
+  if (baselineTitle) {
+    titleEl.textContent = baselineTitle;
   }
 
   let isDirty = false;
@@ -787,7 +796,7 @@ function wireChildEditorPage({
     cancelBtn.addEventListener('click', (e) => {
       e.preventDefault();
       if (!isDirty) return;
-      titleEl.textContent = originalTitle;
+      titleEl.textContent = baselineTitle;
       isDirty = false;
       updateButtons();
     });
@@ -802,7 +811,7 @@ function wireChildEditorPage({
 
       try {
         if (typeof onSave === 'function') {
-          await onSave({ title: nextTitle, originalTitle });
+          await onSave({ title: nextTitle, baselineTitle });
         }
       } catch (err) {
         console.error('❌ Failed to save child editor:', err);
@@ -812,6 +821,8 @@ function wireChildEditorPage({
 
       isDirty = false;
       updateButtons();
+      // After a successful save, the saved title becomes the new cancel baseline.
+      baselineTitle = nextTitle;
       // NOTE: no navigation here; Save just persists and stays on page
     });
   }
@@ -965,6 +976,12 @@ async function loadUnitsPage() {
 
   const list = document.getElementById('unitsList');
 
+  // App bar is injected async; wait before wiring menu/search.
+  if (typeof waitForAppBarReady === 'function') {
+    await waitForAppBarReady();
+  }
+  initBottomNav();
+
   const searchInput = document.getElementById('appBarSearchInput');
   const clearBtn = document.getElementById('appBarSearchClear');
 
@@ -1116,6 +1133,12 @@ async function loadStoresPage() {
 
   const list = document.getElementById('storesList');
 
+  // App bar is injected async; wait before wiring menu/search/add.
+  if (typeof waitForAppBarReady === 'function') {
+    await waitForAppBarReady();
+  }
+  initBottomNav();
+
   const searchInput = document.getElementById('appBarSearchInput');
   const clearBtn = document.getElementById('appBarSearchClear');
   const addBtn = document.getElementById('appBarAddBtn');
@@ -1183,6 +1206,15 @@ async function loadStoresPage() {
 
       li.textContent = location ? `${chain} (${location})` : chain || '';
 
+      li.addEventListener('click', () => {
+        // Basic editor navigation (stub editor today, but should be reachable).
+        sessionStorage.setItem('selectedStoreId', String(store.id));
+        sessionStorage.setItem('selectedStoreChain', store.chain || '');
+        sessionStorage.setItem('selectedStoreLocation', store.location || '');
+        sessionStorage.removeItem('selectedStoreIsNew');
+        window.location.href = 'storeEditor.html';
+      });
+
       list.appendChild(li);
     });
   }
@@ -1224,6 +1256,17 @@ async function loadStoresPage() {
       if (e.key === 'Enter') {
         e.preventDefault();
       }
+    });
+  }
+
+  // Add button → new store editor (stub today, but should not be a no-op)
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      sessionStorage.removeItem('selectedStoreId');
+      sessionStorage.removeItem('selectedStoreChain');
+      sessionStorage.removeItem('selectedStoreLocation');
+      sessionStorage.setItem('selectedStoreIsNew', '1');
+      window.location.href = 'storeEditor.html';
     });
   }
 }
@@ -1565,13 +1608,17 @@ async function loadRecipeEditorPage() {
       }
     },
     onSave: async () => {
+      // Recipe editor SoT: the live model (`window.recipeData.title`).
+      // The app-bar title is a view; it may lag if the user edited the in-page title.
+      const modelTitle = (window.recipeData?.title || '').trim();
       const el = document.getElementById('appBarTitle');
-      const next = (el?.textContent || '').trim();
+      const next = (modelTitle || el?.textContent || '').trim();
       if (!next) return;
 
       // Keep in-memory model + visible title in sync
       recipe.title = next;
       if (window.recipeData) window.recipeData.title = next;
+      if (el) el.textContent = next;
       const titleEl = document.getElementById('recipeTitle');
       if (titleEl) titleEl.textContent = next;
 

@@ -80,6 +80,9 @@
   --pill-min-width: 120px;
   --pill-max-width: 360px;
   --pill-padding-horizontal: var(--pill-padding-x);
+
+  /* App bar */
+  --app-bar-title-size: 18px;
 }
 
 /* --- Body / Layout Defaults --- */
@@ -335,6 +338,8 @@
 }
 
 .app-bar-wrapper .title {
+  font-size: var(--app-bar-title-size);
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -769,7 +774,6 @@ h1.nav-text {
 .app-bar-elements-layer .title-editor {
   position: relative;
   top: 0px;
-  font-size: var(--headline-font-size);
   color: white;
 }
 

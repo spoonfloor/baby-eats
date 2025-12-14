@@ -203,6 +203,12 @@ function renderRecipe(recipe) {
   // Keep a deep copy for the live editing model (after normalization)
   window.recipeData = JSON.parse(JSON.stringify(recipe));
 
+  // Keep app-bar title in sync with the rendered recipe title (single visible source).
+  const appBarTitleEl = document.getElementById('appBarTitle');
+  if (appBarTitleEl) {
+    appBarTitleEl.textContent = recipe.title || '';
+  }
+
   // 🧠 Session baseline for Cancel:
   try {
     if (
@@ -1113,6 +1119,10 @@ function attachTitleEditor(titleEl) {
         if (typeof markDirty === 'function') markDirty();
       }
       titleEl.textContent = nextTitle;
+
+      // Mirror into the app-bar title so Save reads the right value and UI stays coherent.
+      const appTitle = document.getElementById('appBarTitle');
+      if (appTitle) appTitle.textContent = nextTitle;
     };
 
     const onInput = () => {
@@ -1126,6 +1136,8 @@ function attachTitleEditor(titleEl) {
 
     const cancelLocal = () => {
       titleEl.textContent = original;
+      const appTitle = document.getElementById('appBarTitle');
+      if (appTitle) appTitle.textContent = original;
       if (!hadDirty && typeof revertChanges === 'function') {
         revertChanges();
       }
