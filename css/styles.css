@@ -320,6 +320,26 @@
   width: 100%;
 }
 
+/* The shared app-bar shell uses `.app-bar-wrapper` (not legacy `.app-bar`). */
+.app-bar-wrapper .actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 0 0 auto;
+  white-space: nowrap; /* prevent Cancel/Save wrapping to a second line */
+}
+
+.app-bar-wrapper .title-and-back {
+  flex: 1 1 auto;
+  min-width: 0; /* allow title to shrink + ellipsis instead of forcing wrap */
+}
+
+.app-bar-wrapper .title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Title */
 .title {
   color: white;
@@ -329,12 +349,7 @@
   cursor: pointer;
 }
 
-/* Actions */
-.app-bar .actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
+/* (Legacy `.app-bar` styles removed — shared shell is `.app-bar-wrapper`) */
 
 /* --- Centered Search Bar Layer (overlapping) --- */
 .app-bar-search-layer {
@@ -875,38 +890,4 @@ h1.nav-text {
   background: var(--theme-secondary);
 }
 
-/* Base app bar container */
-.app-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 56px; /* unified height */
-  padding: 0 12px; /* consistent horizontal spacing */
-  box-sizing: border-box;
-}
-
-/* Title typography */
-.app-bar .title {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 24px;
-  margin: 0;
-  padding: 0;
-  flex: 1;
-  text-align: left;
-}
-
-/* Back + action buttons */
-.app-bar button {
-  background: none;
-  border: none;
-  padding: 8px; /* unified touch target */
-  font-size: 16px;
-  line-height: 16px;
-}
-
-/* Right-side actions wrapper */
-.app-bar .actions {
-  display: flex;
-  gap: 4px;
-}
+/* (Legacy `.app-bar` styles removed — shared shell is `.app-bar-wrapper`) */

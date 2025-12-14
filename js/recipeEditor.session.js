@@ -11,19 +11,15 @@ window.originalRecipeSnapshot = null;
 // --- Display / selection helpers shared across editor ---
 
 function enableSave() {
-  const saveBtn = document.getElementById('appBarSaveBtn');
-
-  if (saveBtn) {
-    saveBtn.disabled = false;
-  }
+  const btn =
+    window._recipeEditorSaveBtn || document.getElementById('appBarSaveBtn');
+  if (btn) btn.disabled = false;
 }
 
 function disableSave() {
-  const saveBtn = document.getElementById('appBarSaveBtn');
-
-  if (saveBtn) {
-    saveBtn.disabled = true;
-  }
+  const btn =
+    window._recipeEditorSaveBtn || document.getElementById('appBarSaveBtn');
+  if (btn) btn.disabled = true;
 }
 
 // --- Shared helper: clear any selected instruction line ---
@@ -48,19 +44,52 @@ function setActiveStep(lineEl) {
 
 // --- Cancel / Dirty state tracking ---
 let isDirty = false;
-const cancelBtn = document.getElementById('appBarCancelBtn');
 
-if (cancelBtn) {
-  cancelBtn.disabled = true; // ✅ start disabled
+// App-bar buttons are injected asynchronously; capture them once available.
+window._recipeEditorCancelBtn = null;
+window._recipeEditorSaveBtn = null;
+
+function wireRecipeEditorAppBarButtons() {
+  window._recipeEditorCancelBtn = document.getElementById('appBarCancelBtn');
+  window._recipeEditorSaveBtn = document.getElementById('appBarSaveBtn');
+
+  if (window._recipeEditorCancelBtn)
+    window._recipeEditorCancelBtn.disabled = true;
+  if (window._recipeEditorSaveBtn) window._recipeEditorSaveBtn.disabled = true;
 }
+
+if (typeof waitForAppBarReady === 'function') {
+  waitForAppBarReady().then(() => wireRecipeEditorAppBarButtons());
+} else {
+  wireRecipeEditorAppBarButtons();
+}
+
+function recipeEditorGetIsDirty() {
+  return !!isDirty;
+}
+
+function recipeEditorResetDirty() {
+  isDirty = false;
+  const c =
+    window._recipeEditorCancelBtn || document.getElementById('appBarCancelBtn');
+  const s =
+    window._recipeEditorSaveBtn || document.getElementById('appBarSaveBtn');
+  if (c) c.disabled = true;
+  if (s) s.disabled = true;
+}
+
+// Expose for main.js so back/cancel/save can share one path.
+window.recipeEditorGetIsDirty = recipeEditorGetIsDirty;
+window.recipeEditorResetDirty = recipeEditorResetDirty;
 
 function markDirty() {
   if (!isDirty) {
     isDirty = true;
 
-    if (cancelBtn) {
-      cancelBtn.disabled = false;
-    }
+    const c =
+      window._recipeEditorCancelBtn ||
+      document.getElementById('appBarCancelBtn');
+    if (c) c.disabled = false;
 
     enableSave();
   }
@@ -91,21 +120,7 @@ function revertChanges() {
 
   if (window.getSelection) window.getSelection().removeAllRanges();
   clearSelectedStep();
-  isDirty = false;
-
-  if (cancelBtn) {
-    cancelBtn.disabled = true;
-  }
-
-  disableSave();
-}
-
-if (cancelBtn) {
-  cancelBtn.addEventListener('click', () => {
-    if (isDirty) {
-      revertChanges();
-    }
-  });
+  recipeEditorResetDirty();
 }
 
 document.addEventListener('keydown', (e) => {

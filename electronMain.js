@@ -89,6 +89,17 @@ function createWindow() {
 
   // load your existing web app entry
   win.loadFile('index.html');
+
+  // Enforce a consistent no-zoom baseline on every page load.
+  // This prevents page-to-page zoom drift and guarantees zoom won't "stick"
+  // across restarts (we do not persist zoom anywhere).
+  win.webContents.on('did-finish-load', () => {
+    try {
+      win.webContents.setZoomFactor(1.0);
+    } catch (_) {
+      // ignore
+    }
+  });
 }
 
 // --- Config helpers (remember last DB path) ---
