@@ -586,6 +586,133 @@ async function loadShoppingPage() {
     );
   }
 
+  function countRecipesUsingShoppingName(name) {
+    const n = (name || '').trim();
+    if (!n) return 0;
+
+    // Count distinct recipes referenced by any ingredient row with this name.
+    // Includes both direct ingredient usage and substitute usage.
+    try {
+      const q = db.exec(
+        `
+        SELECT COUNT(DISTINCT rid) AS n
+        FROM (
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_map rim
+          JOIN ingredients i ON i.ID = rim.ingredient_id
+          WHERE lower(i.name) = lower(?)
+          UNION
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_substitutes ris
+          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+          JOIN ingredients i2 ON i2.ID = ris.ingredient_id
+          WHERE lower(i2.name) = lower(?)
+        ) t;
+        `,
+        [n, n]
+      );
+
+      if (q.length && q[0].values.length) {
+        const v = Number(q[0].values[0][0]);
+        return Number.isFinite(v) ? v : 0;
+      }
+    } catch (err) {
+      console.warn('countRecipesUsingShoppingName failed:', err);
+    }
+    return 0;
+  }
+
+  function removeShoppingName(name) {
+    const n = (name || '').trim();
+    if (!n) return false;
+
+    const usedCount = countRecipesUsingShoppingName(n);
+
+    if (usedCount > 0) {
+      const ok = window.confirm(
+        `Remove '${n}'?\n\nUsed in ${usedCount} recipe${
+          usedCount === 1 ? '' : 's'
+        }.\n\nRemoving will hide it from Shopping and search (it will remain in recipes until replaced).`
+      );
+      if (!ok) return false;
+
+      try {
+        db.run(
+          'UPDATE ingredients SET hide_from_shopping_list = 1 WHERE lower(name) = lower(?);',
+          [n]
+        );
+      } catch (err) {
+        console.error('❌ Failed to hide shopping item:', err);
+        alert('Failed to remove item. See console for details.');
+        return false;
+      }
+    } else {
+      const ok = window.confirm(
+        `Remove '${n}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`
+      );
+      if (!ok) return false;
+
+      try {
+        // Gather ingredient IDs for this name (covers variants).
+        const idsQ = db.exec(
+          'SELECT ID FROM ingredients WHERE lower(name) = lower(?);',
+          [n]
+        );
+        const ids = idsQ.length ? idsQ[0].values.map(([id]) => Number(id)) : [];
+
+        // Remove dependent rows defensively (even though usedCount is 0).
+        ids.forEach((id) => {
+          if (!Number.isFinite(id)) return;
+          try {
+            db.run(
+              'DELETE FROM ingredient_store_location WHERE ingredient_id = ?;',
+              [id]
+            );
+          } catch (_) {}
+          try {
+            db.run(
+              'DELETE FROM recipe_ingredient_substitutes WHERE ingredient_id = ?;',
+              [id]
+            );
+          } catch (_) {}
+          try {
+            db.run(
+              'DELETE FROM recipe_ingredient_map WHERE ingredient_id = ?;',
+              [id]
+            );
+          } catch (_) {}
+        });
+
+        db.run('DELETE FROM ingredients WHERE lower(name) = lower(?);', [n]);
+      } catch (err) {
+        console.error('❌ Failed to delete shopping item:', err);
+        alert('Failed to delete item. See console for details.');
+        return false;
+      }
+    }
+
+    // Persist DB after remove/hide.
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        window.electronAPI.saveDB(binaryArray);
+      } else {
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
+      }
+    } catch (err) {
+      console.error(
+        '❌ Failed to persist DB after removing shopping item:',
+        err
+      );
+    }
+
+    return true;
+  }
+
   function renderShoppingList(rows) {
     list.innerHTML = '';
 
@@ -621,11 +748,31 @@ async function loadShoppingPage() {
 
       li.textContent = line;
 
-      li.addEventListener('click', () => {
+      li.addEventListener('click', (event) => {
+        const wantsRemove = event.ctrlKey || event.metaKey;
+        if (wantsRemove) {
+          event.preventDefault();
+          event.stopPropagation();
+          const ok = removeShoppingName(item.name || '');
+          if (ok) {
+            // Update in-memory rows (hide/remove) and rerender by reloading from DB is simplest.
+            window.location.reload();
+          }
+          return;
+        }
+
         sessionStorage.setItem('selectedShoppingItemId', String(item.id));
         sessionStorage.setItem('selectedShoppingItemName', item.name || '');
         sessionStorage.removeItem('selectedShoppingItemIsNew');
         window.location.href = 'shoppingEditor.html';
+      });
+
+      li.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        const ok = removeShoppingName(item.name || '');
+        if (ok) {
+          window.location.reload();
+        }
       });
 
       list.appendChild(li);
@@ -1154,11 +1301,23 @@ async function loadUnitsPage() {
   window.dbInstance = db;
 
   // --- Load units from units table ---
-  const result = db.exec(`
-    SELECT code, name_singular, name_plural, category, sort_order
-    FROM units
-    ORDER BY sort_order ASC, code COLLATE NOCASE;
-  `);
+  // Prefer hiding limbo units when schema supports it.
+  let result = [];
+  try {
+    result = db.exec(`
+      SELECT code, name_singular, name_plural, category, sort_order
+      FROM units
+      WHERE COALESCE(is_hidden, 0) = 0
+      ORDER BY sort_order ASC, code COLLATE NOCASE;
+    `);
+  } catch (_) {
+    // Older DB without is_hidden column.
+    result = db.exec(`
+      SELECT code, name_singular, name_plural, category, sort_order
+      FROM units
+      ORDER BY sort_order ASC, code COLLATE NOCASE;
+    `);
+  }
 
   let unitRows = [];
   if (result.length > 0) {
@@ -1191,7 +1350,101 @@ async function loadUnitsPage() {
 
       li.textContent = line;
 
-      li.addEventListener('click', () => {
+      const countRecipesUsingUnit = (code) => {
+        const c = (code || '').trim();
+        if (!c) return 0;
+        try {
+          const q = db.exec(
+            `
+            SELECT COUNT(DISTINCT rid) AS n
+            FROM (
+              SELECT recipe_id AS rid
+              FROM recipe_ingredient_map
+              WHERE lower(unit) = lower(?)
+              UNION
+              SELECT rim.recipe_id AS rid
+              FROM recipe_ingredient_substitutes ris
+              JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+              WHERE lower(ris.unit) = lower(?)
+            ) t;
+            `,
+            [c, c]
+          );
+          if (q.length && q[0].values.length) {
+            const v = Number(q[0].values[0][0]);
+            return Number.isFinite(v) ? v : 0;
+          }
+        } catch (err) {
+          console.warn('countRecipesUsingUnit failed:', err);
+        }
+        return 0;
+      };
+
+      const removeUnit = (code) => {
+        const c = (code || '').trim();
+        if (!c) return false;
+
+        const usedCount = countRecipesUsingUnit(c);
+
+        if (usedCount > 0) {
+          const ok = window.confirm(
+            `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
+              usedCount === 1 ? '' : 's'
+            }.\n\nRemoving will hide it from Units and search (it will remain in recipes until replaced).`
+          );
+          if (!ok) return false;
+
+          try {
+            db.run('UPDATE units SET is_hidden = 1 WHERE code = ?;', [c]);
+          } catch (err) {
+            console.error('❌ Failed to hide unit:', err);
+            alert('Failed to remove unit. See console for details.');
+            return false;
+          }
+        } else {
+          const ok = window.confirm(
+            `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`
+          );
+          if (!ok) return false;
+
+          try {
+            db.run('DELETE FROM units WHERE code = ?;', [c]);
+          } catch (err) {
+            console.error('❌ Failed to delete unit:', err);
+            alert('Failed to delete unit. See console for details.');
+            return false;
+          }
+        }
+
+        // Persist DB after remove/hide.
+        try {
+          const binaryArray = db.export();
+          const isElectronEnv = !!window.electronAPI;
+          if (isElectronEnv) {
+            window.electronAPI.saveDB(binaryArray);
+          } else {
+            localStorage.setItem(
+              'favoriteEatsDb',
+              JSON.stringify(Array.from(binaryArray))
+            );
+          }
+        } catch (err) {
+          console.error('❌ Failed to persist DB after removing unit:', err);
+        }
+
+        return true;
+      };
+
+      li.addEventListener('click', (event) => {
+        const wantsRemove = event.ctrlKey || event.metaKey;
+        if (wantsRemove) {
+          event.preventDefault();
+          event.stopPropagation();
+          const ok = removeUnit(unit.code || '');
+          if (ok) window.location.reload();
+          return;
+        }
+
         // Stash selected unit in session for future editor wiring
         sessionStorage.setItem('selectedUnitCode', unit.code || '');
         sessionStorage.setItem(
@@ -1203,6 +1456,12 @@ async function loadUnitsPage() {
         sessionStorage.removeItem('selectedUnitIsNew');
 
         window.location.href = 'unitEditor.html';
+      });
+
+      li.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        const ok = removeUnit(unit.code || '');
+        if (ok) window.location.reload();
       });
 
       list.appendChild(li);
@@ -1425,13 +1684,80 @@ async function loadStoresPage() {
 
       li.textContent = location ? `${chain} (${location})` : chain || '';
 
-      li.addEventListener('click', () => {
-        // Basic editor navigation (stub editor today, but should be reachable).
+      const deleteStoreDeep = (storeId, label) => {
+        const ok = window.confirm(`Delete '${label}'?`);
+        if (!ok) return false;
+
+        try {
+          // Delete dependent store_locations and join rows first.
+          const locQ = db.exec(
+            'SELECT ID FROM store_locations WHERE store_id = ?;',
+            [storeId]
+          );
+          const locIds = locQ.length
+            ? locQ[0].values.map(([id]) => Number(id)).filter(Number.isFinite)
+            : [];
+
+          locIds.forEach((lid) => {
+            try {
+              db.run(
+                'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
+                [lid]
+              );
+            } catch (_) {}
+          });
+
+          db.run('DELETE FROM store_locations WHERE store_id = ?;', [storeId]);
+          db.run('DELETE FROM stores WHERE ID = ?;', [storeId]);
+        } catch (err) {
+          console.error('❌ Failed to delete store:', err);
+          alert('Failed to delete store. See console for details.');
+          return false;
+        }
+
+        // Persist
+        try {
+          const binaryArray = db.export();
+          const isElectronEnv = !!window.electronAPI;
+          if (isElectronEnv) {
+            window.electronAPI.saveDB(binaryArray);
+          } else {
+            localStorage.setItem(
+              'favoriteEatsDb',
+              JSON.stringify(Array.from(binaryArray))
+            );
+          }
+        } catch (err) {
+          console.error('❌ Failed to persist DB after deleting store:', err);
+        }
+
+        return true;
+      };
+
+      li.addEventListener('click', (event) => {
+        const wantsDelete = event.ctrlKey || event.metaKey;
+        if (wantsDelete) {
+          event.preventDefault();
+          event.stopPropagation();
+          const label = location ? `${chain} (${location})` : chain || 'Store';
+          const ok = deleteStoreDeep(Number(store.id), label);
+          if (ok) window.location.reload();
+          return;
+        }
+
+        // Open editor
         sessionStorage.setItem('selectedStoreId', String(store.id));
         sessionStorage.setItem('selectedStoreChain', store.chain || '');
         sessionStorage.setItem('selectedStoreLocation', store.location || '');
         sessionStorage.removeItem('selectedStoreIsNew');
         window.location.href = 'storeEditor.html';
+      });
+
+      li.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        const label = location ? `${chain} (${location})` : chain || 'Store';
+        const ok = deleteStoreDeep(Number(store.id), label);
+        if (ok) window.location.reload();
       });
 
       list.appendChild(li);
