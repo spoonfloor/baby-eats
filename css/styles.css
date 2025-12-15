@@ -83,6 +83,7 @@
 
   /* App bar */
   --app-bar-title-size: 18px;
+  --app-bar-gap: 12px;
 }
 
 /* --- Body / Layout Defaults --- */
@@ -201,9 +202,11 @@
   padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
 }
 
-/* Prevent a white flash before the app-bar fragment injects on navigation. */
+/* Prevent a white flash before the app-bar fragment injects on navigation.
+   IMPORTANT: the real app bar is position:fixed, so the mount must NOT take up
+   layout space (otherwise we double-count height with .page-main padding-top). */
 #appBarMount {
-  height: var(--app-bar-height);
+  height: 0;
 }
 
 #appBarMount:empty {
@@ -364,14 +367,14 @@ body.shopping-editor-page #appBarTitle::first-letter {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 12px;
+  gap: var(--app-bar-gap);
 }
 
 /* The shared app-bar shell uses `.app-bar-wrapper` (not legacy `.app-bar`). */
 .app-bar-wrapper .actions {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--app-bar-gap);
   flex: 0 0 auto;
   white-space: nowrap; /* prevent Cancel/Save wrapping to a second line */
   margin-left: auto; /* keep actions pinned right on all pages */
@@ -490,7 +493,9 @@ body.shopping-editor-page #appBarTitle::first-letter {
 .page-content {
   width: 100%;
   max-width: 680px;
-  margin: 40px auto;
+  /* IMPORTANT: avoid double top-spacing.
+     page-main already pads for the fixed app bar, so content should start at 0. */
+  margin: 0 auto;
   padding: 0 24px; /* matches existing spacing expectations */
 }
 
