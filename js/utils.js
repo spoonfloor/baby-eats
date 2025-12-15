@@ -211,6 +211,8 @@ function initAppBar(options = {}) {
       if (onSave) saveBtn.onclick = onSave;
     }
   }
+
+  // Search layout is handled by CSS (flex middle column) to avoid collisions.
 }
 
 /**

@@ -302,10 +302,21 @@ body.shopping-editor-page #appBarTitle::first-letter {
 } */
 
 /* Unified list styling for Recipes, Shopping, Units, Stores */
+.list-view.list-page {
+  /* Inset the list so hover pills keep rounded corners visible on narrow windows */
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
+}
+
 .list-page li {
   cursor: pointer;
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
+  /* Polished truncation */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .list-page li:hover {
@@ -351,9 +362,9 @@ body.shopping-editor-page #appBarTitle::first-letter {
 /* --- Left/Right Elements Layer --- */
 .app-bar-elements-layer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   width: 100%;
+  gap: 12px;
 }
 
 /* The shared app-bar shell uses `.app-bar-wrapper` (not legacy `.app-bar`). */
@@ -366,7 +377,7 @@ body.shopping-editor-page #appBarTitle::first-letter {
 }
 
 .app-bar-wrapper .title-and-back {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0; /* allow title to shrink + ellipsis instead of forcing wrap */
 }
 
@@ -389,22 +400,18 @@ body.shopping-editor-page #appBarTitle::first-letter {
 
 /* (Legacy `.app-bar` styles removed — shared shell is `.app-bar-wrapper`) */
 
-/* --- Centered Search Bar Layer (overlapping) --- */
+/* --- Center search column (in layout flow) --- */
 .app-bar-search-layer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
   display: flex;
   justify-content: center;
-  pointer-events: none; /* allow clicks through empty space */
+  flex: 1 1 auto;
+  min-width: 0; /* allow shrink on narrow windows */
 }
 
 .app-bar-search-layer .search-bar {
-  pointer-events: all; /* allow interaction with input */
   width: 100%;
   max-width: 600px; /* match recipe list */
+  position: relative;
 }
 
 .app-bar-search-layer .search-bar input {
@@ -440,7 +447,8 @@ body.shopping-editor-page #appBarTitle::first-letter {
 
 .search-bar {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: 100%;
 }
 
 .search-bar input {
