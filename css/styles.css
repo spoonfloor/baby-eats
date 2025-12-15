@@ -374,6 +374,7 @@ body.shopping-editor-page #appBarTitle::first-letter {
   gap: 1rem;
   flex: 0 0 auto;
   white-space: nowrap; /* prevent Cancel/Save wrapping to a second line */
+  margin-left: auto; /* keep actions pinned right on all pages */
 }
 
 .app-bar-wrapper .title-and-back {
