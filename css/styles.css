@@ -50,8 +50,8 @@
   --ingredient-field-qty-max: 9ch;
   --ingredient-field-unit-min: 4ch;
   --ingredient-field-unit-max: 9ch;
-  --ingredient-field-name-min: 4ch;
-  --ingredient-field-name-max: 9ch;
+  --ingredient-field-name-min: 12ch;
+  --ingredient-field-name-max: 50ch;
   --ingredient-field-var-min: 4ch;
   --ingredient-field-var-max: 9ch;
   --ingredient-field-prep-min: 4ch;
@@ -66,6 +66,9 @@
   /* --- Ingredient edit tray --- */
   --ingredient-edit-tray-bleed: 20px;
   --ingredient-edit-tray-vgap: 8px;
+  --ingredient-edit-tray-padding: 16px 20px;
+  --ingredient-edit-field-gap: 16px;
+  --ingredient-edit-cell-gap: 6px;
 
   /* --- Servings column layout --- */
 
@@ -667,18 +670,19 @@ h1.nav-text {
 .ingredient-edit-row.editing {
   /* Containment tray for the one active ingredient row in edit mode */
   background: var(--field-bg);
-  padding: 10px 12px;
+  padding: var(--ingredient-edit-tray-padding);
   border-radius: 14px;
   margin-top: var(--ingredient-edit-tray-vgap);
   margin-bottom: var(--ingredient-edit-tray-vgap);
   margin-left: calc(-1 * var(--ingredient-edit-tray-bleed));
   margin-right: calc(-1 * var(--ingredient-edit-tray-bleed));
+  gap: var(--ingredient-edit-field-gap);
 }
 
 .ingredient-edit-cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--servings-pill-gap);
+  gap: var(--ingredient-edit-cell-gap);
   white-space: nowrap;
 }
 
@@ -742,6 +746,8 @@ h1.nav-text {
 .ingredient-edit-input--name {
   min-width: var(--ingredient-field-name-min);
   max-width: var(--ingredient-field-name-max);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ingredient-edit-input--var {

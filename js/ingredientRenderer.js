@@ -371,7 +371,9 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
   // Prefill values when editing an existing row
   if (!isInsert && modelRef) {
     const set = (field, val) => {
-      const inp = row.querySelector(`.ingredient-edit-input[data-field="${field}"]`);
+      const inp = row.querySelector(
+        `.ingredient-edit-input[data-field="${field}"]`
+      );
       if (!inp) return;
       inp.value = val == null ? '' : String(val);
       // Trigger autosize once.
@@ -572,9 +574,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     row.classList.add('editing');
   }
 
-  // Focus qty by default
-  const qtyInput = row.querySelector('.ingredient-edit-input[data-field="qty"]');
-  if (qtyInput) qtyInput.focus();
+  // Focus name by default, with caret at the beginning
+  const nameInput = row.querySelector(
+    '.ingredient-edit-input[data-field="name"]'
+  );
+  if (nameInput) {
+    nameInput.focus();
+    nameInput.setSelectionRange(0, 0);
+    // Scroll to beginning so caret is visible even if field is narrow
+    nameInput.scrollLeft = 0;
+  }
 }
 
 function renderIngredientEditRowScaffold() {
