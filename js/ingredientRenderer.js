@@ -3,54 +3,58 @@
 function attachIngredientInputAutosize(input) {
   if (!input) return;
 
-  // Measure "1ch" in pixels for this font, once per page.
-  let pxPerCh = window.__ingredientPxPerCh;
-  if (!pxPerCh || !Number.isFinite(pxPerCh) || pxPerCh <= 0) {
+  // Measure actual text width using a probe element
+  const measureText = (text) => {
     const probe = document.createElement('span');
-    probe.textContent = '0';
+    probe.textContent = text || 'M'; // Use 'M' as baseline for empty
     probe.style.position = 'absolute';
     probe.style.visibility = 'hidden';
     probe.style.whiteSpace = 'pre';
-
     const cs = window.getComputedStyle(input);
     probe.style.fontFamily = cs.fontFamily;
     probe.style.fontSize = cs.fontSize;
+    probe.style.fontWeight = cs.fontWeight;
+    probe.style.letterSpacing = cs.letterSpacing;
 
     document.body.appendChild(probe);
-    const rect = probe.getBoundingClientRect();
+    const width = probe.getBoundingClientRect().width;
     document.body.removeChild(probe);
-
-    pxPerCh = rect.width || 8; // sensible fallback
-    window.__ingredientPxPerCh = pxPerCh;
-  }
-
-  const getMinMaxCh = () => {
-    const styles = window.getComputedStyle(input);
-    const minPx = parseFloat(styles.minWidth) || 0;
-    const maxPx = parseFloat(styles.maxWidth) || 0;
-
-    const minCh = minPx > 0 ? minPx / pxPerCh : 0;
-    const maxCh = maxPx > 0 ? maxPx / pxPerCh : Infinity;
-
-    return { minCh, maxCh };
+    return width;
   };
 
   const updateWidth = () => {
-    const text = input.value || input.placeholder || '';
+    const text = (input.value || '').trimEnd();
+    const styles = window.getComputedStyle(input);
+    const maxPx = parseFloat(styles.maxWidth) || 0;
 
-    let ch = (text && text.length) || 1;
+    // Empty: use CSS `--ingredient-field-empty-width` (clear inline width)
+    if (!text) {
+      input.style.width = '';
+      return;
+    }
 
-    const { minCh, maxCh } = getMinMaxCh();
+    // Filled: shrink-wrap to content (plus padding+border), clamp only to max width.
+    let targetWidth = measureText(text);
 
-    if (minCh && ch < minCh) ch = minCh;
-    if (Number.isFinite(maxCh) && ch > maxCh) ch = maxCh;
+    const padding =
+      parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+    const border =
+      parseFloat(styles.borderLeftWidth) + parseFloat(styles.borderRightWidth);
+    targetWidth += padding + border;
 
-    // Let CSS own min/max (via vars); JS only picks a target width in ch units.
-    input.style.width = `${ch}ch`;
+    if (maxPx && targetWidth > maxPx) targetWidth = maxPx;
+
+    input.style.width = `${targetWidth}px`;
   };
 
-  // Size once now, and again on each change
+  // Scroll to beginning on focus and blur
+  const scrollToStart = () => {
+    input.scrollLeft = 0;
+  };
+  input.addEventListener('focus', scrollToStart);
+  input.addEventListener('blur', scrollToStart);
 
+  // Size once now, and again on each change
   input.addEventListener('input', updateWidth);
   updateWidth();
 }
@@ -376,10 +380,11 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       );
       if (!inp) return;
       inp.value = val == null ? '' : String(val);
-      // Trigger autosize once.
+      // Trigger autosize by dispatching input event (autosize listens for this)
       try {
         // NOTE: do not bubble; bubbling would trigger dirty-on-first-keystroke logic.
-        inp.dispatchEvent(new Event('input'));
+        const evt = new Event('input', { bubbles: false });
+        inp.dispatchEvent(evt);
       } catch (_) {}
     };
 
@@ -390,6 +395,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     set('prep', modelRef.prepNotes ?? '');
     set('notes', modelRef.parentheticalNote ?? '');
     set('opt', modelRef.isOptional ? 'x' : '');
+
+    // Force autosize to run after all values are set (in case events didn't fire)
+    requestAnimationFrame(() => {
+      const inputs = row.querySelectorAll('.ingredient-edit-input');
+      inputs.forEach((inp) => {
+        try {
+          inp.dispatchEvent(new Event('input', { bubbles: false }));
+        } catch (_) {}
+      });
+    });
   }
 
   const restoreOriginal = () => {
@@ -581,7 +596,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
   if (nameInput) {
     nameInput.focus();
     nameInput.setSelectionRange(0, 0);
-    // Scroll to beginning so caret is visible even if field is narrow
+    // scrollToStart is handled by attachIngredientInputAutosize, but ensure it here too
     nameInput.scrollLeft = 0;
   }
 }

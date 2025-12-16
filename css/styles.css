@@ -45,28 +45,15 @@
   --servings-field-height: 28px;
   --servings-line-h: 42px;
 
-  /* --- Ingredient inline edit field widths (per label) --- */
-  --ingredient-field-qty-min: 4ch;
-  --ingredient-field-qty-max: 9ch;
-  --ingredient-field-unit-min: 4ch;
-  --ingredient-field-unit-max: 9ch;
-  --ingredient-field-name-min: 12ch;
-  --ingredient-field-name-max: 50ch;
-  --ingredient-field-var-min: 4ch;
-  --ingredient-field-var-max: 9ch;
-  --ingredient-field-prep-min: 4ch;
-  --ingredient-field-prep-max: 9ch;
-  --ingredient-field-notes-min: 4ch;
-  --ingredient-field-notes-max: 9ch;
-  --ingredient-field-opt-min: 4ch;
-  --ingredient-field-opt-max: 9ch;
-  --ingredient-field-loc-min: 4ch;
-  --ingredient-field-loc-max: 9ch;
+  /* --- Ingredient inline edit field widths (unified) --- */
+  /* Empty fields render at this width. Filled fields shrink-wrap to content (JS). */
+  --ingredient-field-empty-width: 4ch;
+  --ingredient-field-max-width: 50ch;
 
   /* --- Ingredient edit tray --- */
-  --ingredient-edit-tray-bleed: 20px;
+  --ingredient-edit-tray-bleed: 30px;
   --ingredient-edit-tray-vgap: 8px;
-  --ingredient-edit-tray-padding: 16px 20px;
+  --ingredient-edit-tray-padding: 22px 20px;
   --ingredient-edit-field-gap: 16px;
   --ingredient-edit-cell-gap: 6px;
 
@@ -732,47 +719,21 @@ h1.nav-text {
   white-space: nowrap;
 }
 
-/* Per-field min/max widths for ingredient edit inputs */
-.ingredient-edit-input--qty {
-  min-width: var(--ingredient-field-qty-min);
-  max-width: var(--ingredient-field-qty-max);
+/* Edit mode input styling: blue only for the focused field */
+.ingredient-edit-row.editing .ingredient-edit-input:focus {
+  background-color: #e5eefa;
+  border-color: #b5ceff;
 }
 
-.ingredient-edit-input--unit {
-  min-width: var(--ingredient-field-unit-min);
-  max-width: var(--ingredient-field-unit-max);
+/* Unified sizing for all ingredient edit inputs */
+.ingredient-edit-input {
+  width: var(--ingredient-field-empty-width);
+  max-width: var(--ingredient-field-max-width);
 }
 
 .ingredient-edit-input--name {
-  min-width: var(--ingredient-field-name-min);
-  max-width: var(--ingredient-field-name-max);
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.ingredient-edit-input--var {
-  min-width: var(--ingredient-field-var-min);
-  max-width: var(--ingredient-field-var-max);
-}
-
-.ingredient-edit-input--prep {
-  min-width: var(--ingredient-field-prep-min);
-  max-width: var(--ingredient-field-prep-max);
-}
-
-.ingredient-edit-input--notes {
-  min-width: var(--ingredient-field-notes-min);
-  max-width: var(--ingredient-field-notes-max);
-}
-
-.ingredient-edit-input--opt {
-  min-width: var(--ingredient-field-opt-min);
-  max-width: var(--ingredient-field-opt-max);
-}
-
-.ingredient-edit-input--loc {
-  min-width: var(--ingredient-field-loc-min);
-  max-width: var(--ingredient-field-loc-max);
 }
 
 .ingredient-edit-input:focus {
