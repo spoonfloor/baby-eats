@@ -24,6 +24,7 @@ window.bridge = {
   loadRecipeFromDB,
   saveRecipeToDB,
   saveRecipeStepsFromStepNodes,
+  saveRecipeIngredientsFromModel,
 };
 
 // Load a recipe and all its pieces from the database into a full JS object.
@@ -202,4 +203,176 @@ function saveRecipeToDB(db, recipe) {
     console.error('❌ saveRecipeToDB failed', e);
     throw e;
   }
+}
+
+function getTableColumns(activeDb, tableName) {
+  try {
+    const q = activeDb.exec(`PRAGMA table_info(${tableName});`);
+    if (!q.length) return [];
+    // PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+    return q[0].values.map((row) => String(row[1]));
+  } catch (_) {
+    return [];
+  }
+}
+
+function pickIdColumn(cols) {
+  const hit = cols.find((c) => String(c).toLowerCase() === 'id');
+  return hit || 'ID';
+}
+
+function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
+  if (!activeDb) throw new Error('saveRecipeIngredientsFromModel: missing db');
+  const rid = Number(recipeId || recipe?.id);
+  if (!Number.isFinite(rid)) {
+    throw new Error('saveRecipeIngredientsFromModel: invalid recipe id');
+  }
+
+  const ingredientsCols = getTableColumns(activeDb, 'ingredients');
+  const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
+  const ingIdCol = pickIdColumn(ingredientsCols);
+
+  const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
+  const ingHas = (col) =>
+    ingredientsCols.map((c) => c.toLowerCase()).includes(col);
+
+  if (!rimHas('recipe_id') || !rimHas('ingredient_id')) {
+    throw new Error(
+      'saveRecipeIngredientsFromModel: recipe_ingredient_map missing required columns'
+    );
+  }
+  if (!ingHas('name')) {
+    throw new Error(
+      'saveRecipeIngredientsFromModel: ingredients table missing name column'
+    );
+  }
+
+  const sections = Array.isArray(recipe?.sections) ? recipe.sections : [];
+  const all = sections.flatMap((sec) => (sec && sec.ingredients) || []);
+
+  const realIngredients = all.filter(
+    (ing) => ing && !ing.isPlaceholder && (ing.name || '').trim() !== ''
+  );
+
+  // Clear existing mappings for this recipe (substitutes cascade off this).
+  activeDb.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [rid]);
+
+  const findOrCreateIngredientId = (ing) => {
+    const name = (ing.name || '').trim();
+    const variant = (ing.variant || '').trim();
+    const parenthetical = (ing.parentheticalNote || '').trim();
+    const loc = (ing.locationAtHome || '').trim();
+
+    const where = ['lower(name) = lower(?)'];
+    const params = [name];
+
+    if (ingHas('variant')) {
+      where.push("COALESCE(variant, '') = ?");
+      params.push(variant);
+    }
+    if (ingHas('parenthetical_note')) {
+      where.push("COALESCE(parenthetical_note, '') = ?");
+      params.push(parenthetical);
+    }
+    if (ingHas('location_at_home')) {
+      where.push("COALESCE(location_at_home, '') = ?");
+      params.push(loc);
+    }
+
+    // Use prepared statements (SQL.js exec() is not reliably parameterized).
+    let foundId = null;
+    const selStmt = activeDb.prepare(
+      `SELECT ${ingIdCol} AS id FROM ingredients WHERE ${where.join(
+        ' AND '
+      )} LIMIT 1;`
+    );
+    try {
+      selStmt.bind(params);
+      if (selStmt.step()) {
+        const row = selStmt.getAsObject();
+        if (row && row.id != null) {
+          const v = Number(row.id);
+          if (Number.isFinite(v)) foundId = v;
+        }
+      }
+    } finally {
+      selStmt.free();
+    }
+
+    if (foundId != null) return foundId;
+
+    // Insert new ingredient row (best-effort to include extra columns if present)
+    const cols = ['name'];
+    const vals = [name];
+
+    if (ingHas('variant')) {
+      cols.push('variant');
+      vals.push(variant);
+    }
+    if (ingHas('parenthetical_note')) {
+      cols.push('parenthetical_note');
+      vals.push(parenthetical);
+    }
+    if (ingHas('location_at_home')) {
+      cols.push('location_at_home');
+      vals.push(loc);
+    }
+
+    const placeholders = cols.map(() => '?').join(', ');
+    const insStmt = activeDb.prepare(
+      `INSERT INTO ingredients (${cols.join(', ')}) VALUES (${placeholders});`
+    );
+    try {
+      insStmt.run(vals);
+    } finally {
+      insStmt.free();
+    }
+
+    const idQ = activeDb.exec('SELECT last_insert_rowid();');
+    if (idQ.length && idQ[0].values.length) {
+      return Number(idQ[0].values[0][0]);
+    }
+    throw new Error('saveRecipeIngredientsFromModel: failed to insert ingredient');
+  };
+
+  // Insert fresh mappings in current model order
+  let inserted = 0;
+  realIngredients.forEach((ing) => {
+    const ingredientId = findOrCreateIngredientId(ing);
+
+    const cols = ['recipe_id', 'ingredient_id'];
+    const vals = [rid, ingredientId];
+
+    if (rimHas('quantity')) {
+      cols.push('quantity');
+      vals.push(ing.quantity ?? '');
+    }
+    if (rimHas('unit')) {
+      cols.push('unit');
+      vals.push((ing.unit || '').trim());
+    }
+    if (rimHas('prep_notes')) {
+      cols.push('prep_notes');
+      vals.push((ing.prepNotes || '').trim());
+    }
+    if (rimHas('is_optional')) {
+      cols.push('is_optional');
+      vals.push(ing.isOptional ? 1 : 0);
+    }
+
+    const placeholders = cols.map(() => '?').join(', ');
+    const mapStmt = activeDb.prepare(
+      `INSERT INTO recipe_ingredient_map (${cols.join(
+        ', '
+      )}) VALUES (${placeholders});`
+    );
+    try {
+      mapStmt.run(vals);
+    } finally {
+      mapStmt.free();
+    }
+    inserted += 1;
+  });
+
+  console.info(`💾 saveRecipeIngredientsFromModel: wrote ${inserted} rows`);
 }

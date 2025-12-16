@@ -137,12 +137,15 @@ async function saveRecipeToDB() {
     throw new Error('saveRecipeToDB: missing db or recipeData');
   }
 
-  // --- 1) Persist recipe metadata (title + servings) ---
   const rid = Number(window.recipeId || recipe.id);
   if (!Number.isFinite(rid)) {
     throw new Error('saveRecipeToDB: invalid recipe id');
   }
 
+  // Transaction keeps steps + ingredients consistent.
+  db.run('BEGIN;');
+  try {
+    // --- 1) Persist recipe metadata (title + servings) ---
   const title = recipe.title || '';
 
   const servingsDefault =
@@ -152,10 +155,14 @@ async function saveRecipeToDB() {
       : null);
 
   const servingsMin =
-    recipe.servings && recipe.servings.min != null ? recipe.servings.min : null;
+      recipe.servings && recipe.servings.min != null
+        ? recipe.servings.min
+        : null;
 
   const servingsMax =
-    recipe.servings && recipe.servings.max != null ? recipe.servings.max : null;
+      recipe.servings && recipe.servings.max != null
+        ? recipe.servings.max
+        : null;
 
   db.run(
     'UPDATE recipes SET title = ?, servings_default = ?, servings_min = ?, servings_max = ? WHERE ID = ?;',
@@ -163,9 +170,24 @@ async function saveRecipeToDB() {
   );
 
   // --- 2) Persist steps from the StepNode model ---
+    bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);
 
-  bridge.saveRecipeStepsFromStepNodes(db, window.recipeId, window.stepNodes);
+    // --- 3) Persist ingredients from the live model ---
+    if (
+      window.bridge &&
+      typeof bridge.saveRecipeIngredientsFromModel === 'function'
+    ) {
+      bridge.saveRecipeIngredientsFromModel(db, rid, recipe);
+    }
+
+    db.run('COMMIT;');
+  } catch (err) {
+    try {
+      db.run('ROLLBACK;');
+    } catch (_) {}
+    throw err;
+  }
 
   // Re-read from DB to return a fully refreshed object
-  return bridge.loadRecipeFromDB(db, window.recipeId);
+  return bridge.loadRecipeFromDB(db, rid);
 }

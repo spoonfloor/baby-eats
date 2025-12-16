@@ -4,6 +4,7 @@
   --body-font-size: 15.5px;
   --body-font-weight: 400;
   --headline-font-size: 16px;
+  --ingredient-editor-control-font-size: 14px;
 
   /* --- Colors: theme + surfaces + roles --- */
   --theme-primary: #6d49ff;
@@ -62,6 +63,10 @@
   --ingredient-field-loc-min: 4ch;
   --ingredient-field-loc-max: 9ch;
 
+  /* --- Ingredient edit tray --- */
+  --ingredient-edit-tray-bleed: 20px;
+  --ingredient-edit-tray-vgap: 8px;
+
   /* --- Servings column layout --- */
 
   --servings-col-default: 6rem;
@@ -70,7 +75,7 @@
 
   /* --- Pill sizing pipeline --- */
   --pill-height: 28px;
-  --pill-font-size: var(--body-font-size);
+  --pill-font-size: var(--ingredient-editor-control-font-size);
   --pill-line-height: 1.4;
   --pill-padding-x: 10px;
   --servings-pill-offset: -10px;
@@ -659,6 +664,17 @@ h1.nav-text {
   min-height: var(--servings-line-h);
 }
 
+.ingredient-edit-row.editing {
+  /* Containment tray for the one active ingredient row in edit mode */
+  background: var(--field-bg);
+  padding: 10px 12px;
+  border-radius: 14px;
+  margin-top: var(--ingredient-edit-tray-vgap);
+  margin-bottom: var(--ingredient-edit-tray-vgap);
+  margin-left: calc(-1 * var(--ingredient-edit-tray-bleed));
+  margin-right: calc(-1 * var(--ingredient-edit-tray-bleed));
+}
+
 .ingredient-edit-cell {
   display: inline-flex;
   align-items: center;
@@ -703,11 +719,11 @@ h1.nav-text {
   height: var(--servings-field-height);
   padding: 4px 8px;
   border-radius: 8px;
-  background-color: var(--field-bg);
+  background-color: hsl(0, 0%, 98%);
   color: var(--field-fg);
-  border: 1px solid transparent;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   font-family: var(--main-font);
-  font-size: var(--body-font-size);
+  font-size: var(--ingredient-editor-control-font-size);
   box-sizing: border-box;
   white-space: nowrap;
 }
