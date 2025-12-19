@@ -1173,23 +1173,23 @@ function loadShoppingItemEditorPage() {
     <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
     <div class="shopping-item-editor-card" aria-label="Shopping item">
       <div class="shopping-item-field">
-        <div class="shopping-item-label">Variant</div>
-        <input
-          id="shoppingItemVariantInput"
-          class="shopping-item-input"
-          type="text"
-          placeholder="brand / style"
-        />
+        <div class="shopping-item-label">Variants</div>
+        <textarea
+          id="shoppingItemVariantsTextarea"
+          class="shopping-item-textarea"
+          placeholder="e.g., kind or brand"
+          wrap="off"
+        ></textarea>
       </div>
 
       <div class="shopping-item-field">
-        <div class="shopping-item-label">Size</div>
-        <input
-          id="shoppingItemSizeInput"
-          class="shopping-item-input"
-          type="text"
+        <div class="shopping-item-label">Sizes</div>
+        <textarea
+          id="shoppingItemSizesTextarea"
+          class="shopping-item-textarea"
           placeholder="e.g. 12oz can"
-        />
+          wrap="off"
+        ></textarea>
       </div>
 
       <div class="shopping-item-field">
@@ -1198,7 +1198,7 @@ function loadShoppingItemEditorPage() {
           id="shoppingItemNoteInput"
           class="shopping-item-input"
           type="text"
-          placeholder="optional / divided / for garnish"
+          placeholder="included in parentheses"
         />
       </div>
 
@@ -1247,6 +1247,30 @@ function loadShoppingItemEditorPage() {
     </div>
   `;
 
+  // Auto-grow textareas to preserve the "Docs list" feel (like steps editor).
+  const attachAutoGrowTextarea = (el, { maxPx = 220 } = {}) => {
+    if (!el) return;
+    const resize = () => {
+      try {
+        el.style.height = 'auto';
+        const next = Math.min(el.scrollHeight || 0, maxPx);
+        el.style.height = `${Math.max(56, next)}px`;
+      } catch (_) {}
+    };
+    el.addEventListener('input', resize);
+    // size once now
+    try {
+      requestAnimationFrame(resize);
+    } catch (_) {
+      resize();
+    }
+  };
+
+  attachAutoGrowTextarea(
+    document.getElementById('shoppingItemVariantsTextarea')
+  );
+  attachAutoGrowTextarea(document.getElementById('shoppingItemSizesTextarea'));
+
   const loadDbForShoppingEditor = async () => {
     const isElectron = !!window.electronAPI;
     let db;
@@ -1285,8 +1309,8 @@ function loadShoppingItemEditorPage() {
     try {
       const idStr = sessionStorage.getItem('selectedShoppingItemId');
       const id = Number(idStr);
-      const variant = (extraValues && extraValues.variant) || '';
-      const size = (extraValues && extraValues.size) || '';
+      const variantsText = (extraValues && extraValues.variants) || '';
+      const sizesText = (extraValues && extraValues.sizes) || '';
       const note = (extraValues && extraValues.note) || '';
       const home = (extraValues && extraValues.home) || '';
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
@@ -1294,6 +1318,30 @@ function loadShoppingItemEditorPage() {
 
       const isFood = isFoodRaw === '1' ? 1 : 0;
       const isDeprecated = isDeprecatedRaw === '1' ? 1 : 0;
+
+      const parseList = (raw) => {
+        const lines = String(raw || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        const out = [];
+        const seen = new Set();
+        lines.forEach((s) => {
+          const key = s.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push(s);
+        });
+        return out;
+      };
+
+      const variants = parseList(variantsText);
+      const sizes = parseList(sizesText);
+
+      // Keep legacy single-value columns best-effort for now:
+      // - variant/size columns become "representative" first entries
+      const variant0 = variants[0] || '';
+      const size0 = sizes[0] || '';
 
       let cols = [];
       try {
@@ -1305,6 +1353,22 @@ function loadShoppingItemEditorPage() {
       }
       const has = (c) => cols.includes(String(c).toLowerCase());
 
+      const tableExists = (name) => {
+        try {
+          const q = db.exec(
+            `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+            [name]
+          );
+          return !!(q.length && q[0].values && q[0].values.length);
+        } catch (_) {
+          return false;
+        }
+      };
+      const hasVariantTable = tableExists('ingredient_variants');
+      const hasSizeTable = tableExists('ingredient_sizes');
+
+      let currentId = Number.isFinite(id) ? id : null;
+
       // If the row already exists (created from the list-page Create flow),
       // always UPDATE, even if it is flagged as "new".
       if (Number.isFinite(id)) {
@@ -1313,11 +1377,11 @@ function loadShoppingItemEditorPage() {
 
         if (has('variant')) {
           sets.push('variant = ?');
-          vals.push(variant);
+          vals.push(variant0);
         }
         if (has('size')) {
           sets.push('size = ?');
-          vals.push(size);
+          vals.push(size0);
         }
         if (has('parenthetical_note')) {
           sets.push('parenthetical_note = ?');
@@ -1346,11 +1410,11 @@ function loadShoppingItemEditorPage() {
         const insertVals = [next];
         if (has('variant')) {
           insertCols.push('variant');
-          insertVals.push(variant);
+          insertVals.push(variant0);
         }
         if (has('size')) {
           insertCols.push('size');
-          insertVals.push(size);
+          insertVals.push(size0);
         }
         if (has('parenthetical_note')) {
           insertCols.push('parenthetical_note');
@@ -1383,6 +1447,52 @@ function loadShoppingItemEditorPage() {
         if (idQ.length && idQ[0].values.length) {
           const newId = idQ[0].values[0][0];
           sessionStorage.setItem('selectedShoppingItemId', String(newId));
+          currentId = Number(newId);
+        }
+      }
+
+      // Persist variants/sizes lists to their own tables (newline-only, order preserved).
+      if (currentId != null && Number.isFinite(Number(currentId))) {
+        const iid = Number(currentId);
+
+        // Transaction is best-effort; SQL.js supports BEGIN/COMMIT.
+        try {
+          db.run('BEGIN;');
+        } catch (_) {}
+
+        try {
+          if (hasVariantTable) {
+            db.run('DELETE FROM ingredient_variants WHERE ingredient_id = ?;', [
+              iid,
+            ]);
+            variants.forEach((v, idx) => {
+              db.run(
+                'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order) VALUES (?, ?, ?);',
+                [iid, v, idx + 1]
+              );
+            });
+          }
+
+          if (hasSizeTable) {
+            db.run('DELETE FROM ingredient_sizes WHERE ingredient_id = ?;', [
+              iid,
+            ]);
+            sizes.forEach((s, idx) => {
+              db.run(
+                'INSERT INTO ingredient_sizes (ingredient_id, size, sort_order) VALUES (?, ?, ?);',
+                [iid, s, idx + 1]
+              );
+            });
+          }
+
+          try {
+            db.run('COMMIT;');
+          } catch (_) {}
+        } catch (err) {
+          try {
+            db.run('ROLLBACK;');
+          } catch (_) {}
+          throw err;
         }
       }
     } catch (err) {
@@ -1415,8 +1525,8 @@ function loadShoppingItemEditorPage() {
   // Wire shared editor behavior once the injected shell exists.
   if (typeof waitForAppBarReady === 'function') {
     waitForAppBarReady().then(async () => {
-      let baselineVariant = '';
-      let baselineSize = '';
+      let baselineVariants = '';
+      let baselineSizes = '';
       let baselineNote = '';
       let baselineHome = '';
       let baselineIsFood = '1';
@@ -1457,13 +1567,41 @@ function loadShoppingItemEditorPage() {
           );
           if (q.length && q[0].values.length) {
             const row = q[0].values[0];
-            baselineVariant = String(row[0] || '');
-            baselineSize = String(row[1] || '');
+            // Legacy single-value columns
+            baselineVariants = String(row[0] || '');
+            baselineSizes = String(row[1] || '');
             baselineNote = String(row[2] || '');
             baselineHome = String(row[3] || '');
             baselineIsFood = String(row[4] != null ? row[4] : '1');
             baselineIsDeprecated = String(row[5] != null ? row[5] : '0');
           }
+
+          // If list tables exist, prefer them as the baseline source-of-truth.
+          try {
+            const vq = db.exec(
+              `SELECT variant FROM ingredient_variants WHERE ingredient_id = ? ORDER BY sort_order ASC, id ASC;`,
+              [id]
+            );
+            if (vq.length && vq[0].values.length) {
+              baselineVariants = vq[0].values
+                .map((r) => String(r[0] || '').trim())
+                .filter((s) => s.length > 0)
+                .join('\n');
+            }
+          } catch (_) {}
+
+          try {
+            const sq = db.exec(
+              `SELECT size FROM ingredient_sizes WHERE ingredient_id = ? ORDER BY sort_order ASC, id ASC;`,
+              [id]
+            );
+            if (sq.length && sq[0].values.length) {
+              baselineSizes = sq[0].values
+                .map((r) => String(r[0] || '').trim())
+                .filter((s) => s.length > 0)
+                .join('\n');
+            }
+          } catch (_) {}
         }
       } catch (_) {}
 
@@ -1477,14 +1615,14 @@ function loadShoppingItemEditorPage() {
         backHref: 'shopping.html',
         extraFields: [
           {
-            key: 'variant',
-            el: document.getElementById('shoppingItemVariantInput'),
-            initialValue: baselineVariant,
+            key: 'variants',
+            el: document.getElementById('shoppingItemVariantsTextarea'),
+            initialValue: baselineVariants,
           },
           {
-            key: 'size',
-            el: document.getElementById('shoppingItemSizeInput'),
-            initialValue: baselineSize,
+            key: 'sizes',
+            el: document.getElementById('shoppingItemSizesTextarea'),
+            initialValue: baselineSizes,
           },
           {
             key: 'note',

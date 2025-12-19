@@ -3,6 +3,14 @@ CREATE TABLE IF NOT EXISTS "favorite_eats" (
 	"field1"	TEXT,
 	"field2"	TEXT
 );
+CREATE TABLE IF NOT EXISTS "ingredient_sizes" (
+	"id"	INTEGER,
+	"ingredient_id"	INTEGER NOT NULL,
+	"size"	TEXT NOT NULL,
+	"sort_order"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID") ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS "ingredient_store_location" (
 	"ID"	INTEGER,
 	"ingredient_id"	INTEGER NOT NULL,
@@ -10,6 +18,14 @@ CREATE TABLE IF NOT EXISTS "ingredient_store_location" (
 	PRIMARY KEY("ID" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID"),
 	FOREIGN KEY("store_location_id") REFERENCES "store_locations"("ID")
+);
+CREATE TABLE IF NOT EXISTS "ingredient_variants" (
+	"id"	INTEGER,
+	"ingredient_id"	INTEGER NOT NULL,
+	"variant"	TEXT NOT NULL,
+	"sort_order"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID") ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS "ingredients" (
 	"ID"	INTEGER NOT NULL,
@@ -464,6 +480,9 @@ INSERT INTO "favorite_eats" VALUES ('INSERT INTO store_locations VALUES (10','1'
 INSERT INTO "favorite_eats" VALUES ('INSERT INTO store_locations VALUES (11','1');
 INSERT INTO "favorite_eats" VALUES ('INSERT INTO stores VALUES (1','''whole foods''');
 INSERT INTO "favorite_eats" VALUES ('COMMIT;',NULL);
+INSERT INTO "ingredient_sizes" VALUES (1,23,'large',1);
+INSERT INTO "ingredient_sizes" VALUES (4,32,'medium',2);
+INSERT INTO "ingredient_sizes" VALUES (5,32,'large',3);
 INSERT INTO "ingredient_store_location" VALUES (1,10,1);
 INSERT INTO "ingredient_store_location" VALUES (2,11,1);
 INSERT INTO "ingredient_store_location" VALUES (3,12,1);
@@ -562,6 +581,42 @@ INSERT INTO "ingredient_store_location" VALUES (123,130,11);
 INSERT INTO "ingredient_store_location" VALUES (124,131,11);
 INSERT INTO "ingredient_store_location" VALUES (125,132,11);
 INSERT INTO "ingredient_store_location" VALUES (126,133,11);
+INSERT INTO "ingredient_variants" VALUES (1,3,'granulated',1);
+INSERT INTO "ingredient_variants" VALUES (2,7,'apple cider',1);
+INSERT INTO "ingredient_variants" VALUES (3,8,'canola',1);
+INSERT INTO "ingredient_variants" VALUES (4,19,'fresh',1);
+INSERT INTO "ingredient_variants" VALUES (5,22,'purple',1);
+INSERT INTO "ingredient_variants" VALUES (6,32,'yellow',1);
+INSERT INTO "ingredient_variants" VALUES (7,34,'Baby Bella',1);
+INSERT INTO "ingredient_variants" VALUES (8,35,'butter',1);
+INSERT INTO "ingredient_variants" VALUES (9,36,'baby',1);
+INSERT INTO "ingredient_variants" VALUES (10,69,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (11,70,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (12,71,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (13,72,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (14,73,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (15,74,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (16,75,'frozen',1);
+INSERT INTO "ingredient_variants" VALUES (17,93,'Rao’s',1);
+INSERT INTO "ingredient_variants" VALUES (18,94,'extra-virgin',1);
+INSERT INTO "ingredient_variants" VALUES (19,99,'dave''s killer thin-sliced',1);
+INSERT INTO "ingredient_variants" VALUES (20,109,'liquid',1);
+INSERT INTO "ingredient_variants" VALUES (21,130,'firm',1);
+INSERT INTO "ingredient_variants" VALUES (22,133,'beyond beef',1);
+INSERT INTO "ingredient_variants" VALUES (23,135,'Impossible',1);
+INSERT INTO "ingredient_variants" VALUES (24,137,'raw',1);
+INSERT INTO "ingredient_variants" VALUES (25,139,'dried',1);
+INSERT INTO "ingredient_variants" VALUES (26,140,'dried',1);
+INSERT INTO "ingredient_variants" VALUES (27,141,'no-boil',1);
+INSERT INTO "ingredient_variants" VALUES (28,142,'vegan',1);
+INSERT INTO "ingredient_variants" VALUES (29,143,'fresh',1);
+INSERT INTO "ingredient_variants" VALUES (30,160,'vegetable',1);
+INSERT INTO "ingredient_variants" VALUES (31,161,'red',1);
+INSERT INTO "ingredient_variants" VALUES (32,162,'ground',1);
+INSERT INTO "ingredient_variants" VALUES (33,163,'ground',1);
+INSERT INTO "ingredient_variants" VALUES (34,164,'ground',1);
+INSERT INTO "ingredient_variants" VALUES (35,165,'ground',1);
+INSERT INTO "ingredient_variants" VALUES (36,166,'ground',1);
 INSERT INTO "ingredients" VALUES (3,'sugar','granulated','pantry',0,NULL,NULL,1,0);
 INSERT INTO "ingredients" VALUES (7,'vinegar','apple cider','above fridge',0,NULL,NULL,1,0);
 INSERT INTO "ingredients" VALUES (8,'oil','canola','pantry',0,NULL,NULL,1,0);
@@ -825,6 +880,14 @@ INSERT INTO "units" VALUES ('slice','slice','slices','count',46);
 INSERT INTO "units" VALUES ('pinch','pinch','pinches','misc',50);
 INSERT INTO "units" VALUES ('dash','dash','dashes','misc',51);
 INSERT INTO "units" VALUES ('drop','drop','drops','misc',52);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_ingredient_sizes_unique" ON "ingredient_sizes" (
+	"ingredient_id",
+	lower("size")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_ingredient_variants_unique" ON "ingredient_variants" (
+	"ingredient_id",
+	lower("variant")
+);
 CREATE INDEX IF NOT EXISTS "idx_substitutes_recipe_ingredient_id" ON "recipe_ingredient_substitutes" (
 	"recipe_ingredient_id"
 );

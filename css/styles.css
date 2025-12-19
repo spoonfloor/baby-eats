@@ -401,6 +401,33 @@ body.shopping-editor-page .shopping-item-input:focus {
   caret-color: var(--edit-mode-color);
 }
 
+body.shopping-editor-page .shopping-item-textarea {
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background-color: hsl(0, 0%, 98%);
+  color: var(--field-fg);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-family: var(--main-font);
+  font-size: var(--ingredient-editor-control-font-size);
+  width: 100%;
+  box-sizing: border-box;
+
+  /* newline-only list: never wrap, so line breaks are unambiguous */
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  resize: none;
+}
+
+body.shopping-editor-page .shopping-item-textarea:focus {
+  outline: none;
+  background-color: #e5eefa;
+  border-color: #b5ceff;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
 body.shopping-editor-page .shopping-item-status {
   display: flex;
   flex-direction: column;

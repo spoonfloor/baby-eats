@@ -537,17 +537,47 @@
       return poolCache.variantsByName.get(key) || [];
     const db = getDb();
     if (!db) return [];
-    const q = safeExec(
-      db,
-      `SELECT DISTINCT variant
-       FROM ingredients
-       WHERE lower(name) = lower(?)
-         AND variant IS NOT NULL
-         AND trim(variant) != ''
-       ORDER BY variant COLLATE NOCASE;`,
-      [nameText]
-    );
-    const out = columnFromExec(q, 0);
+    // Prefer list table when present; fall back to legacy ingredients.variant.
+    let q = [];
+    try {
+      q = safeExec(
+        db,
+        `SELECT DISTINCT v.variant
+         FROM ingredient_variants v
+         JOIN ingredients i ON i.ID = v.ingredient_id
+         WHERE lower(i.name) = lower(?)
+           AND v.variant IS NOT NULL
+           AND trim(v.variant) != ''
+         ORDER BY v.variant COLLATE NOCASE;`,
+        [nameText]
+      );
+    } catch (_) {
+      q = safeExec(
+        db,
+        `SELECT DISTINCT variant
+         FROM ingredients
+         WHERE lower(name) = lower(?)
+           AND variant IS NOT NULL
+           AND trim(variant) != ''
+         ORDER BY variant COLLATE NOCASE;`,
+        [nameText]
+      );
+    }
+    let out = columnFromExec(q, 0);
+    if (!out || out.length === 0) {
+      // Fallback if the join/table doesn't exist.
+      const q2 = safeExec(
+        db,
+        `SELECT DISTINCT variant
+         FROM ingredients
+         WHERE lower(name) = lower(?)
+           AND variant IS NOT NULL
+           AND trim(variant) != ''
+         ORDER BY variant COLLATE NOCASE;`,
+        [nameText]
+      );
+      out = columnFromExec(q2, 0);
+    }
     poolCache.variantsByName.set(key, out);
     return out;
   }
