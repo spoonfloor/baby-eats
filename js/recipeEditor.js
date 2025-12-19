@@ -114,7 +114,9 @@ function mergeByIngredient(list) {
   const map = new Map();
 
   list.forEach((ing) => {
-    const key = `${ing.variant || ''}|${ing.name}|${ing.locationAtHome || ''}`;
+    const key = `${ing.variant || ''}|${ing.name}|${ing.size || ''}|${
+      ing.locationAtHome || ''
+    }`;
     if (!map.has(key)) {
       map.set(key, { ...ing });
     } else {

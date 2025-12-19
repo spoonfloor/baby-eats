@@ -371,9 +371,62 @@ function setupInlineRowEditing(options) {
     exitEdit(!isEmpty());
   };
 
+  // Clicking inside the row but not on a focusable control (e.g. the tray background)
+  // should NOT trigger blur-commit. We use a "neutral focus" target when available,
+  // so the row can remain in edit mode with no active field selected.
+  const handleMouseDownCapture = (e) => {
+    if (!getIsEditing()) return;
+    const t = e && e.target ? e.target : null;
+    if (!t || !rowElement.contains(t)) return;
+
+    // Clicking a pill label should behave like a label click (focus the wired input).
+    // Let `wireLabelToInput` handle that.
+    if (t.closest && t.closest('.field-pill')) return;
+
+    // If the click is already on a focusable control, let it behave normally.
+    const tag = (t.tagName || '').toLowerCase();
+    const isFocusable =
+      tag === 'input' ||
+      tag === 'textarea' ||
+      tag === 'select' ||
+      t.isContentEditable === true;
+
+    if (isFocusable) return;
+
+    // Tray background click:
+    // - close any overlay dropdown
+    // - move focus off inputs (neutral focus) without leaving edit mode
+    e.preventDefault();
+
+    try {
+      if (
+        window.favoriteEatsTypeahead &&
+        typeof window.favoriteEatsTypeahead.close === 'function'
+      ) {
+        window.favoriteEatsTypeahead.close();
+      }
+    } catch (_) {}
+
+    const blurTarget = rowElement.querySelector('.inline-edit-blur-target');
+    if (blurTarget && typeof blurTarget.focus === 'function') {
+      blurTarget.focus();
+      return;
+    }
+
+    // Fallback: keep focus inside row (avoid exiting edit mode).
+    const first = rowElement.querySelector(
+      'input, textarea, select, [contenteditable="true"]'
+    );
+    if (first && typeof first.focus === 'function') {
+      first.focus();
+      if (typeof first.select === 'function') first.select();
+    }
+  };
+
   rowElement.addEventListener('click', handleClick);
   rowElement.addEventListener('keydown', handleKeyDown);
   rowElement.addEventListener('focusout', handleFocusOut);
+  rowElement.addEventListener('mousedown', handleMouseDownCapture, true);
 
   return {
     enterEdit,
@@ -382,6 +435,7 @@ function setupInlineRowEditing(options) {
       rowElement.removeEventListener('click', handleClick);
       rowElement.removeEventListener('keydown', handleKeyDown);
       rowElement.removeEventListener('focusout', handleFocusOut);
+      rowElement.removeEventListener('mousedown', handleMouseDownCapture, true);
       if (globalState.activeRow === rowElement) {
         globalState.activeRow = null;
       }

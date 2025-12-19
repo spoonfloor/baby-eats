@@ -520,12 +520,23 @@ async function loadShoppingPage() {
   window.dbInstance = db;
 
   // --- Load shopping items from ingredients table ---
-  const result = db.exec(`
-    SELECT ID, name, variant
-    FROM ingredients
-    WHERE hide_from_shopping_list = 0
-    ORDER BY name COLLATE NOCASE;
-  `);
+  // Prefer is_deprecated when available; fall back to legacy hide_from_shopping_list.
+  let result = [];
+  try {
+    result = db.exec(`
+      SELECT ID, name, variant
+      FROM ingredients
+      WHERE COALESCE(is_deprecated, 0) = 0
+      ORDER BY name COLLATE NOCASE;
+    `);
+  } catch (_) {
+    result = db.exec(`
+      SELECT ID, name, variant
+      FROM ingredients
+      WHERE hide_from_shopping_list = 0
+      ORDER BY name COLLATE NOCASE;
+    `);
+  }
 
   // Normalize into the same shape the UI already expects, but
   // aggregate variants by ingredient name so each name appears once.
@@ -637,12 +648,19 @@ async function loadShoppingPage() {
       if (!ok) return false;
 
       try {
-        db.run(
-          'UPDATE ingredients SET hide_from_shopping_list = 1 WHERE lower(name) = lower(?);',
-          [n]
-        );
+        try {
+          db.run(
+            'UPDATE ingredients SET is_deprecated = 1 WHERE lower(name) = lower(?);',
+            [n]
+          );
+        } catch (_) {
+          db.run(
+            'UPDATE ingredients SET hide_from_shopping_list = 1 WHERE lower(name) = lower(?);',
+            [n]
+          );
+        }
       } catch (err) {
-        console.error('❌ Failed to hide shopping item:', err);
+        console.error('❌ Failed to deprecate shopping item:', err);
         alert('Failed to remove item. See console for details.');
         return false;
       }
@@ -918,11 +936,18 @@ function wireChildEditorPage({
   initialTitle,
   backHref,
   onSave,
+  extraFields,
 }) {
   if (!appBarTitleEl || !bodyTitleEl) return;
 
   const normalize = (value) => (value || '').trim();
   let baselineTitle = normalize(initialTitle);
+  const extras = Array.isArray(extraFields) ? extraFields : [];
+  let baselineExtras = {};
+  extras.forEach((f) => {
+    if (!f || !f.key) return;
+    baselineExtras[String(f.key)] = normalize(f.initialValue);
+  });
 
   bodyTitleEl.textContent = baselineTitle || '';
   appBarTitleEl.textContent = baselineTitle || '';
@@ -942,6 +967,38 @@ function wireChildEditorPage({
       updateButtons();
     }
   };
+
+  // Extra fields: set baseline values and wire dirty tracking
+  extras.forEach((f) => {
+    if (!f) return;
+    const key = String(f.key || '');
+    if (!key) return;
+
+    const els = Array.isArray(f.els) ? f.els.filter(Boolean) : [];
+    const primaryEl = f.el || els[0] || null;
+    if (!primaryEl) return;
+
+    try {
+      const v = baselineExtras[key] ?? '';
+      if (typeof f.setValue === 'function') {
+        f.setValue(v);
+      } else if ('value' in primaryEl) {
+        primaryEl.value = v;
+      } else if ('textContent' in primaryEl) {
+        primaryEl.textContent = v;
+      }
+    } catch (_) {}
+
+    try {
+      const targets = els.length > 0 ? els : [primaryEl];
+      targets.forEach((el) => {
+        try {
+          el.addEventListener('input', markDirty);
+          el.addEventListener('change', markDirty);
+        } catch (_) {}
+      });
+    } catch (_) {}
+  });
 
   // Title is editable in the page body only (app-bar title is display-only).
   bodyTitleEl.addEventListener('click', () => {
@@ -1020,6 +1077,23 @@ function wireChildEditorPage({
       if (!isDirty) return;
       bodyTitleEl.textContent = baselineTitle;
       appBarTitleEl.textContent = baselineTitle;
+      extras.forEach((f) => {
+        if (!f) return;
+        const key = String(f.key || '');
+        if (!key) return;
+        const v = baselineExtras[key] ?? '';
+        try {
+          if (typeof f.setValue === 'function') {
+            f.setValue(v);
+          } else {
+            const els = Array.isArray(f.els) ? f.els.filter(Boolean) : [];
+            const primaryEl = f.el || els[0] || null;
+            if (!primaryEl) return;
+            if ('value' in primaryEl) primaryEl.value = v;
+            else if ('textContent' in primaryEl) primaryEl.textContent = v;
+          }
+        } catch (_) {}
+      });
       isDirty = false;
       updateButtons();
     });
@@ -1033,9 +1107,30 @@ function wireChildEditorPage({
       bodyTitleEl.textContent = nextTitle;
       appBarTitleEl.textContent = nextTitle;
 
+      const extraValues = {};
+      extras.forEach((f) => {
+        if (!f || !f.key) return;
+        const key = String(f.key);
+        let raw = '';
+        try {
+          if (typeof f.getValue === 'function') {
+            raw = f.getValue();
+          } else {
+            const els = Array.isArray(f.els) ? f.els.filter(Boolean) : [];
+            const primaryEl = f.el || els[0] || null;
+            if (!primaryEl) return;
+            if ('value' in primaryEl) raw = primaryEl.value;
+            else if ('textContent' in primaryEl) raw = primaryEl.textContent;
+          }
+        } catch (_) {
+          raw = '';
+        }
+        extraValues[key] = normalize(raw);
+      });
+
       try {
         if (typeof onSave === 'function') {
-          await onSave({ title: nextTitle, baselineTitle });
+          await onSave({ title: nextTitle, baselineTitle, extraValues });
         }
       } catch (err) {
         console.error('❌ Failed to save child editor:', err);
@@ -1047,6 +1142,7 @@ function wireChildEditorPage({
       updateButtons();
       // After a successful save, the saved title becomes the new cancel baseline.
       baselineTitle = nextTitle;
+      baselineExtras = { ...baselineExtras, ...extraValues };
       // NOTE: no navigation here; Save just persists and stays on page
     });
   }
@@ -1072,14 +1168,86 @@ function loadShoppingItemEditorPage() {
   // after the fragment exists, so there is exactly one path.
   initAppBar({ mode: 'editor', titleText });
 
-  // Body title (single place where editing happens)
+  // Body title + single calm card
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+    <div class="shopping-item-editor-card" aria-label="Shopping item">
+      <div class="shopping-item-field">
+        <div class="shopping-item-label">Variant</div>
+        <input
+          id="shoppingItemVariantInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="brand / style"
+        />
+      </div>
+
+      <div class="shopping-item-field">
+        <div class="shopping-item-label">Size</div>
+        <input
+          id="shoppingItemSizeInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="e.g. 12oz can"
+        />
+      </div>
+
+      <div class="shopping-item-field">
+        <div class="shopping-item-label">Note</div>
+        <input
+          id="shoppingItemNoteInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="optional / divided / for garnish"
+        />
+      </div>
+
+      <div class="shopping-item-field">
+        <div class="shopping-item-label">Home</div>
+        <input
+          id="shoppingItemHomeInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="pantry / fridge / spices / …"
+        />
+      </div>
+
+      <div class="shopping-item-status">
+        <div class="shopping-item-status-row">
+          <label class="shopping-item-toggle">
+            <input
+              id="shoppingItemIsFoodYes"
+              type="radio"
+              name="shoppingItemIsFood"
+            />
+            <span>Food</span>
+          </label>
+          <label class="shopping-item-toggle">
+            <input
+              id="shoppingItemIsFoodNo"
+              type="radio"
+              name="shoppingItemIsFood"
+            />
+            <span>Not food</span>
+          </label>
+        </div>
+
+        <div class="shopping-item-status-row">
+          <label class="shopping-item-toggle">
+            <input id="shoppingItemIsDeprecatedToggle" type="checkbox" />
+            <span>Hidden</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="shopping-item-help">
+        Hidden items have been removed from Shopping and can be deleted once they
+        aren't used by any recipe.
+      </div>
+    </div>
   `;
 
-  const persistShoppingItemTitle = async ({ title: next }) => {
-    if (!next) return;
-
+  const loadDbForShoppingEditor = async () => {
     const isElectron = !!window.electronAPI;
     let db;
 
@@ -1106,17 +1274,111 @@ function loadShoppingItemEditorPage() {
     }
 
     window.dbInstance = db;
+    return { db, isElectron };
+  };
+
+  const persistShoppingItem = async ({ title: next, extraValues }) => {
+    if (!next) return;
+
+    const { db, isElectron } = await loadDbForShoppingEditor();
 
     try {
       const idStr = sessionStorage.getItem('selectedShoppingItemId');
       const id = Number(idStr);
+      const variant = (extraValues && extraValues.variant) || '';
+      const size = (extraValues && extraValues.size) || '';
+      const note = (extraValues && extraValues.note) || '';
+      const home = (extraValues && extraValues.home) || '';
+      const isFoodRaw = (extraValues && extraValues.is_food) || '';
+      const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
+
+      const isFood = isFoodRaw === '1' ? 1 : 0;
+      const isDeprecated = isDeprecatedRaw === '1' ? 1 : 0;
+
+      let cols = [];
+      try {
+        const info = db.exec('PRAGMA table_info(ingredients);');
+        const rows = info.length ? info[0].values : [];
+        cols = rows.map((r) => String(r[1] || '').toLowerCase());
+      } catch (_) {
+        cols = [];
+      }
+      const has = (c) => cols.includes(String(c).toLowerCase());
 
       // If the row already exists (created from the list-page Create flow),
       // always UPDATE, even if it is flagged as "new".
       if (Number.isFinite(id)) {
-        db.run('UPDATE ingredients SET name = ? WHERE ID = ?;', [next, id]);
+        const sets = ['name = ?'];
+        const vals = [next];
+
+        if (has('variant')) {
+          sets.push('variant = ?');
+          vals.push(variant);
+        }
+        if (has('size')) {
+          sets.push('size = ?');
+          vals.push(size);
+        }
+        if (has('parenthetical_note')) {
+          sets.push('parenthetical_note = ?');
+          vals.push(note);
+        }
+        if (has('location_at_home')) {
+          sets.push('location_at_home = ?');
+          vals.push(home);
+        }
+        if (has('is_food')) {
+          sets.push('is_food = ?');
+          vals.push(isFood);
+        }
+        if (has('is_deprecated')) {
+          sets.push('is_deprecated = ?');
+          vals.push(isDeprecated);
+        } else if (has('hide_from_shopping_list')) {
+          sets.push('hide_from_shopping_list = ?');
+          vals.push(isDeprecated);
+        }
+
+        vals.push(id);
+        db.run(`UPDATE ingredients SET ${sets.join(', ')} WHERE ID = ?;`, vals);
       } else {
-        db.run('INSERT INTO ingredients (name) VALUES (?);', [next]);
+        const insertCols = ['name'];
+        const insertVals = [next];
+        if (has('variant')) {
+          insertCols.push('variant');
+          insertVals.push(variant);
+        }
+        if (has('size')) {
+          insertCols.push('size');
+          insertVals.push(size);
+        }
+        if (has('parenthetical_note')) {
+          insertCols.push('parenthetical_note');
+          insertVals.push(note);
+        }
+        if (has('location_at_home')) {
+          insertCols.push('location_at_home');
+          insertVals.push(home);
+        }
+        if (has('is_food')) {
+          insertCols.push('is_food');
+          insertVals.push(isFood);
+        }
+        if (has('is_deprecated')) {
+          insertCols.push('is_deprecated');
+          insertVals.push(isDeprecated);
+        } else if (has('hide_from_shopping_list')) {
+          insertCols.push('hide_from_shopping_list');
+          insertVals.push(isDeprecated);
+        }
+
+        const placeholders = insertCols.map(() => '?').join(', ');
+        db.run(
+          `INSERT INTO ingredients (${insertCols.join(
+            ', '
+          )}) VALUES (${placeholders});`,
+          insertVals
+        );
         const idQ = db.exec('SELECT last_insert_rowid();');
         if (idQ.length && idQ[0].values.length) {
           const newId = idQ[0].values[0][0];
@@ -1131,8 +1393,7 @@ function loadShoppingItemEditorPage() {
 
     try {
       const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
+      if (isElectron) {
         const ok = await window.electronAPI.saveDB(binaryArray);
         if (ok === false) throw new Error('electronAPI.saveDB returned false');
       } else {
@@ -1153,7 +1414,59 @@ function loadShoppingItemEditorPage() {
 
   // Wire shared editor behavior once the injected shell exists.
   if (typeof waitForAppBarReady === 'function') {
-    waitForAppBarReady().then(() => {
+    waitForAppBarReady().then(async () => {
+      let baselineVariant = '';
+      let baselineSize = '';
+      let baselineNote = '';
+      let baselineHome = '';
+      let baselineIsFood = '1';
+      let baselineIsDeprecated = '0';
+
+      try {
+        const idStr = sessionStorage.getItem('selectedShoppingItemId');
+        const id = Number(idStr);
+        if (Number.isFinite(id)) {
+          const { db } = await loadDbForShoppingEditor();
+
+          let cols = [];
+          try {
+            const info = db.exec('PRAGMA table_info(ingredients);');
+            const rows = info.length ? info[0].values : [];
+            cols = rows.map((r) => String(r[1] || '').toLowerCase());
+          } catch (_) {
+            cols = [];
+          }
+          const has = (c) => cols.includes(String(c).toLowerCase());
+
+          const selectCols = [
+            "COALESCE(variant, '')",
+            "COALESCE(size, '')",
+            "COALESCE(parenthetical_note, '')",
+            "COALESCE(location_at_home, '')",
+            has('is_food') ? 'COALESCE(is_food, 1)' : '1',
+            has('is_deprecated')
+              ? 'COALESCE(is_deprecated, 0)'
+              : has('hide_from_shopping_list')
+              ? 'COALESCE(hide_from_shopping_list, 0)'
+              : '0',
+          ];
+
+          const q = db.exec(
+            `SELECT ${selectCols.join(', ')} FROM ingredients WHERE ID = ?;`,
+            [id]
+          );
+          if (q.length && q[0].values.length) {
+            const row = q[0].values[0];
+            baselineVariant = String(row[0] || '');
+            baselineSize = String(row[1] || '');
+            baselineNote = String(row[2] || '');
+            baselineHome = String(row[3] || '');
+            baselineIsFood = String(row[4] != null ? row[4] : '1');
+            baselineIsDeprecated = String(row[5] != null ? row[5] : '0');
+          }
+        }
+      } catch (_) {}
+
       wireChildEditorPage({
         backBtn: document.getElementById('appBarBackBtn'),
         cancelBtn: document.getElementById('appBarCancelBtn'),
@@ -1162,7 +1475,64 @@ function loadShoppingItemEditorPage() {
         bodyTitleEl: document.getElementById('childEditorTitle'),
         initialTitle: titleText,
         backHref: 'shopping.html',
-        onSave: persistShoppingItemTitle,
+        extraFields: [
+          {
+            key: 'variant',
+            el: document.getElementById('shoppingItemVariantInput'),
+            initialValue: baselineVariant,
+          },
+          {
+            key: 'size',
+            el: document.getElementById('shoppingItemSizeInput'),
+            initialValue: baselineSize,
+          },
+          {
+            key: 'note',
+            el: document.getElementById('shoppingItemNoteInput'),
+            initialValue: baselineNote,
+          },
+          {
+            key: 'home',
+            el: document.getElementById('shoppingItemHomeInput'),
+            initialValue: baselineHome,
+          },
+          {
+            key: 'is_food',
+            el: document.getElementById('shoppingItemIsFoodYes'),
+            els: [
+              document.getElementById('shoppingItemIsFoodYes'),
+              document.getElementById('shoppingItemIsFoodNo'),
+            ],
+            initialValue: baselineIsFood === '1' ? '1' : '0',
+            getValue: () =>
+              document.getElementById('shoppingItemIsFoodYes')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const yes = document.getElementById('shoppingItemIsFoodYes');
+              const no = document.getElementById('shoppingItemIsFoodNo');
+              const isYes = String(v) === '1';
+              if (yes) yes.checked = isYes;
+              if (no) no.checked = !isYes;
+            },
+          },
+          {
+            key: 'is_deprecated',
+            el: document.getElementById('shoppingItemIsDeprecatedToggle'),
+            initialValue: baselineIsDeprecated === '1' ? '1' : '0',
+            getValue: () =>
+              document.getElementById('shoppingItemIsDeprecatedToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById(
+                'shoppingItemIsDeprecatedToggle'
+              );
+              if (el) el.checked = String(v) === '1';
+            },
+          },
+        ],
+        onSave: persistShoppingItem,
       });
     });
   }

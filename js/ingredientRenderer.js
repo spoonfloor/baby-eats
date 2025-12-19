@@ -296,6 +296,14 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
   row.className = 'ingredient-edit-row editing';
   row.dataset.isEditing = 'true';
 
+  // Hidden focus target to support a "neutral" state within edit mode:
+  // clicking tray background can move focus off inputs without exiting edit mode.
+  const blurTarget = document.createElement('div');
+  blurTarget.className = 'inline-edit-blur-target';
+  blurTarget.tabIndex = -1;
+  blurTarget.setAttribute('aria-hidden', 'true');
+  row.appendChild(blurTarget);
+
   // Dirty should flip on first keystroke (not blur/commit).
   let hasPendingEdit = false;
   const markDirtyOnce = () => {
@@ -337,14 +345,29 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     cell.className = 'ingredient-edit-cell';
     cell.classList.add(`ingredient-edit-cell--${labelText}`);
 
-    const pill = makePill(labelText);
-    cell.appendChild(pill);
-
     const input = document.createElement('input');
     input.className = 'ingredient-edit-input';
     input.classList.add(`ingredient-edit-input--${labelText}`);
-    input.type = 'text';
     input.dataset.field = labelText;
+
+    // OPT is a boolean: render as a checkbox toggle (not a text field).
+    // Wrap pill + checkbox in a <label> so clicking the pill toggles with trusted events.
+    if (labelText === 'opt') {
+      input.type = 'checkbox';
+      const wrap = document.createElement('label');
+      wrap.className = 'ingredient-edit-toggle';
+
+      const pill = makePill(labelText);
+      wrap.appendChild(pill);
+      wrap.appendChild(input);
+      cell.appendChild(wrap);
+      return cell;
+    }
+
+    // Default: pill + text input
+    input.type = 'text';
+    const pill = makePill(labelText);
+    cell.appendChild(pill);
 
     if (typeof wireLabelToInput === 'function') {
       wireLabelToInput(pill, input);
@@ -359,7 +382,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
 
   // Location is edited elsewhere; suppress it here.
   // Field order: name first, everything else unchanged.
-  const labels = ['name', 'qty', 'unit', 'var', 'prep', 'notes', 'opt'];
+  const labels = ['name', 'qty', 'unit', 'size', 'var', 'prep', 'notes', 'opt'];
   labels.forEach((lab) => row.appendChild(makeCell(lab)));
 
   // Any keystroke in any ingredient field should immediately enable Cancel/Save.
@@ -379,6 +402,12 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         `.ingredient-edit-input[data-field="${field}"]`
       );
       if (!inp) return;
+      if (inp.type === 'checkbox') {
+        const s = val == null ? '' : String(val);
+        inp.checked =
+          s === '1' || s.toLowerCase() === 'true' || s.toLowerCase() === 'x';
+        return;
+      }
       inp.value = val == null ? '' : String(val);
       // Trigger autosize by dispatching input event (autosize listens for this)
       try {
@@ -391,10 +420,11 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     set('qty', modelRef.quantity ?? '');
     set('unit', modelRef.unit ?? '');
     set('name', modelRef.name ?? '');
+    set('size', modelRef.size ?? '');
     set('var', modelRef.variant ?? '');
     set('prep', modelRef.prepNotes ?? '');
     set('notes', modelRef.parentheticalNote ?? '');
-    set('opt', modelRef.isOptional ? 'x' : '');
+    set('opt', modelRef.isOptional ? '1' : '');
 
     // Force autosize to run after all values are set (in case events didn't fire)
     requestAnimationFrame(() => {
@@ -407,13 +437,31 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     });
   }
 
-  const restoreOriginal = () => {
-    if (parent.contains(row)) parent.replaceChild(replaceEl, row);
+  // DOM replacement can be triggered by multiple paths (Escape + focusout, etc.).
+  // Make replacement idempotent and always replace via the row's current parent.
+  let _didFinalizeSwap = false;
+  const finalizeSwap = (nextEl) => {
+    if (_didFinalizeSwap) return;
+    _didFinalizeSwap = true;
+    try {
+      const p = row.parentNode;
+      if (p && nextEl) {
+        p.replaceChild(nextEl, row);
+      }
+    } catch (_) {
+      // ignore double-swap / already-removed situations
+    }
   };
+
+  const restoreOriginal = () => finalizeSwap(replaceEl);
 
   const isEmpty = () => {
     const inputs = row.querySelectorAll('.ingredient-edit-input');
     for (const inp of inputs) {
+      if (inp.type === 'checkbox') {
+        if (inp.checked) return false;
+        continue;
+      }
       if (inp.value && inp.value.trim() !== '') return false;
     }
     return true;
@@ -425,12 +473,26 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     inputs.forEach((inp) => {
       const key = inp.dataset.field || '';
       if (!key) return;
-      fields[key] = (inp.value || '').trim();
+      if (inp.type === 'checkbox') {
+        fields[key] = inp.checked ? '1' : '';
+      } else {
+        fields[key] = (inp.value || '').trim();
+      }
     });
     return fields;
   };
 
   const commit = () => {
+    // If an overlay dropdown is open, close it before we mutate DOM.
+    try {
+      if (
+        window.favoriteEatsTypeahead &&
+        typeof window.favoriteEatsTypeahead.close === 'function'
+      ) {
+        window.favoriteEatsTypeahead.close();
+      }
+    } catch (_) {}
+
     const fields = readFields();
     const hasData = Object.values(fields).some((v) => v && v.trim() !== '');
 
@@ -449,6 +511,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         quantity,
         unit: fields.unit || '',
         name: fields.name || '',
+        size: fields.size || '',
         variant: fields.var || '',
         prepNotes: fields.prep || '',
         parentheticalNote: fields.notes || '',
@@ -483,6 +546,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
             quantity: '',
             unit: '',
             name: '',
+            size: '',
             variant: '',
             prepNotes: '',
             parentheticalNote: '',
@@ -496,14 +560,13 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       }
 
       const readOnlyLine = renderIngredient(ingredient);
-      if (readOnlyLine && parent.contains(row)) {
-        parent.replaceChild(readOnlyLine, row);
-      }
+      if (readOnlyLine) finalizeSwap(readOnlyLine);
     } else if (modelRef) {
       // Update the model reference (the thing Save will persist).
       modelRef.quantity = quantity;
       modelRef.unit = fields.unit || '';
       modelRef.name = fields.name || '';
+      modelRef.size = fields.size || '';
       modelRef.variant = fields.var || '';
       modelRef.prepNotes = fields.prep || '';
       modelRef.parentheticalNote = fields.notes || '';
@@ -516,6 +579,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         seedLine.quantity = modelRef.quantity;
         seedLine.unit = modelRef.unit;
         seedLine.name = modelRef.name;
+        seedLine.size = modelRef.size;
         seedLine.variant = modelRef.variant;
         seedLine.prepNotes = modelRef.prepNotes;
         seedLine.parentheticalNote = modelRef.parentheticalNote;
@@ -524,15 +588,24 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       }
 
       const readOnlyLine = renderIngredient(modelRef);
-      if (readOnlyLine && parent.contains(row)) {
-        parent.replaceChild(readOnlyLine, row);
-      }
+      if (readOnlyLine) finalizeSwap(readOnlyLine);
     }
 
     // Do NOT mark dirty on commit; dirty should flip on the first keystroke only.
   };
 
-  const cancel = () => restoreOriginal();
+  const cancel = () => {
+    try {
+      if (
+        window.favoriteEatsTypeahead &&
+        typeof window.favoriteEatsTypeahead.close === 'function'
+      ) {
+        window.favoriteEatsTypeahead.close();
+      }
+    } catch (_) {}
+
+    restoreOriginal();
+  };
 
   // Replace in DOM first, then enter edit mode with the shared controller.
   parent.replaceChild(row, replaceEl);
@@ -587,6 +660,19 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     }
   } else {
     row.classList.add('editing');
+  }
+
+  // Wire typeahead + tab-order navigation for this row (v1: name/unit/variant)
+  try {
+    if (
+      typeof window.setupIngredientTypeaheadRow === 'function' &&
+      row &&
+      row.querySelector('.ingredient-edit-input')
+    ) {
+      window.setupIngredientTypeaheadRow(row);
+    }
+  } catch (err) {
+    console.warn('⚠️ setupIngredientTypeaheadRow failed:', err);
   }
 
   // Focus name by default, with caret at the beginning
@@ -645,8 +731,8 @@ function renderIngredientEditRowScaffold() {
   };
 
   // Scaffold helper (currently unused): keep in sync with openIngredientEditRow.
-  // name | qty | unit | var | prep | notes | opt
-  const labels = ['name', 'qty', 'unit', 'var', 'prep', 'notes', 'opt'];
+  // name | size | qty | unit | var | prep | notes | opt
+  const labels = ['name', 'qty', 'unit', 'size', 'var', 'prep', 'notes', 'opt'];
 
   labels.forEach((lab) => {
     row.appendChild(makeCell(lab));

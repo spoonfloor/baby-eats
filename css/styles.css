@@ -28,7 +28,7 @@
 
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
-  --page-top-gap: 16px;
+  --page-top-gap: 48px;
   --page-content-width: 574px;
 
   --header-font-size: 16px;
@@ -79,6 +79,97 @@
   /* App bar */
   --app-bar-title-size: 18px;
   --app-bar-gap: 12px;
+}
+
+/* --- Typeahead dropdown (v1) --- */
+.typeahead-dropdown {
+  z-index: 9999;
+  /* Neutral surface: match ingredient tray, not the focused field */
+  background: var(--field-bg);
+  /* Outline and text match inactive field styling */
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  color: var(--field-fg);
+}
+
+.typeahead-list {
+  overflow: auto;
+  /* Cap to ~8 rows via max-height; JS also clamps based on viewport */
+  max-height: calc(8 * 34px);
+}
+
+.typeahead-item,
+.typeahead-empty {
+  /* Match ingredient edit input horizontal padding (see .ingredient-edit-input padding: 4px 8px) */
+  padding: 8px 8px;
+  line-height: 18px;
+  font-size: 14px;
+  color: inherit;
+  user-select: none;
+  cursor: default;
+}
+
+.typeahead-item.is-highlighted {
+  /* Neutral highlight: black tint with light transparency */
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.typeahead-empty {
+  /* Same text color as inactive field; reduce emphasis via opacity */
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+/* --- Typeahead toast --- */
+.typeahead-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-height) + 14px);
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.typeahead-toast {
+  pointer-events: auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(25, 25, 25, 0.92);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: min(560px, calc(100vw - 24px));
+}
+
+.typeahead-toast__msg {
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.typeahead-toast__undo {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.typeahead-toast__undo:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* --- Body / Layout Defaults --- */
@@ -262,6 +353,126 @@ body.shopping-editor-page #childEditorTitle::first-letter {
 
 body.shopping-editor-page #appBarTitle::first-letter {
   text-transform: uppercase;
+}
+
+/* Shopping item editor: single calm card */
+body.shopping-editor-page .shopping-item-editor-card {
+  margin-top: 18px;
+  background: var(--field-bg);
+  border-radius: 14px;
+  padding: 18px 18px;
+
+  /* Optical alignment with the title: let the card bleed slightly wider */
+  margin-left: -12px;
+  margin-right: -12px;
+}
+
+body.shopping-editor-page .shopping-item-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+body.shopping-editor-page .shopping-item-label {
+  font-size: 13px;
+  color: var(--theme-primary);
+  letter-spacing: 0.2px;
+}
+
+body.shopping-editor-page .shopping-item-input {
+  height: var(--servings-field-height);
+  padding: 4px 10px;
+  border-radius: 10px;
+  background-color: hsl(0, 0%, 98%);
+  color: var(--field-fg);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-family: var(--main-font);
+  font-size: var(--ingredient-editor-control-font-size);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+body.shopping-editor-page .shopping-item-input:focus {
+  outline: none;
+  background-color: #e5eefa;
+  border-color: #b5ceff;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
+body.shopping-editor-page .shopping-item-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+body.shopping-editor-page .shopping-item-status-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+body.shopping-editor-page .shopping-item-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+body.shopping-editor-page .shopping-item-toggle span {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+body.shopping-editor-page .shopping-item-toggle input[type='checkbox'],
+body.shopping-editor-page .shopping-item-toggle input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff;
+  display: inline-grid;
+  place-content: center;
+}
+
+body.shopping-editor-page .shopping-item-toggle input[type='checkbox']:checked,
+body.shopping-editor-page .shopping-item-toggle input[type='radio']:checked {
+  border-color: var(--theme-primary);
+}
+
+body.shopping-editor-page
+  .shopping-item-toggle
+  input[type='checkbox']:checked::after,
+body.shopping-editor-page
+  .shopping-item-toggle
+  input[type='radio']:checked::after {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background-color: var(--theme-primary);
+  border-radius: 4px;
+
+  /* Use SVG as a mask so the checkmark is cut out of the filled square */
+  -webkit-mask-image: url('../assets/checkbox.svg');
+  mask-image: url('../assets/checkbox.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 18px 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+body.shopping-editor-page .shopping-item-help {
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.55);
+  line-height: 1.4;
 }
 
 .recipe-title[contenteditable='true'] {
@@ -656,6 +867,7 @@ h1.nav-text {
 
 .ingredient-edit-row.editing {
   /* Containment tray for the one active ingredient row in edit mode */
+  position: relative;
   background: var(--field-bg);
   padding: var(--ingredient-edit-tray-padding);
   border-radius: 14px;
@@ -666,6 +878,15 @@ h1.nav-text {
   gap: var(--ingredient-edit-field-gap);
 }
 
+.inline-edit-blur-target {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .ingredient-edit-cell {
   display: inline-flex;
   align-items: center;
@@ -673,36 +894,17 @@ h1.nav-text {
   white-space: nowrap;
 }
 
-.ingredient-edit-cell--qty {
-  flex: 0 0 var(--ingredient-col-qty);
-}
-
-.ingredient-edit-cell--unit {
-  flex: 0 0 var(--ingredient-col-unit);
-}
-
-.ingredient-edit-cell--name {
-  flex: 0 0 var(--ingredient-col-name);
-}
-
-.ingredient-edit-cell--var {
-  flex: 0 0 var(--ingredient-col-var);
-}
-
-.ingredient-edit-cell--prep {
-  flex: 0 0 var(--ingredient-col-prep);
-}
-
-.ingredient-edit-cell--notes {
-  flex: 0 0 var(--ingredient-col-notes);
-}
-
-.ingredient-edit-cell--opt {
-  flex: 0 0 var(--ingredient-col-opt);
-}
-
+/* Treat each pill+field pair like a "word" in a text editor: intrinsic width, no reserved columns. */
+.ingredient-edit-cell--qty,
+.ingredient-edit-cell--unit,
+.ingredient-edit-cell--name,
+.ingredient-edit-cell--size,
+.ingredient-edit-cell--var,
+.ingredient-edit-cell--prep,
+.ingredient-edit-cell--notes,
+.ingredient-edit-cell--opt,
 .ingredient-edit-cell--loc {
-  flex: 0 0 var(--ingredient-col-loc);
+  flex: 0 0 auto;
 }
 
 .ingredient-edit-input {
@@ -717,6 +919,41 @@ h1.nav-text {
   font-size: var(--ingredient-editor-control-font-size);
   box-sizing: border-box;
   white-space: nowrap;
+}
+
+/* Checkbox variant (used for opt toggle) */
+.ingredient-edit-input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff;
+  display: inline-grid;
+  place-content: center;
+}
+
+.ingredient-edit-input[type='checkbox']:checked {
+  border-color: var(--theme-primary);
+}
+
+.ingredient-edit-input[type='checkbox']:checked::after {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background-color: var(--theme-primary);
+  border-radius: 4px;
+
+  -webkit-mask-image: url('../assets/checkbox.svg');
+  mask-image: url('../assets/checkbox.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 18px 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 /* Edit mode input styling: blue only for the focused field */

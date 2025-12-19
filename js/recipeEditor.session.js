@@ -189,5 +189,17 @@ async function saveRecipeToDB() {
   }
 
   // Re-read from DB to return a fully refreshed object
-  return bridge.loadRecipeFromDB(db, rid);
+  const refreshed = bridge.loadRecipeFromDB(db, rid);
+
+  // Notify any UI helpers (typeahead pools, etc.) that DB-backed suggestion sources may have changed.
+  try {
+    window.dispatchEvent(new CustomEvent('favoriteEats:db-updated'));
+  } catch (_) {}
+  try {
+    if (typeof window.typeaheadInvalidatePools === 'function') {
+      window.typeaheadInvalidatePools();
+    }
+  } catch (_) {}
+
+  return refreshed;
 }

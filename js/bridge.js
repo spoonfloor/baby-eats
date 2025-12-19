@@ -59,7 +59,7 @@ function loadRecipeFromDB(db, recipeId) {
   // --- Load ingredients (no more section_id) ---
   const ingredientsQ = db.exec(`
     SELECT rim.ID, rim.quantity, rim.unit,
-           i.name, i.variant, rim.prep_notes,
+           i.name, i.variant, i.size, rim.prep_notes,
            rim.is_optional, i.parenthetical_note, i.location_at_home
     FROM recipe_ingredient_map rim
     JOIN ingredients i ON rim.ingredient_id = i.ID
@@ -75,6 +75,7 @@ function loadRecipeFromDB(db, recipeId) {
           unit,
           name,
           variant,
+          size,
           prepNotes,
           isOptional,
           parentheticalNote,
@@ -85,6 +86,7 @@ function loadRecipeFromDB(db, recipeId) {
           unit: unit || '',
           name,
           variant: variant || '',
+          size: size || '',
           prepNotes: prepNotes || '',
           isOptional: !!isOptional,
           parentheticalNote: parentheticalNote || '',
@@ -260,6 +262,7 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   const findOrCreateIngredientId = (ing) => {
     const name = (ing.name || '').trim();
     const variant = (ing.variant || '').trim();
+    const size = (ing.size || '').trim();
     const parenthetical = (ing.parentheticalNote || '').trim();
     const loc = (ing.locationAtHome || '').trim();
 
@@ -269,6 +272,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     if (ingHas('variant')) {
       where.push("COALESCE(variant, '') = ?");
       params.push(variant);
+    }
+    if (ingHas('size')) {
+      where.push("COALESCE(size, '') = ?");
+      params.push(size);
     }
     if (ingHas('parenthetical_note')) {
       where.push("COALESCE(parenthetical_note, '') = ?");
@@ -309,6 +316,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       cols.push('variant');
       vals.push(variant);
     }
+    if (ingHas('size')) {
+      cols.push('size');
+      vals.push(size);
+    }
     if (ingHas('parenthetical_note')) {
       cols.push('parenthetical_note');
       vals.push(parenthetical);
@@ -332,7 +343,9 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     if (idQ.length && idQ[0].values.length) {
       return Number(idQ[0].values[0][0]);
     }
-    throw new Error('saveRecipeIngredientsFromModel: failed to insert ingredient');
+    throw new Error(
+      'saveRecipeIngredientsFromModel: failed to insert ingredient'
+    );
   };
 
   // Insert fresh mappings in current model order
