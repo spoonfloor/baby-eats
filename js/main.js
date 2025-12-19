@@ -28,6 +28,43 @@ initSqlJs({
       ? 'store-editor'
       : null);
 
+  // --- Cmd+← / Cmd+→: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
+  const TOP_LEVEL_PAGES = ['recipes', 'shopping', 'units', 'stores'];
+
+  function isTypingContext(target) {
+    const el = target instanceof Element ? target : null;
+    const active =
+      document.activeElement instanceof Element ? document.activeElement : null;
+
+    const selector =
+      'input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]';
+
+    return !!(el?.closest(selector) || active?.closest(selector));
+  }
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.isComposing) return;
+
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (isTypingContext(e.target)) return;
+
+      const idx = TOP_LEVEL_PAGES.indexOf(pageId);
+      if (idx === -1) return; // only act on top-level list pages
+
+      const delta = e.key === 'ArrowRight' ? 1 : -1;
+      const nextIdx =
+        (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
+
+      e.preventDefault();
+      window.location.href = `${TOP_LEVEL_PAGES[nextIdx]}.html`;
+    },
+    { capture: true }
+  );
+
   const pageLoaders = {
     recipes: loadRecipesPage,
     'recipe-editor': loadRecipeEditorPage,
