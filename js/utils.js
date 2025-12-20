@@ -383,6 +383,17 @@ function setupInlineRowEditing(options) {
     // Let `wireLabelToInput` handle that.
     if (t.closest && t.closest('.field-pill')) return;
 
+    // Clicking a label-wrapped control (e.g. the Ingredients "opt" toggle) should
+    // behave normally. Preventing default on mousedown here can cancel the label's
+    // default action (toggling the nested checkbox).
+    if (t.closest) {
+      const labelEl = t.closest('label');
+      if (labelEl && labelEl.querySelector && labelEl.querySelector('input')) {
+        return;
+      }
+      if (t.closest('.ingredient-edit-toggle')) return;
+    }
+
     // If the click is already on a focusable control, let it behave normally.
     const tag = (t.tagName || '').toLowerCase();
     const isFocusable =

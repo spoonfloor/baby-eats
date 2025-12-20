@@ -1,6 +1,94 @@
 // bridge.js
 // A single place for translating between the SQL.js database and in-memory objects.
 
+// --- Shared DB helpers ---
+function getTableColumns(activeDb, tableName) {
+  try {
+    const q = activeDb.exec(`PRAGMA table_info(${tableName});`);
+    if (!q.length) return [];
+    // PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+    return q[0].values.map((row) => String(row[1]));
+  } catch (_) {
+    return [];
+  }
+}
+
+function pickIdColumn(cols) {
+  const hit = cols.find((c) => String(c).toLowerCase() === 'id');
+  return hit || 'ID';
+}
+
+function tableExists(activeDb, tableName) {
+  if (!activeDb || !tableName) return false;
+  try {
+    const q = activeDb.exec(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='${String(
+        tableName
+      ).replace(/'/g, "''")}';`
+    );
+    return !!(q && q.length && q[0].values && q[0].values.length);
+  } catch (_) {
+    return false;
+  }
+}
+
+function ensureRecipeIngredientMapSortOrderSchema(activeDb) {
+  if (!activeDb) return false;
+  const cols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+  const hasSortOrder = cols.includes('sort_order');
+  if (!hasSortOrder) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN sort_order INTEGER;'
+      );
+    } catch (_) {
+      // If schema is already upgraded (or ALTER fails), ignore.
+    }
+  }
+
+  // Best-effort index (safe to attempt repeatedly).
+  try {
+    activeDb.run(
+      'CREATE INDEX IF NOT EXISTS idx_rim_recipe_section_sort ON recipe_ingredient_map(recipe_id, section_id, sort_order, ID);'
+    );
+  } catch (_) {}
+
+  return true;
+}
+
+function ensureRecipeIngredientHeadingsSchema(activeDb) {
+  if (!activeDb) return false;
+
+  // Only create if missing; do not mutate schemas on load paths unless called explicitly.
+  const exists = tableExists(activeDb, 'recipe_ingredient_headings');
+  if (!exists) {
+    try {
+      activeDb.run(`
+        CREATE TABLE IF NOT EXISTS recipe_ingredient_headings (
+          ID INTEGER PRIMARY KEY,
+          recipe_id INTEGER NOT NULL,
+          section_id INTEGER,
+          sort_order INTEGER,
+          text TEXT
+        );
+      `);
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  // Best-effort index (safe to attempt repeatedly).
+  try {
+    activeDb.run(
+      'CREATE INDEX IF NOT EXISTS idx_rih_recipe_section_sort ON recipe_ingredient_headings(recipe_id, section_id, sort_order, ID);'
+    );
+  } catch (_) {}
+
+  return true;
+}
+
 // --- StepNode → DB save adapter (Option A: minimal) ---
 function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
   // Remove existing rows for this recipe
@@ -25,6 +113,9 @@ window.bridge = {
   saveRecipeToDB,
   saveRecipeStepsFromStepNodes,
   saveRecipeIngredientsFromModel,
+  ensureRecipeIngredientMapSortOrderSchema,
+  ensureRecipeIngredientHeadingsSchema,
+  writeIngredientSortOrderFromModel,
 };
 
 // Load a recipe and all its pieces from the database into a full JS object.
@@ -56,21 +147,52 @@ function loadRecipeFromDB(db, recipeId) {
       }))
     : [];
 
-  // --- Load ingredients (no more section_id) ---
+  // --- Load ingredients ---
+  const rimCols = getTableColumns(db, 'recipe_ingredient_map');
+  const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
+  const hasSectionId = rimHas('section_id');
+  const hasSortOrder = rimHas('sort_order');
+
+  const selectParts = [
+    'rim.ID',
+    hasSectionId ? 'rim.section_id' : 'NULL AS section_id',
+    hasSortOrder ? 'rim.sort_order' : 'NULL AS sort_order',
+    'rim.quantity',
+    'rim.unit',
+    'i.name',
+    'i.variant',
+    'i.size',
+    'rim.prep_notes',
+    'rim.is_optional',
+    'i.parenthetical_note',
+    'i.location_at_home',
+  ];
+
+  const orderParts = [];
+  if (hasSectionId) {
+    // Global (no section) first, then by section id.
+    orderParts.push('CASE WHEN rim.section_id IS NULL THEN 0 ELSE 1 END');
+    orderParts.push('rim.section_id');
+  }
+  if (hasSortOrder) {
+    orderParts.push('COALESCE(rim.sort_order, 999999)');
+  }
+  orderParts.push('rim.ID');
+
   const ingredientsQ = db.exec(`
-    SELECT rim.ID, rim.quantity, rim.unit,
-           i.name, i.variant, i.size, rim.prep_notes,
-           rim.is_optional, i.parenthetical_note, i.location_at_home
+    SELECT ${selectParts.join(', ')}
     FROM recipe_ingredient_map rim
     JOIN ingredients i ON rim.ingredient_id = i.ID
     WHERE rim.recipe_id = ${id}
-    ORDER BY rim.ID;
+    ORDER BY ${orderParts.join(', ')};
   `);
 
   const ingredients = ingredientsQ.length
     ? ingredientsQ[0].values.map(
         ([
           rimId,
+          sectionId,
+          sortOrder,
           qty,
           unit,
           name,
@@ -81,7 +203,10 @@ function loadRecipeFromDB(db, recipeId) {
           parentheticalNote,
           locationAtHome,
         ]) => ({
+          rowType: 'ingredient',
           rimId,
+          sectionId: sectionId == null ? null : Number(sectionId),
+          sortOrder: sortOrder == null ? null : Number(sortOrder),
           quantity: isNaN(parseFloat(qty)) ? qty : parseFloat(qty),
           unit: unit || '',
           name,
@@ -95,8 +220,92 @@ function loadRecipeFromDB(db, recipeId) {
       )
     : [];
 
+  // --- Load ingredient subsection headings (optional table) ---
+  const headings = [];
+  try {
+    if (tableExists(db, 'recipe_ingredient_headings')) {
+      const rihCols = getTableColumns(db, 'recipe_ingredient_headings');
+      const rihHas = (col) =>
+        rihCols.map((c) => String(c).toLowerCase()).includes(col);
+      const hasRihSection = rihHas('section_id');
+
+      const select = [
+        'ID',
+        'recipe_id',
+        hasRihSection ? 'section_id' : 'NULL AS section_id',
+        'sort_order',
+        'text',
+      ];
+      const order = [];
+      if (hasRihSection) {
+        order.push('CASE WHEN section_id IS NULL THEN 0 ELSE 1 END');
+        order.push('section_id');
+      }
+      order.push('COALESCE(sort_order, 999999)');
+      order.push('ID');
+
+      const q = db.exec(`
+        SELECT ${select.join(', ')}
+        FROM recipe_ingredient_headings
+        WHERE recipe_id = ${id}
+        ORDER BY ${order.join(', ')};
+      `);
+
+      if (q.length) {
+        q[0].values.forEach(([ID, _rid, section_id, sort_order, text]) => {
+          const hid = ID == null ? null : Number(ID);
+          const sid = section_id == null ? null : Number(section_id);
+          const so = sort_order == null ? null : Number(sort_order);
+          const t = text == null ? '' : String(text);
+          headings.push({
+            rowType: 'heading',
+            headingId: Number.isFinite(hid) ? hid : null,
+            headingClientId: Number.isFinite(hid) ? `h-${hid}` : null,
+            sectionId: Number.isFinite(sid) ? sid : null,
+            sortOrder: Number.isFinite(so) ? so : null,
+            text: t,
+          });
+        });
+      }
+    }
+  } catch (_) {}
+
+  // --- Interleave headings + ingredients by shared sort_order namespace (best-effort) ---
+  let ingredientRows = ingredients;
+  if (headings.length > 0) {
+    const typeRank = (row) => {
+      if (!row) return 9;
+      if (row.rowType === 'heading') return 0;
+      if (row.rowType === 'ingredient') return 1;
+      return 5;
+    };
+    const sortKey = (row) =>
+      row && Number.isFinite(row.sortOrder) ? row.sortOrder : 999999;
+    ingredientRows = [...ingredients, ...headings].sort((a, b) => {
+      const sa = sortKey(a);
+      const sb = sortKey(b);
+      if (sa !== sb) return sa - sb;
+      const ta = typeRank(a);
+      const tb = typeRank(b);
+      if (ta !== tb) return ta - tb;
+      const ida =
+        a.rowType === 'heading'
+          ? a.headingId ?? 0
+          : a.rowType === 'ingredient'
+          ? a.rimId ?? 0
+          : 0;
+      const idb =
+        b.rowType === 'heading'
+          ? b.headingId ?? 0
+          : b.rowType === 'ingredient'
+          ? b.rimId ?? 0
+          : 0;
+      return Number(ida) - Number(idb);
+    });
+  }
+
   // --- Synthetic single section to keep renderRecipe happy ---
-  const hasContent = steps.length || ingredients.length;
+  const hasContent = steps.length || ingredientRows.length;
 
   const sections = hasContent
     ? [
@@ -104,7 +313,7 @@ function loadRecipeFromDB(db, recipeId) {
           ID: null,
           name: '(unnamed)',
           steps,
-          ingredients,
+          ingredients: ingredientRows,
         },
       ]
     : [];
@@ -207,28 +416,17 @@ function saveRecipeToDB(db, recipe) {
   }
 }
 
-function getTableColumns(activeDb, tableName) {
-  try {
-    const q = activeDb.exec(`PRAGMA table_info(${tableName});`);
-    if (!q.length) return [];
-    // PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
-    return q[0].values.map((row) => String(row[1]));
-  } catch (_) {
-    return [];
-  }
-}
-
-function pickIdColumn(cols) {
-  const hit = cols.find((c) => String(c).toLowerCase() === 'id');
-  return hit || 'ID';
-}
-
 function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   if (!activeDb) throw new Error('saveRecipeIngredientsFromModel: missing db');
   const rid = Number(recipeId || recipe?.id);
   if (!Number.isFinite(rid)) {
     throw new Error('saveRecipeIngredientsFromModel: invalid recipe id');
   }
+
+  // Ensure schema supports sort_order so we can persist order safely.
+  ensureRecipeIngredientMapSortOrderSchema(activeDb);
+  // Ensure schema supports ingredient headings.
+  ensureRecipeIngredientHeadingsSchema(activeDb);
 
   const ingredientsCols = getTableColumns(activeDb, 'ingredients');
   const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
@@ -250,14 +448,54 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   }
 
   const sections = Array.isArray(recipe?.sections) ? recipe.sections : [];
-  const all = sections.flatMap((sec) => (sec && sec.ingredients) || []);
 
-  const realIngredients = all.filter(
-    (ing) => ing && !ing.isPlaceholder && (ing.name || '').trim() !== ''
-  );
+  const isHeadingRow = (row) => {
+    if (!row) return false;
+    if (row.rowType === 'heading') return true;
+    if (row.headingId != null) return true;
+    if (row.headingClientId && row.text != null && row.name == null) return true;
+    return false;
+  };
 
-  // Clear existing mappings for this recipe (substitutes cascade off this).
-  activeDb.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [rid]);
+  // Snapshot current heading IDs so we can update/insert/delete safely.
+  const existingHeadingIds = new Set();
+  try {
+    if (tableExists(activeDb, 'recipe_ingredient_headings')) {
+      const sel = activeDb.prepare(
+        'SELECT ID FROM recipe_ingredient_headings WHERE recipe_id = ?;'
+      );
+      try {
+        sel.bind([rid]);
+        while (sel.step()) {
+          const row = sel.getAsObject();
+          if (row && row.ID != null) existingHeadingIds.add(Number(row.ID));
+        }
+      } finally {
+        sel.free();
+      }
+    }
+  } catch (_) {}
+  const keptHeadingIds = new Set();
+
+  // Snapshot current DB mapping IDs so we can update/insert/delete without
+  // nuking substitutes (children are ON DELETE CASCADE from mapping IDs).
+  const existingIds = new Set();
+  try {
+    const sel = activeDb.prepare(
+      'SELECT ID FROM recipe_ingredient_map WHERE recipe_id = ?;'
+    );
+    try {
+      sel.bind([rid]);
+      while (sel.step()) {
+        const row = sel.getAsObject();
+        if (row && row.ID != null) existingIds.add(Number(row.ID));
+      }
+    } finally {
+      sel.free();
+    }
+  } catch (_) {}
+
+  const keptIds = new Set();
 
   const findOrCreateIngredientId = (ing) => {
     const name = (ing.name || '').trim();
@@ -348,44 +586,240 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     );
   };
 
-  // Insert fresh mappings in current model order
+  const rimHasSection = rimHas('section_id');
+  const rimHasSortOrder = rimHas('sort_order');
+
+  const rihCols = getTableColumns(activeDb, 'recipe_ingredient_headings');
+  const rihHas = (col) =>
+    rihCols.map((c) => String(c).toLowerCase()).includes(col);
+  const rihHasSection = rihHas('section_id');
+
+  // Upsert mappings in current model order (per section)
   let inserted = 0;
-  realIngredients.forEach((ing) => {
-    const ingredientId = findOrCreateIngredientId(ing);
+  let updated = 0;
 
-    const cols = ['recipe_id', 'ingredient_id'];
-    const vals = [rid, ingredientId];
+  sections.forEach((sec) => {
+    const sectionId = rimHasSection ? sec?.ID ?? sec?.id ?? null : null;
+    const list = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
 
-    if (rimHas('quantity')) {
-      cols.push('quantity');
-      vals.push(ing.quantity ?? '');
-    }
-    if (rimHas('unit')) {
-      cols.push('unit');
-      vals.push((ing.unit || '').trim());
-    }
-    if (rimHas('prep_notes')) {
-      cols.push('prep_notes');
-      vals.push((ing.prepNotes || '').trim());
-    }
-    if (rimHas('is_optional')) {
-      cols.push('is_optional');
-      vals.push(ing.isOptional ? 1 : 0);
-    }
+    // Only persist "real" rows; placeholders are view-only.
+    // Headings persist when their text is non-empty.
+    const realRows = list.filter((row) => {
+      if (!row || row.isPlaceholder) return false;
+      if (isHeadingRow(row)) {
+        const t = row.text != null ? String(row.text).trim() : '';
+        return t.length > 0;
+      }
+      return (row.name || '').trim() !== '';
+    });
 
-    const placeholders = cols.map(() => '?').join(', ');
-    const mapStmt = activeDb.prepare(
-      `INSERT INTO recipe_ingredient_map (${cols.join(
-        ', '
-      )}) VALUES (${placeholders});`
-    );
-    try {
-      mapStmt.run(vals);
-    } finally {
-      mapStmt.free();
-    }
-    inserted += 1;
+    let sortN = 1;
+    realRows.forEach((row) => {
+      // Shared ordering namespace across headings + ingredients.
+      const assignedSort = sortN;
+      sortN += 1;
+
+      if (isHeadingRow(row)) {
+        const text = (row.text != null ? String(row.text) : '').trim();
+        const headingId =
+          row.headingId != null ? Number(row.headingId) : null;
+
+        try {
+          if (headingId != null && existingHeadingIds.has(headingId)) {
+            if (rihHasSection) {
+              activeDb.run(
+                'UPDATE recipe_ingredient_headings SET section_id = ?, sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
+                [sectionId ?? null, assignedSort, text, rid, headingId]
+              );
+            } else {
+              activeDb.run(
+                'UPDATE recipe_ingredient_headings SET sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
+                [assignedSort, text, rid, headingId]
+              );
+            }
+            keptHeadingIds.add(headingId);
+          } else {
+            if (rihHasSection) {
+              activeDb.run(
+                'INSERT INTO recipe_ingredient_headings (recipe_id, section_id, sort_order, text) VALUES (?, ?, ?, ?);',
+                [rid, sectionId ?? null, assignedSort, text]
+              );
+            } else {
+              activeDb.run(
+                'INSERT INTO recipe_ingredient_headings (recipe_id, sort_order, text) VALUES (?, ?, ?);',
+                [rid, assignedSort, text]
+              );
+            }
+            const idQ = activeDb.exec('SELECT last_insert_rowid();');
+            const newId =
+              idQ.length && idQ[0].values.length
+                ? Number(idQ[0].values[0][0])
+                : null;
+            if (Number.isFinite(newId)) {
+              row.headingId = newId;
+              row.headingClientId = `h-${newId}`;
+              keptHeadingIds.add(newId);
+            }
+          }
+        } catch (_) {}
+
+        row.sortOrder = assignedSort;
+        return;
+      }
+
+      const ing = row;
+      const ingredientId = findOrCreateIngredientId(ing);
+      const rimId = ing.rimId != null ? Number(ing.rimId) : null;
+      ing.sortOrder = assignedSort;
+
+      // Build common column sets
+      const cols = ['recipe_id', 'ingredient_id'];
+      const vals = [rid, ingredientId];
+
+      if (rimHasSection) {
+        cols.push('section_id');
+        vals.push(sectionId ?? null);
+      }
+      if (rimHas('quantity')) {
+        cols.push('quantity');
+        vals.push(ing.quantity ?? '');
+      }
+      if (rimHas('unit')) {
+        cols.push('unit');
+        vals.push((ing.unit || '').trim());
+      }
+      if (rimHas('prep_notes')) {
+        cols.push('prep_notes');
+        vals.push((ing.prepNotes || '').trim());
+      }
+      if (rimHas('is_optional')) {
+        cols.push('is_optional');
+        vals.push(ing.isOptional ? 1 : 0);
+      }
+      if (rimHasSortOrder) {
+        cols.push('sort_order');
+        vals.push(assignedSort);
+      }
+
+      // Update existing row if we have a valid rimId still present in DB.
+      if (rimId != null && existingIds.has(rimId)) {
+        // Convert insert-shape into update-shape (skip recipe_id)
+        const setCols = cols
+          .filter((c) => c !== 'recipe_id')
+          .map((c) => `${c} = ?`);
+        const setVals = vals.slice(1); // drop recipe_id
+
+        const sql = `UPDATE recipe_ingredient_map SET ${setCols.join(
+          ', '
+        )} WHERE ID = ? AND recipe_id = ?;`;
+
+        const stmt = activeDb.prepare(sql);
+        try {
+          stmt.run([...setVals, rimId, rid]);
+        } finally {
+          stmt.free();
+        }
+        keptIds.add(rimId);
+        updated += 1;
+      } else {
+        // Insert new mapping row (keeps children safe because none exist yet)
+        const placeholders = cols.map(() => '?').join(', ');
+        const mapStmt = activeDb.prepare(
+          `INSERT INTO recipe_ingredient_map (${cols.join(
+            ', '
+          )}) VALUES (${placeholders});`
+        );
+        try {
+          mapStmt.run(vals);
+        } finally {
+          mapStmt.free();
+        }
+        const idQ = activeDb.exec('SELECT last_insert_rowid();');
+        const newId =
+          idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
+        if (Number.isFinite(newId)) {
+          ing.rimId = newId;
+          keptIds.add(newId);
+        }
+        inserted += 1;
+      }
+
+    });
   });
 
-  console.info(`💾 saveRecipeIngredientsFromModel: wrote ${inserted} rows`);
+  // Delete removed mapping rows (and their substitutes).
+  existingIds.forEach((id) => {
+    if (!keptIds.has(id)) {
+      try {
+        activeDb.run(
+          'DELETE FROM recipe_ingredient_map WHERE recipe_id = ? AND ID = ?;',
+          [rid, id]
+        );
+      } catch (_) {}
+    }
+  });
+
+  // Delete removed headings.
+  existingHeadingIds.forEach((id) => {
+    if (!keptHeadingIds.has(id)) {
+      try {
+        activeDb.run(
+          'DELETE FROM recipe_ingredient_headings WHERE recipe_id = ? AND ID = ?;',
+          [rid, id]
+        );
+      } catch (_) {}
+    }
+  });
+
+  console.info(
+    `💾 saveRecipeIngredientsFromModel: updated ${updated}, inserted ${inserted}, deleted ${
+      existingIds.size - keptIds.size
+    }`
+  );
+}
+
+// Persist sort_order only (in place, does NOT delete rows).
+function writeIngredientSortOrderFromModel(activeDb, recipeId, recipe) {
+  if (!activeDb) return false;
+  const rid = Number(recipeId || recipe?.id);
+  if (!Number.isFinite(rid)) return false;
+
+  ensureRecipeIngredientMapSortOrderSchema(activeDb);
+  const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
+  const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
+  if (!rimHas('sort_order')) return false;
+
+  const rimHasSection = rimHas('section_id');
+
+  const sections = Array.isArray(recipe?.sections) ? recipe.sections : [];
+  sections.forEach((sec) => {
+    const sid = rimHasSection ? sec?.ID ?? sec?.id ?? null : null;
+    const list = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+    const real = list.filter(
+      (ing) => ing && !ing.isPlaceholder && ing.rimId != null
+    );
+
+    let n = 1;
+    real.forEach((ing) => {
+      const rimId = Number(ing.rimId);
+      if (!Number.isFinite(rimId)) return;
+      try {
+        if (rimHasSection) {
+          activeDb.run(
+            'UPDATE recipe_ingredient_map SET sort_order = ? WHERE recipe_id = ? AND section_id IS ? AND ID = ?;',
+            [n++, rid, sid ?? null, rimId]
+          );
+        } else {
+          activeDb.run(
+            'UPDATE recipe_ingredient_map SET sort_order = ? WHERE recipe_id = ? AND ID = ?;',
+            [n++, rid, rimId]
+          );
+        }
+      } catch (_) {
+        // ignore
+      }
+    });
+  });
+
+  return true;
 }

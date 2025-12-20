@@ -22,10 +22,59 @@ function formatRecipe(db, recipeId) {
   const sectionRows = sectionsQuery.length ? sectionsQuery[0].values : [];
 
   // Helpers
+  const tableExists = (name) => {
+    try {
+      const q = db.exec(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='${String(
+          name
+        ).replace(/'/g, "''")}';`
+      );
+      return !!(q && q.length && q[0].values && q[0].values.length);
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const rimCols = (() => {
+    try {
+      const info = db.exec('PRAGMA table_info(recipe_ingredient_map);');
+      const rows = info.length ? info[0].values : [];
+      return rows.map((r) => String(r[1] || '').toLowerCase());
+    } catch (_) {
+      return [];
+    }
+  })();
+  const rimHasSortOrder = rimCols.includes('sort_order');
+  const rimHasSectionId = rimCols.includes('section_id');
+
+  function loadHeadings(whereClause) {
+    if (!tableExists('recipe_ingredient_headings')) return [];
+    try {
+      const q = db.exec(
+        `
+        SELECT ID, sort_order, text
+        FROM recipe_ingredient_headings
+        WHERE recipe_id=${recipeId} AND ${whereClause}
+        ORDER BY COALESCE(sort_order, 999999), ID;
+        `
+      );
+      if (!q.length) return [];
+      return q[0].values.map(([id, sortOrder, text]) => ({
+        rowType: 'heading',
+        headingId: id,
+        sortOrder: sortOrder == null ? null : Number(sortOrder),
+        text: text == null ? '' : String(text),
+      }));
+    } catch (_) {
+      return [];
+    }
+  }
+
   function loadIngredients(whereClause) {
     const q = db.exec(
       `
       SELECT rim.ID,
+             ${rimHasSortOrder ? 'rim.sort_order,' : 'NULL AS sort_order,'}
              rim.quantity,
              rim.unit,
              i.name,
@@ -38,7 +87,9 @@ function formatRecipe(db, recipeId) {
       FROM recipe_ingredient_map rim
       JOIN ingredients i ON rim.ingredient_id = i.ID
       WHERE rim.recipe_id=${recipeId} AND ${whereClause}
-      ORDER BY rim.ID;
+      ORDER BY ${
+        rimHasSortOrder ? 'COALESCE(rim.sort_order, 999999), rim.ID' : 'rim.ID'
+      };
       `
     );
 
@@ -47,6 +98,7 @@ function formatRecipe(db, recipeId) {
     return q[0].values.map(
       ([
         rimId,
+        sortOrder,
         qty,
         unit,
         name,
@@ -89,6 +141,7 @@ function formatRecipe(db, recipeId) {
           : null;
 
         return {
+          rowType: 'ingredient',
           quantity: isNaN(parseFloat(qty)) ? qty : parseFloat(qty),
 
           unit: unit || '',
@@ -101,6 +154,8 @@ function formatRecipe(db, recipeId) {
           substitutes,
           locationAtHome: locationAtHome ? locationAtHome.toLowerCase() : '',
           subRecipeId, // add the field (can be null)
+          rimId,
+          sortOrder: sortOrder == null ? null : Number(sortOrder),
         };
       }
     );
@@ -122,12 +177,39 @@ function formatRecipe(db, recipeId) {
   let sections = sectionRows.map(([id, name]) => ({
     name,
     contexts: [],
-    ingredients: loadIngredients(`rim.section_id=${id}`),
+    ingredients: (() => {
+      const ing = loadIngredients(`rim.section_id=${id}`);
+      const heads = loadHeadings(`section_id=${id}`);
+      const combined = [...heads, ...ing].sort((a, b) => {
+        const sa = a && a.sortOrder != null ? Number(a.sortOrder) : 999999;
+        const sb = b && b.sortOrder != null ? Number(b.sortOrder) : 999999;
+        if (sa !== sb) return sa - sb;
+        const ta = a && a.rowType === 'heading' ? 0 : 1;
+        const tb = b && b.rowType === 'heading' ? 0 : 1;
+        if (ta !== tb) return ta - tb;
+        return 0;
+      });
+      return combined;
+    })(),
     steps: loadSteps(`section_id=${id}`),
   }));
 
   // Fallback for global (no-section) items
-  const globalIngredients = loadIngredients(`rim.section_id IS NULL`);
+  const globalIngredients = (() => {
+    const where = rimHasSectionId ? `rim.section_id IS NULL` : `1=1`;
+    const ing = loadIngredients(where);
+    const heads = loadHeadings(`section_id IS NULL`);
+    const combined = [...heads, ...ing].sort((a, b) => {
+      const sa = a && a.sortOrder != null ? Number(a.sortOrder) : 999999;
+      const sb = b && b.sortOrder != null ? Number(b.sortOrder) : 999999;
+      if (sa !== sb) return sa - sb;
+      const ta = a && a.rowType === 'heading' ? 0 : 1;
+      const tb = b && b.rowType === 'heading' ? 0 : 1;
+      if (ta !== tb) return ta - tb;
+      return 0;
+    });
+    return combined;
+  })();
   const globalSteps = loadSteps(`section_id IS NULL`);
   if (globalIngredients.length || globalSteps.length) {
     sections = [

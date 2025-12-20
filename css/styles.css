@@ -526,6 +526,70 @@ body.shopping-editor-page .shopping-item-help {
   flex-wrap: wrap;
   align-items: baseline;
   margin-bottom: 0.25rem;
+  line-height: var(--step-line-height);
+  cursor: pointer;
+}
+
+.ingredient-subsection-heading-line {
+  display: flex;
+  align-items: baseline;
+  /* Match the visual hierarchy of instruction subheads */
+  margin-top: 20px;
+  margin-bottom: 12px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ingredient-subsection-heading-text {
+  flex: 1;
+  line-height: var(--step-line-height);
+  color: var(--theme-primary);
+}
+
+.ingredient-subsection-heading-text[contenteditable='true'] {
+  outline: none;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
+.ingredient-subsection-heading-text.placeholder-prompt::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder-muted);
+  pointer-events: none;
+}
+
+/* Hover insertion caret between ingredient rows (for subsection heading insertion) */
+.ingredient-insert-zone {
+  position: relative;
+  /* Keep a generous hit target without introducing vertical whitespace. */
+  height: 0;
+  padding: 8px 0;
+  margin: -8px 0;
+  cursor: pointer;
+}
+
+.ingredient-insert-zone::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.ingredient-insert-zone:hover::before {
+  background: #dae8ff;
+}
+
+.ingredient-insert-zone--disabled {
+  cursor: default;
+}
+
+.ingredient-insert-zone--disabled:hover::before {
+  background: transparent;
 }
 
 /* --- Recipe list item hover --- */
@@ -991,20 +1055,34 @@ h1.nav-text {
   vertical-align: middle;
 }
 
-/* Checkbox focus: match field focus styling, but don't override checked fill */
+/* Checkbox focus: show the blue "focused field" styling only for keyboard focus.
+   Mouse-clicking the checkbox should not look like a text-field focus. */
 .ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus {
   outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
+  /* Override the global `.ingredient-edit-input:focus { border-color: transparent; }` */
+  background-color: hsl(0, 0%, 98%);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
+/* If the checkbox is checked, never visually “lose” the checked state just because it has focus. */
 .ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:checked:focus {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
 }
 
-/* Edit mode input styling: blue only for the focused field */
-.ingredient-edit-row.editing .ingredient-edit-input:focus {
+.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus-visible {
+  background-color: #e5eefa;
+  border-color: #b5ceff;
+}
+
+.ingredient-edit-row.editing
+  .ingredient-edit-input[type='checkbox']:checked:focus-visible {
+  background-color: var(--theme-primary);
+  border-color: var(--theme-primary);
+}
+
+/* Edit mode input styling: blue only for the focused text-like field (not the opt checkbox) */
+.ingredient-edit-row.editing .ingredient-edit-input:not([type='checkbox']):focus {
   background-color: #e5eefa;
   border-color: #b5ceff;
 }
@@ -1020,7 +1098,7 @@ h1.nav-text {
   text-overflow: ellipsis;
 }
 
-.ingredient-edit-input:focus {
+.ingredient-edit-input:not([type='checkbox']):focus {
   outline: none;
   border-color: transparent;
   color: var(--edit-mode-color);

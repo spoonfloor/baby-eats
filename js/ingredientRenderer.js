@@ -111,11 +111,190 @@ if (typeof window !== 'undefined' && !window.getUnitDisplay) {
   window.getUnitDisplay = getUnitDisplay;
 }
 
+function normalizeIngredientHeadingText(raw) {
+  if (raw == null) return '';
+  const t = String(raw).replace(/\s+/g, ' ').trim();
+  return t;
+}
+
+function findIngredientSectionForHeadingClientId(clientId) {
+  const model = window.recipeData;
+  const secs = Array.isArray(model?.sections) ? model.sections : [];
+  for (const sec of secs) {
+    const arr = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+    const idx = arr.findIndex(
+      (r) => r && r.rowType === 'heading' && r.headingClientId === clientId
+    );
+    if (idx !== -1) return { sec, idx };
+  }
+  return null;
+}
+
+function renderIngredientHeading(row) {
+  const div = document.createElement('div');
+  div.className = 'ingredient-subsection-heading-line';
+  if (row && row.headingClientId) {
+    div.dataset.headingClientId = String(row.headingClientId);
+  }
+
+  const text = document.createElement('span');
+  text.className = 'ingredient-subsection-heading-text';
+  if (row && row.headingClientId) {
+    text.dataset.headingClientId = String(row.headingClientId);
+  }
+
+  const originalText = row && row.text != null ? String(row.text) : '';
+  const normalized = normalizeIngredientHeadingText(originalText);
+  text.textContent = normalized;
+
+  if (!normalized) {
+    text.classList.add('placeholder-prompt');
+    text.dataset.placeholder = 'Subsection';
+  }
+
+  div.appendChild(text);
+
+  div.addEventListener('click', () => {
+    // If already editing, do not re-enter edit mode; this breaks native
+    // double-click/triple-click selection and click-drag selection.
+    if (text.isContentEditable || div.classList.contains('editing')) return;
+
+    const clientId = row && row.headingClientId ? String(row.headingClientId) : '';
+    if (!clientId) return;
+
+    // Only one heading editor at a time.
+    if (
+      window._editingIngredientHeadingClientId &&
+      window._editingIngredientHeadingClientId !== clientId
+    ) {
+      return;
+    }
+
+    const wasDirty = typeof isDirty !== 'undefined' && isDirty === true;
+    const startValue = normalizeIngredientHeadingText(row.text || '');
+
+    window._editingIngredientHeadingClientId = clientId;
+    div.classList.add('editing');
+
+    // Enter edit mode.
+    text.classList.remove('placeholder-prompt');
+    text.contentEditable = 'true';
+    text.textContent = startValue;
+    try {
+      text.focus();
+      // Place caret at end.
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {}
+
+    let hasPendingEdit = false;
+    let suppressCommitOnce = false;
+
+    const cleanup = () => {
+      text.contentEditable = 'false';
+      div.classList.remove('editing');
+      window._editingIngredientHeadingClientId = null;
+      text.removeEventListener('keydown', onKeyDown);
+      text.removeEventListener('blur', onBlur);
+      text.removeEventListener('input', onInput);
+    };
+
+    const cancel = () => {
+      suppressCommitOnce = true;
+
+      // If this was a newly inserted empty heading, cancel should remove it.
+      const isNewEmpty =
+        (!row.headingId || row.headingId == null) && startValue === '';
+
+      if (isNewEmpty) {
+        const found = findIngredientSectionForHeadingClientId(clientId);
+        if (found && found.sec && Array.isArray(found.sec.ingredients)) {
+          found.sec.ingredients.splice(found.idx, 1);
+        }
+      } else {
+        row.text = startValue;
+      }
+
+      cleanup();
+
+      // If we dirtied only via this edit, revert dirty flag by reverting changes.
+      if (!wasDirty && typeof revertChanges === 'function') {
+        revertChanges();
+      }
+
+      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+        window.recipeEditorRerenderIngredientsFromModel();
+      }
+    };
+
+    const commit = () => {
+      if (suppressCommitOnce) return;
+
+      const next = normalizeIngredientHeadingText(text.textContent || '');
+      if (!next) {
+        const found = findIngredientSectionForHeadingClientId(clientId);
+        if (found && found.sec && Array.isArray(found.sec.ingredients)) {
+          found.sec.ingredients.splice(found.idx, 1);
+        }
+      } else {
+        row.text = next;
+      }
+
+      cleanup();
+
+      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+        window.recipeEditorRerenderIngredientsFromModel();
+      }
+    };
+
+    const onInput = (e) => {
+      if (e && e.isTrusted === false) return;
+      if (hasPendingEdit) return;
+      hasPendingEdit = true;
+      if (typeof markDirty === 'function') {
+        markDirty();
+      }
+    };
+
+    const onBlur = () => commit();
+
+    const onKeyDown = (e) => {
+      if (!e) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        text.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel();
+      }
+    };
+
+    text.addEventListener('input', onInput);
+    text.addEventListener('blur', onBlur);
+    text.addEventListener('keydown', onKeyDown);
+  });
+
+  return div;
+}
+
+if (typeof window !== 'undefined' && !window.renderIngredientHeading) {
+  window.renderIngredientHeading = renderIngredientHeading;
+}
+
 function renderIngredient(line) {
   // NOTE: edit-row scaffold added further down
 
   const div = document.createElement('div');
   div.className = 'ingredient-line';
+  if (line && line.rimId != null) {
+    div.dataset.rimId = String(line.rimId);
+  }
+  div.dataset.isOptional = line && line.isOptional ? '1' : '0';
+  div.dataset.isPlaceholder = line && line.isPlaceholder ? '1' : '0';
   div.dataset.quantity = line.quantity;
   div.dataset.unit = line.unit;
   div.dataset.name = line.name;
@@ -317,6 +496,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
   // When editing an existing ingredient, make sure we update the real in-memory model
   // (`window.recipeData`) that Save reads from. The rendered `seedLine` might be a copy.
   let modelRef = seedLine || null;
+  let sectionRef = null;
   if (!isInsert && seedLine && seedLine.rimId != null) {
     const rid = String(seedLine.rimId);
     const model = window.recipeData;
@@ -326,6 +506,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       const hit = arr.find((ing) => ing && String(ing.rimId) === rid);
       if (hit) {
         modelRef = hit;
+        sectionRef = sec;
         break;
       }
     }
@@ -388,6 +569,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
   // Any keystroke in any ingredient field should immediately enable Cancel/Save.
   row.addEventListener('input', (e) => {
     // Ignore synthetic/programmatic input events (e.g. our own prefill/autosize nudges).
+    if (e && e.isTrusted === false) return;
+    const t = e && e.target;
+    if (t && t.classList && t.classList.contains('ingredient-edit-input')) {
+      markDirtyOnce();
+    }
+  });
+
+  // Checkbox toggles (opt) often fire `change` (not consistently `input`), but they
+  // should still enable Cancel/Save immediately.
+  row.addEventListener('change', (e) => {
     if (e && e.isTrusted === false) return;
     const t = e && e.target;
     if (t && t.classList && t.classList.contains('ingredient-edit-input')) {
@@ -526,6 +717,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       const model = window.recipeData;
       if (model && Array.isArray(model.sections) && model.sections[0]) {
         const section = model.sections[0];
+        sectionRef = section;
         if (!Array.isArray(section.ingredients)) section.ingredients = [];
 
         let placeholderIdx = section.ingredients.findIndex(
@@ -590,6 +782,14 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       const readOnlyLine = renderIngredient(modelRef);
       if (readOnlyLine) finalizeSwap(readOnlyLine);
     }
+
+    // After a successful commit, apply the "optional goes to bottom of section"
+    // rule without being disruptive during active edit flows.
+    try {
+      if (sectionRef && typeof window.recipeEditorAfterIngredientEditCommit === 'function') {
+        window.recipeEditorAfterIngredientEditCommit(sectionRef);
+      }
+    } catch (_) {}
 
     // Do NOT mark dirty on commit; dirty should flip on the first keystroke only.
   };

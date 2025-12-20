@@ -36,10 +36,6 @@ function setActiveStep(lineEl) {
 
   // Logical selection only (no visual highlight here)
   window.activeStep = lineEl;
-
-  if (typeof stepReorderCtx !== 'undefined' && stepReorderCtx) {
-    stepReorderCtx.activeStep = lineEl;
-  }
 }
 
 // --- Cancel / Dirty state tracking ---

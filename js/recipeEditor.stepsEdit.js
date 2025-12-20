@@ -1,193 +1,27 @@
-// --- Keyboard Step Reordering System (single global key handler) ---
+// --- Step numbering helpers ---
+function renumberSteps(containerEl) {
+  const container = containerEl || document.getElementById('stepsSection');
+  if (!container) return;
 
-const stepReorderCtx = {
-  container: null,
-  activeStep: null,
-  recipeId: null,
-  renumber: null,
-  handlerInstalled: false,
-};
+  const all = container.querySelectorAll('.instruction-line.numbered') || [];
+  let displayIndex = 0;
 
-function setupStepReordering(container, recipeId) {
-  // keep latest refs
-  stepReorderCtx.container = container;
-  stepReorderCtx.recipeId =
-    recipeId || window.recipeId || window.recipeData?.id || null;
+  all.forEach((line) => {
+    const num = line.querySelector('.step-num');
+    if (!num) return;
 
-  // click to select
-  container.addEventListener('click', (e) => {
-    const line = e.target.closest('.instruction-line');
-    if (!line || !container.contains(line)) return;
+    const type = line.dataset.stepType || 'step';
 
-    if (typeof setActiveStep === 'function') {
-      setActiveStep(line);
-    } else {
-      stepReorderCtx.activeStep = line;
+    if (type === 'heading') {
+      // Headings: unnumbered and start a new numbering group.
+      num.textContent = '';
+      displayIndex = 0;
+      return;
     }
+
+    displayIndex += 1;
+    num.textContent = `${displayIndex}.`;
   });
-
-  // helper: update visible numbers after reorder
-
-  function renumberSteps() {
-    const all =
-      stepReorderCtx.container?.querySelectorAll(
-        '.instruction-line.numbered'
-      ) || [];
-
-    let displayIndex = 0;
-
-    all.forEach((line) => {
-      const num = line.querySelector('.step-num');
-      if (!num) return;
-
-      const type = line.dataset.stepType || 'step';
-
-      if (type === 'heading') {
-        // Headings: unnumbered and start a new numbering group.
-        num.textContent = '';
-        displayIndex = 0;
-        return;
-      }
-
-      displayIndex += 1;
-      num.textContent = `${displayIndex}.`;
-    });
-  }
-
-  stepReorderCtx.renumber = renumberSteps;
-
-  // single global key handler
-  if (!stepReorderCtx.handlerInstalled) {
-    document.addEventListener('keydown', (e) => {
-      const ctx = stepReorderCtx;
-      const containerRef = ctx.container;
-      if (!containerRef) return;
-
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
-
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-      e.preventDefault();
-
-      const activeStep = ctx.activeStep;
-      if (!activeStep || !containerRef.contains(activeStep)) return;
-
-      // 🎯 If there is an inline editor inside the active step,
-      // capture its selection and prevent blur->commit from closing it.
-      let hadInlineEditor = false;
-      let activeInput = null;
-      let selectionInfo = null;
-      const previousSuppress = !!window._suppressStepCommit;
-
-      if (
-        window._activeStepInput &&
-        activeStep.contains(window._activeStepInput) &&
-        typeof getSelectionOffsetsInStep === 'function'
-      ) {
-        hadInlineEditor = true;
-        activeInput = window._activeStepInput;
-        selectionInfo = getSelectionOffsetsInStep(activeInput) || null;
-        // Prevent onBlur -> commit from tearing down the editor during the move
-        window._suppressStepCommit = true;
-      }
-
-      const moveUp = e.key === 'ArrowUp';
-      const sibling = moveUp
-        ? activeStep.previousElementSibling
-        : activeStep.nextElementSibling;
-
-      if (!sibling || !sibling.classList.contains('instruction-line')) {
-        // Restore flag if we changed it
-        window._suppressStepCommit = previousSuppress;
-        return;
-      }
-
-      // 🔁 Reorder DOM
-      if (moveUp) {
-        containerRef.insertBefore(activeStep, sibling);
-      } else {
-        containerRef.insertBefore(sibling, activeStep);
-      }
-
-      // 🔢 Renumber + sync model order
-      ctx.renumber && ctx.renumber();
-      syncStepOrderFromDOM(containerRef);
-
-      if (typeof markDirty === 'function') {
-        markDirty();
-      }
-
-      // Keep logical active step pointing at the moved node
-      if (typeof setActiveStep === 'function') {
-        setActiveStep(activeStep);
-      } else {
-        ctx.activeStep = activeStep;
-      }
-
-      // ✅ Restore caret & editing state if we had an inline editor
-      if (hadInlineEditor && activeInput && selectionInfo) {
-        setTimeout(() => {
-          try {
-            // If the element disappeared somehow, just bail and restore flag.
-            if (!containerRef.contains(activeInput)) {
-              window._suppressStepCommit = previousSuppress;
-              return;
-            }
-
-            const fullText = activeInput.textContent || '';
-            let targetOffset = selectionInfo.start;
-
-            if (targetOffset < 0) targetOffset = 0;
-            if (targetOffset > fullText.length) {
-              targetOffset = fullText.length;
-            }
-
-            const sel = window.getSelection();
-            if (!sel) {
-              window._suppressStepCommit = previousSuppress;
-              return;
-            }
-
-            const range = document.createRange();
-            const walker = document.createTreeWalker(
-              activeInput,
-              NodeFilter.SHOW_TEXT
-            );
-
-            let remaining = targetOffset;
-            let node = walker.nextNode();
-            while (node) {
-              const len = node.textContent.length;
-              if (remaining <= len) {
-                range.setStart(node, remaining);
-                break;
-              }
-              remaining -= len;
-              node = walker.nextNode();
-            }
-
-            if (!node) {
-              // Fallback: caret at end
-              range.selectNodeContents(activeInput);
-              range.collapse(false);
-            }
-
-            activeInput.focus();
-            sel.removeAllRanges();
-            sel.addRange(range);
-          } finally {
-            // 🧹 Restore previous suppress flag no matter what
-            window._suppressStepCommit = previousSuppress;
-          }
-        }, 0);
-      } else {
-        // No inline editor involved; just restore flag immediately
-        window._suppressStepCommit = previousSuppress;
-      }
-    });
-
-    stepReorderCtx.handlerInstalled = true;
-  }
 }
 
 // --- Step model helpers ---
@@ -355,9 +189,6 @@ function attachStepInlineEditor(textEl) {
 
     if (typeof setActiveStep === 'function') {
       setActiveStep(lineEl);
-    } else if (typeof stepReorderCtx !== 'undefined' && stepReorderCtx) {
-      // Fallback: logical selection only, no visual class
-      stepReorderCtx.activeStep = lineEl;
     }
 
     // Visual editing state
@@ -466,32 +297,7 @@ function attachStepInlineEditor(textEl) {
           }
         }
 
-        if (
-          typeof stepReorderCtx !== 'undefined' &&
-          stepReorderCtx &&
-          typeof stepReorderCtx.renumber === 'function'
-        ) {
-          stepReorderCtx.renumber();
-        } else {
-          const stepsContainer = document.getElementById('stepsSection');
-          if (stepsContainer) {
-            const allLines =
-              stepsContainer.querySelectorAll('.instruction-line.numbered') ||
-              [];
-            let counter = 0;
-            allLines.forEach((line) => {
-              const numEl = line.querySelector('.step-num');
-              if (!numEl) return;
-              // Headings are unnumbered and do not consume a counter slot.
-              if ((line.dataset.stepType || 'step') === 'heading') {
-                numEl.textContent = '';
-                return;
-              }
-              counter += 1;
-              numEl.textContent = `${counter}.`;
-            });
-          }
-        }
+        renumberSteps(document.getElementById('stepsSection'));
       } else {
         textEl.textContent = normalizedVal;
 
@@ -694,28 +500,9 @@ function attachStepInlineEditor(textEl) {
       }
 
       // 4) Renumber + sync order in the model
-      const stepsContainer =
-        (typeof stepReorderCtx !== 'undefined' && stepReorderCtx.container) ||
-        document.getElementById('stepsSection');
-
-      if (
-        typeof stepReorderCtx !== 'undefined' &&
-        stepReorderCtx &&
-        typeof stepReorderCtx.renumber === 'function'
-      ) {
-        stepReorderCtx.renumber();
-      } else if (stepsContainer) {
-        const allLines = stepsContainer.querySelectorAll(
-          '.instruction-line.numbered .step-num'
-        );
-        allLines.forEach((numEl, idx2) => {
-          numEl.textContent = `${idx2 + 1}.`;
-        });
-      }
-
-      if (stepsContainer) {
-        syncStepOrderFromDOM(stepsContainer);
-      }
+      const stepsContainer = document.getElementById('stepsSection');
+      renumberSteps(stepsContainer);
+      if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
 
       if (typeof markDirty === 'function') {
         markDirty();
@@ -863,28 +650,9 @@ function attachStepInlineEditor(textEl) {
       textEl.textContent = merged;
 
       // Renumber + sync
-      const stepsContainer =
-        (typeof stepReorderCtx !== 'undefined' && stepReorderCtx.container) ||
-        document.getElementById('stepsSection');
-
-      if (
-        typeof stepReorderCtx !== 'undefined' &&
-        stepReorderCtx &&
-        typeof stepReorderCtx.renumber === 'function'
-      ) {
-        stepReorderCtx.renumber();
-      } else if (stepsContainer) {
-        const allLines = stepsContainer.querySelectorAll(
-          '.instruction-line.numbered .step-num'
-        );
-        allLines.forEach((numEl, idx2) => {
-          numEl.textContent = `${idx2 + 1}.`;
-        });
-      }
-
-      if (stepsContainer) {
-        syncStepOrderFromDOM(stepsContainer);
-      }
+      const stepsContainer = document.getElementById('stepsSection');
+      renumberSteps(stepsContainer);
+      if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
 
       if (typeof markDirty === 'function') {
         markDirty();
@@ -976,9 +744,7 @@ function attachStepInlineEditor(textEl) {
 
         // --- DOM: restore parent text, remove this (child) line ---
 
-        const stepsContainer =
-          (typeof stepReorderCtx !== 'undefined' && stepReorderCtx.container) ||
-          document.getElementById('stepsSection');
+        const stepsContainer = document.getElementById('stepsSection');
 
         if (stepsContainer) {
           const parentTextEl = stepsContainer.querySelector(
@@ -993,21 +759,7 @@ function attachStepInlineEditor(textEl) {
             parent.removeChild(lineEl);
           }
 
-          if (
-            typeof stepReorderCtx !== 'undefined' &&
-            stepReorderCtx &&
-            typeof stepReorderCtx.renumber === 'function'
-          ) {
-            stepReorderCtx.renumber();
-          } else {
-            const allLines = stepsContainer.querySelectorAll(
-              '.instruction-line.numbered .step-num'
-            );
-            allLines.forEach((numEl, idx2) => {
-              numEl.textContent = `${idx2 + 1}.`;
-            });
-          }
-
+          renumberSteps(stepsContainer);
           syncStepOrderFromDOM(stepsContainer);
         }
 
@@ -1055,7 +807,7 @@ function attachStepInlineEditor(textEl) {
         }
 
         // Renumber if needed
-        if (stepReorderCtx?.renumber) stepReorderCtx.renumber();
+        renumberSteps(document.getElementById('stepsSection'));
 
         window.editingStepId = null;
         window._activeStepInput = null;
@@ -1280,37 +1032,7 @@ function attachStepInlineEditor(textEl) {
         }
 
         // Re-number all lines, skipping headings.
-        if (
-          typeof stepReorderCtx !== 'undefined' &&
-          stepReorderCtx &&
-          typeof stepReorderCtx.renumber === 'function'
-        ) {
-          stepReorderCtx.renumber();
-        } else {
-          const stepsContainer = document.getElementById('stepsSection');
-          if (stepsContainer) {
-            const allLines =
-              stepsContainer.querySelectorAll('.instruction-line.numbered') ||
-              [];
-
-            let displayIndex = 0;
-
-            allLines.forEach((ln) => {
-              const n = ln.querySelector('.step-num');
-              if (!n) return;
-
-              const type = ln.dataset.stepType || 'step';
-              if (type === 'heading') {
-                // Headings: unnumbered and start a new numbering group.
-                n.textContent = '';
-                displayIndex = 0;
-                return;
-              }
-              displayIndex += 1;
-              n.textContent = `${displayIndex}.`;
-            });
-          }
-        }
+        renumberSteps(document.getElementById('stepsSection'));
 
         // Structural promotion/demotion is a real edit → enable Save/Cancel.
         if (typeof markDirty === 'function') {
@@ -1492,29 +1214,9 @@ function attachStepInlineEditor(textEl) {
             attachStepInlineEditor(textSpan);
 
             // Renumber + sync
-            const stepsContainer =
-              (typeof stepReorderCtx !== 'undefined' &&
-                stepReorderCtx.container) ||
-              document.getElementById('stepsSection');
-
-            if (
-              typeof stepReorderCtx !== 'undefined' &&
-              stepReorderCtx &&
-              typeof stepReorderCtx.renumber === 'function'
-            ) {
-              stepReorderCtx.renumber();
-            } else if (stepsContainer) {
-              const allLines = stepsContainer.querySelectorAll(
-                '.instruction-line.numbered .step-num'
-              );
-              allLines.forEach((numEl, idx2) => {
-                numEl.textContent = `${idx2 + 1}.`;
-              });
-            }
-
-            if (stepsContainer) {
-              syncStepOrderFromDOM(stepsContainer);
-            }
+            const stepsContainer = document.getElementById('stepsSection');
+            renumberSteps(stepsContainer);
+            if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
 
             if (typeof markDirty === 'function') {
               markDirty();

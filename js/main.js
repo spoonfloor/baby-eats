@@ -65,6 +65,34 @@ initSqlJs({
     { capture: true }
   );
 
+  // --- Cmd+↑: go to parent/back page on editor pages ---
+  const CHILD_EDITOR_PAGES = new Set([
+    'recipe-editor',
+    'shopping-editor',
+    'unit-editor',
+    'store-editor',
+  ]);
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.isComposing) return;
+
+      if (e.key !== 'ArrowUp') return;
+      if (!CHILD_EDITOR_PAGES.has(pageId)) return;
+      if (isTypingContext(e.target)) return;
+
+      const backBtn = document.getElementById('appBarBackBtn');
+      if (!backBtn) return;
+
+      e.preventDefault();
+      backBtn.click();
+    },
+    { capture: true }
+  );
+
   const pageLoaders = {
     recipes: loadRecipesPage,
     'recipe-editor': loadRecipeEditorPage,
@@ -2817,6 +2845,16 @@ async function loadRecipeEditorPage() {
         },
       ];
     }
+  }
+
+  // --- On load/return: apply full ingredient sort (per section) for display only ---
+  // We intentionally do NOT persist or migrate the DB just by opening a recipe.
+  try {
+    if (typeof window.recipeEditorSortIngredientsOnLoad === 'function') {
+      window.recipeEditorSortIngredientsOnLoad(recipe);
+    }
+  } catch (err) {
+    console.warn('⚠️ Ingredient sort-on-load failed:', err);
   }
 
   const titleEl = document.getElementById('recipeTitle');
