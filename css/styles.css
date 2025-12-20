@@ -39,6 +39,9 @@
   --step-padding-top: 0px;
   --step-padding-bottom: 12px;
 
+  /* Ingredients section line height (separate control from steps/instructions) */
+  --ingredients-line-height: 2;
+
   /* --- Servings row layout --- */
   --servings-pill-gap: 3px;
   --servings-set-gap: 8px;
@@ -526,24 +529,53 @@ body.shopping-editor-page .shopping-item-help {
   flex-wrap: wrap;
   align-items: baseline;
   margin-bottom: 0.25rem;
-  line-height: var(--step-line-height);
   cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+/* overrides.css sets `line-height` on `*`, so we must set it on the actual text nodes too.
+   Scope to the Ingredients section only (YWN stays on default rhythm). */
+#ingredientsSection .ingredient-line,
+#ingredientsSection .ingredient-line * {
+  line-height: var(--ingredients-line-height);
 }
 
 .ingredient-subsection-heading-line {
   display: flex;
   align-items: baseline;
-  /* Match the visual hierarchy of instruction subheads */
-  margin-top: 20px;
-  margin-bottom: 12px;
-  padding: 0;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
 }
 
 .ingredient-subsection-heading-text {
   flex: 1;
+}
+
+.ingredient-subsection-heading-text,
+.instruction-line[data-step-type='heading'] .step-text {
+  /* Unified subsection heading style (Ingredients + Instructions) */
   line-height: var(--step-line-height);
   color: var(--theme-primary);
+}
+
+/* Ingredient subsection headings track Ingredients line-height (so Ingredients can be tuned independently). */
+#ingredientsSection .ingredient-subsection-heading-text {
+  line-height: var(--ingredients-line-height);
+}
+
+.ingredient-subsection-heading-line,
+.instruction-line[data-step-type='heading'] {
+  /* Unified vertical rhythm */
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+/* Prevent instruction headings from getting double bottom spacing
+   (instruction lines already have padding-bottom by default). */
+.instruction-line[data-step-type='heading'] {
+  padding-bottom: 0;
 }
 
 .ingredient-subsection-heading-text[contenteditable='true'] {
@@ -565,7 +597,50 @@ body.shopping-editor-page .shopping-item-help {
   height: 0;
   padding: 8px 0;
   margin: -8px 0;
+  cursor: default;
+  z-index: 5;
+}
+
+.subhead-insert-mode .ingredient-insert-zone {
   cursor: pointer;
+}
+
+.step-insert-zone {
+  position: relative;
+  /* Same hit target strategy as ingredients: no layout shift */
+  height: 0;
+  padding: 8px 0;
+  margin: -8px 0;
+  cursor: default;
+  z-index: 5;
+}
+
+.subhead-insert-mode .step-insert-zone {
+  cursor: pointer;
+}
+
+.step-insert-zone::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.subhead-insert-mode .step-insert-zone:hover::before {
+  background: #7abdff;
+}
+
+.step-insert-zone--disabled {
+  cursor: default;
+}
+
+.step-insert-zone--disabled:hover::before {
+  background: transparent;
 }
 
 .ingredient-insert-zone::before {
@@ -580,8 +655,8 @@ body.shopping-editor-page .shopping-item-help {
   border-radius: 9999px;
 }
 
-.ingredient-insert-zone:hover::before {
-  background: #dae8ff;
+.subhead-insert-mode .ingredient-insert-zone:hover::before {
+  background: #7abdff;
 }
 
 .ingredient-insert-zone--disabled {
@@ -822,6 +897,17 @@ body.shopping-editor-page .shopping-item-help {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
+}
+
+/* Heading placeholder should look like "edit blue" (semi-transparent), not purple. */
+.step-text.placeholder-prompt--editblue::before {
+  color: rgba(33, 132, 255, 0.55);
+}
+
+/* Also avoid making placeholder heading text purple via the heading rule. */
+.instruction-line[data-step-type='heading']
+  .step-text.placeholder-prompt--editblue {
+  color: transparent;
 }
 
 .instruction-line[data-step-type='heading'] .step-text {
@@ -1065,12 +1151,14 @@ h1.nav-text {
 }
 
 /* If the checkbox is checked, never visually “lose” the checked state just because it has focus. */
-.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:checked:focus {
+.ingredient-edit-row.editing
+  .ingredient-edit-input[type='checkbox']:checked:focus {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
 }
 
-.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus-visible {
+.ingredient-edit-row.editing
+  .ingredient-edit-input[type='checkbox']:focus-visible {
   background-color: #e5eefa;
   border-color: #b5ceff;
 }
@@ -1082,7 +1170,8 @@ h1.nav-text {
 }
 
 /* Edit mode input styling: blue only for the focused text-like field (not the opt checkbox) */
-.ingredient-edit-row.editing .ingredient-edit-input:not([type='checkbox']):focus {
+.ingredient-edit-row.editing
+  .ingredient-edit-input:not([type='checkbox']):focus {
   background-color: #e5eefa;
   border-color: #b5ceff;
 }

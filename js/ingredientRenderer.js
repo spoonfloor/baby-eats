@@ -147,11 +147,6 @@ function renderIngredientHeading(row) {
   const normalized = normalizeIngredientHeadingText(originalText);
   text.textContent = normalized;
 
-  if (!normalized) {
-    text.classList.add('placeholder-prompt');
-    text.dataset.placeholder = 'Subsection';
-  }
-
   div.appendChild(text);
 
   div.addEventListener('click', () => {
@@ -159,7 +154,8 @@ function renderIngredientHeading(row) {
     // double-click/triple-click selection and click-drag selection.
     if (text.isContentEditable || div.classList.contains('editing')) return;
 
-    const clientId = row && row.headingClientId ? String(row.headingClientId) : '';
+    const clientId =
+      row && row.headingClientId ? String(row.headingClientId) : '';
     if (!clientId) return;
 
     // Only one heading editor at a time.
@@ -198,6 +194,12 @@ function renderIngredientHeading(row) {
       text.contentEditable = 'false';
       div.classList.remove('editing');
       window._editingIngredientHeadingClientId = null;
+      if (
+        window._activeIngredientHeadingEditor &&
+        window._activeIngredientHeadingEditor.clientId === clientId
+      ) {
+        window._activeIngredientHeadingEditor = null;
+      }
       text.removeEventListener('keydown', onKeyDown);
       text.removeEventListener('blur', onBlur);
       text.removeEventListener('input', onInput);
@@ -226,7 +228,9 @@ function renderIngredientHeading(row) {
         revertChanges();
       }
 
-      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+      if (
+        typeof window.recipeEditorRerenderIngredientsFromModel === 'function'
+      ) {
         window.recipeEditorRerenderIngredientsFromModel();
       }
     };
@@ -246,9 +250,19 @@ function renderIngredientHeading(row) {
 
       cleanup();
 
-      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+      if (
+        typeof window.recipeEditorRerenderIngredientsFromModel === 'function'
+      ) {
         window.recipeEditorRerenderIngredientsFromModel();
       }
+    };
+
+    // Expose this editor so other actions (like ctrl-click inserting another heading)
+    // can commit/delete the active heading before forcing a rerender.
+    window._activeIngredientHeadingEditor = {
+      clientId,
+      commit,
+      cancel,
     };
 
     const onInput = (e) => {
@@ -786,7 +800,10 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     // After a successful commit, apply the "optional goes to bottom of section"
     // rule without being disruptive during active edit flows.
     try {
-      if (sectionRef && typeof window.recipeEditorAfterIngredientEditCommit === 'function') {
+      if (
+        sectionRef &&
+        typeof window.recipeEditorAfterIngredientEditCommit === 'function'
+      ) {
         window.recipeEditorAfterIngredientEditCommit(sectionRef);
       }
     } catch (_) {}
