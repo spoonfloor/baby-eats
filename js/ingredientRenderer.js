@@ -146,6 +146,15 @@ function renderIngredientHeading(row) {
   const originalText = row && row.text != null ? String(row.text) : '';
   const normalized = normalizeIngredientHeadingText(originalText);
   text.textContent = normalized;
+  text.dataset.placeholder = 'Section title';
+
+  // Show "Section title" hint for empty headings (like instructions).
+  if (!normalized) {
+    text.textContent = '';
+    text.classList.add('placeholder-prompt', 'placeholder-prompt--editblue');
+  } else {
+    text.classList.remove('placeholder-prompt', 'placeholder-prompt--editblue');
+  }
 
   div.appendChild(text);
 
@@ -172,8 +181,7 @@ function renderIngredientHeading(row) {
     window._editingIngredientHeadingClientId = clientId;
     div.classList.add('editing');
 
-    // Enter edit mode.
-    text.classList.remove('placeholder-prompt');
+    // Enter edit mode. Keep placeholder class until the user types.
     text.contentEditable = 'true';
     text.textContent = startValue;
     try {
@@ -272,6 +280,18 @@ function renderIngredientHeading(row) {
       if (typeof markDirty === 'function') {
         markDirty();
       }
+
+      // Once the user types something non-empty, hide the placeholder hint.
+      try {
+        const raw = text.textContent || '';
+        const v = normalizeIngredientHeadingText(raw);
+        if (v) {
+          text.classList.remove(
+            'placeholder-prompt',
+            'placeholder-prompt--editblue'
+          );
+        }
+      } catch (_) {}
     };
 
     const onBlur = () => commit();

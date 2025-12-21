@@ -278,6 +278,12 @@ function attachStepInlineEditor(textEl) {
       if (shouldDelete) {
         const parent = lineEl.parentElement;
         if (parent) {
+          // We may have "insert rails" (step-insert-zone) interleaved between lines.
+          // If we delete a line but leave both adjacent rails, they become back-to-back
+          // and create a large vertical gap. Collapse to a single rail.
+          const prevSibling = lineEl.previousSibling;
+          const nextSibling = lineEl.nextSibling;
+
           const allLines =
             parent.querySelectorAll('.instruction-line.numbered') || [];
           const isLastLine = allLines.length === 1;
@@ -294,6 +300,52 @@ function attachStepInlineEditor(textEl) {
             ensureStepTextNotEmpty(textEl);
           } else {
             parent.removeChild(lineEl);
+
+            try {
+              const isZone = (el) =>
+                el &&
+                el.classList &&
+                el.classList.contains('step-insert-zone');
+              if (isZone(prevSibling) && isZone(nextSibling)) {
+                // Remove the "after" zone; keep the "before" zone.
+                parent.removeChild(nextSibling);
+              }
+
+              // If the remaining zone was previously adjacent to a heading, it may still
+              // be flagged disabled. Recompute its enabled/disabled state based on the
+              // new neighbors so ctrl-click works again at the same spot.
+              const keptZone = isZone(prevSibling)
+                ? prevSibling
+                : isZone(nextSibling)
+                ? nextSibling
+                : null;
+              if (keptZone) {
+                const prevLine =
+                  keptZone.previousElementSibling &&
+                  keptZone.previousElementSibling.classList &&
+                  keptZone.previousElementSibling.classList.contains(
+                    'instruction-line'
+                  )
+                    ? keptZone.previousElementSibling
+                    : null;
+                const nextLine =
+                  keptZone.nextElementSibling &&
+                  keptZone.nextElementSibling.classList &&
+                  keptZone.nextElementSibling.classList.contains(
+                    'instruction-line'
+                  )
+                    ? keptZone.nextElementSibling
+                    : null;
+                const prevIsHeading =
+                  !!(prevLine && prevLine.dataset && prevLine.dataset.stepType === 'heading');
+                const nextIsHeading =
+                  !!(nextLine && nextLine.dataset && nextLine.dataset.stepType === 'heading');
+                keptZone.classList.toggle(
+                  'step-insert-zone--disabled',
+                  prevIsHeading || nextIsHeading
+                );
+              }
+            } catch (_) {}
           }
         }
 
@@ -337,8 +389,15 @@ function attachStepInlineEditor(textEl) {
       const effectiveVal =
         startedFromPlaceholder && placeholderActive ? '' : newVal;
 
-      // 🔒 Do NOT auto-delete empty steps on blur/save; blanks are “real” steps.
-      commitWithValue(effectiveVal, { deleteIfEmpty: false });
+      // Steps: blanks are “real” steps (never auto-delete).
+      // Headings: blanks should disappear on blur/Enter so placeholder text never persists.
+      const isHeadingLine =
+        (lineEl && lineEl.dataset && lineEl.dataset.stepType === 'heading') ||
+        (textEl &&
+          textEl.closest &&
+          textEl.closest('.instruction-line')?.dataset?.stepType === 'heading');
+
+      commitWithValue(effectiveVal, { deleteIfEmpty: !!isHeadingLine });
     };
 
     const handleEnterSplit = () => {
