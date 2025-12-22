@@ -58,6 +58,10 @@ function formatRecipe(db, recipeId) {
     }
   })();
   const ingHasParen = ingCols.includes('parenthetical_note');
+  const ingHasLemma = ingCols.includes('lemma');
+  const ingHasPluralByDefault = ingCols.includes('plural_by_default');
+  const ingHasIsMassNoun = ingCols.includes('is_mass_noun');
+  const ingHasPluralOverride = ingCols.includes('plural_override');
 
   function loadHeadings(whereClause) {
     if (!tableExists('recipe_ingredient_headings')) return [];
@@ -92,6 +96,22 @@ function formatRecipe(db, recipeId) {
              i.name,
              i.variant,
              i.size,
+             ${ingHasLemma ? 'i.lemma,' : 'NULL AS lemma,'}
+             ${
+               ingHasPluralByDefault
+                 ? 'COALESCE(i.plural_by_default, 0) AS plural_by_default,'
+                 : '0 AS plural_by_default,'
+             }
+             ${
+               ingHasIsMassNoun
+                 ? 'COALESCE(i.is_mass_noun, 0) AS is_mass_noun,'
+                 : '0 AS is_mass_noun,'
+             }
+             ${
+               ingHasPluralOverride
+                 ? "COALESCE(i.plural_override, '') AS plural_override,"
+                 : "'' AS plural_override,"
+             }
              rim.prep_notes,
              rim.is_optional,
              ${
@@ -122,6 +142,10 @@ function formatRecipe(db, recipeId) {
         name,
         variant,
         size,
+        lemma,
+        pluralByDefault,
+        isMassNoun,
+        pluralOverride,
         prepNotes,
         isOptional,
         parentheticalNote,
@@ -166,6 +190,10 @@ function formatRecipe(db, recipeId) {
           name,
           variant: variant || '',
           size: size || '',
+          lemma: lemma || '',
+          pluralByDefault: !!pluralByDefault,
+          isMassNoun: !!isMassNoun,
+          pluralOverride: pluralOverride || '',
           prepNotes: prepNotes || '',
           parentheticalNote: parentheticalNote || '',
           isOptional: !!isOptional,

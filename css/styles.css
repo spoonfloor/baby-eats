@@ -345,8 +345,33 @@
   border-radius: 8px;
 }
 
-.list-view li:hover {
+.list-view li.is-selected {
   background-color: hsl(270, 0%, 96%);
+}
+
+.list-view li:hover:not(.is-selected) {
+  background-color: hsl(270, 0%, 96%);
+}
+
+.list-view li.list-section-label {
+  cursor: default;
+  user-select: none;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.55);
+  padding-top: 1rem;
+  padding-bottom: 0.25rem;
+}
+
+.list-view li.list-section-label:hover {
+  background-color: transparent;
+}
+
+.list-view.top-level-kbd-nav li:hover:not(.is-selected) {
+  /* For top-level pages, hover moves selection in JS.
+     Don't also paint a separate hover highlight (it fights keyboard selection). */
+  background-color: transparent;
 }
 
 .recipe-title {
@@ -804,8 +829,12 @@ body.shopping-editor-page .shopping-item-help {
   text-overflow: ellipsis;
 }
 
-.list-page li:hover {
+.list-page li:hover:not(.is-selected) {
   background-color: hsl(270, 0%, 96%);
+}
+
+.list-page.top-level-kbd-nav li:hover:not(.is-selected) {
+  background-color: transparent;
 }
 
 /* --- App Bar Wrapper --- */

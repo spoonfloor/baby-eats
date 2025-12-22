@@ -292,6 +292,12 @@
 
     getQuery() {
       const inp = this.anchorInput;
+      // Special-case: allow one-time forced empty query (used for "open on focus"
+      // for units so the user sees the full list immediately).
+      if (inp && inp._typeaheadForceEmptyQueryOnce) {
+        inp._typeaheadForceEmptyQueryOnce = false;
+        return '';
+      }
       return inp ? norm(inp.value) : '';
     }
 
@@ -559,9 +565,35 @@
        WHERE ${where}
        ORDER BY code COLLATE NOCASE;`
     );
-    const out = columnFromExec(q, 0);
-    poolCache.unitAll = out;
-    return out;
+    const official = columnFromExec(q, 0) || [];
+
+    // Soft-add pool: unit_suggestions (if present). Suggestions come first.
+    let suggested = [];
+    try {
+      const qs = safeExec(
+        db,
+        `SELECT code
+         FROM unit_suggestions
+         WHERE code IS NOT NULL
+           AND trim(code) != ''
+           AND COALESCE(is_hidden, 0) = 0
+         ORDER BY COALESCE(last_used_at, 0) DESC,
+                  COALESCE(use_count, 0) DESC,
+                  code COLLATE NOCASE;`
+      );
+      suggested = columnFromExec(qs, 0) || [];
+    } catch (_) {
+      suggested = [];
+    }
+
+    const officialLower = new Set(official.map((v) => lower(v)));
+    const merged = [
+      ...suggested.filter((v) => !officialLower.has(lower(v))),
+      ...official,
+    ];
+
+    poolCache.unitAll = merged;
+    return merged;
   }
 
   async function getVariantPoolForName(nameText) {
@@ -681,7 +713,7 @@
   }
 
   // --- Attachment helpers
-  function attachTypeaheadToInput({ inputEl, getPool, onPick }) {
+  function attachTypeaheadToInput({ inputEl, getPool, onPick, openOnFocus }) {
     if (!inputEl) return;
     const cfg = { getPool, onPick };
 
@@ -689,7 +721,27 @@
     inputEl._typeaheadSuppressNextNormalize = false;
 
     // v2 behavior: dropdown is OFF by default; it opens only on user keystroke
-    // (input events) or explicit ArrowDown, and stays closed on focus.
+    // (input events) or explicit ArrowDown, and stays closed on focus unless
+    // explicitly enabled via openOnFocus.
+
+    // Optional: open on focus (used for ingredient unit field)
+    if (openOnFocus) {
+      inputEl.addEventListener('focus', (e) => {
+        // Avoid programmatic focus (e.g., initial render/tab-order helpers).
+        if (e && e.isTrusted === false) return;
+
+        // Show full pool on focus regardless of current value.
+        inputEl._typeaheadForceEmptyQueryOnce = true;
+
+        if (!dropdown.isOpen || dropdown.anchorInput !== inputEl) {
+          dropdown.open(inputEl, cfg);
+          return;
+        }
+
+        dropdown.highlightIdx = 0;
+        dropdown.update();
+      });
+    }
 
     // Live open/update (trusted user edits only)
     inputEl.addEventListener('input', (e) => {
@@ -853,6 +905,7 @@
       attachTypeaheadToInput({
         inputEl: unitInput,
         getPool: async () => await getUnitPool(),
+        openOnFocus: true,
       });
 
       unitInput.addEventListener('blur', async () => {
@@ -899,5 +952,6 @@
   window.favoriteEatsTypeahead = {
     close: () => dropdown.close(),
     invalidate: invalidatePools,
+    attach: (args) => attachTypeaheadToInput(args || {}),
   };
 })();

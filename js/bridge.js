@@ -139,6 +139,108 @@ function ensureRecipeIngredientMapParentheticalNoteSchema(activeDb) {
   return true;
 }
 
+// --- Unit suggestions (soft-add) ---
+function ensureUnitSuggestionsSchema(activeDb) {
+  if (!activeDb) return false;
+  const exists = tableExists(activeDb, 'unit_suggestions');
+  if (!exists) {
+    try {
+      activeDb.run(`
+        CREATE TABLE IF NOT EXISTS unit_suggestions (
+          code TEXT PRIMARY KEY,
+          use_count INTEGER NOT NULL DEFAULT 0,
+          last_used_at INTEGER,
+          is_hidden INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+    } catch (_) {
+      return false;
+    }
+  }
+  try {
+    activeDb.run(
+      'CREATE INDEX IF NOT EXISTS idx_unit_suggestions_hidden_last ON unit_suggestions(is_hidden, last_used_at);'
+    );
+  } catch (_) {}
+  return true;
+}
+
+function normalizeUnitCode(unitText) {
+  return String(unitText || '')
+    .trim()
+    .toLowerCase();
+}
+
+function recordUnitSuggestionsFromRecipeModel(activeDb, recipe) {
+  if (!activeDb) return;
+  if (!ensureUnitSuggestionsSchema(activeDb)) return;
+  if (!tableExists(activeDb, 'units')) return;
+
+  const sections = Array.isArray(recipe?.sections) ? recipe.sections : [];
+  const seen = new Set();
+
+  const consider = (u) => {
+    const code = normalizeUnitCode(u);
+    if (!code) return;
+    seen.add(code);
+  };
+
+  sections.forEach((sec) => {
+    const list = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+    list.forEach((row) => {
+      if (!row || row.isPlaceholder) return;
+      if (row.rowType === 'heading') return;
+      consider(row.unit);
+      if (Array.isArray(row.substitutes)) {
+        row.substitutes.forEach((sub) => consider(sub && sub.unit));
+      }
+    });
+  });
+
+  if (seen.size === 0) return;
+
+  const ts = Math.floor(Date.now() / 1000);
+
+  const existsStmt = activeDb.prepare(
+    'SELECT 1 AS ok FROM units WHERE lower(code) = lower(?) LIMIT 1;'
+  );
+  const upsertStmt = activeDb.prepare(`
+    INSERT INTO unit_suggestions (code, use_count, last_used_at, is_hidden)
+    VALUES (?, 1, ?, 0)
+    ON CONFLICT(code) DO UPDATE SET
+      use_count = unit_suggestions.use_count + 1,
+      last_used_at = excluded.last_used_at;
+  `);
+
+  try {
+    seen.forEach((code) => {
+      let isOfficial = false;
+      try {
+        existsStmt.bind([code]);
+        if (existsStmt.step()) isOfficial = true;
+      } catch (_) {
+        isOfficial = false;
+      } finally {
+        try {
+          existsStmt.reset();
+        } catch (_) {}
+      }
+      if (isOfficial) return;
+
+      try {
+        upsertStmt.run([code, ts]);
+      } catch (_) {}
+    });
+  } finally {
+    try {
+      existsStmt.free();
+    } catch (_) {}
+    try {
+      upsertStmt.free();
+    } catch (_) {}
+  }
+}
+
 // --- StepNode → DB save adapter (Option A: minimal) ---
 function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
   // Remove existing rows for this recipe
@@ -208,6 +310,10 @@ function loadRecipeFromDB(db, recipeId) {
   const ingCols = getTableColumns(db, 'ingredients');
   const ingHas = (col) => ingCols.map((c) => String(c).toLowerCase()).includes(col);
   const hasIngParen = ingHas('parenthetical_note');
+  const hasLemma = ingHas('lemma');
+  const hasPluralByDefault = ingHas('plural_by_default');
+  const hasIsMassNoun = ingHas('is_mass_noun');
+  const hasPluralOverride = ingHas('plural_override');
 
   const selectParts = [
     'rim.ID',
@@ -218,6 +324,12 @@ function loadRecipeFromDB(db, recipeId) {
     'i.name',
     'i.variant',
     'i.size',
+    hasLemma ? 'i.lemma' : 'NULL AS lemma',
+    hasPluralByDefault ? 'COALESCE(i.plural_by_default, 0) AS plural_by_default' : '0 AS plural_by_default',
+    hasIsMassNoun ? 'COALESCE(i.is_mass_noun, 0) AS is_mass_noun' : '0 AS is_mass_noun',
+    hasPluralOverride
+      ? 'COALESCE(i.plural_override, \'\') AS plural_override'
+      : "'' AS plural_override",
     'rim.prep_notes',
     'rim.is_optional',
     hasRimParen
@@ -258,6 +370,10 @@ function loadRecipeFromDB(db, recipeId) {
           name,
           variant,
           size,
+          lemma,
+          pluralByDefault,
+          isMassNoun,
+          pluralOverride,
           prepNotes,
           isOptional,
           parentheticalNote,
@@ -272,6 +388,10 @@ function loadRecipeFromDB(db, recipeId) {
           name,
           variant: variant || '',
           size: size || '',
+          lemma: lemma || '',
+          pluralByDefault: !!pluralByDefault,
+          isMassNoun: !!isMassNoun,
+          pluralOverride: pluralOverride || '',
           prepNotes: prepNotes || '',
           isOptional: !!isOptional,
           parentheticalNote: parentheticalNote || '',
@@ -827,6 +947,11 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       } catch (_) {}
     }
   });
+
+  // Soft-add unit suggestions (unknown units only).
+  try {
+    recordUnitSuggestionsFromRecipeModel(activeDb, recipe);
+  } catch (_) {}
 
   console.info(
     `💾 saveRecipeIngredientsFromModel: updated ${updated}, inserted ${inserted}, deleted ${

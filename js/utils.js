@@ -250,6 +250,98 @@ function decimalToFractionDisplay(value, denominator = 8) {
   return fracGlyph ? `${whole}${fracGlyph}` : `${whole}`;
 }
 
+// --- Ingredient grammar helpers (pluralization) ---
+function pluralizeEnglishNoun(singular, pluralOverride) {
+  const base = (singular || '').trim();
+  const override = (pluralOverride || '').trim();
+  if (!base) return '';
+  if (override) return override;
+
+  const lower = base.toLowerCase();
+  // Small irregular set (everything else can use plural_override if needed)
+  const irregular = {
+    leaf: 'leaves',
+    loaf: 'loaves',
+    knife: 'knives',
+    life: 'lives',
+    wife: 'wives',
+    wolf: 'wolves',
+    tomato: 'tomatoes',
+    potato: 'potatoes',
+  };
+  if (irregular[lower]) {
+    // Preserve capitalization of first letter (simple)
+    const pl = irregular[lower];
+    return base[0] === base[0].toUpperCase()
+      ? pl.charAt(0).toUpperCase() + pl.slice(1)
+      : pl;
+  }
+
+  // -ch/-sh/-s/-x/-z => +es
+  if (/(ch|sh|s|x|z)$/i.test(base)) return base + 'es';
+
+  // consonant + y => ies
+  if (/[bcdfghjklmnpqrstvwxyz]y$/i.test(base)) {
+    return base.slice(0, -1) + 'ies';
+  }
+
+  return base + 's';
+}
+
+function isNumericQuantity(q) {
+  if (q == null) return false;
+  if (q === '') return false;
+  const n = typeof q === 'number' ? q : parseFloat(String(q));
+  return Number.isFinite(n);
+}
+
+function getIngredientNounDisplay(line) {
+  // line can be a recipe ingredient row or a formatter ingredient row
+  if (!line) return '';
+  const name = (line.name || '').trim();
+  const lemma = (line.lemma || '').trim();
+  const base = lemma || name;
+  if (!base) return '';
+
+  const pluralByDefault = !!(
+    line.pluralByDefault ??
+    line.plural_by_default ??
+    0
+  );
+  const isMassNoun = !!(line.isMassNoun ?? line.is_mass_noun ?? 0);
+  const pluralOverride =
+    line.pluralOverride ?? line.plural_override ?? '';
+
+  if (isMassNoun) return base;
+
+  const qtyIsNumeric = isNumericQuantity(line.quantity);
+  if (qtyIsNumeric) {
+    const n = typeof line.quantity === 'number'
+      ? line.quantity
+      : parseFloat(String(line.quantity));
+    if (Number.isFinite(n) && n === 1) return base;
+    return pluralizeEnglishNoun(base, pluralOverride);
+  }
+
+  // No numeric quantity (including empty or free-text)
+  if (pluralByDefault) return pluralizeEnglishNoun(base, pluralOverride);
+  return base;
+}
+
+function getIngredientDisplayName(line) {
+  if (!line) return '';
+  const noun = getIngredientNounDisplay(line);
+  const variant = (line.variant || '').trim();
+  return variant ? `${variant} ${noun}`.trim() : noun;
+}
+
+// Expose helpers for other modules (loaded as scripts, not ES modules)
+if (typeof window !== 'undefined') {
+  window.pluralizeEnglishNoun = pluralizeEnglishNoun;
+  window.getIngredientNounDisplay = getIngredientNounDisplay;
+  window.getIngredientDisplayName = getIngredientDisplayName;
+}
+
 /**
  * Make a span element editable on click
  * Dynamically replaces it with an input, inheriting the font

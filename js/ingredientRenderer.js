@@ -361,12 +361,15 @@ function renderIngredient(line) {
   }
 
   // --- Build base name (variant + name) ---
-  let baseName;
-  if (line.variant) {
-    baseName = `${line.variant} ${line.name}`.trim();
-  } else {
-    baseName = line.name;
-  }
+  // Prefer DB-backed grammar fields when present (lemma / plural flags).
+  // Falls back to name/variant as-is on older DBs.
+  const baseName =
+    typeof window !== 'undefined' &&
+    typeof window.getIngredientDisplayName === 'function'
+      ? window.getIngredientDisplayName(line)
+      : line.variant
+      ? `${line.variant} ${line.name}`.trim()
+      : line.name;
 
   // --- Decide if quantity is numeric or free-text ---
   const isNumericQty = !isNaN(parseFloat(line.quantity));

@@ -1,5 +1,152 @@
 // Shared SQL.js init (offline / local version)
 let SQL;
+
+function isTypingContext(target) {
+  const el = target instanceof Element ? target : null;
+  const active =
+    document.activeElement instanceof Element ? document.activeElement : null;
+
+  const selector =
+    'input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]';
+
+  return !!(el?.closest(selector) || active?.closest(selector));
+}
+
+function enableTopLevelListKeyboardNav(listEl) {
+  if (!(listEl instanceof Element)) return null;
+
+  // Marks this list so CSS can avoid showing a second "hover highlight"
+  // when keyboard selection moves off the hovered row.
+  listEl.classList.add('top-level-kbd-nav');
+
+  // Start with *no* selection. Hover or arrow keys will select.
+  let selectedIdx = -1;
+  let selectionSource = null; // 'hover' | 'keyboard' | null
+
+  const isModalOpen = () => !!document.querySelector('.modal:not(.hidden)');
+  const getRows = () => Array.from(listEl.querySelectorAll('li'));
+
+  const applySelection = () => {
+    const rows = getRows();
+    if (rows.length === 0) return;
+
+    if (selectedIdx == null) selectedIdx = -1;
+    if (selectedIdx >= rows.length) selectedIdx = rows.length - 1;
+
+    rows.forEach((li, i) =>
+      li.classList.toggle('is-selected', i === selectedIdx)
+    );
+    if (selectedIdx >= 0) {
+      rows[selectedIdx]?.scrollIntoView?.({ block: 'nearest' });
+    }
+  };
+
+  const setSelectedIdx = (idx) => {
+    selectedIdx = idx;
+    applySelection();
+  };
+
+  // Hover should not be a competing highlight; it should *move selection*.
+  listEl.addEventListener('mouseover', (e) => {
+    const li = e.target?.closest?.('li');
+    if (!li || !listEl.contains(li)) return;
+    const rows = getRows();
+    const idx = rows.indexOf(li);
+    if (idx >= 0) {
+      selectionSource = 'hover';
+      setSelectedIdx(idx);
+    }
+  });
+
+  // If the mouse is not over a hover target (li), clear hover-driven selection.
+  const clearHoverSelectionIfNeeded = (e) => {
+    if (selectionSource !== 'hover') return;
+    const li = e?.target?.closest?.('li');
+    if (li && listEl.contains(li)) return;
+    selectionSource = null;
+    setSelectedIdx(-1);
+  };
+
+  // When moving over blank space inside the list, clear the highlight.
+  listEl.addEventListener('mousemove', clearHoverSelectionIfNeeded);
+  // When leaving the list entirely, clear the highlight.
+  listEl.addEventListener('mouseleave', clearHoverSelectionIfNeeded);
+
+  // Click should also update selection (keeps state coherent after mouse use).
+  listEl.addEventListener('click', (e) => {
+    const li = e.target?.closest?.('li');
+    if (!li || !listEl.contains(li)) return;
+    const rows = getRows();
+    const idx = rows.indexOf(li);
+    if (idx >= 0) {
+      // Treat click as a "committed" selection so it doesn't get cleared on mouseout.
+      selectionSource = 'keyboard';
+      selectedIdx = idx;
+    }
+  });
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Only plain keys; don't steal Cmd/Ctrl/Alt/Shift combos
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.isComposing) return;
+      if (isTypingContext(e.target)) return;
+      if (isModalOpen()) return;
+      if (document.activeElement?.closest?.('.bottom-nav')) return;
+
+      const rows = getRows();
+      if (rows.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        // If nothing selected yet, Down selects the first row.
+        if (selectedIdx < 0) {
+          selectionSource = 'keyboard';
+          setSelectedIdx(0);
+          return;
+        }
+        selectionSource = 'keyboard';
+        setSelectedIdx(Math.min(selectedIdx + 1, rows.length - 1));
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        // If nothing selected yet, Up selects the last row.
+        if (selectedIdx < 0) {
+          selectionSource = 'keyboard';
+          setSelectedIdx(rows.length - 1);
+          return;
+        }
+        selectionSource = 'keyboard';
+        setSelectedIdx(Math.max(selectedIdx - 1, 0));
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (selectedIdx < 0) return;
+        e.preventDefault();
+        rows[selectedIdx]?.click?.();
+      }
+    },
+    { capture: true }
+  );
+
+  // Initial paint
+  applySelection();
+
+  return {
+    syncAfterRender() {
+      applySelection();
+    },
+    resetToTop() {
+      selectedIdx = -1;
+      applySelection();
+    },
+  };
+}
+
 initSqlJs({
   locateFile: (file) => `js/${file}`, // load local sql-wasm.wasm
 }).then((sql) => {
@@ -30,17 +177,6 @@ initSqlJs({
 
   // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
   const TOP_LEVEL_PAGES = ['recipes', 'shopping', 'units', 'stores'];
-
-  function isTypingContext(target) {
-    const el = target instanceof Element ? target : null;
-    const active =
-      document.activeElement instanceof Element ? document.activeElement : null;
-
-    const selector =
-      'input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]';
-
-    return !!(el?.closest(selector) || active?.closest(selector));
-  }
 
   document.addEventListener(
     'keydown',
@@ -222,6 +358,9 @@ async function loadRecipesPage() {
 
   window.dbInstance = db;
 
+  // Keyboard selection + Enter activation for list rows.
+  const listNav = enableTopLevelListKeyboardNav(list);
+
   // 🔹 Keep all recipes in memory for filtering
   let recipeRows = [];
   if (recipes.length > 0) {
@@ -279,6 +418,9 @@ async function loadRecipesPage() {
 
       list.appendChild(li);
     });
+
+    // Keep selection valid after rerender (search/filter changes).
+    listNav?.syncAfterRender?.();
   }
 
   // --- Recipes action button stub ---
@@ -555,6 +697,9 @@ async function loadShoppingPage() {
   const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
+
+  // Keyboard selection + Enter activation for list rows.
+  const listNav = enableTopLevelListKeyboardNav(list);
 
   // --- Load DB (mirror recipe loaders) ---
   const isElectron = !!window.electronAPI;
@@ -862,6 +1007,9 @@ async function loadShoppingPage() {
 
       list.appendChild(li);
     });
+
+    // Keep selection valid after rerender (search/filter changes).
+    listNav?.syncAfterRender?.();
   }
 
   // Initial render
@@ -1580,10 +1728,15 @@ function loadShoppingItemEditorPage() {
       let baselineIsDeprecated = '0';
 
       try {
+        // Load DB once up-front so shared utilities (e.g., typeahead pools) can use window.dbInstance.
+        // (loadDbForShoppingEditor also sets window.dbInstance)
+        await loadDbForShoppingEditor();
+
         const idStr = sessionStorage.getItem('selectedShoppingItemId');
         const id = Number(idStr);
         if (Number.isFinite(id)) {
-          const { db } = await loadDbForShoppingEditor();
+          const db = window.dbInstance;
+          if (!db) throw new Error('DB not available for shopping editor init');
 
           let cols = [];
           try {
@@ -1647,6 +1800,40 @@ function loadShoppingItemEditorPage() {
                 .join('\n');
             }
           } catch (_) {}
+        }
+      } catch (_) {}
+
+      // Home typeahead (suggest existing "location_at_home" values).
+      try {
+        const homeInput = document.getElementById('shoppingItemHomeInput');
+        const ta = window.favoriteEatsTypeahead;
+        if (homeInput && ta && typeof ta.attach === 'function') {
+          ta.attach({
+            inputEl: homeInput,
+            openOnFocus: true,
+            getPool: async () => {
+              const db = window.dbInstance;
+              if (!db) return [];
+              const q = db.exec(
+                `SELECT DISTINCT location_at_home
+                 FROM ingredients
+                 WHERE location_at_home IS NOT NULL
+                   AND trim(location_at_home) != ''
+                 ORDER BY location_at_home COLLATE NOCASE;`
+              );
+              const vals =
+                Array.isArray(q) &&
+                q.length > 0 &&
+                q[0] &&
+                Array.isArray(q[0].values)
+                  ? q[0].values
+                      .map((row) => (Array.isArray(row) ? row[0] : null))
+                      .map((v) => String(v || '').trim())
+                      .filter((v) => v.length > 0)
+                  : [];
+              return vals;
+            },
+          });
         }
       } catch (_) {}
 
@@ -1818,6 +2005,9 @@ async function loadUnitsPage() {
 
   if (!list) return;
 
+  // Keyboard selection + Enter activation for list rows.
+  const listNav = enableTopLevelListKeyboardNav(list);
+
   // --- Load DB (mirror recipe/shopping loaders) ---
   const isElectron = !!window.electronAPI;
   let db;
@@ -1880,8 +2070,51 @@ async function loadUnitsPage() {
     );
   }
 
-  function renderUnitsList(rows) {
+  // --- Load unit suggestions (soft-add pool) ---
+  let suggestionRows = [];
+  try {
+    const qs = db.exec(`
+      SELECT code, use_count, last_used_at
+      FROM unit_suggestions
+      WHERE COALESCE(is_hidden, 0) = 0
+      ORDER BY COALESCE(last_used_at, 0) DESC,
+               COALESCE(use_count, 0) DESC,
+               code COLLATE NOCASE;
+    `);
+    if (qs.length > 0) {
+      suggestionRows = qs[0].values.map(([code, useCount, lastUsedAt]) => ({
+        code,
+        useCount: useCount == null ? 0 : Number(useCount),
+        lastUsedAt: lastUsedAt == null ? null : Number(lastUsedAt),
+      }));
+    }
+  } catch (_) {
+    suggestionRows = [];
+  }
+
+  const persistDb = () => {
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        window.electronAPI.saveDB(binaryArray);
+      } else {
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
+      }
+    } catch (err) {
+      console.error('❌ Failed to persist DB:', err);
+    }
+  };
+
+  function renderUnitsList({ units, suggestions }) {
     list.innerHTML = '';
+
+    const rows = Array.isArray(units) ? units : [];
+    const sugg = Array.isArray(suggestions) ? suggestions : [];
+
     rows.forEach((unit) => {
       const li = document.createElement('li');
 
@@ -1965,20 +2198,7 @@ async function loadUnitsPage() {
         }
 
         // Persist DB after remove/hide.
-        try {
-          const binaryArray = db.export();
-          const isElectronEnv = !!window.electronAPI;
-          if (isElectronEnv) {
-            window.electronAPI.saveDB(binaryArray);
-          } else {
-            localStorage.setItem(
-              'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray))
-            );
-          }
-        } catch (err) {
-          console.error('❌ Failed to persist DB after removing unit:', err);
-        }
+        persistDb();
 
         return true;
       };
@@ -2014,10 +2234,218 @@ async function loadUnitsPage() {
 
       list.appendChild(li);
     });
+
+    if (sugg.length > 0) {
+      const header = document.createElement('li');
+      header.textContent = 'Suggestions';
+      header.className = 'list-section-label';
+      header.tabIndex = -1;
+      list.appendChild(header);
+
+      const guessCategory = (code) => {
+        const c = (code || '').trim().toLowerCase();
+        if (!c) return 'misc';
+        const volume = new Set([
+          'tsp',
+          'tbsp',
+          'cup',
+          'pt',
+          'qt',
+          'gal',
+          'floz',
+          'ml',
+          'l',
+        ]);
+        const mass = new Set(['g', 'kg', 'oz', 'lb']);
+        const count = new Set([
+          'each',
+          'pkg',
+          'can',
+          'jar',
+          'bunch',
+          'clove',
+          'slice',
+          'bag',
+          'box',
+          'bottle',
+          'packet',
+        ]);
+        if (volume.has(c)) return 'volume';
+        if (mass.has(c)) return 'mass';
+        if (count.has(c)) return 'count';
+        return 'misc';
+      };
+
+      const guessPlural = (singular) => {
+        try {
+          if (typeof window.pluralizeEnglishNoun === 'function') {
+            return window.pluralizeEnglishNoun(singular, '');
+          }
+        } catch (_) {}
+        return (singular || '') + 's';
+      };
+
+      const removeSuggestion = (code) => {
+        const c = (code || '').trim();
+        if (!c) return false;
+        const usedCount = countRecipesUsingUnit(c);
+
+        if (usedCount > 0) {
+          const ok = window.confirm(
+            `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
+              usedCount === 1 ? '' : 's'
+            }.\n\nRemoving will hide it from suggestions (it will remain in recipes until replaced).`
+          );
+          if (!ok) return false;
+          try {
+            db.run(
+              'UPDATE unit_suggestions SET is_hidden = 1 WHERE code = ?;',
+              [c.toLowerCase()]
+            );
+          } catch (err) {
+            console.error('❌ Failed to hide unit suggestion:', err);
+            alert('Failed to remove suggestion. See console for details.');
+            return false;
+          }
+        } else {
+          const ok = window.confirm(
+            `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from suggestions.`
+          );
+          if (!ok) return false;
+          try {
+            db.run('DELETE FROM unit_suggestions WHERE code = ?;', [
+              c.toLowerCase(),
+            ]);
+          } catch (err) {
+            console.error('❌ Failed to delete unit suggestion:', err);
+            alert('Failed to delete suggestion. See console for details.');
+            return false;
+          }
+        }
+
+        persistDb();
+        return true;
+      };
+
+      const promoteSuggestion = (code) => {
+        const c = (code || '').trim();
+        if (!c) return false;
+
+        const ok = window.confirm(`Add '${c}' to Units?`);
+        if (!ok) return false;
+
+        // Insert into units (best-effort defaults) and then open the unit editor.
+        try {
+          const codeLower = c.toLowerCase();
+
+          // If already an official unit, drop the suggestion and open the editor.
+          try {
+            const ex = db.exec(
+              'SELECT code, name_singular, name_plural, category FROM units WHERE lower(code) = lower(?) LIMIT 1;',
+              [codeLower]
+            );
+            if (ex.length && ex[0].values.length) {
+              try {
+                db.run('DELETE FROM unit_suggestions WHERE code = ?;', [
+                  codeLower,
+                ]);
+              } catch (_) {}
+              persistDb();
+
+              sessionStorage.setItem('selectedUnitCode', codeLower);
+              sessionStorage.setItem(
+                'selectedUnitNameSingular',
+                ex[0].values[0][1] || ''
+              );
+              sessionStorage.setItem(
+                'selectedUnitNamePlural',
+                ex[0].values[0][2] || ''
+              );
+              sessionStorage.setItem(
+                'selectedUnitCategory',
+                ex[0].values[0][3] || ''
+              );
+              sessionStorage.removeItem('selectedUnitIsNew');
+              window.location.href = 'unitEditor.html';
+              return true;
+            }
+          } catch (_) {}
+
+          const nameSingular = c;
+          const namePlural = guessPlural(nameSingular);
+          const category = guessCategory(codeLower);
+
+          // Compute next sort_order
+          let nextSort = 999999;
+          try {
+            const q = db.exec(
+              'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+            );
+            if (q.length && q[0].values.length) {
+              const v = Number(q[0].values[0][0]);
+              if (Number.isFinite(v)) nextSort = v;
+            }
+          } catch (_) {}
+
+          db.run(
+            'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
+            [codeLower, nameSingular, namePlural, category, nextSort]
+          );
+
+          // Remove from suggestions list once promoted.
+          try {
+            db.run('DELETE FROM unit_suggestions WHERE code = ?;', [codeLower]);
+          } catch (_) {}
+        } catch (err) {
+          console.error('❌ Failed to promote unit suggestion:', err);
+          alert('Failed to add unit. See console for details.');
+          return false;
+        }
+
+        persistDb();
+
+        sessionStorage.setItem('selectedUnitCode', codeLower);
+        sessionStorage.setItem('selectedUnitNameSingular', c);
+        sessionStorage.setItem('selectedUnitNamePlural', '');
+        sessionStorage.setItem('selectedUnitCategory', '');
+        sessionStorage.removeItem('selectedUnitIsNew');
+        window.location.href = 'unitEditor.html';
+        return true;
+      };
+
+      sugg.forEach((s) => {
+        const li = document.createElement('li');
+        li.className = 'unit-suggestion-row';
+        li.textContent = s.code || '';
+
+        li.addEventListener('click', (event) => {
+          const wantsRemove = event.ctrlKey || event.metaKey;
+          if (wantsRemove) {
+            event.preventDefault();
+            event.stopPropagation();
+            const ok = removeSuggestion(s.code || '');
+            if (ok) window.location.reload();
+            return;
+          }
+          promoteSuggestion(s.code || '');
+        });
+
+        li.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          const ok = removeSuggestion(s.code || '');
+          if (ok) window.location.reload();
+        });
+
+        list.appendChild(li);
+      });
+    }
+
+    // Keep selection valid after rerender (search/filter changes).
+    listNav?.syncAfterRender?.();
   }
 
   // Initial render
-  renderUnitsList(unitRows);
+  renderUnitsList({ units: unitRows, suggestions: suggestionRows });
 
   // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
   const openAddUnitModal = () => {
@@ -2118,11 +2546,11 @@ async function loadUnitsPage() {
       clearBtn.style.display = query ? 'inline' : 'none';
 
       if (!query) {
-        renderUnitsList(unitRows);
+        renderUnitsList({ units: unitRows, suggestions: suggestionRows });
         return;
       }
 
-      const filtered = unitRows.filter((u) => {
+      const filteredUnits = unitRows.filter((u) => {
         const haystack = [
           u.code || '',
           u.nameSingular || '',
@@ -2134,13 +2562,22 @@ async function loadUnitsPage() {
         return haystack.includes(query);
       });
 
-      renderUnitsList(filtered);
+      const filteredSuggestions = suggestionRows.filter((s) =>
+        String(s.code || '')
+          .toLowerCase()
+          .includes(query)
+      );
+
+      renderUnitsList({
+        units: filteredUnits,
+        suggestions: filteredSuggestions,
+      });
     });
 
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
       clearBtn.style.display = 'none';
-      renderUnitsList(unitRows);
+      renderUnitsList({ units: unitRows, suggestions: suggestionRows });
       searchInput.focus();
     });
 
@@ -2172,6 +2609,9 @@ async function loadStoresPage() {
   const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
+
+  // Keyboard selection + Enter activation for list rows.
+  const listNav = enableTopLevelListKeyboardNav(list);
 
   // --- Load DB (mirror recipe loaders) ---
   const isElectron = !!window.electronAPI;
@@ -2310,6 +2750,9 @@ async function loadStoresPage() {
 
       list.appendChild(li);
     });
+
+    // Keep selection valid after rerender (search/filter changes).
+    listNav?.syncAfterRender?.();
   }
 
   // Initial render
