@@ -479,12 +479,14 @@
     nameAll: null,
     unitAll: null,
     variantsByName: new Map(), // lower(name) -> string[]
+    _cols: new Map(), // tableName -> lowercased column names[]
   };
 
   function invalidatePools() {
     poolCache.nameAll = null;
     poolCache.unitAll = null;
     poolCache.variantsByName = new Map();
+    poolCache._cols = new Map();
   }
 
   window.addEventListener('favoriteEats:db-updated', () => invalidatePools());
@@ -497,15 +499,43 @@
     return window.dbInstance || null;
   }
 
+  function getTableColumns(db, tableName) {
+    const key = lower(tableName);
+    if (poolCache._cols.has(key)) return poolCache._cols.get(key) || [];
+    if (!db || !tableName) return [];
+    const result = safeExec(db, `PRAGMA table_info(${tableName});`);
+    const cols =
+      Array.isArray(result) && result.length > 0 && Array.isArray(result[0].values)
+        ? result[0].values
+            .map((row) => (Array.isArray(row) ? row[1] : null)) // PRAGMA: [cid, name, type, notnull, dflt_value, pk]
+            .map((v) => lower(v))
+            .filter((v) => v.length > 0)
+        : [];
+    poolCache._cols.set(key, cols);
+    return cols;
+  }
+
+  function tableHasColumn(db, tableName, colName) {
+    const cols = getTableColumns(db, tableName);
+    return cols.includes(lower(colName));
+  }
+
   async function getNamePool() {
     if (poolCache.nameAll) return poolCache.nameAll;
     const db = getDb();
     if (!db) return [];
+    const hasDeprecated = tableHasColumn(db, 'ingredients', 'is_deprecated');
+    const hasHide = tableHasColumn(db, 'ingredients', 'hide_from_shopping_list');
+
+    let where = `name IS NOT NULL AND trim(name) != ''`;
+    if (hasDeprecated) where += ` AND COALESCE(is_deprecated, 0) = 0`;
+    else if (hasHide) where += ` AND COALESCE(hide_from_shopping_list, 0) = 0`;
+
     const q = safeExec(
       db,
       `SELECT DISTINCT name
        FROM ingredients
-       WHERE name IS NOT NULL AND trim(name) != ''
+       WHERE ${where}
        ORDER BY name COLLATE NOCASE;`
     );
     const out = columnFromExec(q, 0);
@@ -518,11 +548,15 @@
     const db = getDb();
     if (!db) return [];
     // Keep it simple: suggest unit codes.
+    const hasHidden = tableHasColumn(db, 'units', 'is_hidden');
+    const where = hasHidden
+      ? `code IS NOT NULL AND trim(code) != '' AND COALESCE(is_hidden, 0) = 0`
+      : `code IS NOT NULL AND trim(code) != ''`;
     const q = safeExec(
       db,
       `SELECT DISTINCT code
        FROM units
-       WHERE code IS NOT NULL AND trim(code) != ''
+       WHERE ${where}
        ORDER BY code COLLATE NOCASE;`
     );
     const out = columnFromExec(q, 0);
@@ -537,6 +571,20 @@
       return poolCache.variantsByName.get(key) || [];
     const db = getDb();
     if (!db) return [];
+
+    const ingHasDeprecated = tableHasColumn(db, 'ingredients', 'is_deprecated');
+    const ingHasHide = tableHasColumn(db, 'ingredients', 'hide_from_shopping_list');
+    const ingVisibilityClause = ingHasDeprecated
+      ? `AND COALESCE(i.is_deprecated, 0) = 0`
+      : ingHasHide
+      ? `AND COALESCE(i.hide_from_shopping_list, 0) = 0`
+      : ``;
+    const ingVisibilityClauseNoAlias = ingHasDeprecated
+      ? `AND COALESCE(is_deprecated, 0) = 0`
+      : ingHasHide
+      ? `AND COALESCE(hide_from_shopping_list, 0) = 0`
+      : ``;
+
     // Prefer list table when present; fall back to legacy ingredients.variant.
     let q = [];
     try {
@@ -548,6 +596,7 @@
          WHERE lower(i.name) = lower(?)
            AND v.variant IS NOT NULL
            AND trim(v.variant) != ''
+           ${ingVisibilityClause}
          ORDER BY v.variant COLLATE NOCASE;`,
         [nameText]
       );
@@ -559,6 +608,7 @@
          WHERE lower(name) = lower(?)
            AND variant IS NOT NULL
            AND trim(variant) != ''
+           ${ingVisibilityClauseNoAlias}
          ORDER BY variant COLLATE NOCASE;`,
         [nameText]
       );
@@ -573,6 +623,7 @@
          WHERE lower(name) = lower(?)
            AND variant IS NOT NULL
            AND trim(variant) != ''
+           ${ingVisibilityClauseNoAlias}
          ORDER BY variant COLLATE NOCASE;`,
         [nameText]
       );

@@ -44,19 +44,16 @@
 
   /* --- System spacing scale (px) ---
      A–F are the explicit vertical distances you described. */
-  --space-A: 28px; /* Instructions: wrapped lines within a step */
-  --space-B: 12px; /* Instructions: between steps */
-  --space-C: 12px; /* Instructions: subhead -> next step */
-  --space-D: 20px; /* Instructions: previous step -> subhead */
-  --space-E: 16px; /* Section title -> first step/subhead */
-  --space-F: 22px; /* YWN: wrapped lines + between list elements (tight) */
-  --space-G: 30px; /* Recipe title -> first section title (e.g., Ingredients) */
-
-  /* Split C/D so Instructions headings and Ingredients subheads can diverge */
-  --gap-instruction-prev-to-heading: var(--space-D);
-  --gap-instruction-heading-to-next: var(--space-C);
-  --gap-ingredient-prev-to-subhead: var(--space-D);
-  --gap-ingredient-subhead-to-next: var(--space-C);
+  /* --- Optical spacing knobs (px) ---
+     All knobs target "optical gap" = next.top - prev.bottom.
+     Downstream-only rule: knobs are applied as top spacing on the downstream element. */
+  --gap-instructions-wrap: 28px; /* A */
+  --gap-instructions-between-steps: 12px; /* B */
+  --gap-heading-to-next: 12px; /* C */
+  --gap-prev-to-heading: 20px; /* D */
+  --gap-section-header-to-first: 16px; /* E */
+  --gap-tight-list: 22px; /* F */
+  --gap-title-to-first-section: 30px; /* G */
 
   /* --- Servings row layout --- */
   --servings-pill-gap: 3px;
@@ -547,28 +544,29 @@ body.shopping-editor-page .shopping-item-help {
   cursor: pointer;
   position: relative;
   z-index: 1;
+  margin: 0; /* spacing is handled via downstream-only margin-top rules below */
 }
 
 /* overrides.css sets `line-height` on `*`, so we must set it on the actual text nodes too.
    Scope to the Ingredients section only (YWN stays on default rhythm). */
 #ingredientsSection .ingredient-line,
 #ingredientsSection .ingredient-line * {
-  line-height: var(--space-F);
+  /* Ingredients rows use F as their wrap line optical gap (even if rarely wraps). */
+  line-height: calc(1em + var(--gap-tight-list));
 }
 
-/* Ingredients list items: use A as the *between-item* gap, and F as the within-line height.
-   Item-to-item gap = line-height (F) + margin-bottom (A - F). */
-#ingredientsSection .ingredient-line {
-  margin-bottom: max(0px, calc(var(--space-A) - var(--space-F)));
+/* Ingredients inter-paragraph spacing uses Instructions A (optical gap) */
+#ingredientsSection .ingredient-line + .ingredient-line {
+  margin-top: var(--gap-instructions-wrap);
 }
 
 /* YWN list is tighter: use F for both line-height and item spacing. */
 .you-will-need-card .ingredient-line,
 .you-will-need-card .ingredient-line * {
-  line-height: var(--space-F);
+  line-height: calc(1em + var(--gap-tight-list));
 }
 .you-will-need-card .ingredient-line {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .ingredient-subsection-heading-line {
@@ -586,43 +584,83 @@ body.shopping-editor-page .shopping-item-help {
 .ingredient-subsection-heading-text,
 .instruction-line[data-step-type='heading'] .step-text {
   /* Unified subsection heading style (Ingredients + Instructions) */
-  line-height: var(--space-A);
+  line-height: calc(1em + var(--gap-instructions-wrap));
   color: var(--theme-primary);
 }
 
 /* Ingredient subsection headings track Ingredients line-height (so Ingredients can be tuned independently). */
 #ingredientsSection .ingredient-subsection-heading-text {
-  line-height: var(--space-A);
+  line-height: calc(1em + var(--gap-instructions-wrap));
 }
 
-.instruction-line[data-step-type='heading'] {
-  margin-top: var(--gap-instruction-prev-to-heading);
-  margin-bottom: var(--gap-instruction-heading-to-next);
-}
+/* --- Downstream-only spacing rules (optical gap proxy: next.top - prev.bottom) --- */
 
+/* Reset any incidental margins on headings/subheads */
+.instruction-line[data-step-type='heading'],
 .ingredient-subsection-heading-line {
-  /* Default: previous line -> subhead uses D; subhead -> next uses C */
-  margin-top: var(--gap-ingredient-prev-to-subhead);
-  margin-bottom: var(--gap-ingredient-subhead-to-next);
+  margin: 0;
+  padding: 0;
 }
 
-/* First element after the section header should rely on the header's bottom margin (E),
-   not add the usual D on top. We have an insert-zone immediately after each header. */
-.section-header
-  + .ingredient-insert-zone
-  + .ingredient-subsection-heading-line {
-  margin-top: 0;
-}
-
-/* Same rule for Instructions: header -> insert-zone -> first line should not add extra D. */
+/* E: section header -> first item/subhead (header must not move) */
+.section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
+.section-header + .ingredient-insert-zone + .ingredient-line,
 .section-header + .step-insert-zone + .instruction-line.numbered {
-  margin-top: 0;
+  margin-top: var(--gap-section-header-to-first);
 }
 
-/* Prevent instruction headings from getting double bottom spacing
-   (instruction lines already have padding-bottom by default). */
-.instruction-line[data-step-type='heading'] {
-  padding-bottom: 0;
+/* Instructions: step -> step = B */
+.instruction-line.numbered:not([data-step-type='heading'])
+  + .instruction-line.numbered:not([data-step-type='heading']) {
+  margin-top: var(--gap-instructions-between-steps);
+}
+
+/* Instructions: step -> heading = D (downstream heading) */
+.instruction-line.numbered:not([data-step-type='heading'])
+  + .instruction-line.numbered[data-step-type='heading'],
+.instruction-line.numbered[data-step-type='heading']
+  + .instruction-line.numbered[data-step-type='heading'] {
+  margin-top: var(--gap-prev-to-heading);
+}
+
+/* Instructions: heading -> next line = C (downstream next) */
+.instruction-line.numbered[data-step-type='heading']
+  + .instruction-line.numbered {
+  margin-top: var(--gap-heading-to-next);
+}
+
+/* Ingredients: ingredient -> subhead = D */
+#ingredientsSection .ingredient-line + .ingredient-subsection-heading-line,
+#ingredientsSection
+  .ingredient-subsection-heading-line
+  + .ingredient-subsection-heading-line {
+  margin-top: var(--gap-prev-to-heading);
+}
+
+/* Ingredients: subhead -> next ingredient = C */
+#ingredientsSection .ingredient-subsection-heading-line + .ingredient-line {
+  margin-top: var(--gap-heading-to-next);
+}
+
+/* YWN: header -> first label = E */
+.you-will-need-card .section-header + .subsection-header {
+  margin-top: var(--gap-section-header-to-first);
+}
+
+/* YWN: item -> label = D */
+.you-will-need-card .ingredient-line + .subsection-header,
+.you-will-need-card .subsection-header + .subsection-header {
+  margin-top: var(--gap-prev-to-heading);
+}
+
+/* YWN: label -> first item = C */
+.you-will-need-card .subsection-header + .ingredient-line {
+  margin-top: var(--gap-heading-to-next);
+}
+
+/* YWN: item -> item tight spacing = F */
+.you-will-need-card .ingredient-line + .ingredient-line {
+  margin-top: var(--gap-tight-list);
 }
 
 .ingredient-subsection-heading-text[contenteditable='true'] {
@@ -640,12 +678,20 @@ body.shopping-editor-page .shopping-item-help {
 /* Hover insertion caret between ingredient rows (for subsection heading insertion) */
 .ingredient-insert-zone {
   position: relative;
-  /* Keep a generous hit target without introducing vertical whitespace. */
   height: 0;
-  padding: 8px 0;
-  margin: -8px 0;
+  margin: 0; /* rails must never affect layout */
   cursor: default;
   z-index: 5;
+}
+
+/* Hit target overlay (no layout impact) */
+.ingredient-insert-zone::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 16px;
 }
 
 .subhead-insert-mode .ingredient-insert-zone {
@@ -654,12 +700,19 @@ body.shopping-editor-page .shopping-item-help {
 
 .step-insert-zone {
   position: relative;
-  /* Same hit target strategy as ingredients: no layout shift */
   height: 0;
-  padding: 8px 0;
-  margin: -8px 0;
+  margin: 0; /* rails must never affect layout */
   cursor: default;
   z-index: 5;
+}
+
+.step-insert-zone::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 16px;
 }
 
 .subhead-insert-mode .step-insert-zone {
@@ -932,9 +985,8 @@ body.shopping-editor-page .shopping-item-help {
 .instruction-line {
   display: flex;
   align-items: baseline;
-  margin-bottom: var(--step-vertical-gap);
-  padding-top: var(--step-padding-top);
-  padding-bottom: var(--space-B);
+  margin: 0;
+  padding: 0;
 }
 
 .instruction-line .step-num {
@@ -943,7 +995,8 @@ body.shopping-editor-page .shopping-item-help {
 
 .instruction-line .step-text {
   flex: 1;
-  line-height: var(--space-A);
+  /* Optical gap A for wrapped lines: line-height ≈ font box (1em) + A */
+  line-height: calc(1em + var(--gap-instructions-wrap));
 }
 
 .placeholder-prompt {
@@ -997,15 +1050,14 @@ body.shopping-editor-page .shopping-item-help {
 .section-header {
   color: black;
   font-size: var(--header-font-size);
-  margin-top: var(--space-G);
-  margin-bottom: var(--space-E);
+  margin-top: var(--gap-title-to-first-section);
+  margin-bottom: 0; /* downstream-only: E is applied to the first item, not the header */
   text-transform: uppercase;
 }
 
 .subsection-header {
   color: var(--theme-primary);
-  margin-top: var(--space-D);
-  margin-bottom: var(--space-C);
+  margin: 0;
 }
 
 .instruction-line[data-step-type='heading'] .step-text {
