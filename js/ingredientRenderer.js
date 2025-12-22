@@ -327,6 +327,9 @@ function renderIngredient(line) {
   if (line && line.rimId != null) {
     div.dataset.rimId = String(line.rimId);
   }
+  if (line && line.clientId) {
+    div.dataset.clientId = String(line.clientId);
+  }
   div.dataset.isOptional = line && line.isOptional ? '1' : '0';
   div.dataset.isPlaceholder = line && line.isPlaceholder ? '1' : '0';
   div.dataset.quantity = line.quantity;
@@ -339,6 +342,18 @@ function renderIngredient(line) {
   // Placeholder row: "Add an ingredient."
   if (line.isPlaceholder) {
     textSpan.classList.add('placeholder-prompt');
+    if (textSpan.dataset && !textSpan.dataset.placeholder) {
+      textSpan.dataset.placeholder = 'Add an ingredient.';
+    }
+    // Some seed logic stores the placeholder text in `name`; clear it so we don't
+    // render the message twice (once as text, once via ::before).
+    if (
+      line &&
+      typeof line.name === 'string' &&
+      line.name.trim() === 'Add an ingredient.'
+    ) {
+      line.name = '';
+    }
 
     // click → open the multi-field editor (insert mode)
     div.addEventListener('click', () => {
@@ -485,9 +500,69 @@ function renderIngredient(line) {
 
   // Existing ingredient rows: click → open multi-field editor (update mode)
   if (!line.isPlaceholder) {
+    const handleMaybeDelete = (e) => {
+      if (!e) return false;
+      // Delete gesture:
+      // - ctrl/⌘-click (consistent with other list pages)
+      // - right-click (contextmenu) should behave the same
+      const wantsDelete = !!(e.ctrlKey || e.metaKey || e.type === 'contextmenu');
+      if (!wantsDelete) return false;
+      // Never delete via ctrl-click on sub-recipe links.
+      try {
+        if (e.target && e.target.closest && e.target.closest('a')) return false;
+      } catch (_) {}
+
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+
+      // Delete recipe-local row (never the global shopping item).
+      try {
+        const model = window.recipeData;
+        const secs = Array.isArray(model?.sections) ? model.sections : [];
+        const first = secs[0] || null;
+        if (!first || !Array.isArray(first.ingredients)) return true;
+
+        const rid = line && line.rimId != null ? String(line.rimId) : '';
+        const cid = line && line.clientId ? String(line.clientId) : '';
+        const hit = first.ingredients.find((ing) => {
+          if (!ing || ing.isPlaceholder || ing.rowType === 'heading') return false;
+          if (rid && ing.rimId != null && String(ing.rimId) === rid) return true;
+          if (cid && ing.clientId && String(ing.clientId) === cid) return true;
+          return ing === line;
+        });
+        if (!hit) return true;
+
+        if (typeof window.recipeEditorDeleteIngredientRow === 'function') {
+          void window.recipeEditorDeleteIngredientRow({
+            sectionRef: first,
+            rowRef: hit,
+            focusId: rid || cid,
+            focusBy: rid ? 'rimId' : 'clientId',
+          });
+        }
+      } catch (_) {}
+
+      return true;
+    };
+
+    // Ctrl-click on mac can be interpreted as contextmenu and may not fire click.
+    div.addEventListener('pointerdown', (e) => {
+      handleMaybeDelete(e);
+    });
+    div.addEventListener('contextmenu', (e) => {
+      // Treat right-click and ctrl/⌘-click equivalently for delete.
+      if (e) e.preventDefault();
+      handleMaybeDelete(e);
+    });
+
     div.addEventListener('click', (e) => {
       // Let clicks on sub-recipe links behave normally.
       if (e && e.target && e.target.closest && e.target.closest('a')) return;
+
+      // Ctrl/⌘-click deletes the row (recipe-local).
+      if (handleMaybeDelete(e)) return;
 
       const parent = div.parentNode;
       if (!parent) return;
@@ -541,6 +616,21 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     for (const sec of secs) {
       const arr = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
       const hit = arr.find((ing) => ing && String(ing.rimId) === rid);
+      if (hit) {
+        modelRef = hit;
+        sectionRef = sec;
+        break;
+      }
+    }
+  }
+  // Fallback: match by clientId when rimId doesn't exist yet (new unsaved rows).
+  if (!isInsert && !sectionRef && seedLine && seedLine.clientId) {
+    const cid = String(seedLine.clientId);
+    const model = window.recipeData;
+    const secs = Array.isArray(model?.sections) ? model.sections : [];
+    for (const sec of secs) {
+      const arr = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+      const hit = arr.find((ing) => ing && ing.clientId && String(ing.clientId) === cid);
       if (hit) {
         modelRef = hit;
         sectionRef = sec;
@@ -710,7 +800,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     return fields;
   };
 
-  const commit = () => {
+  const commit = async () => {
     // If an overlay dropdown is open, close it before we mutate DOM.
     try {
       if (
@@ -729,16 +819,24 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       return;
     }
 
+    const nameTrimmed = (fields.name || '').trim();
+
     const qtyRaw = fields.qty || '';
     let quantity = qtyRaw;
     const qtyNum = parseFloat(qtyRaw);
     if (qtyRaw && !Number.isNaN(qtyNum)) quantity = qtyNum;
 
     if (isInsert) {
+      // If user cleared the name, treat it as "no-op" insert (keep placeholder).
+      if (!nameTrimmed) {
+        restoreOriginal();
+        return;
+      }
+
       const ingredient = {
         quantity,
         unit: fields.unit || '',
-        name: fields.name || '',
+        name: nameTrimmed,
         size: fields.size || '',
         variant: fields.var || '',
         prepNotes: fields.prep || '',
@@ -748,6 +846,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         locationAtHome: '',
         subRecipeId: null,
         isPlaceholder: false,
+        clientId: `tmp-ing-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       };
 
       // v1: assume single ingredients section in the model
@@ -791,16 +890,47 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
       const readOnlyLine = renderIngredient(ingredient);
       if (readOnlyLine) finalizeSwap(readOnlyLine);
     } else if (modelRef) {
+      // Clearing name deletes the ingredient line from this recipe (with undo).
+      if (!nameTrimmed) {
+        try {
+          if (
+            sectionRef &&
+            typeof window.recipeEditorDeleteIngredientRow === 'function'
+          ) {
+            const ok = await window.recipeEditorDeleteIngredientRow({
+              sectionRef,
+              rowRef: modelRef,
+              focusId: modelRef.rimId != null ? String(modelRef.rimId) : modelRef.clientId,
+              focusBy: modelRef.rimId != null ? 'rimId' : 'clientId',
+            });
+            if (!ok) {
+              // User cancelled the delete confirmation: restore the original row.
+              restoreOriginal();
+              return;
+            }
+          }
+        } catch (_) {}
+        // Ensure the edit row is removed (rerender will replace the section anyway).
+        try {
+          _didFinalizeSwap = true;
+          if (row && row.parentNode) row.parentNode.removeChild(row);
+        } catch (_) {}
+        return;
+      }
+
       // Update the model reference (the thing Save will persist).
       modelRef.quantity = quantity;
       modelRef.unit = fields.unit || '';
-      modelRef.name = fields.name || '';
+      modelRef.name = nameTrimmed;
       modelRef.size = fields.size || '';
       modelRef.variant = fields.var || '';
       modelRef.prepNotes = fields.prep || '';
       modelRef.parentheticalNote = fields.notes || '';
       modelRef.isOptional = !!(fields.opt && fields.opt.trim());
       modelRef.isPlaceholder = false;
+      if (!modelRef.clientId) {
+        modelRef.clientId = modelRef.rimId != null ? `i-${modelRef.rimId}` : `tmp-ing-${Date.now()}`;
+      }
 
       // Keep the original rendered object in sync too (best-effort), so any other
       // logic that still holds that reference won't drift.
@@ -814,6 +944,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         seedLine.parentheticalNote = modelRef.parentheticalNote;
         seedLine.isOptional = modelRef.isOptional;
         seedLine.isPlaceholder = false;
+        if (!seedLine.clientId) seedLine.clientId = modelRef.clientId;
       }
 
       const readOnlyLine = renderIngredient(modelRef);

@@ -8,57 +8,58 @@
   const normalizationExemptions = new Set();
   window._typeaheadNormalizationExemptions = normalizationExemptions;
 
-  // --- Small toast helper (minimal; app has no shared toast currently)
-  function showUndoToast({ message, onUndo }) {
-    try {
-      let host = document.getElementById('typeaheadToastHost');
-      if (!host) {
-        host = document.createElement('div');
-        host.id = 'typeaheadToastHost';
-        host.className = 'typeahead-toast-host';
-        document.body.appendChild(host);
-      }
+  // --- Small toast helper (reuse global if available)
+  const showUndoToast =
+    typeof window.showUndoToast === 'function'
+      ? window.showUndoToast
+      : function showUndoToastFallback({ message, onUndo }) {
+          try {
+            let host = document.getElementById('typeaheadToastHost');
+            if (!host) {
+              host = document.createElement('div');
+              host.id = 'typeaheadToastHost';
+              host.className = 'typeahead-toast-host';
+              document.body.appendChild(host);
+            }
 
-      const toast = document.createElement('div');
-      toast.className = 'typeahead-toast';
+            const toast = document.createElement('div');
+            toast.className = 'typeahead-toast';
 
-      const msg = document.createElement('div');
-      msg.className = 'typeahead-toast__msg';
-      msg.textContent = message || '';
-      toast.appendChild(msg);
+            const msg = document.createElement('div');
+            msg.className = 'typeahead-toast__msg';
+            msg.textContent = message || '';
+            toast.appendChild(msg);
 
-      const undoBtn = document.createElement('button');
-      undoBtn.type = 'button';
-      undoBtn.className = 'typeahead-toast__undo';
-      undoBtn.textContent = 'Undo';
-      undoBtn.addEventListener('click', () => {
-        try {
-          if (typeof onUndo === 'function') onUndo();
-        } finally {
-          if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
-        }
-      });
-      toast.appendChild(undoBtn);
+            const undoBtn = document.createElement('button');
+            undoBtn.type = 'button';
+            undoBtn.className = 'typeahead-toast__undo';
+            undoBtn.textContent = 'Undo';
+            undoBtn.addEventListener('click', () => {
+              try {
+                if (typeof onUndo === 'function') onUndo();
+              } finally {
+                if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+              }
+            });
+            toast.appendChild(undoBtn);
 
-      host.appendChild(toast);
+            host.appendChild(toast);
 
-      const t = window.setTimeout(() => {
-        if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
-      }, 4500);
+            const t = window.setTimeout(() => {
+              if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 4500);
 
-      // If user interacts, keep it around a bit longer (best-effort).
-      toast.addEventListener('mouseenter', () => {
-        try {
-          window.clearTimeout(t);
-        } catch (_) {}
-      });
+            toast.addEventListener('mouseenter', () => {
+              try {
+                window.clearTimeout(t);
+              } catch (_) {}
+            });
 
-      return toast;
-    } catch (_) {
-      // If toast fails, do nothing; the feature should still function.
-      return null;
-    }
-  }
+            return toast;
+          } catch (_) {
+            return null;
+          }
+        };
 
   // --- Text helpers
   const norm = (s) => (s || '').toString().trim();
@@ -223,8 +224,13 @@
       this.fixedWidth = null;
       this._updateReqId = 0;
 
-      this._onScroll = () => {
-        // v1: close on scroll
+      this._onScroll = (e) => {
+        // Close on page scroll, but NOT when the dropdown list itself scrolls
+        // (arrowing through items can scroll the internal list).
+        try {
+          const t = e && e.target ? e.target : null;
+          if (t && this.el && (t === this.el || this.el.contains(t))) return;
+        } catch (_) {}
         this.close();
       };
     }
@@ -440,8 +446,9 @@
       if (!Array.isArray(this.items) || this.items.length === 0) return;
       const len = this.items.length;
       let idx = nextIdx;
-      if (idx < 0) idx = len - 1;
-      if (idx >= len) idx = 0;
+      // Clamp, do not wrap (wrapping felt surprising in practice).
+      if (idx < 0) idx = 0;
+      if (idx >= len) idx = len - 1;
       this.highlightIdx = idx;
 
       const rows = this.el.querySelectorAll('.typeahead-item');
@@ -505,6 +512,7 @@
   const poolCache = {
     nameAll: null,
     unitAll: null,
+    sizeAll: null,
     variantsByName: new Map(), // lower(name) -> string[]
     _cols: new Map(), // tableName -> lowercased column names[]
   };
@@ -512,6 +520,7 @@
   function invalidatePools() {
     poolCache.nameAll = null;
     poolCache.unitAll = null;
+    poolCache.sizeAll = null;
     poolCache.variantsByName = new Map();
     poolCache._cols = new Map();
   }
@@ -615,6 +624,89 @@
 
     poolCache.unitAll = merged;
     return merged;
+  }
+
+  async function getSizePool() {
+    if (poolCache.sizeAll) return poolCache.sizeAll;
+    const db = getDb();
+    if (!db) return [];
+
+    // Sizes show up in multiple places across schema revisions.
+    // We merge them into a single suggestion pool.
+    const pools = [];
+
+    // Per-recipe ingredient sizes (primary use in the tray)
+    pools.push(
+      columnFromExec(
+        safeExec(
+          db,
+          `SELECT DISTINCT size
+           FROM recipe_ingredient_map
+           WHERE size IS NOT NULL AND trim(size) != ''
+           ORDER BY size COLLATE NOCASE;`
+        ),
+        0
+      )
+    );
+
+    // Substitute sizes
+    pools.push(
+      columnFromExec(
+        safeExec(
+          db,
+          `SELECT DISTINCT size
+           FROM recipe_ingredient_substitutes
+           WHERE size IS NOT NULL AND trim(size) != ''
+           ORDER BY size COLLATE NOCASE;`
+        ),
+        0
+      )
+    );
+
+    // Shopping item / ingredient sizes list table (if present)
+    pools.push(
+      columnFromExec(
+        safeExec(
+          db,
+          `SELECT DISTINCT size
+           FROM ingredient_sizes
+           WHERE size IS NOT NULL AND trim(size) != ''
+           ORDER BY size COLLATE NOCASE;`
+        ),
+        0
+      )
+    );
+
+    // Legacy single-value ingredient.size (if present)
+    if (tableHasColumn(db, 'ingredients', 'size')) {
+      pools.push(
+        columnFromExec(
+          safeExec(
+            db,
+            `SELECT DISTINCT size
+             FROM ingredients
+             WHERE size IS NOT NULL AND trim(size) != ''
+             ORDER BY size COLLATE NOCASE;`
+          ),
+          0
+        )
+      );
+    }
+
+    const out = [];
+    const seen = new Set();
+    pools.flat().forEach((s) => {
+      const v = norm(s);
+      if (!v) return;
+      const k = lower(v);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(v);
+    });
+
+    out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    poolCache.sizeAll = out;
+    return out;
   }
 
   async function getVariantPoolForName(nameText) {
@@ -908,6 +1000,9 @@
     const unitInput = rowEl.querySelector(
       '.ingredient-edit-input[data-field="unit"]'
     );
+    const sizeInput = rowEl.querySelector(
+      '.ingredient-edit-input[data-field="size"]'
+    );
     const varInput = rowEl.querySelector(
       '.ingredient-edit-input[data-field="var"]'
     );
@@ -944,6 +1039,16 @@
         await maybeNormalizeOnBlur(unitInput, async () => await getUnitPool(), {
           mode: 'unit',
         });
+      });
+    }
+
+    // SIZE (show full list on focus, like units; no normalization)
+    if (sizeInput) {
+      attachTypeaheadToInput({
+        inputEl: sizeInput,
+        getPool: async () => await getSizePool(),
+        openOnFocus: true,
+        maxVisible: 10,
       });
     }
 

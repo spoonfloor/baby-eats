@@ -771,7 +771,6 @@ INSERT INTO "ingredients" VALUES (166,'cinnamon','ground','spices',0,'','',1,0,'
 INSERT INTO "ingredients" VALUES (167,'tomato paste','','fridge',0,'','',1,0,'tomato paste',0,0,NULL);
 INSERT INTO "ingredients" VALUES (168,'vegan yogurt','','fridge',0,'','',1,0,'vegan yogurt',0,0,NULL);
 INSERT INTO "ingredients" VALUES (170,'nutritional yeast','','spices',0,'','butt',1,0,'nutritional yeast',0,0,NULL);
-INSERT INTO "ingredients" VALUES (171,'Banquo''s Ghosticles','Pee Pee Edition','',0,'large','Don''t do pee pee',1,0,'Banquo''s Ghosticles',0,0,NULL);
 INSERT INTO "ingredients" VALUES (172,'apple cider vinegar','Pee Pee Edition','',0,'large',NULL,1,0,'apple cider vinegar',0,0,NULL);
 INSERT INTO "recipe_ingredient_map" VALUES (34,1,151,NULL,'2.25','cup',NULL,0,NULL,NULL,NULL);
 INSERT INTO "recipe_ingredient_map" VALUES (35,1,152,NULL,'3','tbsp',NULL,0,NULL,NULL,NULL);
@@ -875,6 +874,7 @@ INSERT INTO "recipes" VALUES (28,'Newone',NULL,NULL,NULL);
 INSERT INTO "size_classes" VALUES ('small',1);
 INSERT INTO "size_classes" VALUES ('medium',2);
 INSERT INTO "size_classes" VALUES ('large',3);
+INSERT INTO "size_classes" VALUES ('extra large',4);
 INSERT INTO "store_locations" VALUES (1,1,'produce',NULL,1);
 INSERT INTO "store_locations" VALUES (2,1,'health and beauty',NULL,2);
 INSERT INTO "store_locations" VALUES (3,1,'frozen food',NULL,3);
@@ -900,15 +900,7 @@ INSERT INTO "units" VALUES ('g','gram','grams','mass',30,0);
 INSERT INTO "units" VALUES ('kg','kilogram','kilograms','mass',31,0);
 INSERT INTO "units" VALUES ('oz','ounce','ounces','mass',32,0);
 INSERT INTO "units" VALUES ('lb','pound','pounds','mass',33,0);
-INSERT INTO "units" VALUES ('each','each','each','count',40,0);
-INSERT INTO "units" VALUES ('pkg','package','packages','count',41,0);
-INSERT INTO "units" VALUES ('can','can','cans','count',42,0);
-INSERT INTO "units" VALUES ('jar','jar','jars','count',43,0);
-INSERT INTO "units" VALUES ('bunch','bunch','bunches','count',44,0);
 INSERT INTO "units" VALUES ('clove','clove','cloves','count',45,0);
-INSERT INTO "units" VALUES ('slice','slice','slices','count',46,0);
-INSERT INTO "units" VALUES ('pinch','pinch','pinches','misc',50,0);
-INSERT INTO "units" VALUES ('dash','dash','dashes','misc',51,0);
 INSERT INTO "units" VALUES ('drop','drop','drops','misc',52,0);
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_ingredient_sizes_unique" ON "ingredient_sizes" (
 	"ingredient_id",

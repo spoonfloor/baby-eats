@@ -357,6 +357,15 @@ function rerenderIngredientsSectionFromModel() {
       }
     } else {
       if (typeof renderIngredient === 'function') {
+        if (row && !row.isPlaceholder && row.rowType !== 'heading') {
+          // Ensure every ingredient row has a stable clientId for in-session operations (delete/undo).
+          if (!row.clientId) {
+            row.clientId =
+              row.rimId != null
+                ? `i-${row.rimId}`
+                : `tmp-ing-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          }
+        }
         el = renderIngredient(row);
       } else {
         el = document.createElement('div');
@@ -435,7 +444,246 @@ function rerenderIngredientsSectionFromModel() {
       }
     }
   } catch (_) {}
+
+  // Keep "You will need" in sync with ingredient edits.
+  try {
+    if (typeof window.recipeEditorRerenderYouWillNeedFromModel === 'function') {
+      window.recipeEditorRerenderYouWillNeedFromModel();
+    }
+  } catch (_) {}
 }
+
+function rerenderYouWillNeedFromModel() {
+  const container = getPageContentContainer();
+  if (!container) return;
+  const recipe = window.recipeData;
+  if (!recipe) return;
+
+  let needWrapper = container.querySelector('.you-will-need-card');
+  const stepsSection = container.querySelector('#stepsSection');
+  if (!needWrapper) {
+    needWrapper = document.createElement('div');
+    needWrapper.className = 'you-will-need-card';
+    if (stepsSection && stepsSection.parentNode === container) {
+      container.insertBefore(needWrapper, stepsSection);
+    } else {
+      container.appendChild(needWrapper);
+    }
+  }
+
+  needWrapper.innerHTML = '';
+  const needHeader = document.createElement('h2');
+  needHeader.className = 'section-header';
+  needHeader.textContent = 'You will need';
+  needWrapper.appendChild(needHeader);
+
+  const allIngredientsRaw = Array.isArray(recipe.sections)
+    ? recipe.sections.flatMap((s) => s.ingredients || [])
+    : [];
+
+  const allIngredients = allIngredientsRaw.filter(
+    (row) => row && row.rowType !== 'heading' && !row.isPlaceholder
+  );
+
+  if (allIngredients.length === 0) {
+    const line = document.createElement('div');
+    line.className = 'ingredient-line';
+    const span = document.createElement('span');
+    span.className = 'placeholder-prompt';
+    span.textContent = 'No ingredients yet. Add some above.';
+    line.appendChild(span);
+    needWrapper.appendChild(line);
+    return;
+  }
+
+  const grouped = {};
+  allIngredients.forEach((ing) => {
+    const loc = ing.locationAtHome || '';
+    if (!grouped[loc]) grouped[loc] = [];
+    grouped[loc].push(ing);
+  });
+
+  Object.keys(grouped).forEach((loc) => {
+    grouped[loc] = mergeByIngredient(grouped[loc]);
+  });
+
+  NEED_LOCATION_ORDER.forEach((loc) => {
+    const items = grouped[loc];
+    if (!items || !items.length) return;
+
+    const subHeader = document.createElement('div');
+    subHeader.className = 'subsection-header';
+    subHeader.textContent = loc ? capitalizeWords(loc) : 'Misc';
+    needWrapper.appendChild(subHeader);
+
+    sortIngredients(items, NEED_LOCATION_ORDER).forEach((ing) => {
+      const line = document.createElement('div');
+      line.className = 'ingredient-line';
+      const span = document.createElement('span');
+      span.textContent = formatNeedLine(ing);
+      line.appendChild(span);
+      needWrapper.appendChild(line);
+    });
+  });
+
+  const measures = computeMeasures(allIngredients);
+  if (measures.length > 0) {
+    const measureHeader = document.createElement('div');
+    measureHeader.className = 'subsection-header';
+    measureHeader.textContent = 'Measures';
+    needWrapper.appendChild(measureHeader);
+
+    measures.forEach((m) => {
+      const line = document.createElement('div');
+      line.className = 'ingredient-line';
+      const span = document.createElement('span');
+      span.textContent = formatMeasureLabel(m);
+      line.appendChild(span);
+      needWrapper.appendChild(line);
+    });
+  }
+}
+
+window.recipeEditorRerenderYouWillNeedFromModel = rerenderYouWillNeedFromModel;
+
+// --- Ingredient deletion (recipe-local) + undo ---
+function ensureIngredientPlaceholder(section) {
+  if (!section) return;
+  if (!Array.isArray(section.ingredients)) section.ingredients = [];
+  const hasPlaceholder = section.ingredients.some((r) => r && r.isPlaceholder);
+  if (hasPlaceholder) return;
+  section.ingredients.push({
+    quantity: '',
+    unit: '',
+    name: '',
+    size: '',
+    variant: '',
+    prepNotes: '',
+    parentheticalNote: '',
+    isOptional: false,
+    substitutes: [],
+    locationAtHome: '',
+    subRecipeId: null,
+    isPlaceholder: true,
+    clientId: `tmp-ing-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  });
+}
+
+function deleteIngredientRowFromSection(sectionRef, rowRef) {
+  if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef) return null;
+  const idx = sectionRef.ingredients.indexOf(rowRef);
+  if (idx < 0) return null;
+  const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
+  ensureIngredientPlaceholder(sectionRef);
+  return { idx, removed };
+}
+
+window.recipeEditorDeleteIngredientRow = async ({
+  sectionRef,
+  rowRef,
+  focusId,
+  focusBy = 'clientId',
+} = {}) => {
+  if (!sectionRef || !rowRef) return false;
+
+  // Capture a deep-ish snapshot for undo.
+  const snapshot = JSON.parse(JSON.stringify(rowRef));
+
+  // Confirm before deleting (consistent with parent pages).
+  try {
+    const labelParts = [];
+    if (snapshot.quantity != null && String(snapshot.quantity).trim()) {
+      labelParts.push(String(snapshot.quantity).trim());
+    }
+    if (snapshot.unit != null && String(snapshot.unit).trim()) {
+      labelParts.push(String(snapshot.unit).trim());
+    }
+    const nameBits = [];
+    if (snapshot.variant) nameBits.push(String(snapshot.variant).trim());
+    if (snapshot.name) nameBits.push(String(snapshot.name).trim());
+    if (snapshot.size) nameBits.push(String(snapshot.size).trim());
+    const nameStr = nameBits.filter(Boolean).join(' ');
+    if (nameStr) labelParts.push(nameStr);
+
+    const display = labelParts.filter(Boolean).join(' ').trim() || 'this ingredient';
+    const ok =
+      window.ui && typeof window.ui.confirm === 'function'
+        ? await window.ui.confirm({
+            title: 'Remove Ingredient',
+            message: `Remove "${display}" from this recipe?\n\nThis won’t delete it from your shopping items.`,
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            danger: true,
+          })
+        : window.confirm(
+            `Remove "${display}" from this recipe?\n\nThis won’t delete it from your shopping items.`
+          );
+    if (!ok) return false;
+  } catch (_) {
+    // If confirm fails for some reason, proceed (fail-open).
+  }
+
+  const del = deleteIngredientRowFromSection(sectionRef, rowRef);
+  if (!del || !del.removed) return false;
+
+  // Mark editor dirty (explicit destructive action).
+  try {
+    if (typeof markDirty === 'function') markDirty();
+  } catch (_) {}
+
+  rerenderIngredientsSectionFromModel();
+
+  const restore = () => {
+    try {
+      if (!Array.isArray(sectionRef.ingredients)) sectionRef.ingredients = [];
+      // Remove placeholder if we're restoring a real row and placeholder is the only thing.
+      const placeholderIdx = sectionRef.ingredients.findIndex((r) => r && r.isPlaceholder);
+      if (placeholderIdx >= 0) {
+        // Keep placeholder if there are headings; otherwise we can remove and re-add later.
+        const hasOther = sectionRef.ingredients.some((r, i) => i !== placeholderIdx);
+        if (!hasOther) sectionRef.ingredients.splice(placeholderIdx, 1);
+      }
+      const insertAt = Math.min(Math.max(0, del.idx), sectionRef.ingredients.length);
+      sectionRef.ingredients.splice(insertAt, 0, snapshot);
+      ensureIngredientPlaceholder(sectionRef);
+    } catch (_) {}
+
+    rerenderIngredientsSectionFromModel();
+
+    // Best-effort: scroll restored row into view
+    try {
+      const container = getPageContentContainer();
+      const ingredientsSection = container?.querySelector('#ingredientsSection');
+      if (!ingredientsSection) return;
+      const selector =
+        focusBy === 'rimId'
+          ? `.ingredient-line[data-rim-id="${String(focusId || snapshot.rimId || '')}"]`
+          : `.ingredient-line[data-client-id="${String(
+              focusId || snapshot.clientId || ''
+            )}"]`;
+      const el = ingredientsSection.querySelector(selector);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    } catch (_) {}
+  };
+
+  // Offer undo (single-slot toast)
+  try {
+    const um = window.undoManager;
+    if (um && typeof um.push === 'function') {
+      um.push({
+        message: 'Ingredient removed from recipe',
+        undo: restore,
+        timeoutMs: 8000,
+      });
+    } else if (typeof window.showUndoToast === 'function') {
+      window.showUndoToast({ message: 'Ingredient removed from recipe', onUndo: restore });
+    }
+  } catch (_) {}
+
+  return true;
+};
 
 // Exposed hooks used by ingredient editor + main.js loader.
 window.recipeEditorAfterIngredientEditCommit = (sectionRef) => {
@@ -443,6 +691,13 @@ window.recipeEditorAfterIngredientEditCommit = (sectionRef) => {
 
   // Always enforce "optional goes to bottom" within the current subsection.
   sectionRef.ingredients = partitionOptionalsWithinSubsections(sectionRef.ingredients);
+
+  // Keep "You will need" in sync even if we skip a disruptive rerender.
+  try {
+    if (typeof window.recipeEditorRerenderYouWillNeedFromModel === 'function') {
+      window.recipeEditorRerenderYouWillNeedFromModel();
+    }
+  } catch (_) {}
 
   // If another ingredient row is already active (e.g. Enter-to-next flow),
   // avoid a disruptive rerender mid-session.

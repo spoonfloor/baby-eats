@@ -381,6 +381,7 @@ function loadRecipeFromDB(db, recipeId) {
         ]) => ({
           rowType: 'ingredient',
           rimId,
+          clientId: rimId != null ? `i-${rimId}` : null,
           sectionId: sectionId == null ? null : Number(sectionId),
           sortOrder: sortOrder == null ? null : Number(sortOrder),
           quantity: isNaN(parseFloat(qty)) ? qty : parseFloat(qty),

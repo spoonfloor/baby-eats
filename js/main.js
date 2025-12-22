@@ -1,6 +1,53 @@
 // Shared SQL.js init (offline / local version)
 let SQL;
 
+// --- Unified user messaging helpers (dialogs/toasts) ---
+function uiToast(message, opts = {}) {
+  try {
+    if (window.ui && typeof window.ui.toast === 'function') {
+      return window.ui.toast({ message: String(message || ''), ...opts });
+    }
+  } catch (_) {}
+  try {
+    // Fallback for early boot / missing ui
+    alert(String(message || ''));
+  } catch (_) {}
+  return null;
+}
+
+function uiAlert(title, message) {
+  try {
+    if (window.ui && typeof window.ui.alert === 'function') {
+      return window.ui.alert({
+        title: String(title || ''),
+        message: String(message || ''),
+      });
+    }
+  } catch (_) {}
+  try {
+    alert(String(message || ''));
+  } catch (_) {}
+  return Promise.resolve(true);
+}
+
+async function uiConfirm({
+  title = 'Confirm',
+  message = '',
+  confirmText = 'OK',
+  cancelText = 'Cancel',
+  danger = false,
+} = {}) {
+  try {
+    if (window.ui && typeof window.ui.confirm === 'function') {
+      return await window.ui.confirm({ title, message, confirmText, cancelText, danger });
+    }
+  } catch (_) {}
+  try {
+    return window.confirm(String(message || 'Are you sure?'));
+  } catch (_) {}
+  return false;
+}
+
 function isTypingContext(target) {
   const el = target instanceof Element ? target : null;
   const active =
@@ -23,7 +70,15 @@ function enableTopLevelListKeyboardNav(listEl) {
   let selectedIdx = -1;
   let selectionSource = null; // 'hover' | 'keyboard' | null
 
-  const isModalOpen = () => !!document.querySelector('.modal:not(.hidden)');
+  const isModalOpen = () => {
+    try {
+      if (window.ui && typeof window.ui.isDialogOpen === 'function') {
+        return !!window.ui.isDialogOpen();
+      }
+    } catch (_) {}
+    // Legacy fallback (older static modals)
+    return !!document.querySelector('.modal:not(.hidden)');
+  };
   const getRows = () => Array.from(listEl.querySelectorAll('li'));
 
   const applySelection = () => {
@@ -273,7 +328,7 @@ if (loadDbBtn && dbLoader) {
         // 2. Prompt for DB file
         let dbPath = await window.electronAPI.pickDB(lastPath);
         if (!dbPath) {
-          alert('No database selected.');
+          uiToast('No database selected.');
           return;
         }
 
@@ -287,7 +342,7 @@ if (loadDbBtn && dbLoader) {
         window.location.href = 'recipes.html';
       } catch (err) {
         console.error('❌ Error loading database:', err);
-        alert('Failed to load database — check console for details.');
+        uiToast('Failed to load database — check console for details.');
       }
     } else {
       // --- Browser fallback flow (no Electron) ---
@@ -321,14 +376,14 @@ async function loadRecipesPage() {
       db = new SQL.Database(Uints);
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       return;
     }
   } else {
     // Browser fallback (keeps old behavior)
     const stored = localStorage.getItem('favoriteEatsDb');
     if (!stored) {
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       return;
     }
     const Uints = new Uint8Array(JSON.parse(stored));
@@ -382,27 +437,11 @@ async function loadRecipesPage() {
       li.textContent = fixedTitle;
 
       li.addEventListener('click', (event) => {
-        // Ctrl-click → delete dialog; plain click → open editor
-        if (event.ctrlKey) {
+        // Treat Ctrl-click / Cmd-click as "delete"
+        if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           event.stopPropagation();
-          openDeleteModal(id, title);
-          return;
-        }
-
-        sessionStorage.setItem('selectedRecipeId', id);
-        window.location.href = 'recipeEditor.html';
-      });
-
-      // Primary click: open editor, unless modifier indicates delete
-      li.addEventListener('click', (event) => {
-        // Treat Ctrl-click (Windows/Linux) or Cmd-click (macOS) as "delete"
-        const wantsDelete = event.ctrlKey || event.metaKey;
-
-        if (wantsDelete) {
-          event.preventDefault();
-          event.stopPropagation();
-          openDeleteModal(id, title);
+          void deleteRecipeWithConfirm(db, id, title);
           return;
         }
 
@@ -413,7 +452,7 @@ async function loadRecipesPage() {
       // Right-click / two-finger click → delete dialog as well
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        openDeleteModal(id, title);
+        void deleteRecipeWithConfirm(db, id, title);
       });
 
       list.appendChild(li);
@@ -433,62 +472,69 @@ async function loadRecipesPage() {
       .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
   }
 
-  const modal = document.getElementById('addRecipeModal');
-  const cancelBtn = document.getElementById('addRecipeCancel');
-  const createBtn = document.getElementById('addRecipeCreate');
-  const titleInput = document.getElementById('newRecipeTitle');
-
-  const deleteModal = document.getElementById('deleteRecipeModal');
-  const deleteTitleSpan = document.getElementById('deleteRecipeTitle');
-  const deleteCancelBtn = document.getElementById('deleteRecipeCancel');
-  const deleteConfirmBtn = document.getElementById('deleteRecipeConfirm');
-  let pendingDeleteId = null;
-
-  // Start with Create disabled; enable only when there is non-blank text.
-  if (createBtn) {
-    createBtn.disabled = true;
-  }
-
-  function updateCreateButtonState() {
-    if (!createBtn || !titleInput) return;
-    const hasText = !!titleInput.value.trim();
-    createBtn.disabled = !hasText;
-  }
-
-  function openModal() {
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    if (titleInput) {
-      titleInput.value = '';
-      titleInput.focus();
-
-      // Reset disabled state on open
-      updateCreateButtonState();
-    }
-  }
-
-  function closeModal() {
-    if (!modal) return;
-    modal.classList.add('hidden');
-  }
-
-  function openDeleteModal(id, title) {
-    if (!deleteModal || !deleteTitleSpan) return;
-    pendingDeleteId = id;
-    deleteTitleSpan.textContent = title;
-    deleteModal.classList.remove('hidden');
-  }
-
-  function closeDeleteModal() {
-    if (!deleteModal) return;
-    pendingDeleteId = null;
-    deleteModal.classList.add('hidden');
-  }
-
-  if (deleteCancelBtn) {
-    deleteCancelBtn.addEventListener('click', () => {
-      closeDeleteModal();
+  async function openCreateRecipeDialog(db) {
+    if (!db || !window.ui) return;
+    const vals = await window.ui.form({
+      title: 'New Recipe',
+      fields: [
+        {
+          key: 'title',
+          label: 'Title',
+          value: '',
+          required: true,
+          normalize: (v) => toTitleCase((v || '').trim()),
+        },
+      ],
+      confirmText: 'Create',
+      cancelText: 'Cancel',
+      validate: (v) => {
+        if (!v.title || !v.title.trim()) return 'Title is required.';
+        return '';
+      },
     });
+    if (!vals) return;
+
+    const title = vals.title;
+    let newId = null;
+    try {
+      db.run('INSERT INTO recipes (title) VALUES (?);', [title]);
+      const idQ = db.exec('SELECT last_insert_rowid();');
+      if (idQ.length && idQ[0].values.length) {
+        newId = idQ[0].values[0][0];
+      }
+    } catch (err) {
+      console.error('❌ Failed to create recipe:', err);
+      window.ui.toast({ message: 'Failed to create recipe. See console.' });
+      return;
+    }
+
+    // Persist DB so editor + list can see the new recipe
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) {
+          window.ui.toast({ message: 'Failed to save database after creating recipe.' });
+          return;
+        }
+      } else {
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
+      }
+    } catch (err) {
+      console.error('❌ Failed to persist DB after creating recipe:', err);
+      window.ui.toast({ message: 'Failed to save database after creating recipe.' });
+      return;
+    }
+
+    if (newId != null) {
+      sessionStorage.setItem('selectedRecipeId', newId);
+      sessionStorage.setItem('selectedRecipeIsNew', '1');
+      window.location.href = 'recipeEditor.html';
+    }
   }
 
   // Delete a recipe and all dependent rows in child tables.
@@ -508,136 +554,50 @@ async function loadRecipesPage() {
     db.run('DELETE FROM recipes WHERE ID = ?;', [recipeId]);
   }
 
-  if (deleteConfirmBtn) {
-    deleteConfirmBtn.addEventListener('click', async () => {
-      if (pendingDeleteId == null) {
-        closeDeleteModal();
-        return;
-      }
-
-      try {
-        deleteRecipeDeep(db, pendingDeleteId);
-      } catch (err) {
-        console.error('❌ Failed to delete recipe:', err);
-        alert('Failed to delete recipe. See console for details.');
-        closeDeleteModal();
-        return;
-      }
-
-      // --- Persist updated DB so delete is durable ---
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after deleting recipe.');
-            return;
-          }
-        } else {
-          // Browser fallback — keep DB in localStorage
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
-      } catch (err) {
-        console.error('❌ Failed to persist DB after deleting recipe:', err);
-        alert(
-          'Failed to save database after deleting recipe. See console for details.'
-        );
-        return;
-      }
-
-      // Update in-memory list and UI
-      recipeRows = recipeRows.filter(([id]) => id !== pendingDeleteId);
-      renderRecipeList(recipeRows);
-
-      closeDeleteModal();
+  async function deleteRecipeWithConfirm(db, recipeId, title) {
+    if (!db || recipeId == null || !window.ui) return;
+    const ok = await window.ui.confirm({
+      title: 'Delete Recipe',
+      message: `Delete "${title}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true,
     });
-  }
+    if (!ok) return;
 
-  // Keep Create button in sync as user types.
-  if (titleInput) {
-    titleInput.addEventListener('input', updateCreateButtonState);
+    try {
+      deleteRecipeDeep(db, recipeId);
+    } catch (err) {
+      console.error('❌ Failed to delete recipe:', err);
+      window.ui.toast({ message: 'Failed to delete recipe. See console.' });
+      return;
+    }
+
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        const okSave = await window.electronAPI.saveDB(binaryArray);
+        if (okSave === false) {
+          window.ui.toast({ message: 'Failed to save database after deleting recipe.' });
+          return;
+        }
+      } else {
+        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+      }
+    } catch (err) {
+      console.error('❌ Failed to persist DB after deleting recipe:', err);
+      window.ui.toast({ message: 'Failed to save database after deleting recipe.' });
+      return;
+    }
+
+    recipeRows = recipeRows.filter(([id]) => id !== recipeId);
+    renderRecipeList(recipeRows);
   }
 
   if (recipesActionBtn) {
-    recipesActionBtn.addEventListener('click', openModal);
-  }
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', closeModal);
-  }
-  if (createBtn) {
-    createBtn.addEventListener('click', async () => {
-      if (!titleInput) {
-        closeModal();
-        return;
-      }
-
-      const rawTitle = titleInput.value || '';
-      const trimmed = rawTitle.trim();
-
-      // Require non-empty
-      if (!trimmed) {
-        titleInput.focus();
-        return;
-      }
-
-      const title = toTitleCase(trimmed);
-
-      let newId = null;
-      try {
-        // Insert new recipe row (servings fields left NULL / default)
-        db.run('INSERT INTO recipes (title) VALUES (?);', [title]);
-
-        const idQ = db.exec('SELECT last_insert_rowid();');
-        if (idQ.length && idQ[0].values.length) {
-          newId = idQ[0].values[0][0];
-        }
-      } catch (err) {
-        console.error('❌ Failed to create recipe:', err);
-        alert('Failed to create recipe. See console for details.');
-        return;
-      }
-
-      // --- Persist updated DB so editor + list can see the new recipe ---
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after creating recipe.');
-            return;
-          }
-        } else {
-          // Browser fallback — keep DB in localStorage
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
-      } catch (err) {
-        console.error('❌ Failed to persist DB after creating recipe:', err);
-        alert(
-          'Failed to save database after creating recipe. See console for details.'
-        );
-        return;
-      }
-
-      closeModal();
-
-      if (newId != null) {
-        sessionStorage.setItem('selectedRecipeId', newId);
-
-        // Mark this as a brand-new recipe so the editor can seed placeholders.
-        sessionStorage.setItem('selectedRecipeIsNew', '1');
-
-        window.location.href = 'recipeEditor.html';
-      }
+    recipesActionBtn.addEventListener('click', () => {
+      void openCreateRecipeDialog(db);
     });
   }
 
@@ -713,14 +673,14 @@ async function loadShoppingPage() {
       db = new SQL.Database(Uints);
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
   } else {
     const stored = localStorage.getItem('favoriteEatsDb');
     if (!stored) {
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
@@ -845,18 +805,22 @@ async function loadShoppingPage() {
     return 0;
   }
 
-  function removeShoppingName(name) {
+  async function removeShoppingName(name) {
     const n = (name || '').trim();
     if (!n) return false;
 
     const usedCount = countRecipesUsingShoppingName(n);
 
     if (usedCount > 0) {
-      const ok = window.confirm(
-        `Remove '${n}'?\n\nUsed in ${usedCount} recipe${
+      const ok = await uiConfirm({
+        title: 'Remove Shopping Item',
+        message: `Remove '${n}'?\n\nUsed in ${usedCount} recipe${
           usedCount === 1 ? '' : 's'
-        }.\n\nRemoving will hide it from Shopping and search (it will remain in recipes until replaced).`
-      );
+        }.\n\nRemoving will hide it from Shopping and search (it will remain in recipes until replaced).`,
+        confirmText: 'Remove',
+        cancelText: 'Cancel',
+        danger: true,
+      });
       if (!ok) return false;
 
       try {
@@ -873,13 +837,17 @@ async function loadShoppingPage() {
         }
       } catch (err) {
         console.error('❌ Failed to deprecate shopping item:', err);
-        alert('Failed to remove item. See console for details.');
+        uiToast('Failed to remove item. See console for details.');
         return false;
       }
     } else {
-      const ok = window.confirm(
-        `Remove '${n}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`
-      );
+      const ok = await uiConfirm({
+        title: 'Delete Shopping Item',
+        message: `Remove '${n}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true,
+      });
       if (!ok) return false;
 
       try {
@@ -916,7 +884,7 @@ async function loadShoppingPage() {
         db.run('DELETE FROM ingredients WHERE lower(name) = lower(?);', [n]);
       } catch (err) {
         console.error('❌ Failed to delete shopping item:', err);
-        alert('Failed to delete item. See console for details.');
+        uiToast('Failed to delete item. See console for details.');
         return false;
       }
     }
@@ -999,10 +967,14 @@ async function loadShoppingPage() {
 
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        const ok = removeShoppingName(item.name || '');
-        if (ok) {
-          window.location.reload();
-        }
+        void (async () => {
+          const ok = await removeShoppingName(item.name || '');
+          if (ok) window.location.reload();
+        })();
+        void (async () => {
+          const ok = await removeShoppingName(item.name || '');
+          if (ok) window.location.reload();
+        })();
       });
 
       list.appendChild(li);
@@ -1056,87 +1028,66 @@ async function loadShoppingPage() {
   }
 
   // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
-  const addModal = document.getElementById('addShoppingModal');
-  const addCancel = document.getElementById('addShoppingCancel');
-  const addCreate = document.getElementById('addShoppingCreate');
-  const addInput = document.getElementById('newShoppingName');
-
-  const openAddShoppingModal = () => {
-    if (!addModal) return;
-    addModal.classList.remove('hidden');
-    if (addInput) {
-      addInput.value = '';
-      addInput.focus();
+  async function openCreateShoppingItemDialog() {
+    if (!window.ui) {
+      uiToast('UI not ready yet.');
+      return;
     }
-    if (addCreate) addCreate.disabled = true;
-  };
 
-  const closeAddShoppingModal = () => {
-    if (!addModal) return;
-    addModal.classList.add('hidden');
-  };
+    const name = await window.ui.prompt({
+      title: 'New Shopping Item',
+      label: 'Name',
+      value: '',
+      placeholder: '',
+      confirmText: 'Create',
+      cancelText: 'Cancel',
+      required: true,
+      normalize: (v) => (v || '').trim(),
+    });
+    if (!name) return;
 
-  const updateAddShoppingCreateState = () => {
-    if (!addCreate || !addInput) return;
-    addCreate.disabled = !addInput.value.trim();
-  };
+    let newId = null;
+    try {
+      db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
+      const idQ = db.exec('SELECT last_insert_rowid();');
+      if (idQ.length && idQ[0].values.length) {
+        newId = idQ[0].values[0][0];
+      }
+    } catch (err) {
+      console.error('❌ Failed to create shopping item:', err);
+      uiToast('Failed to create shopping item. See console.');
+      return;
+    }
 
-  if (addInput)
-    addInput.addEventListener('input', updateAddShoppingCreateState);
-  if (addCancel) addCancel.addEventListener('click', closeAddShoppingModal);
-  if (addBtn) addBtn.addEventListener('click', openAddShoppingModal);
-
-  if (addCreate) {
-    addCreate.addEventListener('click', async () => {
-      const name = (addInput?.value || '').trim();
-      if (!name) return;
-
-      let newId = null;
-      try {
-        db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
-        const idQ = db.exec('SELECT last_insert_rowid();');
-        if (idQ.length && idQ[0].values.length) {
-          newId = idQ[0].values[0][0];
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) {
+          uiToast('Failed to save database after creating shopping item.');
+          return;
         }
-      } catch (err) {
-        console.error('❌ Failed to create shopping item:', err);
-        alert('Failed to create shopping item. See console for details.');
-        return;
+      } else {
+        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
       }
+    } catch (err) {
+      console.error('❌ Failed to persist DB after creating shopping item:', err);
+      uiToast('Failed to save database after creating shopping item.');
+      return;
+    }
 
-      // Persist updated DB so editor + list can see the new item.
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after creating shopping item.');
-            return;
-          }
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
-      } catch (err) {
-        console.error(
-          '❌ Failed to persist DB after creating shopping item:',
-          err
-        );
-        alert('Failed to save database after creating shopping item.');
-        return;
-      }
+    if (newId != null) {
+      sessionStorage.setItem('selectedShoppingItemId', String(newId));
+      sessionStorage.setItem('selectedShoppingItemName', name);
+      sessionStorage.setItem('selectedShoppingItemIsNew', '1');
+      window.location.href = 'shoppingEditor.html';
+    }
+  }
 
-      closeAddShoppingModal();
-
-      if (newId != null) {
-        sessionStorage.setItem('selectedShoppingItemId', String(newId));
-        sessionStorage.setItem('selectedShoppingItemName', name);
-        sessionStorage.setItem('selectedShoppingItemIsNew', '1');
-        window.location.href = 'shoppingEditor.html';
-      }
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      void openCreateShoppingItemDialog();
     });
   }
 }
@@ -1273,8 +1224,17 @@ function wireChildEditorPage({
     bodyTitleEl.addEventListener('keydown', onKeyDown);
   });
 
-  const doBack = () => {
-    if (!isDirty || window.confirm('Discard unsaved changes?')) {
+  const doBack = async () => {
+    if (
+      !isDirty ||
+      (await uiConfirm({
+        title: 'Discard Changes?',
+        message: 'Discard unsaved changes?',
+        confirmText: 'Discard',
+        cancelText: 'Cancel',
+        danger: true,
+      }))
+    ) {
       window.location.href = backHref;
     }
   };
@@ -1282,7 +1242,7 @@ function wireChildEditorPage({
   if (backBtn) {
     backBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      doBack();
+      void doBack();
     });
   }
 
@@ -1349,7 +1309,7 @@ function wireChildEditorPage({
         }
       } catch (err) {
         console.error('❌ Failed to save child editor:', err);
-        alert('Failed to save changes. See console for details.');
+        uiToast('Failed to save changes. See console for details.');
         return;
       }
 
@@ -1491,7 +1451,7 @@ function loadShoppingItemEditorPage() {
           '❌ Failed to load DB from disk for shopping editor:',
           err
         );
-        alert('No database loaded. Please go back to the welcome page.');
+        uiToast('No database loaded. Please go back to the welcome page.');
         throw err;
       }
     } else {
@@ -1693,7 +1653,7 @@ function loadShoppingItemEditorPage() {
       }
     } catch (err) {
       console.error('❌ Failed to upsert shopping item ingredient:', err);
-      alert('Failed to save shopping item. See console for details.');
+      uiToast('Failed to save shopping item. See console for details.');
       throw err;
     }
 
@@ -1710,7 +1670,7 @@ function loadShoppingItemEditorPage() {
       }
     } catch (err) {
       console.error('❌ Failed to persist DB after shopping edit:', err);
-      alert('Failed to save database. See console for details.');
+      uiToast('Failed to save database. See console for details.');
       throw err;
     }
 
@@ -2014,11 +1974,6 @@ async function loadUnitsPage() {
   const searchInput = document.getElementById('appBarSearchInput');
   const clearBtn = document.getElementById('appBarSearchClear');
   const addBtn = document.getElementById('appBarAddBtn');
-  const addModal = document.getElementById('addUnitModal');
-  const addCancel = document.getElementById('addUnitCancel');
-  const addCreate = document.getElementById('addUnitCreate');
-  const addCode = document.getElementById('newUnitCode');
-  const addName = document.getElementById('newUnitNameSingular');
 
   if (!list) return;
 
@@ -2037,14 +1992,14 @@ async function loadUnitsPage() {
       db = new SQL.Database(Uints);
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
   } else {
     const stored = localStorage.getItem('favoriteEatsDb');
     if (!stored) {
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
@@ -2178,38 +2133,46 @@ async function loadUnitsPage() {
         return 0;
       };
 
-      const removeUnit = (code) => {
+      const removeUnit = async (code) => {
         const c = (code || '').trim();
         if (!c) return false;
 
         const usedCount = countRecipesUsingUnit(c);
 
         if (usedCount > 0) {
-          const ok = window.confirm(
-            `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
+          const ok = await uiConfirm({
+            title: 'Remove Unit',
+            message: `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
               usedCount === 1 ? '' : 's'
-            }.\n\nRemoving will hide it from Units and search (it will remain in recipes until replaced).`
-          );
+            }.\n\nRemoving will hide it from Units and search (it will remain in recipes until replaced).`,
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            danger: true,
+          });
           if (!ok) return false;
 
           try {
             db.run('UPDATE units SET is_hidden = 1 WHERE code = ?;', [c]);
           } catch (err) {
             console.error('❌ Failed to hide unit:', err);
-            alert('Failed to remove unit. See console for details.');
+            uiToast('Failed to remove unit. See console for details.');
             return false;
           }
         } else {
-          const ok = window.confirm(
-            `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`
-          );
+          const ok = await uiConfirm({
+            title: 'Delete Unit',
+            message: `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from the database.`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            danger: true,
+          });
           if (!ok) return false;
 
           try {
             db.run('DELETE FROM units WHERE code = ?;', [c]);
           } catch (err) {
             console.error('❌ Failed to delete unit:', err);
-            alert('Failed to delete unit. See console for details.');
+            uiToast('Failed to delete unit. See console for details.');
             return false;
           }
         }
@@ -2225,8 +2188,10 @@ async function loadUnitsPage() {
         if (wantsRemove) {
           event.preventDefault();
           event.stopPropagation();
-          const ok = removeUnit(unit.code || '');
-          if (ok) window.location.reload();
+          void (async () => {
+            const ok = await removeUnit(unit.code || '');
+            if (ok) window.location.reload();
+          })();
           return;
         }
 
@@ -2245,8 +2210,10 @@ async function loadUnitsPage() {
 
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        const ok = removeUnit(unit.code || '');
-        if (ok) window.location.reload();
+        void (async () => {
+          const ok = await removeUnit(unit.code || '');
+          if (ok) window.location.reload();
+        })();
       });
 
       list.appendChild(li);
@@ -2302,17 +2269,21 @@ async function loadUnitsPage() {
         return (singular || '') + 's';
       };
 
-      const removeSuggestion = (code) => {
+      const removeSuggestion = async (code) => {
         const c = (code || '').trim();
         if (!c) return false;
         const usedCount = countRecipesUsingUnit(c);
 
         if (usedCount > 0) {
-          const ok = window.confirm(
-            `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
+          const ok = await uiConfirm({
+            title: 'Remove Unit Suggestion',
+            message: `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
               usedCount === 1 ? '' : 's'
-            }.\n\nRemoving will hide it from suggestions (it will remain in recipes until replaced).`
-          );
+            }.\n\nRemoving will hide it from suggestions (it will remain in recipes until replaced).`,
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            danger: true,
+          });
           if (!ok) return false;
           try {
             db.run(
@@ -2321,13 +2292,17 @@ async function loadUnitsPage() {
             );
           } catch (err) {
             console.error('❌ Failed to hide unit suggestion:', err);
-            alert('Failed to remove suggestion. See console for details.');
+            uiToast('Failed to remove suggestion. See console for details.');
             return false;
           }
         } else {
-          const ok = window.confirm(
-            `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from suggestions.`
-          );
+          const ok = await uiConfirm({
+            title: 'Delete Unit Suggestion',
+            message: `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from suggestions.`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            danger: true,
+          });
           if (!ok) return false;
           try {
             db.run('DELETE FROM unit_suggestions WHERE code = ?;', [
@@ -2335,7 +2310,7 @@ async function loadUnitsPage() {
             ]);
           } catch (err) {
             console.error('❌ Failed to delete unit suggestion:', err);
-            alert('Failed to delete suggestion. See console for details.');
+            uiToast('Failed to delete suggestion. See console for details.');
             return false;
           }
         }
@@ -2344,11 +2319,17 @@ async function loadUnitsPage() {
         return true;
       };
 
-      const promoteSuggestion = (code) => {
+      const promoteSuggestion = async (code) => {
         const c = (code || '').trim();
         if (!c) return false;
 
-        const ok = window.confirm(`Add '${c}' to Units?`);
+        const ok = await uiConfirm({
+          title: 'Add Unit',
+          message: `Add '${c}' to Units?`,
+          confirmText: 'Add',
+          cancelText: 'Cancel',
+          danger: false,
+        });
         if (!ok) return false;
 
         // Insert into units (best-effort defaults) and then open the unit editor.
@@ -2415,7 +2396,7 @@ async function loadUnitsPage() {
           } catch (_) {}
         } catch (err) {
           console.error('❌ Failed to promote unit suggestion:', err);
-          alert('Failed to add unit. See console for details.');
+          uiToast('Failed to add unit. See console for details.');
           return false;
         }
 
@@ -2440,17 +2421,21 @@ async function loadUnitsPage() {
           if (wantsRemove) {
             event.preventDefault();
             event.stopPropagation();
-            const ok = removeSuggestion(s.code || '');
-            if (ok) window.location.reload();
+            void (async () => {
+              const ok = await removeSuggestion(s.code || '');
+              if (ok) window.location.reload();
+            })();
             return;
           }
-          promoteSuggestion(s.code || '');
+          void promoteSuggestion(s.code || '');
         });
 
         li.addEventListener('contextmenu', (event) => {
           event.preventDefault();
-          const ok = removeSuggestion(s.code || '');
-          if (ok) window.location.reload();
+          void (async () => {
+            const ok = await removeSuggestion(s.code || '');
+            if (ok) window.location.reload();
+          })();
         });
 
         list.appendChild(li);
@@ -2464,93 +2449,90 @@ async function loadUnitsPage() {
   // Initial render
   renderUnitsList({ units: unitRows, suggestions: suggestionRows });
 
-  // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
-  const openAddUnitModal = () => {
-    if (!addModal) return;
-    addModal.classList.remove('hidden');
-    if (addCode) {
-      addCode.value = '';
-      addCode.focus();
+  async function openCreateUnitDialog() {
+    if (!window.ui) {
+      uiToast('UI not ready yet.');
+      return;
     }
-    if (addName) addName.value = '';
-    if (addCreate) addCreate.disabled = true;
-  };
 
-  const closeAddUnitModal = () => {
-    if (!addModal) return;
-    addModal.classList.add('hidden');
-  };
-
-  const updateAddUnitCreateState = () => {
-    if (!addCreate || !addCode || !addName) return;
-    addCreate.disabled = !addCode.value.trim() || !addName.value.trim();
-  };
-
-  if (addCode) addCode.addEventListener('input', updateAddUnitCreateState);
-  if (addName) addName.addEventListener('input', updateAddUnitCreateState);
-  if (addCancel) addCancel.addEventListener('click', closeAddUnitModal);
-  if (addBtn) addBtn.addEventListener('click', openAddUnitModal);
-
-  if (addCreate) {
-    addCreate.addEventListener('click', async () => {
-      const code = (addCode?.value || '').trim();
-      const nameSingular = (addName?.value || '').trim();
-      if (!code || !nameSingular) return;
-
-      try {
-        // Best-effort sort order: append at end
-        let nextSort = null;
-        try {
-          const q = db.exec(
-            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
-          );
-          if (q.length && q[0].values.length) {
-            nextSort = q[0].values[0][0];
-          }
-        } catch (_) {
-          nextSort = null;
+    const vals = await window.ui.form({
+      title: 'New Unit',
+      fields: [
+        { key: 'code', label: 'Code', value: '', required: true, normalize: (v) => (v || '').trim() },
+        {
+          key: 'nameSingular',
+          label: 'Name (singular)',
+          value: '',
+          required: true,
+          normalize: (v) => (v || '').trim(),
+        },
+      ],
+      confirmText: 'Create',
+      cancelText: 'Cancel',
+      validate: (v) => {
+        if (!v.code || !v.code.trim() || !v.nameSingular || !v.nameSingular.trim()) {
+          return 'Code and Name (singular) are required.';
         }
+        return '';
+      },
+    });
+    if (!vals) return;
 
-        db.run(
-          'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
-          [code, nameSingular, '', '', nextSort]
-        );
-      } catch (err) {
-        console.error('❌ Failed to create unit:', err);
-        alert('Failed to create unit. (Code must be unique.)');
-        return;
+    const code = (vals.code || '').trim();
+    const nameSingular = (vals.nameSingular || '').trim();
+    if (!code || !nameSingular) return;
+
+    try {
+      // Best-effort sort order: append at end
+      let nextSort = null;
+      try {
+        const q = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;');
+        if (q.length && q[0].values.length) {
+          nextSort = q[0].values[0][0];
+        }
+      } catch (_) {
+        nextSort = null;
       }
 
-      // Persist updated DB so editor + list can see the new unit.
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after creating unit.');
-            return;
-          }
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
+      db.run(
+        'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
+        [code, nameSingular, '', '', nextSort]
+      );
+    } catch (err) {
+      console.error('❌ Failed to create unit:', err);
+      uiToast('Failed to create unit. (Code must be unique.)');
+      return;
+    }
+
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) {
+          uiToast('Failed to save database after creating unit.');
+          return;
         }
-      } catch (err) {
-        console.error('❌ Failed to persist DB after creating unit:', err);
-        alert('Failed to save database after creating unit.');
-        return;
+      } else {
+        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
       }
+    } catch (err) {
+      console.error('❌ Failed to persist DB after creating unit:', err);
+      uiToast('Failed to save database after creating unit.');
+      return;
+    }
 
-      closeAddUnitModal();
+    sessionStorage.setItem('selectedUnitCode', code);
+    sessionStorage.setItem('selectedUnitNameSingular', nameSingular);
+    sessionStorage.setItem('selectedUnitNamePlural', '');
+    sessionStorage.setItem('selectedUnitCategory', '');
+    sessionStorage.setItem('selectedUnitIsNew', '1');
+    window.location.href = 'unitEditor.html';
+  }
 
-      sessionStorage.setItem('selectedUnitCode', code);
-      sessionStorage.setItem('selectedUnitNameSingular', nameSingular);
-      sessionStorage.setItem('selectedUnitNamePlural', '');
-      sessionStorage.setItem('selectedUnitCategory', '');
-      sessionStorage.setItem('selectedUnitIsNew', '1');
-      window.location.href = 'unitEditor.html';
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      void openCreateUnitDialog();
     });
   }
 
@@ -2642,14 +2624,14 @@ async function loadStoresPage() {
       db = new SQL.Database(Uints);
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
   } else {
     const stored = localStorage.getItem('favoriteEatsDb');
     if (!stored) {
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
@@ -2689,8 +2671,14 @@ async function loadStoresPage() {
 
       li.textContent = location ? `${chain} (${location})` : chain || '';
 
-      const deleteStoreDeep = (storeId, label) => {
-        const ok = window.confirm(`Delete '${label}'?`);
+      const deleteStoreDeep = async (storeId, label) => {
+        const ok = await uiConfirm({
+          title: 'Delete Store',
+          message: `Delete '${label}'?`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          danger: true,
+        });
         if (!ok) return false;
 
         try {
@@ -2716,7 +2704,7 @@ async function loadStoresPage() {
           db.run('DELETE FROM stores WHERE ID = ?;', [storeId]);
         } catch (err) {
           console.error('❌ Failed to delete store:', err);
-          alert('Failed to delete store. See console for details.');
+          uiToast('Failed to delete store. See console for details.');
           return false;
         }
 
@@ -2745,8 +2733,10 @@ async function loadStoresPage() {
           event.preventDefault();
           event.stopPropagation();
           const label = location ? `${chain} (${location})` : chain || 'Store';
-          const ok = deleteStoreDeep(Number(store.id), label);
-          if (ok) window.location.reload();
+          void (async () => {
+            const ok = await deleteStoreDeep(Number(store.id), label);
+            if (ok) window.location.reload();
+          })();
           return;
         }
 
@@ -2761,8 +2751,10 @@ async function loadStoresPage() {
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
         const label = location ? `${chain} (${location})` : chain || 'Store';
-        const ok = deleteStoreDeep(Number(store.id), label);
-        if (ok) window.location.reload();
+        void (async () => {
+          const ok = await deleteStoreDeep(Number(store.id), label);
+          if (ok) window.location.reload();
+        })();
       });
 
       list.appendChild(li);
@@ -2812,91 +2804,70 @@ async function loadStoresPage() {
     });
   }
 
-  // Add button → new store editor (stub today, but should not be a no-op)
-  const addModal = document.getElementById('addStoreModal');
-  const addCancel = document.getElementById('addStoreCancel');
-  const addCreate = document.getElementById('addStoreCreate');
-  const addInput = document.getElementById('newStoreChain');
-
-  const openAddStoreModal = () => {
-    if (!addModal) return;
-    addModal.classList.remove('hidden');
-    if (addInput) {
-      addInput.value = '';
-      addInput.focus();
+  async function openCreateStoreDialog() {
+    if (!window.ui) {
+      uiToast('UI not ready yet.');
+      return;
     }
-    if (addCreate) addCreate.disabled = true;
-  };
 
-  const closeAddStoreModal = () => {
-    if (!addModal) return;
-    addModal.classList.add('hidden');
-  };
+    const chain = await window.ui.prompt({
+      title: 'New Store',
+      label: 'Name',
+      value: '',
+      confirmText: 'Create',
+      cancelText: 'Cancel',
+      required: true,
+      normalize: (v) => (v || '').trim(),
+    });
+    if (!chain) return;
 
-  const updateAddStoreCreateState = () => {
-    if (!addCreate || !addInput) return;
-    addCreate.disabled = !addInput.value.trim();
-  };
+    let newId = null;
+    try {
+      // Store schema requires both chain_name and location_name.
+      db.run('INSERT INTO stores (chain_name, location_name) VALUES (?, ?);', [
+        chain,
+        '',
+      ]);
+      const idQ = db.exec('SELECT last_insert_rowid();');
+      if (idQ.length && idQ[0].values.length) {
+        newId = idQ[0].values[0][0];
+      }
+    } catch (err) {
+      console.error('❌ Failed to create store:', err);
+      uiToast('Failed to create store. See console for details.');
+      return;
+    }
 
-  if (addInput) addInput.addEventListener('input', updateAddStoreCreateState);
-  if (addCancel) addCancel.addEventListener('click', closeAddStoreModal);
-
-  if (addBtn) addBtn.addEventListener('click', openAddStoreModal);
-
-  if (addCreate) {
-    addCreate.addEventListener('click', async () => {
-      if (!addInput) return closeAddStoreModal();
-      const chain = addInput.value.trim();
-      if (!chain) return;
-
-      let newId = null;
-      try {
-        // Store schema requires both chain_name and location_name.
-        db.run(
-          'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
-          [chain, '']
-        );
-        const idQ = db.exec('SELECT last_insert_rowid();');
-        if (idQ.length && idQ[0].values.length) {
-          newId = idQ[0].values[0][0];
+    try {
+      const binaryArray = db.export();
+      const isElectronEnv = !!window.electronAPI;
+      if (isElectronEnv) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) {
+          uiToast('Failed to save database after creating store.');
+          return;
         }
-      } catch (err) {
-        console.error('❌ Failed to create store:', err);
-        alert('Failed to create store. See console for details.');
-        return;
+      } else {
+        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
       }
+    } catch (err) {
+      console.error('❌ Failed to persist DB after creating store:', err);
+      uiToast('Failed to save database after creating store.');
+      return;
+    }
 
-      // Persist updated DB so editor + list can see the new store.
-      try {
-        const binaryArray = db.export();
-        const isElectronEnv = !!window.electronAPI;
-        if (isElectronEnv) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) {
-            alert('Failed to save database after creating store.');
-            return;
-          }
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
-      } catch (err) {
-        console.error('❌ Failed to persist DB after creating store:', err);
-        alert('Failed to save database after creating store.');
-        return;
-      }
+    if (newId != null) {
+      sessionStorage.setItem('selectedStoreId', String(newId));
+      sessionStorage.setItem('selectedStoreChain', chain);
+      sessionStorage.setItem('selectedStoreLocation', '');
+      sessionStorage.setItem('selectedStoreIsNew', '1');
+      window.location.href = 'storeEditor.html';
+    }
+  }
 
-      closeAddStoreModal();
-
-      if (newId != null) {
-        sessionStorage.setItem('selectedStoreId', String(newId));
-        sessionStorage.setItem('selectedStoreChain', chain);
-        sessionStorage.setItem('selectedStoreLocation', '');
-        sessionStorage.setItem('selectedStoreIsNew', '1');
-        window.location.href = 'storeEditor.html';
-      }
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      void openCreateStoreDialog();
     });
   }
 }
@@ -3149,14 +3120,14 @@ async function loadRecipeEditorPage() {
       db = new SQL.Database(Uints);
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
   } else {
     const stored = localStorage.getItem('favoriteEatsDb');
     if (!stored) {
-      alert('No database loaded. Please go back to the welcome page.');
+      uiToast('No database loaded. Please go back to the welcome page.');
       window.location.href = 'index.html';
       return;
     }
@@ -3168,7 +3139,7 @@ async function loadRecipeEditorPage() {
   const isNewRecipe = sessionStorage.getItem('selectedRecipeIsNew') === '1';
 
   if (!recipeId) {
-    alert('No recipe selected.');
+    uiToast('No recipe selected.');
     window.location.href = 'recipes.html';
     return;
   }
@@ -3192,7 +3163,7 @@ async function loadRecipeEditorPage() {
   const recipe = bridge.loadRecipeFromDB(db, recipeId);
 
   if (!recipe) {
-    alert('Recipe not found.');
+    uiToast('Recipe not found.');
     window.location.href = 'recipes.html';
     return;
   }
@@ -3280,7 +3251,7 @@ async function loadRecipeEditorPage() {
         {
           quantity: '',
           unit: '',
-          name: 'Add an ingredient.',
+          name: '',
           variant: '',
           prepNotes: '',
           parentheticalNote: '',
@@ -3312,13 +3283,24 @@ async function loadRecipeEditorPage() {
     mode: 'editor',
     titleText: recipe.title || '',
     onBack: () => {
-      const dirty =
-        typeof window.recipeEditorGetIsDirty === 'function'
-          ? window.recipeEditorGetIsDirty()
-          : false;
-      if (!dirty || window.confirm('Discard unsaved changes?')) {
-        window.location.href = 'recipes.html';
-      }
+      void (async () => {
+        const dirty =
+          typeof window.recipeEditorGetIsDirty === 'function'
+            ? window.recipeEditorGetIsDirty()
+            : false;
+        if (
+          !dirty ||
+          (await uiConfirm({
+            title: 'Discard Changes?',
+            message: 'Discard unsaved changes?',
+            confirmText: 'Discard',
+            cancelText: 'Cancel',
+            danger: true,
+          }))
+        ) {
+          window.location.href = 'recipes.html';
+        }
+      })();
     },
     onCancel: () => {
       if (typeof revertChanges === 'function') {
@@ -3355,8 +3337,8 @@ async function loadRecipeEditorPage() {
           const ok = await window.electronAPI.saveDB(binaryArray, {
             overwriteOnly: false,
           });
-          if (ok) alert('Database saved successfully.');
-          else alert('Save failed — check console for details.');
+          if (ok) uiToast('Database saved successfully.');
+          else uiToast('Save failed — check console for details.');
         } else {
           localStorage.setItem(
             'favoriteEatsDb',
@@ -3385,7 +3367,7 @@ async function loadRecipeEditorPage() {
         if (typeof clearSelectedStep === 'function') clearSelectedStep();
       } catch (err) {
         console.error('❌ Save failed:', err);
-        alert('Save failed — check console for details.');
+        uiToast('Save failed — check console for details.');
         throw err;
       }
     },

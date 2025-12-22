@@ -34,6 +34,12 @@
   --header-font-size: 16px;
   --section-card-offset: 24px;
 
+  /* --- Z-index scale (keep consistent across dropdowns/dialogs/toasts) --- */
+  --z-app-chrome: 1000;
+  --z-dropdown: 10000;
+  --z-dialog: 20000;
+  --z-toast: 21000;
+
   --step-line-height: 1.8;
   --step-vertical-gap: 0px;
   --step-padding-top: 0px;
@@ -99,7 +105,7 @@
 
 /* --- Typeahead dropdown (v1) --- */
 .typeahead-dropdown {
-  z-index: 9999;
+  z-index: var(--z-dropdown);
   /* Neutral surface: match ingredient tray, not the focused field */
   background: var(--field-bg);
   /* Outline and text match inactive field styling */
@@ -139,19 +145,21 @@
 }
 
 /* --- Typeahead toast --- */
-.typeahead-toast-host {
+.typeahead-toast-host,
+.ui-toast-host {
   position: fixed;
   left: 50%;
   bottom: calc(var(--bottom-nav-height) + 14px);
   transform: translateX(-50%);
-  z-index: 10000;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 10px;
   pointer-events: none;
 }
 
-.typeahead-toast {
+.typeahead-toast,
+.ui-toast {
   pointer-events: auto;
   display: flex;
   gap: 12px;
@@ -164,7 +172,8 @@
   max-width: min(560px, calc(100vw - 24px));
 }
 
-.typeahead-toast__msg {
+.typeahead-toast__msg,
+.ui-toast__msg {
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
@@ -172,7 +181,8 @@
   text-overflow: ellipsis;
 }
 
-.typeahead-toast__undo {
+.typeahead-toast__undo,
+.ui-toast__action {
   appearance: none;
   border: 0;
   background: transparent;
@@ -184,8 +194,114 @@
   cursor: pointer;
 }
 
-.typeahead-toast__undo:hover {
+.typeahead-toast__undo:hover,
+.ui-toast__action:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Unified Dialog (window.ui) --- */
+.ui-dialog-host {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  pointer-events: none;
+}
+
+.ui-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  pointer-events: auto;
+}
+
+.ui-dialog-panel {
+  width: min(520px, calc(100vw - 36px));
+  background: #fff;
+  color: var(--font-color-near-black);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  padding: 18px;
+}
+
+.ui-dialog-title {
+  margin: 0 0 10px 0;
+  font-size: var(--header-font-size);
+  font-weight: 700;
+}
+
+.ui-dialog-body {
+  margin: 0 0 14px 0;
+  font-size: var(--body-font-size);
+  line-height: 1.45;
+  color: var(--font-color-near-black);
+  white-space: pre-wrap;
+}
+
+.ui-dialog-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 14px 0;
+}
+
+.ui-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ui-dialog-label {
+  font-size: 13px;
+  color: var(--subtitle);
+}
+
+.ui-dialog-input {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  outline: none;
+}
+
+.ui-dialog-input:focus {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px rgba(109, 73, 255, 0.18);
+}
+
+.ui-dialog-error {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #b00020;
+}
+
+.ui-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Button variants (used by dialogs; safe for existing .button usage too) */
+.button.button--secondary {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--font-color-near-black);
+}
+
+.button.button--danger {
+  background: #b00020;
+  color: #fff;
+}
+
+.button.button--secondary:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.button.button--danger:hover {
+  background: #8f001a;
 }
 
 /* --- Body / Layout Defaults --- */
@@ -1033,6 +1149,12 @@ body.shopping-editor-page .shopping-item-help {
 }
 
 .step-text.placeholder-prompt::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder-muted);
+  pointer-events: none;
+}
+
+.ingredient-text.placeholder-prompt::before {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
