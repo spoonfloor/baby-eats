@@ -89,6 +89,56 @@ function ensureRecipeIngredientHeadingsSchema(activeDb) {
   return true;
 }
 
+function ensureRecipeIngredientMapParentheticalNoteSchema(activeDb) {
+  if (!activeDb) return false;
+
+  const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+  const hasRimParen = rimCols.includes('parenthetical_note');
+  if (!hasRimParen) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN parenthetical_note TEXT;'
+      );
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  // Best-effort backfill from legacy ingredients.parenthetical_note.
+  // Only if ingredients table has that column.
+  try {
+    const ingCols = getTableColumns(activeDb, 'ingredients').map((c) =>
+      String(c).toLowerCase()
+    );
+    const hasIngParen = ingCols.includes('parenthetical_note');
+    if (hasIngParen) {
+      activeDb.run(`
+        UPDATE recipe_ingredient_map
+        SET parenthetical_note = (
+          SELECT i.parenthetical_note
+          FROM ingredients i
+          WHERE i.ID = recipe_ingredient_map.ingredient_id
+        )
+        WHERE (parenthetical_note IS NULL OR parenthetical_note = '')
+          AND (SELECT COALESCE(i.parenthetical_note, '')
+               FROM ingredients i
+               WHERE i.ID = recipe_ingredient_map.ingredient_id) <> '';
+      `);
+    }
+  } catch (_) {}
+
+  // Index is optional; keep it small to avoid surprises.
+  try {
+    activeDb.run(
+      'CREATE INDEX IF NOT EXISTS idx_rim_recipe_paren ON recipe_ingredient_map(recipe_id, parenthetical_note);'
+    );
+  } catch (_) {}
+
+  return true;
+}
+
 // --- StepNode → DB save adapter (Option A: minimal) ---
 function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
   // Remove existing rows for this recipe
@@ -115,6 +165,7 @@ window.bridge = {
   saveRecipeIngredientsFromModel,
   ensureRecipeIngredientMapSortOrderSchema,
   ensureRecipeIngredientHeadingsSchema,
+  ensureRecipeIngredientMapParentheticalNoteSchema,
   writeIngredientSortOrderFromModel,
 };
 
@@ -152,6 +203,11 @@ function loadRecipeFromDB(db, recipeId) {
   const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
   const hasSectionId = rimHas('section_id');
   const hasSortOrder = rimHas('sort_order');
+  const hasRimParen = rimHas('parenthetical_note');
+
+  const ingCols = getTableColumns(db, 'ingredients');
+  const ingHas = (col) => ingCols.map((c) => String(c).toLowerCase()).includes(col);
+  const hasIngParen = ingHas('parenthetical_note');
 
   const selectParts = [
     'rim.ID',
@@ -164,7 +220,11 @@ function loadRecipeFromDB(db, recipeId) {
     'i.size',
     'rim.prep_notes',
     'rim.is_optional',
-    'i.parenthetical_note',
+    hasRimParen
+      ? "COALESCE(rim.parenthetical_note, '') AS parenthetical_note"
+      : hasIngParen
+      ? "COALESCE(i.parenthetical_note, '') AS parenthetical_note"
+      : "'' AS parenthetical_note",
     'i.location_at_home',
   ];
 
@@ -427,6 +487,8 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   ensureRecipeIngredientMapSortOrderSchema(activeDb);
   // Ensure schema supports ingredient headings.
   ensureRecipeIngredientHeadingsSchema(activeDb);
+  // Ensure schema supports recipe-level parenthetical notes.
+  ensureRecipeIngredientMapParentheticalNoteSchema(activeDb);
 
   const ingredientsCols = getTableColumns(activeDb, 'ingredients');
   const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
@@ -501,7 +563,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     const name = (ing.name || '').trim();
     const variant = (ing.variant || '').trim();
     const size = (ing.size || '').trim();
-    const parenthetical = (ing.parentheticalNote || '').trim();
     const loc = (ing.locationAtHome || '').trim();
 
     const where = ['lower(name) = lower(?)'];
@@ -514,10 +575,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     if (ingHas('size')) {
       where.push("COALESCE(size, '') = ?");
       params.push(size);
-    }
-    if (ingHas('parenthetical_note')) {
-      where.push("COALESCE(parenthetical_note, '') = ?");
-      params.push(parenthetical);
     }
     if (ingHas('location_at_home')) {
       where.push("COALESCE(location_at_home, '') = ?");
@@ -557,10 +614,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     if (ingHas('size')) {
       cols.push('size');
       vals.push(size);
-    }
-    if (ingHas('parenthetical_note')) {
-      cols.push('parenthetical_note');
-      vals.push(parenthetical);
     }
     if (ingHas('location_at_home')) {
       cols.push('location_at_home');
@@ -691,6 +744,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       if (rimHas('prep_notes')) {
         cols.push('prep_notes');
         vals.push((ing.prepNotes || '').trim());
+      }
+      if (rimHas('parenthetical_note')) {
+        cols.push('parenthetical_note');
+        vals.push((ing.parentheticalNote || '').trim());
       }
       if (rimHas('is_optional')) {
         cols.push('is_optional');

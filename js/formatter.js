@@ -46,6 +46,18 @@ function formatRecipe(db, recipeId) {
   })();
   const rimHasSortOrder = rimCols.includes('sort_order');
   const rimHasSectionId = rimCols.includes('section_id');
+  const rimHasParen = rimCols.includes('parenthetical_note');
+
+  const ingCols = (() => {
+    try {
+      const info = db.exec('PRAGMA table_info(ingredients);');
+      const rows = info.length ? info[0].values : [];
+      return rows.map((r) => String(r[1] || '').toLowerCase());
+    } catch (_) {
+      return [];
+    }
+  })();
+  const ingHasParen = ingCols.includes('parenthetical_note');
 
   function loadHeadings(whereClause) {
     if (!tableExists('recipe_ingredient_headings')) return [];
@@ -82,7 +94,13 @@ function formatRecipe(db, recipeId) {
              i.size,
              rim.prep_notes,
              rim.is_optional,
-             i.parenthetical_note,
+             ${
+               rimHasParen
+                 ? "COALESCE(rim.parenthetical_note, '')"
+                 : ingHasParen
+                 ? "COALESCE(i.parenthetical_note, '')"
+                 : "''"
+             },
              i.location_at_home
       FROM recipe_ingredient_map rim
       JOIN ingredients i ON rim.ingredient_id = i.ID

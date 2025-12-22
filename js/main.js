@@ -28,7 +28,7 @@ initSqlJs({
       ? 'store-editor'
       : null);
 
-  // --- Cmd+← / Cmd+→: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
+  // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
   const TOP_LEVEL_PAGES = ['recipes', 'shopping', 'units', 'stores'];
 
   function isTypingContext(target) {
@@ -49,13 +49,15 @@ initSqlJs({
       if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (e.isComposing) return;
 
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key))
+        return;
       if (isTypingContext(e.target)) return;
 
       const idx = TOP_LEVEL_PAGES.indexOf(pageId);
       if (idx === -1) return; // only act on top-level list pages
 
-      const delta = e.key === 'ArrowRight' ? 1 : -1;
+      // Treat Up like Left, and Down like Right.
+      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
       const nextIdx =
         (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
 
@@ -1258,16 +1260,6 @@ function loadShoppingItemEditorPage() {
       </div>
 
       <div class="shopping-item-field">
-        <div class="shopping-item-label">Note</div>
-        <input
-          id="shoppingItemNoteInput"
-          class="shopping-item-input"
-          type="text"
-          placeholder="included in parentheses"
-        />
-      </div>
-
-      <div class="shopping-item-field">
         <div class="shopping-item-label">Home</div>
         <input
           id="shoppingItemHomeInput"
@@ -1376,7 +1368,6 @@ function loadShoppingItemEditorPage() {
       const id = Number(idStr);
       const variantsText = (extraValues && extraValues.variants) || '';
       const sizesText = (extraValues && extraValues.sizes) || '';
-      const note = (extraValues && extraValues.note) || '';
       const home = (extraValues && extraValues.home) || '';
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
       const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
@@ -1448,10 +1439,6 @@ function loadShoppingItemEditorPage() {
           sets.push('size = ?');
           vals.push(size0);
         }
-        if (has('parenthetical_note')) {
-          sets.push('parenthetical_note = ?');
-          vals.push(note);
-        }
         if (has('location_at_home')) {
           sets.push('location_at_home = ?');
           vals.push(home);
@@ -1480,10 +1467,6 @@ function loadShoppingItemEditorPage() {
         if (has('size')) {
           insertCols.push('size');
           insertVals.push(size0);
-        }
-        if (has('parenthetical_note')) {
-          insertCols.push('parenthetical_note');
-          insertVals.push(note);
         }
         if (has('location_at_home')) {
           insertCols.push('location_at_home');
@@ -1592,7 +1575,6 @@ function loadShoppingItemEditorPage() {
     waitForAppBarReady().then(async () => {
       let baselineVariants = '';
       let baselineSizes = '';
-      let baselineNote = '';
       let baselineHome = '';
       let baselineIsFood = '1';
       let baselineIsDeprecated = '0';
@@ -1616,7 +1598,6 @@ function loadShoppingItemEditorPage() {
           const selectCols = [
             "COALESCE(variant, '')",
             "COALESCE(size, '')",
-            "COALESCE(parenthetical_note, '')",
             "COALESCE(location_at_home, '')",
             has('is_food') ? 'COALESCE(is_food, 1)' : '1',
             has('is_deprecated')
@@ -1635,10 +1616,9 @@ function loadShoppingItemEditorPage() {
             // Legacy single-value columns
             baselineVariants = String(row[0] || '');
             baselineSizes = String(row[1] || '');
-            baselineNote = String(row[2] || '');
-            baselineHome = String(row[3] || '');
-            baselineIsFood = String(row[4] != null ? row[4] : '1');
-            baselineIsDeprecated = String(row[5] != null ? row[5] : '0');
+            baselineHome = String(row[2] || '');
+            baselineIsFood = String(row[3] != null ? row[3] : '1');
+            baselineIsDeprecated = String(row[4] != null ? row[4] : '0');
           }
 
           // If list tables exist, prefer them as the baseline source-of-truth.
@@ -1688,11 +1668,6 @@ function loadShoppingItemEditorPage() {
             key: 'sizes',
             el: document.getElementById('shoppingItemSizesTextarea'),
             initialValue: baselineSizes,
-          },
-          {
-            key: 'note',
-            el: document.getElementById('shoppingItemNoteInput'),
-            initialValue: baselineNote,
           },
           {
             key: 'home',
@@ -2740,6 +2715,18 @@ async function loadRecipeEditorPage() {
 
   window.dbInstance = db;
   window.recipeId = recipeId;
+
+  // Notes are recipe-level (stored on recipe_ingredient_map), not shopping-item-level.
+  // Ensure the DB has the right column and backfill once for legacy DBs.
+  try {
+    if (
+      window.bridge &&
+      typeof bridge.ensureRecipeIngredientMapParentheticalNoteSchema ===
+        'function'
+    ) {
+      bridge.ensureRecipeIngredientMapParentheticalNoteSchema(db);
+    }
+  } catch (_) {}
 
   // Fetch via bridge (single source of truth)
   const recipe = bridge.loadRecipeFromDB(db, recipeId);

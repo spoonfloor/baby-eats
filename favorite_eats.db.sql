@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS "ingredients" (
 	"location_at_home"	TEXT,
 	"hide_from_shopping_list"	INTEGER DEFAULT 0,
 	"size"	TEXT,
-	"parenthetical_note"	TEXT,
 	"is_food"	INTEGER NOT NULL DEFAULT 1,
 	"is_deprecated"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("ID" AUTOINCREMENT)
@@ -47,6 +46,7 @@ CREATE TABLE IF NOT EXISTS "recipe_ingredient_map" (
 	"quantity"	TEXT,
 	"unit"	TEXT,
 	"prep_notes"	TEXT,
+	"parenthetical_note"	TEXT,
 	"is_optional"	INTEGER DEFAULT 0,
 	"subrecipe_id"	INTEGER,
 	PRIMARY KEY("ID" AUTOINCREMENT),
