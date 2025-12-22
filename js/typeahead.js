@@ -319,7 +319,26 @@
       if (reqId !== this._updateReqId) return; // stale async update
       if (!this.isOpen || !this.anchorInput) return;
       if (this.anchorInput !== anchor) return; // focus moved during async fetch
-      const ranked = filterAndRank(pool, query);
+      // Per-instance list behavior (defaults to current filter+rank).
+      let ranked = [];
+      try {
+        if (this.config && typeof this.config.getItems === 'function') {
+          ranked = this.config.getItems(pool, query, anchor) || [];
+        } else {
+          ranked = filterAndRank(pool, query);
+        }
+      } catch (_) {
+        ranked = filterAndRank(pool, query);
+      }
+
+      // Above-the-fold cap (scroll for the rest). Default stays 8.
+      let maxVisible = 8;
+      try {
+        const v = this.config && this.config.maxVisible;
+        if (Number.isFinite(Number(v))) {
+          maxVisible = Math.max(1, Math.floor(Number(v)));
+        }
+      } catch (_) {}
 
       // Render
       el.innerHTML = '';
@@ -337,9 +356,11 @@
         this.items = [];
         this.highlightIdx = 0;
       } else {
-        const maxVisible = 8;
         const container = document.createElement('div');
         container.className = 'typeahead-list';
+        // Cap visible rows; allow scroll for the rest.
+        // 34px matches the intended row height implied by CSS (see .typeahead-list max-height).
+        container.style.maxHeight = `${maxVisible * 34}px`;
         el.appendChild(container);
 
         ranked.forEach((item, idx) => {
@@ -713,9 +734,16 @@
   }
 
   // --- Attachment helpers
-  function attachTypeaheadToInput({ inputEl, getPool, onPick, openOnFocus }) {
+  function attachTypeaheadToInput({
+    inputEl,
+    getPool,
+    onPick,
+    openOnFocus,
+    maxVisible,
+    getItems,
+  }) {
     if (!inputEl) return;
-    const cfg = { getPool, onPick };
+    const cfg = { getPool, onPick, maxVisible, getItems };
 
     // If Escape is used to cancel the row, suppress blur-time normalization/toasts.
     inputEl._typeaheadSuppressNextNormalize = false;

@@ -1811,6 +1811,7 @@ function loadShoppingItemEditorPage() {
           ta.attach({
             inputEl: homeInput,
             openOnFocus: true,
+            maxVisible: 10,
             getPool: async () => {
               const db = window.dbInstance;
               if (!db) return [];
@@ -1832,6 +1833,22 @@ function loadShoppingItemEditorPage() {
                       .filter((v) => v.length > 0)
                   : [];
               return vals;
+            },
+            // Simple per-field rules:
+            // - empty query: full alphabetical list
+            // - non-empty query: alphabetical subset containing the query (no prefix-boosting)
+            getItems: (pool, query) => {
+              const q = String(query || '')
+                .trim()
+                .toLowerCase();
+              const items = (pool || [])
+                .map((v) => String(v || '').trim())
+                .filter((v) => v.length > 0);
+              items.sort((a, b) =>
+                a.localeCompare(b, undefined, { sensitivity: 'base' })
+              );
+              if (!q) return items;
+              return items.filter((v) => v.toLowerCase().includes(q));
             },
           });
         }
