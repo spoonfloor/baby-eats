@@ -734,6 +734,11 @@ body.shopping-editor-page .shopping-item-help {
   line-height: calc(1em + var(--gap-instructions-wrap));
 }
 
+/* CTA uses ingredient-line for layout; only behavior remains here */
+.ingredient-add-cta {
+  cursor: pointer;
+}
+
 /* --- Downstream-only spacing rules (optical gap proxy: next.top - prev.bottom) --- */
 
 /* Reset any incidental margins on headings/subheads */

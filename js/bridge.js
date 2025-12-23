@@ -386,7 +386,10 @@ function loadRecipeFromDB(db, recipeId) {
           sortOrder: sortOrder == null ? null : Number(sortOrder),
           quantity: isNaN(parseFloat(qty)) ? qty : parseFloat(qty),
           unit: unit || '',
-          name,
+          name:
+            typeof name === 'string' && name.trim() === 'Add an ingredient.'
+              ? ''
+              : name,
           variant: variant || '',
           size: size || '',
           lemma: lemma || '',

@@ -187,10 +187,6 @@ function ingredientLocationRank(loc) {
 
 function sortIngredientsForMainList(list) {
   return [...list].sort((a, b) => {
-    const aPh = !!a.isPlaceholder;
-    const bPh = !!b.isPlaceholder;
-    if (aPh !== bPh) return aPh ? 1 : -1;
-
     const aOpt = !!a.isOptional;
     const bOpt = !!b.isOptional;
     if (aOpt !== bOpt) return aOpt ? 1 : -1;
@@ -212,21 +208,18 @@ function sortIngredientsForMainList(list) {
 function stablePartitionOptionals(list) {
   const required = [];
   const optional = [];
-  const placeholders = [];
   list.forEach((ing) => {
     if (!ing) return;
     // Ignore subsection headings; they are handled by partitionOptionalsWithinSubsections.
     if (ing && ing.rowType === 'heading') return;
-    if (ing.isPlaceholder) placeholders.push(ing);
-    else if (ing.isOptional) optional.push(ing);
+    if (ing.isOptional) optional.push(ing);
     else required.push(ing);
   });
-  return required.concat(optional, placeholders);
+  return required.concat(optional);
 }
 
 function partitionOptionalsWithinSubsections(list) {
   const out = [];
-  const placeholders = [];
 
   let segment = [];
   const flushSegment = () => {
@@ -244,10 +237,6 @@ function partitionOptionalsWithinSubsections(list) {
 
   (list || []).forEach((row) => {
     if (!row) return;
-    if (row.isPlaceholder) {
-      placeholders.push(row);
-      return;
-    }
     if (row.rowType === 'heading') {
       flushSegment();
       out.push(row);
@@ -259,7 +248,29 @@ function partitionOptionalsWithinSubsections(list) {
 
   flushSegment();
 
-  return out.concat(placeholders);
+  return out;
+}
+
+function stripIngredientPlaceholders(section) {
+  if (!section || !Array.isArray(section.ingredients)) return;
+  const isPlaceholderish = (r) => {
+    if (!r || r.rowType === 'heading') return false;
+    if (r.isPlaceholder) return true;
+    const isBlank = (val) => val == null || String(val).trim() === '';
+    const nameIsPrompt =
+      typeof r.name === 'string' &&
+      r.name.trim().toLowerCase() === 'add an ingredient.';
+    return (
+      isBlank(r.quantity) &&
+      isBlank(r.unit) &&
+      isBlank(r.variant) &&
+      isBlank(r.size) &&
+      isBlank(r.prepNotes) &&
+      isBlank(r.parentheticalNote) &&
+      (isBlank(r.name) || nameIsPrompt)
+    );
+  };
+  section.ingredients = section.ingredients.filter((r) => !isPlaceholderish(r));
 }
 
 function rerenderIngredientsSectionFromModel() {
@@ -280,19 +291,26 @@ function rerenderIngredientsSectionFromModel() {
 
   // v1: Ingredients render from the first section (bridge loads a single synthetic section).
   const firstSection =
-    Array.isArray(recipe.sections) && recipe.sections[0] ? recipe.sections[0] : null;
-  const rows = Array.isArray(firstSection?.ingredients) ? firstSection.ingredients : [];
+    Array.isArray(recipe.sections) && recipe.sections[0]
+      ? recipe.sections[0]
+      : null;
+  if (firstSection) stripIngredientPlaceholders(firstSection);
+  const rows = Array.isArray(firstSection?.ingredients)
+    ? firstSection.ingredients
+    : [];
 
   const isHeading = (row) => row && row.rowType === 'heading';
+  const renderRows = rows;
 
   ensureIngredientSubheadInsertModeWiring();
 
   // Top insertion zone (suppressed if next row is a heading)
   {
-    const next = rows.length > 0 ? rows[0] : null;
+    const next = renderRows.length > 0 ? renderRows[0] : null;
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
-    if (next && isHeading(next)) zone.classList.add('ingredient-insert-zone--disabled');
+    if (next && isHeading(next))
+      zone.classList.add('ingredient-insert-zone--disabled');
     let _didInsert = false;
     const handleInsert = (e) => {
       if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
@@ -313,7 +331,9 @@ function rerenderIngredientsSectionFromModel() {
           active.commit();
           // After commit triggers a rerender, perform the insert on next tick.
           setTimeout(() => {
-            if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+            if (
+              typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+            ) {
               window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
             }
           }, 0);
@@ -342,7 +362,7 @@ function rerenderIngredientsSectionFromModel() {
     ingredientsSection.appendChild(zone);
   }
 
-  rows.forEach((row, idx) => {
+  renderRows.forEach((row, idx) => {
     let el = null;
     if (row && row.rowType === 'heading') {
       if (typeof window.renderIngredientHeading === 'function') {
@@ -357,13 +377,15 @@ function rerenderIngredientsSectionFromModel() {
       }
     } else {
       if (typeof renderIngredient === 'function') {
-        if (row && !row.isPlaceholder && row.rowType !== 'heading') {
+        if (row && row.rowType !== 'heading') {
           // Ensure every ingredient row has a stable clientId for in-session operations (delete/undo).
           if (!row.clientId) {
             row.clientId =
               row.rimId != null
                 ? `i-${row.rimId}`
-                : `tmp-ing-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                : `tmp-ing-${Date.now()}-${Math.random()
+                    .toString(16)
+                    .slice(2)}`;
           }
         }
         el = renderIngredient(row);
@@ -374,14 +396,13 @@ function rerenderIngredientsSectionFromModel() {
         span.textContent = `${row.quantity || ''} ${row.unit || ''} ${
           row.name || ''
         }`.trim();
-        if (row.isPlaceholder) span.classList.add('placeholder-prompt');
         el.appendChild(span);
       }
     }
     if (el) ingredientsSection.appendChild(el);
 
     // Inter-row insertion zone (between idx and idx+1), suppressed adjacent to headings
-    const next = idx + 1 < rows.length ? rows[idx + 1] : null;
+    const next = idx + 1 < renderRows.length ? renderRows[idx + 1] : null;
     if (!next) return;
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
@@ -405,8 +426,13 @@ function rerenderIngredientsSectionFromModel() {
         if (active && typeof active.commit === 'function') {
           active.commit();
           setTimeout(() => {
-            if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
-              window.recipeEditorInsertIngredientHeadingAt(firstSection, idx + 1);
+            if (
+              typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+            ) {
+              window.recipeEditorInsertIngredientHeadingAt(
+                firstSection,
+                idx + 1
+              );
             }
           }, 0);
           return;
@@ -429,6 +455,11 @@ function rerenderIngredientsSectionFromModel() {
       }
     });
     ingredientsSection.appendChild(zone);
+  });
+
+  appendIngredientAddCta({
+    container: ingredientsSection,
+    sectionRef: firstSection,
   });
 
   // Focus a newly inserted heading, if any.
@@ -482,7 +513,7 @@ function rerenderYouWillNeedFromModel() {
     : [];
 
   const allIngredients = allIngredientsRaw.filter(
-    (row) => row && row.rowType !== 'heading' && !row.isPlaceholder
+    (row) => row && row.rowType !== 'heading'
   );
 
   if (allIngredients.length === 0) {
@@ -546,35 +577,53 @@ function rerenderYouWillNeedFromModel() {
 
 window.recipeEditorRerenderYouWillNeedFromModel = rerenderYouWillNeedFromModel;
 
-// --- Ingredient deletion (recipe-local) + undo ---
-function ensureIngredientPlaceholder(section) {
-  if (!section) return;
-  if (!Array.isArray(section.ingredients)) section.ingredients = [];
-  const hasPlaceholder = section.ingredients.some((r) => r && r.isPlaceholder);
-  if (hasPlaceholder) return;
-  section.ingredients.push({
-    quantity: '',
-    unit: '',
-    name: '',
-    size: '',
-    variant: '',
-    prepNotes: '',
-    parentheticalNote: '',
-    isOptional: false,
-    substitutes: [],
-    locationAtHome: '',
-    subRecipeId: null,
-    isPlaceholder: true,
-    clientId: `tmp-ing-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+// Render a single UI-only CTA for adding an ingredient (no data placeholders).
+function appendIngredientAddCta({ container, sectionRef }) {
+  if (!container || !sectionRef) return;
+  // Avoid duplicate CTAs if rerendering without clearing.
+  const existing = container.querySelector('.ingredient-add-cta');
+  if (existing) existing.remove();
+
+  // If an edit row is active, defer showing the CTA until the edit flow finishes.
+  const hasActiveEdit = !!container.querySelector(
+    '.ingredient-edit-row.editing'
+  );
+  if (hasActiveEdit) return;
+
+  // In non-empty state, do not render a CTA.
+  const hasAnyIngredients = Array.isArray(sectionRef.ingredients)
+    ? sectionRef.ingredients.some((r) => r && r.rowType !== 'heading')
+    : false;
+  if (hasAnyIngredients) return;
+
+  const cta = document.createElement('div');
+  // Share layout class with ingredient rows so spacing/line-height rules are identical.
+  cta.className = 'ingredient-line ingredient-add-cta';
+  const text = document.createElement('span');
+  text.className = 'placeholder-prompt';
+  text.textContent = 'Add an ingredient.';
+  cta.appendChild(text);
+
+  cta.addEventListener('click', () => {
+    if (typeof openIngredientEditRow === 'function') {
+      openIngredientEditRow({
+        parent: container,
+        replaceEl: cta,
+        mode: 'insert',
+        seedLine: null,
+      });
+    }
   });
+
+  container.appendChild(cta);
 }
 
 function deleteIngredientRowFromSection(sectionRef, rowRef) {
-  if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef) return null;
+  if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef)
+    return null;
   const idx = sectionRef.ingredients.indexOf(rowRef);
   if (idx < 0) return null;
   const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
-  ensureIngredientPlaceholder(sectionRef);
   return { idx, removed };
 }
 
@@ -605,7 +654,8 @@ window.recipeEditorDeleteIngredientRow = async ({
     const nameStr = nameBits.filter(Boolean).join(' ');
     if (nameStr) labelParts.push(nameStr);
 
-    const display = labelParts.filter(Boolean).join(' ').trim() || 'this ingredient';
+    const display =
+      labelParts.filter(Boolean).join(' ').trim() || 'this ingredient';
     const ok =
       window.ui && typeof window.ui.confirm === 'function'
         ? await window.ui.confirm({
@@ -636,16 +686,12 @@ window.recipeEditorDeleteIngredientRow = async ({
   const restore = () => {
     try {
       if (!Array.isArray(sectionRef.ingredients)) sectionRef.ingredients = [];
-      // Remove placeholder if we're restoring a real row and placeholder is the only thing.
-      const placeholderIdx = sectionRef.ingredients.findIndex((r) => r && r.isPlaceholder);
-      if (placeholderIdx >= 0) {
-        // Keep placeholder if there are headings; otherwise we can remove and re-add later.
-        const hasOther = sectionRef.ingredients.some((r, i) => i !== placeholderIdx);
-        if (!hasOther) sectionRef.ingredients.splice(placeholderIdx, 1);
-      }
-      const insertAt = Math.min(Math.max(0, del.idx), sectionRef.ingredients.length);
+      const insertAt = Math.min(
+        Math.max(0, del.idx),
+        sectionRef.ingredients.length
+      );
       sectionRef.ingredients.splice(insertAt, 0, snapshot);
-      ensureIngredientPlaceholder(sectionRef);
+      stripIngredientPlaceholders(sectionRef);
     } catch (_) {}
 
     rerenderIngredientsSectionFromModel();
@@ -653,11 +699,15 @@ window.recipeEditorDeleteIngredientRow = async ({
     // Best-effort: scroll restored row into view
     try {
       const container = getPageContentContainer();
-      const ingredientsSection = container?.querySelector('#ingredientsSection');
+      const ingredientsSection = container?.querySelector(
+        '#ingredientsSection'
+      );
       if (!ingredientsSection) return;
       const selector =
         focusBy === 'rimId'
-          ? `.ingredient-line[data-rim-id="${String(focusId || snapshot.rimId || '')}"]`
+          ? `.ingredient-line[data-rim-id="${String(
+              focusId || snapshot.rimId || ''
+            )}"]`
           : `.ingredient-line[data-client-id="${String(
               focusId || snapshot.clientId || ''
             )}"]`;
@@ -678,7 +728,10 @@ window.recipeEditorDeleteIngredientRow = async ({
         timeoutMs: 8000,
       });
     } else if (typeof window.showUndoToast === 'function') {
-      window.showUndoToast({ message: 'Ingredient removed from recipe', onUndo: restore });
+      window.showUndoToast({
+        message: 'Ingredient removed from recipe',
+        onUndo: restore,
+      });
     }
   } catch (_) {}
 
@@ -689,8 +742,13 @@ window.recipeEditorDeleteIngredientRow = async ({
 window.recipeEditorAfterIngredientEditCommit = (sectionRef) => {
   if (!sectionRef || !Array.isArray(sectionRef.ingredients)) return;
 
+  // Remove any legacy placeholder-ish rows that may have slipped in.
+  stripIngredientPlaceholders(sectionRef);
+
   // Always enforce "optional goes to bottom" within the current subsection.
-  sectionRef.ingredients = partitionOptionalsWithinSubsections(sectionRef.ingredients);
+  sectionRef.ingredients = partitionOptionalsWithinSubsections(
+    sectionRef.ingredients
+  );
 
   // Keep "You will need" in sync even if we skip a disruptive rerender.
   try {
@@ -717,15 +775,20 @@ window.recipeEditorSortIngredientsOnLoad = (recipe) => {
     if (!sec || !Array.isArray(sec.ingredients) || sec.ingredients.length === 0)
       return;
 
+    stripIngredientPlaceholders(sec);
+
     const before = sec.ingredients
       .map((row) => {
         if (!row) return '';
-        if (row.rowType === 'heading') return `h:${row.headingId ?? row.headingClientId ?? ''}`;
+        if (row.rowType === 'heading')
+          return `h:${row.headingId ?? row.headingClientId ?? ''}`;
         return `i:${row.rimId ?? ''}`;
       })
       .join('|');
 
-    const hasHeadings = sec.ingredients.some((r) => r && r.rowType === 'heading');
+    const hasHeadings = sec.ingredients.some(
+      (r) => r && r.rowType === 'heading'
+    );
     const hasSortOrder = sec.ingredients.some(
       (r) => r && Number.isFinite(r.sortOrder)
     );
@@ -747,7 +810,8 @@ window.recipeEditorSortIngredientsOnLoad = (recipe) => {
     const after = sec.ingredients
       .map((row) => {
         if (!row) return '';
-        if (row.rowType === 'heading') return `h:${row.headingId ?? row.headingClientId ?? ''}`;
+        if (row.rowType === 'heading')
+          return `h:${row.headingId ?? row.headingClientId ?? ''}`;
         return `i:${row.rimId ?? ''}`;
       })
       .join('|');
@@ -761,7 +825,10 @@ window.recipeEditorSortIngredientsOnLoad = (recipe) => {
 // Allow ingredient-heading insertion UX to delegate model mutations to the editor.
 window.recipeEditorInsertIngredientHeadingAt = (sectionRef, index) => {
   if (!sectionRef || !Array.isArray(sectionRef.ingredients)) return;
-  const idx = Math.max(0, Math.min(Number(index) || 0, sectionRef.ingredients.length));
+  const idx = Math.max(
+    0,
+    Math.min(Number(index) || 0, sectionRef.ingredients.length)
+  );
   const clientId = `tmp-h-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   const row = {
     rowType: 'heading',
@@ -778,7 +845,8 @@ window.recipeEditorInsertIngredientHeadingAt = (sectionRef, index) => {
 };
 
 // Expose rerender for other modules (ingredient heading inline editor).
-window.recipeEditorRerenderIngredientsFromModel = rerenderIngredientsSectionFromModel;
+window.recipeEditorRerenderIngredientsFromModel =
+  rerenderIngredientsSectionFromModel;
 
 // --- Main render function (bridge edition: safe, data-driven, backward compatible) ---
 
@@ -897,15 +965,17 @@ function renderRecipe(recipe) {
 
     // v1: Ingredients render from the first section (bridge loads a single synthetic section).
     const firstSection = recipe.sections[0];
+    if (firstSection) stripIngredientPlaceholders(firstSection);
     const rows = Array.isArray(firstSection?.ingredients)
       ? firstSection.ingredients
       : [];
 
     const isHeading = (row) => row && row.rowType === 'heading';
+    const renderRows = rows;
 
     // Top insertion zone (suppressed if next row is a heading)
     {
-      const next = rows.length > 0 ? rows[0] : null;
+      const next = renderRows.length > 0 ? renderRows[0] : null;
       const zone = document.createElement('div');
       zone.className = 'ingredient-insert-zone';
       if (next && isHeading(next))
@@ -927,7 +997,10 @@ function renderRecipe(recipe) {
           if (active && typeof active.commit === 'function') {
             active.commit();
             setTimeout(() => {
-              if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+              if (
+                typeof window.recipeEditorInsertIngredientHeadingAt ===
+                'function'
+              ) {
                 window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
               }
             }, 0);
@@ -939,7 +1012,9 @@ function renderRecipe(recipe) {
           e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
-        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        if (
+          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+        ) {
           window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
         }
       };
@@ -953,7 +1028,7 @@ function renderRecipe(recipe) {
       ingredientsSection.appendChild(zone);
     }
 
-    rows.forEach((row, idx) => {
+    renderRows.forEach((row, idx) => {
       let line = null;
 
       if (row && row.rowType === 'heading') {
@@ -991,11 +1066,6 @@ function renderRecipe(recipe) {
 
           span.textContent = text;
 
-          // Subdued gray for placeholder prompt row
-          if (row.isPlaceholder || text === 'Add an ingredient.') {
-            span.classList.add('placeholder-prompt');
-          }
-
           line.appendChild(span);
         }
       }
@@ -1005,7 +1075,7 @@ function renderRecipe(recipe) {
       }
 
       // Inter-row insertion zone (between idx and idx+1), suppressed adjacent to headings
-      const next = idx + 1 < rows.length ? rows[idx + 1] : null;
+      const next = idx + 1 < renderRows.length ? renderRows[idx + 1] : null;
       if (!next) return;
       const zone = document.createElement('div');
       zone.className = 'ingredient-insert-zone';
@@ -1029,8 +1099,14 @@ function renderRecipe(recipe) {
           if (active && typeof active.commit === 'function') {
             active.commit();
             setTimeout(() => {
-              if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
-                window.recipeEditorInsertIngredientHeadingAt(firstSection, idx + 1);
+              if (
+                typeof window.recipeEditorInsertIngredientHeadingAt ===
+                'function'
+              ) {
+                window.recipeEditorInsertIngredientHeadingAt(
+                  firstSection,
+                  idx + 1
+                );
               }
             }, 0);
             return;
@@ -1041,7 +1117,9 @@ function renderRecipe(recipe) {
           e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
-        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        if (
+          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+        ) {
           window.recipeEditorInsertIngredientHeadingAt(firstSection, idx + 1);
         }
       };
@@ -1053,6 +1131,11 @@ function renderRecipe(recipe) {
         }
       });
       ingredientsSection.appendChild(zone);
+    });
+
+    appendIngredientAddCta({
+      container: ingredientsSection,
+      sectionRef: firstSection,
     });
 
     // Focus a newly inserted heading, if any.
@@ -1075,9 +1158,9 @@ function renderRecipe(recipe) {
     ? recipe.sections.flatMap((s) => s.ingredients || [])
     : [];
 
-  // Strip out model-only placeholders so "You will need" reflects real ingredients only.
+  // Strip out headings; ingredients array should already be placeholder-free.
   const allIngredients = allIngredientsRaw.filter(
-    (row) => row && row.rowType !== 'heading' && !row.isPlaceholder
+    (row) => row && row.rowType !== 'heading'
   );
 
   // Always show the card; content depends on whether we have any real ingredients.
@@ -1186,22 +1269,31 @@ function renderRecipe(recipe) {
     const insertHeadingAt = (idx) => {
       try {
         // If a step is actively being edited, blur it first so its onBlur commit runs.
-        if (window._activeStepInput && typeof window._activeStepInput.blur === 'function') {
+        if (
+          window._activeStepInput &&
+          typeof window._activeStepInput.blur === 'function'
+        ) {
           window._activeStepInput.blur();
         }
       } catch (_) {}
 
-      const nodesNow = Array.isArray(window.stepNodes) ? window.stepNodes : nodes;
+      const nodesNow = Array.isArray(window.stepNodes)
+        ? window.stepNodes
+        : nodes;
       const ordered =
-        window.StepNodeModel && typeof StepNodeModel.normalizeStepNodeOrder === 'function'
+        window.StepNodeModel &&
+        typeof StepNodeModel.normalizeStepNodeOrder === 'function'
           ? StepNodeModel.normalizeStepNodeOrder(nodesNow)
           : nodesNow.slice();
 
       const safeIdx = Math.max(0, Math.min(Number(idx) || 0, ordered.length));
-      const newId = `tmp-step-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const newId = `tmp-step-${Date.now()}-${Math.floor(
+        Math.random() * 100000
+      )}`;
 
       const makeNode =
-        window.StepNodeModel && typeof StepNodeModel.createStepNode === 'function'
+        window.StepNodeModel &&
+        typeof StepNodeModel.createStepNode === 'function'
           ? StepNodeModel.createStepNode
           : null;
 
@@ -1211,7 +1303,12 @@ function renderRecipe(recipe) {
           : { HEADING: 'heading', STEP: 'step' };
 
       const newNode = makeNode
-        ? makeNode({ id: newId, type: StepType.HEADING, text: '', order: safeIdx + 1 })
+        ? makeNode({
+            id: newId,
+            type: StepType.HEADING,
+            text: '',
+            order: safeIdx + 1,
+          })
         : { id: newId, type: StepType.HEADING, text: '', order: safeIdx + 1 };
 
       const nextArr = ordered.slice();
@@ -1225,14 +1322,18 @@ function renderRecipe(recipe) {
 
     let displayIndex = 0;
 
-    const isHeading = (n) => n && (n.type === 'heading' || n.type === (window.StepNodeType && window.StepNodeType.HEADING));
+    const isHeading = (n) =>
+      n &&
+      (n.type === 'heading' ||
+        n.type === (window.StepNodeType && window.StepNodeType.HEADING));
 
     // Top insertion zone (suppressed if next node is a heading)
     {
       const next = nodes.length > 0 ? nodes[0] : null;
       const zone = document.createElement('div');
       zone.className = 'step-insert-zone';
-      if (next && isHeading(next)) zone.classList.add('step-insert-zone--disabled');
+      if (next && isHeading(next))
+        zone.classList.add('step-insert-zone--disabled');
       let _didInsert = false;
       const handleInsert = (e) => {
         if (zone.classList.contains('step-insert-zone--disabled')) return;
@@ -1293,7 +1394,10 @@ function renderRecipe(recipe) {
         // Headings use different language than steps.
         if (type === 'heading') {
           text.dataset.placeholder = 'Section title';
-          text.classList.add('placeholder-prompt', 'placeholder-prompt--editblue');
+          text.classList.add(
+            'placeholder-prompt',
+            'placeholder-prompt--editblue'
+          );
         } else {
           text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
@@ -1315,7 +1419,8 @@ function renderRecipe(recipe) {
       if (!next) return;
       const zone = document.createElement('div');
       zone.className = 'step-insert-zone';
-      if (isHeading(node) || isHeading(next)) zone.classList.add('step-insert-zone--disabled');
+      if (isHeading(node) || isHeading(next))
+        zone.classList.add('step-insert-zone--disabled');
       let _didInsert = false;
       const handleInsert = (e) => {
         if (zone.classList.contains('step-insert-zone--disabled')) return;
@@ -1342,7 +1447,6 @@ function renderRecipe(recipe) {
       });
       stepsSection.appendChild(zone);
     });
-
   }
 
   // --- Steps (instructions) ---
@@ -1470,7 +1574,10 @@ function renderRecipe(recipe) {
         // Headings use different language than steps.
         if (line.dataset.stepType === 'heading') {
           text.dataset.placeholder = 'Section title';
-          text.classList.add('placeholder-prompt', 'placeholder-prompt--editblue');
+          text.classList.add(
+            'placeholder-prompt',
+            'placeholder-prompt--editblue'
+          );
         } else {
           text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
@@ -1487,7 +1594,6 @@ function renderRecipe(recipe) {
       stepsSection.appendChild(line);
       attachStepInlineEditor(text);
     });
-
   } else {
     const noSteps = document.createElement('div');
     noSteps.className = 'empty-state';

@@ -39,13 +39,33 @@ async function uiConfirm({
 } = {}) {
   try {
     if (window.ui && typeof window.ui.confirm === 'function') {
-      return await window.ui.confirm({ title, message, confirmText, cancelText, danger });
+      return await window.ui.confirm({
+        title,
+        message,
+        confirmText,
+        cancelText,
+        danger,
+      });
     }
   } catch (_) {}
   try {
     return window.confirm(String(message || 'Are you sure?'));
   } catch (_) {}
   return false;
+}
+
+function attachSecretGalleryShortcut(addBtn) {
+  if (!addBtn) return;
+  const handler = (e) => {
+    if (!e) return;
+    const secret = e.ctrlKey || e.metaKey;
+    if (!secret) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.location.href = 'dialog-gallery.html';
+  };
+  addBtn.addEventListener('pointerdown', handler, { capture: true });
+  addBtn.addEventListener('click', handler, { capture: true });
 }
 
 function isTypingContext(target) {
@@ -404,6 +424,9 @@ async function loadRecipesPage() {
   }
   initBottomNav();
 
+  const addBtnRecipes = document.getElementById('appBarAddBtn');
+  attachSecretGalleryShortcut(addBtnRecipes);
+
   // --- Load recipes ---
   const recipes = db.exec(
     'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
@@ -515,7 +538,9 @@ async function loadRecipesPage() {
       if (isElectronEnv) {
         const ok = await window.electronAPI.saveDB(binaryArray);
         if (ok === false) {
-          window.ui.toast({ message: 'Failed to save database after creating recipe.' });
+          window.ui.toast({
+            message: 'Failed to save database after creating recipe.',
+          });
           return;
         }
       } else {
@@ -526,7 +551,9 @@ async function loadRecipesPage() {
       }
     } catch (err) {
       console.error('❌ Failed to persist DB after creating recipe:', err);
-      window.ui.toast({ message: 'Failed to save database after creating recipe.' });
+      window.ui.toast({
+        message: 'Failed to save database after creating recipe.',
+      });
       return;
     }
 
@@ -579,15 +606,22 @@ async function loadRecipesPage() {
       if (isElectronEnv) {
         const okSave = await window.electronAPI.saveDB(binaryArray);
         if (okSave === false) {
-          window.ui.toast({ message: 'Failed to save database after deleting recipe.' });
+          window.ui.toast({
+            message: 'Failed to save database after deleting recipe.',
+          });
           return;
         }
       } else {
-        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
       }
     } catch (err) {
       console.error('❌ Failed to persist DB after deleting recipe:', err);
-      window.ui.toast({ message: 'Failed to save database after deleting recipe.' });
+      window.ui.toast({
+        message: 'Failed to save database after deleting recipe.',
+      });
       return;
     }
 
@@ -661,9 +695,12 @@ async function loadShoppingPage() {
   // Keyboard selection + Enter activation for list rows.
   const listNav = enableTopLevelListKeyboardNav(list);
 
+  attachSecretGalleryShortcut(addBtn);
+
   // --- Load DB (mirror recipe loaders) ---
   const isElectron = !!window.electronAPI;
   let db;
+  attachSecretGalleryShortcut(addBtn);
 
   if (isElectron) {
     try {
@@ -1069,10 +1106,16 @@ async function loadShoppingPage() {
           return;
         }
       } else {
-        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
       }
     } catch (err) {
-      console.error('❌ Failed to persist DB after creating shopping item:', err);
+      console.error(
+        '❌ Failed to persist DB after creating shopping item:',
+        err
+      );
       uiToast('Failed to save database after creating shopping item.');
       return;
     }
@@ -1980,6 +2023,8 @@ async function loadUnitsPage() {
   // Keyboard selection + Enter activation for list rows.
   const listNav = enableTopLevelListKeyboardNav(list);
 
+  attachSecretGalleryShortcut(addBtn);
+
   // --- Load DB (mirror recipe/shopping loaders) ---
   const isElectron = !!window.electronAPI;
   let db;
@@ -2458,7 +2503,13 @@ async function loadUnitsPage() {
     const vals = await window.ui.form({
       title: 'New Unit',
       fields: [
-        { key: 'code', label: 'Code', value: '', required: true, normalize: (v) => (v || '').trim() },
+        {
+          key: 'code',
+          label: 'Code',
+          value: '',
+          required: true,
+          normalize: (v) => (v || '').trim(),
+        },
         {
           key: 'nameSingular',
           label: 'Name (singular)',
@@ -2470,7 +2521,12 @@ async function loadUnitsPage() {
       confirmText: 'Create',
       cancelText: 'Cancel',
       validate: (v) => {
-        if (!v.code || !v.code.trim() || !v.nameSingular || !v.nameSingular.trim()) {
+        if (
+          !v.code ||
+          !v.code.trim() ||
+          !v.nameSingular ||
+          !v.nameSingular.trim()
+        ) {
           return 'Code and Name (singular) are required.';
         }
         return '';
@@ -2486,7 +2542,9 @@ async function loadUnitsPage() {
       // Best-effort sort order: append at end
       let nextSort = null;
       try {
-        const q = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;');
+        const q = db.exec(
+          'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+        );
         if (q.length && q[0].values.length) {
           nextSort = q[0].values[0][0];
         }
@@ -2514,7 +2572,10 @@ async function loadUnitsPage() {
           return;
         }
       } else {
-        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
       }
     } catch (err) {
       console.error('❌ Failed to persist DB after creating unit:', err);
@@ -2848,7 +2909,10 @@ async function loadStoresPage() {
           return;
         }
       } else {
-        localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray))
+        );
       }
     } catch (err) {
       console.error('❌ Failed to persist DB after creating store:', err);
@@ -3241,28 +3305,7 @@ async function loadRecipeEditorPage() {
       ];
     }
 
-    // Ensure at least one placeholder ingredient whenever there are none
-    if (
-      shouldSeedIngredientPlaceholder &&
-      (!Array.isArray(firstSection.ingredients) ||
-        firstSection.ingredients.length === 0)
-    ) {
-      firstSection.ingredients = [
-        {
-          quantity: '',
-          unit: '',
-          name: '',
-          variant: '',
-          prepNotes: '',
-          parentheticalNote: '',
-          isOptional: false,
-          substitutes: [],
-          locationAtHome: '',
-          subRecipeId: null,
-          isPlaceholder: true,
-        },
-      ];
-    }
+    // Allow empty ingredient arrays; UI provides an add CTA instead of data placeholders.
   }
 
   // --- On load/return: apply full ingredient sort (per section) for display only ---

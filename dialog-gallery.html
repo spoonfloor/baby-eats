@@ -1,0 +1,213 @@
+:<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Dialog Gallery (secret)</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <style>
+      body {
+        font-family: var(--main-font, 'Red Hat Mono', monospace);
+        background: #f7f5ff;
+        padding: 32px;
+      }
+      h1 {
+        margin: 0 0 16px 0;
+      }
+      .gallery {
+        max-width: 860px;
+        margin: 0 auto;
+        display: grid;
+        gap: 18px;
+      }
+      .gallery-section {
+        background: #fff;
+        padding: 18px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+      }
+      .gallery-section h2 {
+        margin: 0 0 12px 0;
+        font-size: 18px;
+      }
+      .gallery-row {
+        display: grid;
+        gap: 12px;
+      }
+      .ui-dialog-panel--inline {
+        position: static;
+        transform: none;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+        margin: 0;
+      }
+      .ui-dialog-backdrop--inline {
+        position: static;
+        background: rgba(0, 0, 0, 0.05);
+        padding: 12px;
+        border-radius: 14px;
+      }
+      .demo-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .demo-inline-toasts {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Dialog/Toast Gallery</h1>
+    <div class="gallery">
+      <div class="gallery-section">
+        <h2>Inline Previews</h2>
+        <div class="gallery-row">
+          <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
+            <div class="ui-dialog-panel ui-dialog-panel--inline">
+              <div class="ui-dialog-title">Alert</div>
+              <div class="ui-dialog-body">
+                Something happened. This is a single-action alert.
+              </div>
+              <div class="ui-dialog-actions">
+                <button class="button">OK</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
+            <div class="ui-dialog-panel ui-dialog-panel--inline">
+              <div class="ui-dialog-title">Confirm (Danger)</div>
+              <div class="ui-dialog-body">Delete “Chili Crisp”?</div>
+              <div class="ui-dialog-actions">
+                <button class="button button--secondary">Cancel</button>
+                <button class="button button--danger">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
+            <div class="ui-dialog-panel ui-dialog-panel--inline">
+              <div class="ui-dialog-title">Prompt</div>
+              <div class="ui-dialog-body">Enter a name:</div>
+              <div class="ui-dialog-fields">
+                <label class="ui-dialog-field">
+                  <div class="ui-dialog-label">Name</div>
+                  <input class="ui-dialog-input" value="My New Thing" />
+                </label>
+              </div>
+              <div class="ui-dialog-actions">
+                <button class="button button--secondary">Cancel</button>
+                <button class="button">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
+            <div class="ui-dialog-panel ui-dialog-panel--inline">
+              <div class="ui-dialog-title">Form (Multi-field)</div>
+              <div class="ui-dialog-fields">
+                <label class="ui-dialog-field">
+                  <div class="ui-dialog-label">Code</div>
+                  <input class="ui-dialog-input" value="tsp" />
+                </label>
+                <label class="ui-dialog-field">
+                  <div class="ui-dialog-label">Name (singular)</div>
+                  <input class="ui-dialog-input" value="teaspoon" />
+                </label>
+              </div>
+              <div class="ui-dialog-actions">
+                <button class="button button--secondary">Cancel</button>
+                <button class="button">Create</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="demo-inline-toasts">
+            <div class="ui-toast typeahead-toast">
+              <div class="ui-toast__msg typeahead-toast__msg">Saved recipe.</div>
+            </div>
+            <div class="ui-toast typeahead-toast">
+              <div class="ui-toast__msg typeahead-toast__msg">Ingredient removed.</div>
+              <button class="ui-toast__action typeahead-toast__undo">Undo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gallery-section">
+        <h2>Live Components</h2>
+        <div class="demo-actions">
+          <button class="button" id="demoAlert">Show Alert</button>
+          <button class="button" id="demoConfirm">Show Confirm</button>
+          <button class="button" id="demoDangerConfirm">Show Danger Confirm</button>
+          <button class="button" id="demoPrompt">Show Prompt</button>
+          <button class="button" id="demoForm">Show Form</button>
+          <button class="button" id="demoToast">Show Toast</button>
+          <button class="button" id="demoToastUndo">Show Toast + Action</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/utils.js"></script>
+    <script>
+      const ui = () => window.ui;
+
+      document.getElementById('demoAlert')?.addEventListener('click', () => {
+        ui()?.alert({ title: 'Heads up', message: 'This is an alert.' });
+      });
+
+      document.getElementById('demoConfirm')?.addEventListener('click', async () => {
+        await ui()?.confirm({ title: 'Confirm', message: 'Proceed?', confirmText: 'OK', cancelText: 'Cancel' });
+      });
+
+      document.getElementById('demoDangerConfirm')?.addEventListener('click', async () => {
+        await ui()?.confirm({
+          title: 'Delete',
+          message: 'Delete “Sample Item”?',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          danger: true,
+        });
+      });
+
+      document.getElementById('demoPrompt')?.addEventListener('click', async () => {
+        await ui()?.prompt({ title: 'Rename', label: 'Name', value: 'Draft', required: true });
+      });
+
+      document.getElementById('demoForm')?.addEventListener('click', async () => {
+        await ui()?.form({
+          title: 'New Unit',
+          fields: [
+            { key: 'code', label: 'Code', required: true },
+            { key: 'name', label: 'Name (singular)', required: true },
+          ],
+          confirmText: 'Create',
+          cancelText: 'Cancel',
+        });
+      });
+
+      document.getElementById('demoToast')?.addEventListener('click', () => {
+        ui()?.toast({ message: 'Saved.' });
+      });
+
+      document.getElementById('demoToastUndo')?.addEventListener('click', () => {
+        ui()?.toast({ message: 'Ingredient removed.', actionText: 'Undo', onAction: () => console.log('undo!') });
+      });
+
+      // Secret exit: Cmd/Ctrl + ArrowUp to go back
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (window.history && typeof window.history.back === 'function') {
+            window.history.back();
+          } else {
+            window.location.href = 'index.html';
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
+
