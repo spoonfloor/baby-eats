@@ -1,0 +1,259 @@
+/* ==========================================================================
+   Overlays: dropdowns, toasts, dialogs (and legacy modals)
+   Keep all overlay UI styling here so it’s easy to tweak in one place.
+   ========================================================================== */
+
+/* --- Typeahead dropdown (v1) --- */
+.typeahead-dropdown {
+  z-index: var(--z-dropdown);
+  /* Neutral surface: match ingredient tray, not the focused field */
+  background: var(--field-bg);
+  /* Outline and text match inactive field styling */
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  color: var(--field-fg);
+}
+
+.typeahead-list {
+  overflow: auto;
+  /* Cap to ~8 rows via max-height; JS also clamps based on viewport */
+  max-height: calc(8 * 34px);
+}
+
+.typeahead-item,
+.typeahead-empty {
+  /* Match ingredient edit input horizontal padding (see .ingredient-edit-input padding: 4px 8px) */
+  padding: 8px 8px;
+  line-height: 18px;
+  font-size: 14px;
+  color: inherit;
+  user-select: none;
+  cursor: default;
+}
+
+.typeahead-item.is-highlighted {
+  /* Neutral highlight: black tint with light transparency */
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.typeahead-empty {
+  /* Same text color as inactive field; reduce emphasis via opacity */
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+/* --- Toasts (typeahead + global) --- */
+.typeahead-toast-host,
+.ui-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-height) + 14px);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.typeahead-toast,
+.ui-toast {
+  pointer-events: auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(25, 25, 25, 0.92);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: min(560px, calc(100vw - 24px));
+}
+
+.typeahead-toast__msg,
+.ui-toast__msg {
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.typeahead-toast__undo,
+.ui-toast__action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.typeahead-toast__undo:hover,
+.ui-toast__action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Dialogs (window.ui) --- */
+.ui-dialog-host {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  pointer-events: none;
+}
+
+.ui-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  pointer-events: auto;
+}
+
+.ui-dialog-panel {
+  width: min(520px, calc(100vw - 36px));
+  background: #fff;
+  color: var(--font-color-near-black);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  padding: 18px;
+  text-align: left;
+}
+
+.ui-dialog-title {
+  margin: 0 0 10px 0;
+  font-size: var(--header-font-size);
+  font-weight: 700;
+}
+
+.ui-dialog-body {
+  margin: 0 0 14px 0;
+  font-size: var(--body-font-size);
+  line-height: 1.45;
+  color: var(--font-color-near-black);
+  /* Preserve explicit newlines, but collapse incidental spaces (prevents "giant indent"). */
+  white-space: pre-line;
+}
+
+.ui-dialog-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 14px 0;
+}
+
+.ui-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ui-dialog-label {
+  font-size: 13px;
+  color: var(--subtitle);
+}
+
+.ui-dialog-input {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  outline: none;
+}
+
+.ui-dialog-input:focus {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px rgba(109, 73, 255, 0.18);
+}
+
+.ui-dialog-error {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #b00020;
+}
+
+.ui-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Button variants (used by dialogs; safe for existing .button usage too) */
+.button.button--secondary {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--font-color-near-black);
+}
+
+.button.button--danger {
+  background: #b00020;
+  color: #fff;
+}
+
+.button.button--secondary:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.button.button--danger:hover {
+  background: #8f001a;
+}
+
+/* --- Legacy HTML modals (kept for backwards-compat) --- */
+.modal.hidden {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: var(--z-app-chrome);
+}
+
+.modal-content {
+  background: #fff;
+  color: var(--font-color-near-black);
+  padding: 24px;
+  border-radius: 12px;
+  min-width: 280px;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  margin: 0 0 12px 0;
+  font-size: var(--header-font-size);
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.modal-field input {
+  font-family: inherit;
+  font-size: inherit;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+

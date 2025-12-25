@@ -449,7 +449,14 @@ if (typeof window !== 'undefined') {
       if (message) {
         bodyEl = document.createElement('div');
         bodyEl.className = 'ui-dialog-body';
-        bodyEl.textContent = String(message);
+        // Normalize: keep newlines, but remove indentation that often comes from
+        // template-literal formatting (prevents "giant indent" rendering).
+        const raw = String(message);
+        const normalized = raw
+          .replace(/\r\n/g, '\n')
+          .replace(/\n[ \t]+/g, '\n')
+          .trim();
+        bodyEl.textContent = normalized;
         panel.appendChild(bodyEl);
       }
 
