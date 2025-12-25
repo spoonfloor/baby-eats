@@ -730,20 +730,55 @@ async function loadShoppingPage() {
 
   // --- Load shopping items from ingredients table ---
   // Prefer is_deprecated when available; fall back to legacy hide_from_shopping_list.
+  const tableExists = (name) => {
+    try {
+      const q = db.exec(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+        [name]
+      );
+      return !!(q.length && q[0].values && q[0].values.length);
+    } catch (_) {
+      return false;
+    }
+  };
+
+  // When available, prefer the list table so Shopping can display multiple variants.
+  const hasVariantTable = tableExists('ingredient_variants');
+  const baseSelectSql = hasVariantTable
+    ? `
+      SELECT i.ID, i.name, COALESCE(v.variant, i.variant) AS variant
+      FROM ingredients i
+      LEFT JOIN ingredient_variants v ON v.ingredient_id = i.ID
+    `
+    : `
+      SELECT ID, name, variant
+      FROM ingredients
+    `;
+
   let result = [];
   try {
     result = db.exec(`
-      SELECT ID, name, variant
-      FROM ingredients
+      ${baseSelectSql}
       WHERE COALESCE(is_deprecated, 0) = 0
-      ORDER BY name COLLATE NOCASE;
+      ORDER BY
+        ${hasVariantTable ? 'i.name' : 'name'} COLLATE NOCASE
+        ${
+          hasVariantTable
+            ? ', i.ID ASC, COALESCE(v.sort_order, 999999) ASC, COALESCE(v.id, 999999) ASC'
+            : ''
+        };
     `);
   } catch (_) {
     result = db.exec(`
-      SELECT ID, name, variant
-      FROM ingredients
+      ${baseSelectSql}
       WHERE hide_from_shopping_list = 0
-      ORDER BY name COLLATE NOCASE;
+      ORDER BY
+        ${hasVariantTable ? 'i.name' : 'name'} COLLATE NOCASE
+        ${
+          hasVariantTable
+            ? ', i.ID ASC, COALESCE(v.sort_order, 999999) ASC, COALESCE(v.id, 999999) ASC'
+            : ''
+        };
     `);
   }
 
@@ -775,22 +810,31 @@ async function loadShoppingPage() {
       }
     });
 
-    // Dedupe + sort variants, then flatten into an array
+    // Dedupe variants, then flatten into an array.
+    // - If we have `ingredient_variants`, preserve list order (sort_order) from DB.
+    // - Otherwise, fall back to alphabetical sorting for stability.
     shoppingRows = Array.from(byName.values()).map((item) => {
       if (Array.isArray(item.variants) && item.variants.length > 0) {
-        const unique = Array.from(
-          new Set(
-            item.variants
-              .map((v) => (v || '').trim())
-              .filter((v) => v.length > 0)
-          )
-        );
+        const cleaned = item.variants
+          .map((v) => (v || '').trim())
+          .filter((v) => v.length > 0);
 
-        unique.sort((a, b) =>
-          a.localeCompare(b, undefined, { sensitivity: 'base' })
-        );
+        const seen = new Set();
+        const uniqueStable = [];
+        cleaned.forEach((v) => {
+          const k = v.toLowerCase();
+          if (seen.has(k)) return;
+          seen.add(k);
+          uniqueStable.push(v);
+        });
 
-        item.variants = unique;
+        if (!hasVariantTable) {
+          uniqueStable.sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+          );
+        }
+
+        item.variants = uniqueStable;
       } else {
         item.variants = [];
       }
@@ -951,37 +995,115 @@ async function loadShoppingPage() {
   function renderShoppingList(rows) {
     list.innerHTML = '';
 
+    const makeTextMeasurer = (el) => {
+      try {
+        const cs = window.getComputedStyle ? getComputedStyle(el) : null;
+        const fontStyle = cs ? cs.fontStyle : 'normal';
+        const fontVariant = cs ? cs.fontVariant : 'normal';
+        const fontWeight = cs ? cs.fontWeight : '400';
+        const fontSize = cs ? cs.fontSize : '16px';
+        const fontFamily = cs ? cs.fontFamily : 'sans-serif';
+        const font = `${fontStyle} ${fontVariant} ${fontWeight} ${fontSize} ${fontFamily}`;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.font = font;
+        return (s) => {
+          try {
+            return ctx.measureText(String(s || '')).width || 0;
+          } catch (_) {
+            return 0;
+          }
+        };
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const truncateToFitPx = (s, maxPx, measure) => {
+      const str = String(s || '');
+      if (!measure) return str;
+      if (maxPx <= 0) return '';
+      if (measure(str) <= maxPx) return str;
+
+      // Ensure we can at least show an ellipsis when needed.
+      const ell = '…';
+      if (measure(ell) > maxPx) return '';
+
+      let lo = 0;
+      let hi = str.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const candidate = str.slice(0, Math.max(0, mid - 1)) + ell;
+        if (measure(candidate) <= maxPx) lo = mid;
+        else hi = mid - 1;
+      }
+      return str.slice(0, Math.max(0, lo - 1)) + ell;
+    };
+
+    const buildLineToFit = (li, baseName, variants) => {
+      const vs = Array.isArray(variants)
+        ? variants.map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      if (vs.length === 0) return baseName;
+
+      const cs = window.getComputedStyle ? getComputedStyle(li) : null;
+      const padL = cs ? parseFloat(cs.paddingLeft) : 0;
+      const padR = cs ? parseFloat(cs.paddingRight) : 0;
+      const maxPx = Math.max(0, li.clientWidth - (padL || 0) - (padR || 0));
+      const measure = makeTextMeasurer(li);
+      if (!measure || maxPx <= 0) return `${baseName} (${vs[0]})`;
+
+      const prefix = `${baseName} (`;
+      const close = `)`;
+      const prefixW = measure(prefix);
+      const closeW = measure(close);
+
+      // If everything fits, render full (rare).
+      const full = `${baseName} (${vs.join(', ')})`;
+      if (measure(full) <= maxPx) return full;
+
+      // If we have <=3 variants, just ellipsize the inside list.
+      if (vs.length <= 3) {
+        const room = Math.max(0, maxPx - prefixW - closeW);
+        const inside = truncateToFitPx(vs.join(', '), room, measure);
+        return `${prefix}${inside}${close}`;
+      }
+
+      // We have >3 variants: ALWAYS keep ", + N others" visible.
+      // Try showing up to 3 visible variants in list order, shrinking as needed.
+      for (let visibleCount = 3; visibleCount >= 1; visibleCount--) {
+        const remaining = vs.length - visibleCount;
+        const suffix = `, + ${remaining} other${remaining === 1 ? '' : 's'}`;
+        const suffixW = measure(suffix);
+        const roomForNames = Math.max(0, maxPx - prefixW - suffixW - closeW);
+
+        if (roomForNames <= 0) continue;
+
+        const names = vs.slice(0, visibleCount).join(', ');
+        if (measure(names) <= roomForNames) {
+          return `${prefix}${names}${suffix}${close}`;
+        }
+      }
+
+      // Fallback: truncate the first variant to fit, but still reserve suffix.
+      const remaining = vs.length - 1;
+      const suffix = `, + ${remaining} other${remaining === 1 ? '' : 's'}`;
+      const suffixW = measure(suffix);
+      const roomForFirst = Math.max(0, maxPx - prefixW - suffixW - closeW);
+      const first = truncateToFitPx(vs[0], roomForFirst, measure) || '…';
+      return `${prefix}${first}${suffix}${close}`;
+    };
+
     rows.forEach((item) => {
       const li = document.createElement('li');
 
       // Capitalize initial letter for top-level shopping list display
-      let line =
+      const baseName =
         item.name && item.name.length > 0
           ? item.name.charAt(0).toUpperCase() + item.name.slice(1)
           : item.name;
-
-      if (Array.isArray(item.variants) && item.variants.length > 0) {
-        const MAX_VISIBLE = 3;
-
-        // item.variants is already deduped + alpha-sorted above
-        const variants = item.variants;
-        const visible = variants.slice(0, MAX_VISIBLE);
-        const remainingCount =
-          variants.length > MAX_VISIBLE ? variants.length - MAX_VISIBLE : 0;
-
-        let variantLabel = visible.join(', ');
-
-        if (remainingCount > 0) {
-          variantLabel += `, +${remainingCount} other${
-            remainingCount === 1 ? '' : 's'
-          }`;
-        }
-
-        // e.g. "Basil (dried, fresh, lemon, +2 others)"
-        line += ` (${variantLabel})`;
-      }
-
-      li.textContent = line;
+      li.textContent = baseName || '';
 
       li.addEventListener('click', (event) => {
         const wantsRemove = event.ctrlKey || event.metaKey;
@@ -1015,6 +1137,22 @@ async function loadShoppingPage() {
       });
 
       list.appendChild(li);
+
+      // After the row is in the DOM, measure actual available width and fit the text so
+      // the "+ N others)" suffix stays visible even when the first variants are long.
+      if (Array.isArray(item.variants) && item.variants.length > 0) {
+        try {
+          requestAnimationFrame(() => {
+            try {
+              const nextText = buildLineToFit(li, baseName || '', item.variants);
+              li.textContent = nextText;
+              li.title = `${baseName || ''}\n\nAll variants: ${item.variants.join(
+                ', '
+              )}`;
+            } catch (_) {}
+          });
+        } catch (_) {}
+      }
     });
 
     // Keep selection valid after rerender (search/filter changes).
@@ -1150,6 +1288,13 @@ function wireChildEditorPage({
   if (!appBarTitleEl || !bodyTitleEl) return;
 
   const normalize = (value) => (value || '').trim();
+  const maybeAutoGrow = (el) => {
+    try {
+      if (el && typeof el.__feAutoGrowResize === 'function') {
+        el.__feAutoGrowResize();
+      }
+    } catch (_) {}
+  };
   let baselineTitle = normalize(initialTitle);
   const extras = Array.isArray(extraFields) ? extraFields : [];
   let baselineExtras = {};
@@ -1196,6 +1341,12 @@ function wireChildEditorPage({
       } else if ('textContent' in primaryEl) {
         primaryEl.textContent = v;
       }
+    } catch (_) {}
+    // If this field supports auto-grow, ensure it sizes correctly even when value
+    // is set programmatically (baseline load).
+    try {
+      maybeAutoGrow(primaryEl);
+      els.forEach((el) => maybeAutoGrow(el));
     } catch (_) {}
 
     try {
@@ -1310,6 +1461,13 @@ function wireChildEditorPage({
             if ('value' in primaryEl) primaryEl.value = v;
             else if ('textContent' in primaryEl) primaryEl.textContent = v;
           }
+        } catch (_) {}
+        // Re-measure any auto-grow fields after restoring values.
+        try {
+          const els = Array.isArray(f.els) ? f.els.filter(Boolean) : [];
+          const primaryEl = f.el || els[0] || null;
+          maybeAutoGrow(primaryEl);
+          els.forEach((el) => maybeAutoGrow(el));
         } catch (_) {}
       });
       isDirty = false;
@@ -1456,15 +1614,48 @@ function loadShoppingItemEditorPage() {
   `;
 
   // Auto-grow textareas to preserve the "Docs list" feel (like steps editor).
-  const attachAutoGrowTextarea = (el, { maxPx = 220 } = {}) => {
+  // Cap is intentionally moderate; beyond that we rely on vertical scrolling.
+  //
+  // Important: these values are sometimes set programmatically (baseline load, Cancel),
+  // so we expose a callable resize hook rather than relying on synthetic input events
+  // (which could incorrectly mark the page dirty).
+  const attachAutoGrowTextarea = (el, { maxLines = 8 } = {}) => {
     if (!el) return;
+    let computedMaxPx = 0;
+    const computeMaxPx = () => {
+      try {
+        const cs = window.getComputedStyle ? getComputedStyle(el) : null;
+        const fontSize = cs ? parseFloat(cs.fontSize) : 0;
+        const lineHeightRaw = cs ? parseFloat(cs.lineHeight) : 0;
+        const lineHeight =
+          Number.isFinite(lineHeightRaw) && lineHeightRaw > 0
+            ? lineHeightRaw
+            : Number.isFinite(fontSize) && fontSize > 0
+            ? fontSize * 1.4
+            : 22; // fallback
+        const padTop = cs ? parseFloat(cs.paddingTop) : 0;
+        const padBot = cs ? parseFloat(cs.paddingBottom) : 0;
+        const pad =
+          (Number.isFinite(padTop) ? padTop : 0) +
+          (Number.isFinite(padBot) ? padBot : 0);
+        const lines = Math.max(1, Number(maxLines) || 8);
+        return Math.round(pad + lineHeight * lines);
+      } catch (_) {
+        return 220;
+      }
+    };
     const resize = () => {
       try {
+        if (!computedMaxPx) computedMaxPx = computeMaxPx();
         el.style.height = 'auto';
-        const next = Math.min(el.scrollHeight || 0, maxPx);
+        const next = Math.min(el.scrollHeight || 0, computedMaxPx);
         el.style.height = `${Math.max(56, next)}px`;
       } catch (_) {}
     };
+    try {
+      // Intentionally non-standard property; internal hook only.
+      el.__feAutoGrowResize = resize;
+    } catch (_) {}
     el.addEventListener('input', resize);
     // size once now
     try {

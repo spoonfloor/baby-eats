@@ -3,6 +3,8 @@
   --main-font: 'Red Hat Mono', monospace;
   --body-font-size: 15.5px;
   --body-font-weight: 400;
+  /* Used by `css/overrides.css` as the global font-weight token */
+  --main-font-weight: var(--body-font-weight);
   --headline-font-size: 16px;
   --ingredient-editor-control-font-size: 14px;
 
@@ -211,6 +213,13 @@
   border-radius: 8px;
 }
 
+/* Shopping list rows: keep items single-line; truncate long "(variants...)" tails. */
+body.shopping-page #shoppingList li:not(.list-section-label) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .list-view li.is-selected {
   background-color: hsl(270, 0%, 96%);
 }
@@ -323,7 +332,9 @@ body.shopping-editor-page .shopping-item-textarea {
   /* newline-only list: never wrap, so line breaks are unambiguous */
   white-space: pre;
   overflow-x: auto;
-  overflow-y: hidden;
+  /* Auto-grow JS clamps height (~8 lines); after that we need vertical scroll. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   resize: none;
 }
 

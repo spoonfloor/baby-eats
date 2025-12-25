@@ -1,8 +1,25 @@
-:<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
     <title>Dialog Gallery (secret)</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="css/overlays.css" />
     <style>
@@ -10,6 +27,28 @@
         font-family: var(--main-font, 'Red Hat Mono', monospace);
         background: #f7f5ff;
         padding: 32px;
+      }
+      .gallery-topbar {
+        max-width: 860px;
+        margin: 0 auto 12px auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .gallery-topbar-left {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .gallery-hint {
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.55);
+      }
+      .gallery-back-btn {
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 999px;
       }
       h1 {
         margin: 0 0 16px 0;
@@ -60,14 +99,21 @@
     </style>
   </head>
   <body>
-    <h1>Dialog/Toast Gallery</h1>
+    <div class="gallery-topbar">
+      <div class="gallery-topbar-left">
+        <h1 style="margin: 0">Dialog/Toast Gallery</h1>
+        <div class="gallery-hint">Back: ⌘↑ (or Ctrl↑)</div>
+      </div>
+      <button class="button button--secondary gallery-back-btn" id="galleryBackBtn" type="button">
+        Back
+      </button>
+    </div>
     <div class="gallery">
       <div class="gallery-section">
         <h2>Inline Previews</h2>
         <div class="gallery-row">
           <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
             <div class="ui-dialog-panel ui-dialog-panel--inline">
-              <div class="ui-dialog-title">Alert</div>
               <div class="ui-dialog-body">Something happened. This is a single-action alert.</div>
               <div class="ui-dialog-actions">
                 <button class="button">OK</button>
@@ -77,7 +123,7 @@
 
           <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
             <div class="ui-dialog-panel ui-dialog-panel--inline">
-              <div class="ui-dialog-title">Confirm (Danger)</div>
+              <div class="ui-dialog-title">Delete item</div>
               <div class="ui-dialog-body">Delete “Chili Crisp”?</div>
               <div class="ui-dialog-actions">
                 <button class="button button--secondary">Cancel</button>
@@ -88,8 +134,7 @@
 
           <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
             <div class="ui-dialog-panel ui-dialog-panel--inline">
-              <div class="ui-dialog-title">Prompt</div>
-              <div class="ui-dialog-body">Enter a name:</div>
+              <div class="ui-dialog-body">Enter a new name:</div>
               <div class="ui-dialog-fields">
                 <label class="ui-dialog-field">
                   <div class="ui-dialog-label">Name</div>
@@ -105,7 +150,7 @@
 
           <div class="ui-dialog-backdrop ui-dialog-backdrop--inline">
             <div class="ui-dialog-panel ui-dialog-panel--inline">
-              <div class="ui-dialog-title">Form (Multi-field)</div>
+              <div class="ui-dialog-title">New unit</div>
               <div class="ui-dialog-fields">
                 <label class="ui-dialog-field">
                   <div class="ui-dialog-label">Code</div>
@@ -153,6 +198,20 @@
     <script>
       const ui = () => window.ui;
 
+      const goBack = () => {
+        try {
+          if (window.history && typeof window.history.back === 'function') {
+            window.history.back();
+            return;
+          }
+        } catch (_) {}
+        window.location.href = 'recipes.html';
+      };
+
+      document.getElementById('galleryBackBtn')?.addEventListener('click', () => {
+        goBack();
+      });
+
       document.getElementById('demoAlert')?.addEventListener('click', () => {
         ui()?.alert({ title: 'Heads up', message: 'This is an alert.' });
       });
@@ -172,7 +231,13 @@
       });
 
       document.getElementById('demoPrompt')?.addEventListener('click', async () => {
-        await ui()?.prompt({ title: 'Rename', label: 'Name', value: 'Draft', required: true });
+        await ui()?.prompt({
+          title: '',
+          message: 'Enter a new name:',
+          label: 'Name',
+          value: 'Draft',
+          required: true,
+        });
       });
 
       document.getElementById('demoForm')?.addEventListener('click', async () => {
@@ -199,11 +264,7 @@
       document.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
           e.preventDefault();
-          if (window.history && typeof window.history.back === 'function') {
-            window.history.back();
-          } else {
-            window.location.href = 'index.html';
-          }
+          goBack();
         }
       });
     </script>

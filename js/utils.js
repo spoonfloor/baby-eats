@@ -439,11 +439,26 @@ if (typeof window !== 'undefined') {
       panel.className = 'ui-dialog-panel';
       panel.setAttribute('role', 'dialog');
       panel.setAttribute('aria-modal', 'true');
+      // If we don't render a visible title, still give the dialog an accessible name.
+      // Prefer title, else a short message summary, else fallback.
+      const ariaLabel = (() => {
+        const t = (title || '').trim();
+        if (t) return t;
+        const m = String(message || '')
+          .replace(/\r\n/g, '\n')
+          .replace(/\n[ \t]+/g, '\n')
+          .trim();
+        if (m) return m.split('\n')[0].slice(0, 80);
+        return 'Dialog';
+      })();
+      panel.setAttribute('aria-label', ariaLabel);
 
-      const titleEl = document.createElement('h2');
-      titleEl.className = 'ui-dialog-title';
-      titleEl.textContent = title || '';
-      panel.appendChild(titleEl);
+      if (title) {
+        const titleEl = document.createElement('h2');
+        titleEl.className = 'ui-dialog-title';
+        titleEl.textContent = String(title);
+        panel.appendChild(titleEl);
+      }
 
       let bodyEl = null;
       if (message) {
@@ -553,6 +568,7 @@ if (typeof window !== 'undefined') {
 
       const syncValidity = () => {
         let err = '';
+        let hasMissingRequired = false;
         try {
           // Required fields
           if (Array.isArray(fields)) {
@@ -560,18 +576,18 @@ if (typeof window !== 'undefined') {
               const key = String(f?.key || '');
               if (!key) continue;
               if (f?.required && !(values[key] || '').trim()) {
-                err = 'Please fill in the required fields.';
-                break;
+                hasMissingRequired = true;
               }
             }
           }
-          if (!err && typeof validate === 'function') {
+          // Only show an error message for semantic validation (not basic "required" empties).
+          if (!err && !hasMissingRequired && typeof validate === 'function') {
             err = String(validate(values) || '').trim();
           }
         } catch (_) {}
 
         setError(err);
-        confirmBtn.disabled = !!err;
+        confirmBtn.disabled = !!err || hasMissingRequired;
       };
 
       const doCancel = () => {
@@ -638,7 +654,8 @@ if (typeof window !== 'undefined') {
     });
   };
 
-  const alertDialog = ({ title = 'Alert', message = '', okText = 'OK' } = {}) =>
+  // Alert: default has *no title* (title "Alert" is redundant most of the time).
+  const alertDialog = ({ title = '', message = '', okText = 'OK' } = {}) =>
     dialog({
       title,
       message,
@@ -648,7 +665,9 @@ if (typeof window !== 'undefined') {
     }).then(() => true);
 
   const confirmDialog = ({
-    title = 'Confirm',
+    // Generic titles like "Confirm" are redundant; callers should pass a semantic title
+    // only when it adds clarity (e.g. "Delete Recipe").
+    title = '',
     message = '',
     confirmText = 'OK',
     cancelText = 'Cancel',
@@ -665,6 +684,8 @@ if (typeof window !== 'undefined') {
     }).then((res) => !!res);
 
   const promptDialog = ({
+    // Generic titles like "Prompt" are redundant; callers should pass a semantic title
+    // only when it adds clarity (e.g. "Rename", "New Unit").
     title = '',
     message = '',
     label = 'Value',
@@ -709,6 +730,8 @@ if (typeof window !== 'undefined') {
     });
 
   const formDialog = ({
+    // Generic titles like "Form" are redundant; callers should pass a semantic title
+    // only when it adds clarity.
     title = '',
     message = '',
     fields = [], // [{ key, label, value, placeholder, required, normalize }]
