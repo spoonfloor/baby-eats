@@ -1223,7 +1223,36 @@ async function loadShoppingPage() {
 
     let newId = null;
     try {
-      db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
+      // Best-effort: when schema supports lemma, auto-fill a singular form from the title.
+      let cols = [];
+      try {
+        const info = db.exec('PRAGMA table_info(ingredients);');
+        const rows = info.length ? info[0].values : [];
+        cols = rows.map((r) => String(r[1] || '').toLowerCase());
+      } catch (_) {
+        cols = [];
+      }
+      const has = (c) => cols.includes(String(c).toLowerCase());
+
+      const deriveLemmaFromTitle = (rawTitle) => {
+        const t = String(rawTitle || '').trim().toLowerCase();
+        if (!t) return '';
+        // Small heuristic singularizer (good enough for simple plurals).
+        if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
+        if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
+        if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
+        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1) return t.slice(0, -1);
+        return t;
+      };
+
+      if (has('lemma')) {
+        db.run('INSERT INTO ingredients (name, lemma) VALUES (?, ?);', [
+          name,
+          deriveLemmaFromTitle(name),
+        ]);
+      } else {
+        db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
+      }
       const idQ = db.exec('SELECT last_insert_rowid();');
       if (idQ.length && idQ[0].values.length) {
         newId = idQ[0].values[0][0];
@@ -1553,7 +1582,7 @@ function loadShoppingItemEditorPage() {
         <textarea
           id="shoppingItemVariantsTextarea"
           class="shopping-item-textarea"
-          placeholder="e.g., kind or brand"
+          placeholder="e.g. kind or brand"
           wrap="off"
         ></textarea>
       </div>
@@ -1569,12 +1598,22 @@ function loadShoppingItemEditorPage() {
       </div>
 
       <div class="shopping-item-field">
-        <div class="shopping-item-label">Home</div>
+        <div class="shopping-item-label">Home location</div>
         <input
           id="shoppingItemHomeInput"
           class="shopping-item-input"
           type="text"
-          placeholder="pantry / fridge / spices / …"
+          placeholder="e.g. fridge, freezer, pantry"
+        />
+      </div>
+
+      <div id="shoppingItemLemmaField" class="shopping-item-field">
+        <div class="shopping-item-label">Singular form</div>
+        <input
+          id="shoppingItemLemmaInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="e.g., bagel"
         />
       </div>
 
@@ -1604,11 +1643,59 @@ function loadShoppingItemEditorPage() {
             <span>Hidden</span>
           </label>
         </div>
-      </div>
 
-      <div class="shopping-item-help">
-        Hidden items have been removed from Shopping and can be deleted once they
-        aren't used by any recipe.
+        <div class="shopping-item-help">
+          Hidden items have been removed from Shopping and can be deleted once they
+          aren't used by any recipe.
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="shoppingItemOverridesTitle"
+      class="shopping-item-label"
+      style="margin: 32px 0 6px 0; color: var(--font-color-near-black);"
+    >
+      Pluralization overrides (optional)
+    </div>
+
+    <div
+      id="shoppingItemOverridesCard"
+      class="shopping-item-editor-card"
+      aria-label="Pluralization overrides"
+    >
+      <div
+        id="shoppingItemLanguageDetails"
+        class="shopping-item-status"
+        style="align-items: stretch; width: 100%;"
+      >
+        <div
+          id="shoppingItemPluralOverrideField"
+          class="shopping-item-field"
+          style="width: 100%;"
+        >
+          <div class="shopping-item-label">Plural form</div>
+          <input
+            id="shoppingItemPluralOverrideInput"
+            class="shopping-item-input"
+            type="text"
+            placeholder="e.g. leaves, grapes, bagels"
+          />
+        </div>
+
+        <div id="shoppingItemPluralByDefaultRow" class="shopping-item-status-row">
+          <label class="shopping-item-toggle" style="display: flex; width: 100%;">
+            <input id="shoppingItemPluralByDefaultToggle" type="checkbox" />
+            <span>Plural by default</span>
+          </label>
+        </div>
+
+        <div id="shoppingItemIsMassNounRow" class="shopping-item-status-row">
+          <label class="shopping-item-toggle" style="display: flex; width: 100%;">
+            <input id="shoppingItemIsMassNounToggle" type="checkbox" />
+            <span>Is a mass or substance (e.g. rice, turmeric)</span>
+          </label>
+        </div>
       </div>
     </div>
   `;
@@ -1700,7 +1787,7 @@ function loadShoppingItemEditorPage() {
     return { db, isElectron };
   };
 
-  const persistShoppingItem = async ({ title: next, extraValues }) => {
+  const persistShoppingItem = async ({ title: next, baselineTitle, extraValues }) => {
     if (!next) return;
 
     const { db, isElectron } = await loadDbForShoppingEditor();
@@ -1713,9 +1800,16 @@ function loadShoppingItemEditorPage() {
       const home = (extraValues && extraValues.home) || '';
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
       const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
+      const lemma = (extraValues && extraValues.lemma) || '';
+      const pluralOverride = (extraValues && extraValues.plural_override) || '';
+      const pluralByDefaultRaw =
+        (extraValues && extraValues.plural_by_default) || '';
+      const isMassNounRaw = (extraValues && extraValues.is_mass_noun) || '';
 
       const isFood = isFoodRaw === '1' ? 1 : 0;
       const isDeprecated = isDeprecatedRaw === '1' ? 1 : 0;
+      const pluralByDefault = pluralByDefaultRaw === '1' ? 1 : 0;
+      const isMassNoun = isMassNounRaw === '1' ? 1 : 0;
 
       const parseList = (raw) => {
         const lines = String(raw || '')
@@ -1751,6 +1845,53 @@ function loadShoppingItemEditorPage() {
       }
       const has = (c) => cols.includes(String(c).toLowerCase());
 
+      const deriveLemmaFromTitle = (rawTitle) => {
+        const t = String(rawTitle || '').trim().toLowerCase();
+        if (!t) return '';
+        // Small heuristic singularizer (good enough for simple plurals).
+        if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
+        if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
+        if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
+        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1) return t.slice(0, -1);
+        return t;
+      };
+      const norm = (s) => String(s || '').trim().toLowerCase();
+
+      // Cascade rule:
+      // - If lemma is empty, fill it from the (new) title.
+      // - If lemma still matches the auto-derived lemma from the old title, update it to match the new title.
+      // - Otherwise preserve the user-provided lemma.
+      let lemmaToWrite = lemma;
+      if (has('lemma')) {
+        const oldDerived =
+          typeof baselineTitle === 'string' ? deriveLemmaFromTitle(baselineTitle) : '';
+        const newDerived = deriveLemmaFromTitle(next);
+        const lemmaNorm = norm(lemmaToWrite);
+        if (!lemmaNorm) {
+          lemmaToWrite = newDerived;
+        } else if (oldDerived && lemmaNorm === norm(oldDerived)) {
+          lemmaToWrite = newDerived;
+        }
+      }
+
+      // Keep UI + wireChildEditorPage baselines consistent with any auto-filled lemma.
+      // Without this, deleting "Singular form" then saving can keep the field visually empty
+      // (even if we persisted a derived lemma to the DB).
+      try {
+        if (has('lemma') && extraValues && typeof extraValues === 'object') {
+          extraValues.lemma = lemmaToWrite;
+        }
+      } catch (_) {}
+      try {
+        if (has('lemma')) {
+          const el = document.getElementById('shoppingItemLemmaInput');
+          if (el && 'value' in el) {
+            const cur = String(el.value || '').trim();
+            if (!cur && lemmaToWrite) el.value = lemmaToWrite;
+          }
+        }
+      } catch (_) {}
+
       const tableExists = (name) => {
         try {
           const q = db.exec(
@@ -1785,6 +1926,22 @@ function loadShoppingItemEditorPage() {
           sets.push('location_at_home = ?');
           vals.push(home);
         }
+        if (has('lemma')) {
+          sets.push('lemma = ?');
+          vals.push(lemmaToWrite);
+        }
+        if (has('plural_override')) {
+          sets.push('plural_override = ?');
+          vals.push(pluralOverride);
+        }
+        if (has('plural_by_default')) {
+          sets.push('plural_by_default = ?');
+          vals.push(pluralByDefault);
+        }
+        if (has('is_mass_noun')) {
+          sets.push('is_mass_noun = ?');
+          vals.push(isMassNoun);
+        }
         if (has('is_food')) {
           sets.push('is_food = ?');
           vals.push(isFood);
@@ -1813,6 +1970,22 @@ function loadShoppingItemEditorPage() {
         if (has('location_at_home')) {
           insertCols.push('location_at_home');
           insertVals.push(home);
+        }
+        if (has('lemma')) {
+          insertCols.push('lemma');
+          insertVals.push(lemmaToWrite);
+        }
+        if (has('plural_override')) {
+          insertCols.push('plural_override');
+          insertVals.push(pluralOverride);
+        }
+        if (has('plural_by_default')) {
+          insertCols.push('plural_by_default');
+          insertVals.push(pluralByDefault);
+        }
+        if (has('is_mass_noun')) {
+          insertCols.push('is_mass_noun');
+          insertVals.push(isMassNoun);
         }
         if (has('is_food')) {
           insertCols.push('is_food');
@@ -1920,6 +2093,10 @@ function loadShoppingItemEditorPage() {
       let baselineHome = '';
       let baselineIsFood = '1';
       let baselineIsDeprecated = '0';
+      let baselineLemma = '';
+      let baselinePluralOverride = '';
+      let baselinePluralByDefault = '0';
+      let baselineIsMassNoun = '0';
 
       try {
         // Load DB once up-front so shared utilities (e.g., typeahead pools) can use window.dbInstance.
@@ -1942,10 +2119,40 @@ function loadShoppingItemEditorPage() {
           }
           const has = (c) => cols.includes(String(c).toLowerCase());
 
+          const setVisible = (elOrId, ok) => {
+            const el =
+              typeof elOrId === 'string'
+                ? document.getElementById(elOrId)
+                : elOrId;
+            if (!el) return;
+            el.style.display = ok ? '' : 'none';
+          };
+
+          // Show grammar controls only when schema supports them (older DBs hide them).
+          const showLemma = has('lemma');
+          const showPluralOverride = has('plural_override');
+          const showPluralByDefault = has('plural_by_default');
+          const showIsMassNoun = has('is_mass_noun');
+          const showAnyOverrides =
+            showPluralOverride || showPluralByDefault || showIsMassNoun;
+          setVisible('shoppingItemOverridesCard', showAnyOverrides);
+          setVisible('shoppingItemOverridesTitle', showAnyOverrides);
+          setVisible('shoppingItemLanguageDetails', showAnyOverrides);
+          setVisible('shoppingItemLemmaField', showLemma);
+          setVisible('shoppingItemPluralOverrideField', showPluralOverride);
+          setVisible('shoppingItemPluralByDefaultRow', showPluralByDefault);
+          setVisible('shoppingItemIsMassNounRow', showIsMassNoun);
+
           const selectCols = [
             "COALESCE(variant, '')",
             "COALESCE(size, '')",
             "COALESCE(location_at_home, '')",
+            has('lemma') ? "COALESCE(lemma, '')" : "''",
+            has('plural_override') ? "COALESCE(plural_override, '')" : "''",
+            has('plural_by_default')
+              ? 'COALESCE(plural_by_default, 0)'
+              : '0',
+            has('is_mass_noun') ? 'COALESCE(is_mass_noun, 0)' : '0',
             has('is_food') ? 'COALESCE(is_food, 1)' : '1',
             has('is_deprecated')
               ? 'COALESCE(is_deprecated, 0)'
@@ -1964,9 +2171,15 @@ function loadShoppingItemEditorPage() {
             baselineVariants = String(row[0] || '');
             baselineSizes = String(row[1] || '');
             baselineHome = String(row[2] || '');
-            baselineIsFood = String(row[3] != null ? row[3] : '1');
-            baselineIsDeprecated = String(row[4] != null ? row[4] : '0');
+            baselineLemma = String(row[3] || '');
+            baselinePluralOverride = String(row[4] || '');
+            baselinePluralByDefault = String(row[5] != null ? row[5] : '0');
+            baselineIsMassNoun = String(row[6] != null ? row[6] : '0');
+            baselineIsFood = String(row[7] != null ? row[7] : '1');
+            baselineIsDeprecated = String(row[8] != null ? row[8] : '0');
           }
+
+          // Note: overrides are always visible (no disclosure); nothing to auto-open.
 
           // If list tables exist, prefer them as the baseline source-of-truth.
           try {
@@ -2071,6 +2284,44 @@ function loadShoppingItemEditorPage() {
             key: 'home',
             el: document.getElementById('shoppingItemHomeInput'),
             initialValue: baselineHome,
+          },
+          {
+            key: 'lemma',
+            el: document.getElementById('shoppingItemLemmaInput'),
+            initialValue: baselineLemma,
+          },
+          {
+            key: 'plural_override',
+            el: document.getElementById('shoppingItemPluralOverrideInput'),
+            initialValue: baselinePluralOverride,
+          },
+          {
+            key: 'plural_by_default',
+            el: document.getElementById('shoppingItemPluralByDefaultToggle'),
+            initialValue: baselinePluralByDefault === '1' ? '1' : '0',
+            getValue: () =>
+              document.getElementById('shoppingItemPluralByDefaultToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById(
+                'shoppingItemPluralByDefaultToggle'
+              );
+              if (el) el.checked = String(v) === '1';
+            },
+          },
+          {
+            key: 'is_mass_noun',
+            el: document.getElementById('shoppingItemIsMassNounToggle'),
+            initialValue: baselineIsMassNoun === '1' ? '1' : '0',
+            getValue: () =>
+              document.getElementById('shoppingItemIsMassNounToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById('shoppingItemIsMassNounToggle');
+              if (el) el.checked = String(v) === '1';
+            },
           },
           {
             key: 'is_food',
