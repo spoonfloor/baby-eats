@@ -245,6 +245,11 @@ function attachStepInlineEditor(textEl) {
 
     const commitWithValue = (normalizedVal, { deleteIfEmpty } = {}) => {
       const shouldDelete = deleteIfEmpty !== false && normalizedVal === '';
+      const isHeadingLine =
+        (lineEl && lineEl.dataset && lineEl.dataset.stepType === 'heading') ||
+        (textEl &&
+          textEl.closest &&
+          textEl.closest('.instruction-line')?.dataset?.stepType === 'heading');
 
       // Phase 1: mirror update into StepNode model (if present).
       if (typeof applyEditToStepNode === 'function' && window.editingStepId) {
@@ -299,6 +304,12 @@ function attachStepInlineEditor(textEl) {
             if (textEl.dataset && !textEl.dataset.placeholder) {
               textEl.dataset.placeholder = 'Add a step.';
             }
+            // Ensure placeholder row styling (hide number + left-align prompt).
+            try {
+              if (!isHeadingLine) {
+                lineEl.classList.add('instruction-line--placeholder');
+              }
+            } catch (_) {}
 
             ensureStepTextNotEmpty(textEl);
           } else {
@@ -358,6 +369,28 @@ function attachStepInlineEditor(textEl) {
 
         ensureStepTextNotEmpty(textEl);
       }
+
+      // Placeholder row bookkeeping:
+      // - If the user committed real text, this is no longer the empty-state placeholder.
+      // - If the field is empty AND showing the placeholder prompt, keep it marked as placeholder.
+      try {
+        const isStepPlaceholder =
+          !isHeadingLine &&
+          textEl &&
+          textEl.classList &&
+          textEl.classList.contains('placeholder-prompt') &&
+          textEl.dataset &&
+          String(textEl.dataset.placeholder || '').trim() === 'Add a step.';
+
+        if (!isHeadingLine && normalizedVal !== '') {
+          lineEl.classList.remove('instruction-line--placeholder');
+        } else if (isStepPlaceholder && normalizedVal === '') {
+          lineEl.classList.add('instruction-line--placeholder');
+        } else if (!isHeadingLine && normalizedVal === '') {
+          // Don't accidentally keep hiding numbers for genuinely-empty non-placeholder steps.
+          lineEl.classList.remove('instruction-line--placeholder');
+        }
+      } catch (_) {}
 
       textEl.contentEditable = 'false';
 
@@ -896,11 +929,32 @@ function attachStepInlineEditor(textEl) {
           textEl.dataset.placeholder = placeholderText;
         }
         placeholderActive = true;
+        try {
+          if (
+            lineEl &&
+            lineEl.classList &&
+            String(placeholderText || '').trim() === 'Add a step.' &&
+            lineEl.dataset &&
+            lineEl.dataset.stepType !== 'heading'
+          ) {
+            lineEl.classList.add('instruction-line--placeholder');
+          }
+        } catch (_) {}
       }
 
       // Restore placeholder styling if we reverted back to the prompt text.
       if ((original || '').trim() === 'Add a step.') {
         textEl.classList.add('placeholder-prompt');
+        try {
+          if (
+            lineEl &&
+            lineEl.classList &&
+            lineEl.dataset &&
+            lineEl.dataset.stepType !== 'heading'
+          ) {
+            lineEl.classList.add('instruction-line--placeholder');
+          }
+        } catch (_) {}
       }
 
       textEl.contentEditable = 'false';
@@ -1349,6 +1403,18 @@ function attachStepInlineEditor(textEl) {
       ) {
         textEl.classList.remove('placeholder-prompt');
       }
+      // If we removed the placeholder prompt due to real text, this is no longer
+      // the empty-state placeholder row, so numbers should show after blur.
+      try {
+        if (
+          current.length > 0 &&
+          lineEl &&
+          lineEl.classList &&
+          lineEl.classList.contains('instruction-line--placeholder')
+        ) {
+          lineEl.classList.remove('instruction-line--placeholder');
+        }
+      } catch (_) {}
 
       // Safety net for the Safari-style placeholder:
       // if we started from the placeholder, the user has typed *something*
@@ -1361,6 +1427,17 @@ function attachStepInlineEditor(textEl) {
             textEl.dataset.placeholder = placeholderText;
           }
           placeholderActive = true;
+          try {
+            if (
+              lineEl &&
+              lineEl.classList &&
+              String(placeholderText || '').trim() === 'Add a step.' &&
+              lineEl.dataset &&
+              lineEl.dataset.stepType !== 'heading'
+            ) {
+              lineEl.classList.add('instruction-line--placeholder');
+            }
+          } catch (_) {}
         }
       }
 
@@ -1375,6 +1452,17 @@ function attachStepInlineEditor(textEl) {
             if (textEl.dataset) {
               textEl.dataset.placeholder = placeholderText;
             }
+            try {
+              if (
+                lineEl &&
+                lineEl.classList &&
+                String(placeholderText || '').trim() === 'Add a step.' &&
+                lineEl.dataset &&
+                lineEl.dataset.stepType !== 'heading'
+              ) {
+                lineEl.classList.add('instruction-line--placeholder');
+              }
+            } catch (_) {}
 
             // Enter placeholder mode for this newly-blank single step.
             placeholderActive = true;

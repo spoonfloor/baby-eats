@@ -347,7 +347,8 @@ function rerenderIngredientsSectionFromModel() {
             // After commit triggers a rerender, perform the insert on next tick.
             setTimeout(() => {
               if (
-                typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+                typeof window.recipeEditorInsertIngredientHeadingAt ===
+                'function'
               ) {
                 window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
               }
@@ -361,7 +362,9 @@ function rerenderIngredientsSectionFromModel() {
           e.stopPropagation();
         } catch (_) {}
 
-        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        if (
+          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+        ) {
           window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
         }
         return;
@@ -372,7 +375,10 @@ function rerenderIngredientsSectionFromModel() {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
-      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+      if (
+        window.openIngredientEditRow &&
+        typeof window.openIngredientEditRow === 'function'
+      ) {
         window.openIngredientEditRow({
           parent: ingredientsSection,
           replaceEl: zone,
@@ -468,7 +474,8 @@ function rerenderIngredientsSectionFromModel() {
             active.commit();
             setTimeout(() => {
               if (
-                typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+                typeof window.recipeEditorInsertIngredientHeadingAt ===
+                'function'
               ) {
                 window.recipeEditorInsertIngredientHeadingAt(
                   firstSection,
@@ -485,7 +492,9 @@ function rerenderIngredientsSectionFromModel() {
           e.stopPropagation();
         } catch (_) {}
 
-        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        if (
+          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+        ) {
           window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
         }
         return;
@@ -496,7 +505,10 @@ function rerenderIngredientsSectionFromModel() {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
-      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+      if (
+        window.openIngredientEditRow &&
+        typeof window.openIngredientEditRow === 'function'
+      ) {
         window.openIngredientEditRow({
           parent: ingredientsSection,
           replaceEl: zone,
@@ -513,7 +525,8 @@ function rerenderIngredientsSectionFromModel() {
 
   // Trailing insertion zone (after the last row) so hover/click works “below” the last line.
   {
-    const last = renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
+    const last =
+      renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
     if (last && isHeading(last)) {
@@ -549,7 +562,9 @@ function rerenderIngredientsSectionFromModel() {
           e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
-        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        if (
+          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+        ) {
           window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
         }
         return;
@@ -559,7 +574,10 @@ function rerenderIngredientsSectionFromModel() {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
-      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+      if (
+        window.openIngredientEditRow &&
+        typeof window.openIngredientEditRow === 'function'
+      ) {
         window.openIngredientEditRow({
           parent: ingredientsSection,
           replaceEl: zone,
@@ -722,7 +740,10 @@ function appendIngredientAddCta({ container, sectionRef }) {
   cta.appendChild(text);
 
   cta.addEventListener('click', () => {
-    if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+    if (
+      window.openIngredientEditRow &&
+      typeof window.openIngredientEditRow === 'function'
+    ) {
       window.openIngredientEditRow({
         parent: container,
         replaceEl: cta,
@@ -1217,7 +1238,8 @@ function renderRecipe(recipe) {
 
         if (wantsHeading) {
           // Do not allow consecutive headings.
-          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+          if (zone.classList.contains('ingredient-insert-zone--disabled'))
+            return;
 
           try {
             const active = window._activeIngredientHeadingEditor;
@@ -1251,7 +1273,10 @@ function renderRecipe(recipe) {
         try {
           e.stopPropagation();
         } catch (_) {}
-        if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+        if (
+          window.openIngredientEditRow &&
+          typeof window.openIngredientEditRow === 'function'
+        ) {
           window.openIngredientEditRow({
             parent: ingredientsSection,
             replaceEl: zone,
@@ -1346,7 +1371,8 @@ function renderRecipe(recipe) {
 
         if (wantsHeading) {
           // Do not allow consecutive headings.
-          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+          if (zone.classList.contains('ingredient-insert-zone--disabled'))
+            return;
 
           try {
             const active = window._activeIngredientHeadingEditor;
@@ -1374,7 +1400,10 @@ function renderRecipe(recipe) {
           if (
             typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
           ) {
-            window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+            window.recipeEditorInsertIngredientHeadingAt(
+              firstSection,
+              insertIdx
+            );
           }
           return;
         }
@@ -1383,7 +1412,10 @@ function renderRecipe(recipe) {
         try {
           e.stopPropagation();
         } catch (_) {}
-        if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+        if (
+          window.openIngredientEditRow &&
+          typeof window.openIngredientEditRow === 'function'
+        ) {
           window.openIngredientEditRow({
             parent: ingredientsSection,
             replaceEl: zone,
@@ -1430,7 +1462,8 @@ function renderRecipe(recipe) {
         const insertIdx = renderRows.length;
 
         if (wantsHeading) {
-          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+          if (zone.classList.contains('ingredient-insert-zone--disabled'))
+            return;
           try {
             e.preventDefault();
             e.stopPropagation();
@@ -1438,7 +1471,10 @@ function renderRecipe(recipe) {
           if (
             typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
           ) {
-            window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+            window.recipeEditorInsertIngredientHeadingAt(
+              firstSection,
+              insertIdx
+            );
           }
           return;
         }
@@ -1672,7 +1708,10 @@ function renderRecipe(recipe) {
         if (!e || !e.altKey) return;
         // Read-mode-only: if a step is actively being edited, require blur/finish first.
         try {
-          if (document.body.classList.contains('step-editing') || window.editingStepId)
+          if (
+            document.body.classList.contains('step-editing') ||
+            window.editingStepId
+          )
             return;
         } catch (_) {}
         if (_didInsert) return;
@@ -1733,6 +1772,8 @@ function renderRecipe(recipe) {
         } else {
           text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
+          // Placeholder step row (empty-state). Used for hiding the number pre-focus.
+          line.classList.add('instruction-line--placeholder');
         }
       } else {
         text.textContent = rawText;
@@ -1759,7 +1800,10 @@ function renderRecipe(recipe) {
         if (!e || !e.altKey) return;
         // Read-mode-only: if a step is actively being edited, require blur/finish first.
         try {
-          if (document.body.classList.contains('step-editing') || window.editingStepId)
+          if (
+            document.body.classList.contains('step-editing') ||
+            window.editingStepId
+          )
             return;
         } catch (_) {}
         if (_didInsert) return;
@@ -1792,7 +1836,10 @@ function renderRecipe(recipe) {
         if (zone.classList.contains('step-insert-zone--disabled')) return;
         if (!e || !e.altKey) return;
         try {
-          if (document.body.classList.contains('step-editing') || window.editingStepId)
+          if (
+            document.body.classList.contains('step-editing') ||
+            window.editingStepId
+          )
             return;
         } catch (_) {}
         if (_didInsert) return;
@@ -1872,7 +1919,18 @@ function renderRecipe(recipe) {
         if (sectionId != null) {
           text.dataset.sectionId = String(sectionId);
         }
-        text.textContent = step.instructions ?? '';
+        const rawText = step.instructions ?? '';
+        const isPlaceholder =
+          !rawText || String(rawText).trim() === 'Add a step.';
+
+        if (isPlaceholder) {
+          text.textContent = '';
+          text.dataset.placeholder = 'Add a step.';
+          text.classList.add('placeholder-prompt');
+          line.classList.add('instruction-line--placeholder');
+        } else {
+          text.textContent = rawText;
+        }
 
         // If StepNode model is present, mirror node.type → DOM.
         try {
@@ -1946,6 +2004,7 @@ function renderRecipe(recipe) {
         } else {
           text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
+          line.classList.add('instruction-line--placeholder');
         }
       } else {
         text.textContent = rawText;

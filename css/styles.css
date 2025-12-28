@@ -990,6 +990,17 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   flex: 0 0 2em; /* reserve fixed width for numbers */
 }
 
+/* Empty-state placeholder row: reserve number gutter but hide the number pre-focus. */
+.instruction-line.instruction-line--placeholder:not(.editing) .step-num {
+  opacity: 0;
+}
+
+/* For the placeholder row only, pull the prompt into the reserved number gutter.
+   This keeps "Add a step." truly left-aligned, while editing snaps to "1. |". */
+.instruction-line.instruction-line--placeholder:not(.editing) .step-text {
+  margin-left: -2em;
+}
+
 .instruction-line .step-text {
   flex: 1;
   /* Optical gap A for wrapped lines: line-height ≈ font box (1em) + A */
@@ -1004,6 +1015,11 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
+}
+
+/* While editing, hide the placeholder prompt so the caret is the only cue. */
+.instruction-line.editing .step-text.placeholder-prompt::before {
+  content: '';
 }
 
 .ingredient-text.placeholder-prompt::before {
