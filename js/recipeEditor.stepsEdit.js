@@ -193,6 +193,9 @@ function attachStepInlineEditor(textEl) {
 
     // Visual editing state
     lineEl.classList.add('editing');
+    try {
+      document.body.classList.add('step-editing');
+    } catch (_) {}
 
     const original = textEl.textContent || '';
 
@@ -363,6 +366,9 @@ function attachStepInlineEditor(textEl) {
       window._hasPendingEdit = false;
 
       lineEl.classList.remove('editing');
+      try {
+        document.body.classList.remove('step-editing');
+      } catch (_) {}
 
       textEl.removeEventListener('keydown', onKeyDown);
       textEl.removeEventListener('blur', onBlur);
@@ -1301,6 +1307,9 @@ function attachStepInlineEditor(textEl) {
         handleEnterSplit();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        try {
+          document.body.classList.remove('step-editing');
+        } catch (_) {}
 
         // ESC should revert the entire edit session via the central handler,
         // which restores both recipeData and stepNodes.

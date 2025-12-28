@@ -158,6 +158,64 @@ function renderIngredientHeading(row) {
 
   div.appendChild(text);
 
+  const handleMaybeDelete = (e) => {
+    if (!e) return false;
+    const wantsDelete = !!(e.ctrlKey || e.metaKey || e.type === 'contextmenu');
+    if (!wantsDelete) return false;
+
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+    } catch (_) {}
+
+    const clientId =
+      row && row.headingClientId ? String(row.headingClientId) : '';
+    if (!clientId) return true;
+
+    // If this heading is actively being edited, exit edit mode first.
+    try {
+      if (
+        window._activeIngredientHeadingEditor &&
+        window._activeIngredientHeadingEditor.clientId === clientId &&
+        typeof window._activeIngredientHeadingEditor.cancel === 'function'
+      ) {
+        window._activeIngredientHeadingEditor.cancel();
+      }
+    } catch (_) {}
+
+    // Delete the heading row from the recipe model (with undo).
+    try {
+      const found = findIngredientSectionForHeadingClientId(clientId);
+      if (!found || !found.sec || !Array.isArray(found.sec.ingredients)) return true;
+      const rowRef = found.sec.ingredients[found.idx];
+      if (!rowRef) return true;
+      if (typeof window.recipeEditorDeleteIngredientHeadingRow === 'function') {
+        void window.recipeEditorDeleteIngredientHeadingRow({
+          sectionRef: found.sec,
+          rowRef,
+          headingClientId: clientId,
+        });
+      } else {
+        // Fallback: remove without confirm/undo
+        found.sec.ingredients.splice(found.idx, 1);
+        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+          window.recipeEditorRerenderIngredientsFromModel();
+        }
+      }
+    } catch (_) {}
+
+    return true;
+  };
+
+  // Ctrl/⌘-click (or right-click) deletes the subhead.
+  div.addEventListener('pointerdown', (e) => {
+    handleMaybeDelete(e);
+  });
+  div.addEventListener('contextmenu', (e) => {
+    if (e) e.preventDefault();
+    handleMaybeDelete(e);
+  });
+
   div.addEventListener('click', () => {
     // If already editing, do not re-enter edit mode; this breaks native
     // double-click/triple-click selection and click-drag selection.
@@ -546,13 +604,19 @@ function renderIngredient(line) {
   return div;
 }
 
-function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
+function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtIndex }) {
   if (!parent || !replaceEl) return;
   const isInsert = mode === 'insert';
+  const insertAt = insertAtIndex;
 
   const row = document.createElement('div');
   row.className = 'ingredient-edit-row editing';
   row.dataset.isEditing = 'true';
+
+  // Read-mode-only affordances: mark that an ingredient row is being edited.
+  try {
+    document.body.classList.add('ingredient-editing');
+  } catch (_) {}
 
   // Hidden focus target to support a "neutral" state within edit mode:
   // clicking tray background can move focus off inputs without exiting edit mode.
@@ -731,6 +795,9 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     if (_didFinalizeSwap) return;
     _didFinalizeSwap = true;
     try {
+      try {
+        document.body.classList.remove('ingredient-editing');
+      } catch (_) {}
       const p = row.parentNode;
       if (p && nextEl) {
         p.replaceChild(nextEl, row);
@@ -825,11 +892,26 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         const section = model.sections[0];
         sectionRef = section;
         if (!Array.isArray(section.ingredients)) section.ingredients = [];
-        section.ingredients.push(ingredient);
+        // Insert at requested index (includes headings), falling back to append.
+        const raw = Number(insertAt);
+        const idx = Number.isFinite(raw) ? raw : section.ingredients.length;
+        const safeIdx = Math.max(0, Math.min(idx, section.ingredients.length));
+        section.ingredients.splice(safeIdx, 0, ingredient);
       }
 
       const readOnlyLine = renderIngredient(ingredient);
       if (readOnlyLine) finalizeSwap(readOnlyLine);
+
+      // If the insert flow replaced an insert-rail element, rerender to restore rails.
+      try {
+        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+          setTimeout(() => {
+            try {
+              window.recipeEditorRerenderIngredientsFromModel();
+            } catch (_) {}
+          }, 0);
+        }
+      } catch (_) {}
     } else if (modelRef) {
       // Clearing name deletes the ingredient line from this recipe (with undo).
       if (!nameTrimmed) {
@@ -856,6 +938,9 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
         } catch (_) {}
         // Ensure the edit row is removed (rerender will replace the section anyway).
         try {
+          try {
+            document.body.classList.remove('ingredient-editing');
+          } catch (_) {}
           _didFinalizeSwap = true;
           if (row && row.parentNode) row.parentNode.removeChild(row);
         } catch (_) {}
@@ -977,17 +1062,28 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine }) {
     console.warn('⚠️ setupIngredientTypeaheadRow failed:', err);
   }
 
-  // Focus name by default, with caret at the beginning
+  // Focus name by default, with caret at the beginning.
+  // IMPORTANT: defer by one tick so the click/pointer event that opened the tray
+  // finishes first; otherwise focusout can immediately cancel an empty insert row.
   const nameInput = row.querySelector(
     '.ingredient-edit-input[data-field="name"]'
   );
   if (nameInput) {
-    nameInput.focus();
-    nameInput.setSelectionRange(0, 0);
-    // scrollToStart is handled by attachIngredientInputAutosize, but ensure it here too
-    nameInput.scrollLeft = 0;
+    setTimeout(() => {
+      try {
+        nameInput.focus();
+        nameInput.setSelectionRange(0, 0);
+        // scrollToStart is handled by attachIngredientInputAutosize, but ensure it here too
+        nameInput.scrollLeft = 0;
+      } catch (_) {}
+    }, 0);
   }
 }
+
+// Expose for other modules (recipeEditor.js) that call into the ingredient editor.
+try {
+  window.openIngredientEditRow = openIngredientEditRow;
+} catch (_) {}
 
 function renderIngredientEditRowScaffold() {
   const row = document.createElement('div');

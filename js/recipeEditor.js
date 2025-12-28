@@ -140,7 +140,7 @@ function mergeByIngredient(list) {
 
 const getPageContentContainer = () => document.getElementById('pageContent');
 
-// --- Subhead insertion mode (hold Control) ---
+// --- Subhead insertion mode (hold Option/Alt) ---
 function ensureIngredientSubheadInsertModeWiring() {
   if (window._ingredientSubheadInsertModeWired) return;
   window._ingredientSubheadInsertModeWired = true;
@@ -156,16 +156,16 @@ function ensureIngredientSubheadInsertModeWiring() {
 
   document.addEventListener('keydown', (e) => {
     if (!e) return;
-    // Only Control toggles insert mode (matches requested UX).
-    if (e.key === 'Control' || e.ctrlKey) {
+    // Only Option/Alt toggles insert mode.
+    if (e.key === 'Alt' || e.altKey) {
       setMode(true);
     }
   });
 
   document.addEventListener('keyup', (e) => {
     if (!e) return;
-    // On keyup, drop the mode when Control is no longer held.
-    if (e.key === 'Control' || !e.ctrlKey) {
+    // On keyup, drop the mode when Option/Alt is no longer held.
+    if (e.key === 'Alt' || !e.altKey) {
       setMode(false);
     }
   });
@@ -313,8 +313,7 @@ function rerenderIngredientsSectionFromModel() {
       zone.classList.add('ingredient-insert-zone--disabled');
     let _didInsert = false;
     const handleInsert = (e) => {
-      if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-      if (!e || !e.ctrlKey) return;
+      if (!e) return;
       if (_didInsert) return;
       _didInsert = true;
       try {
@@ -323,42 +322,68 @@ function rerenderIngredientsSectionFromModel() {
         }, 0);
       } catch (_) {}
 
-      // If a heading editor is active, commit/delete it first; ctrl-click insertion
-      // prevents normal focus changes so blur won't run.
+      // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
       try {
-        const active = window._activeIngredientHeadingEditor;
-        if (active && typeof active.commit === 'function') {
-          active.commit();
-          // After commit triggers a rerender, perform the insert on next tick.
-          setTimeout(() => {
-            if (
-              typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-            ) {
-              window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-            }
-          }, 0);
+        if (
+          document.body.classList.contains('ingredient-editing') ||
+          ingredientsSection.querySelector('.ingredient-edit-row.editing')
+        ) {
           return;
         }
       } catch (_) {}
 
-      // Ctrl-click on mac can be treated as a right-click (contextmenu) and may not
-      // fire a normal `click` event. Handle on pointer/mousedown instead.
+      const wantsHeading = !!e.altKey;
+
+      if (wantsHeading) {
+        // Do not allow consecutive headings.
+        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+
+        // If a heading editor is active, commit/delete it first; Option-click insertion
+        // prevents normal focus changes so blur won't run.
+        try {
+          const active = window._activeIngredientHeadingEditor;
+          if (active && typeof active.commit === 'function') {
+            active.commit();
+            // After commit triggers a rerender, perform the insert on next tick.
+            setTimeout(() => {
+              if (
+                typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+              ) {
+                window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+              }
+            }, 0);
+            return;
+          }
+        } catch (_) {}
+
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+
+        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+          window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+        }
+        return;
+      }
+
+      // Normal click: insert an ingredient row at this position (index 0).
       try {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
-      if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
-        window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+        window.openIngredientEditRow({
+          parent: ingredientsSection,
+          replaceEl: zone,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: 0,
+        });
       }
     };
     zone.addEventListener('pointerdown', handleInsert);
-    zone.addEventListener('contextmenu', (e) => {
-      // Prevent control-click context menu when user is in insert mode.
-      if (e && e.ctrlKey) {
-        e.preventDefault();
-        handleInsert(e);
-      }
-    });
+    zone.addEventListener('click', handleInsert);
     ingredientsSection.appendChild(zone);
   }
 
@@ -411,8 +436,93 @@ function rerenderIngredientsSectionFromModel() {
     }
     let _didInsert = false;
     const handleInsert = (e) => {
-      if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-      if (!e || !e.ctrlKey) return;
+      if (!e) return;
+      if (_didInsert) return;
+      _didInsert = true;
+      try {
+        setTimeout(() => {
+          _didInsert = false;
+        }, 0);
+      } catch (_) {}
+
+      // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
+      try {
+        if (
+          document.body.classList.contains('ingredient-editing') ||
+          ingredientsSection.querySelector('.ingredient-edit-row.editing')
+        ) {
+          return;
+        }
+      } catch (_) {}
+
+      const insertIdx = idx + 1;
+      const wantsHeading = !!e.altKey;
+
+      if (wantsHeading) {
+        // Do not allow consecutive headings.
+        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+
+        try {
+          const active = window._activeIngredientHeadingEditor;
+          if (active && typeof active.commit === 'function') {
+            active.commit();
+            setTimeout(() => {
+              if (
+                typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+              ) {
+                window.recipeEditorInsertIngredientHeadingAt(
+                  firstSection,
+                  insertIdx
+                );
+              }
+            }, 0);
+            return;
+          }
+        } catch (_) {}
+
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+
+        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+          window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+        }
+        return;
+      }
+
+      // Normal click: insert an ingredient row at this position.
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+        window.openIngredientEditRow({
+          parent: ingredientsSection,
+          replaceEl: zone,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: insertIdx,
+        });
+      }
+    };
+    zone.addEventListener('pointerdown', handleInsert);
+    zone.addEventListener('click', handleInsert);
+    ingredientsSection.appendChild(zone);
+  });
+
+  // Trailing insertion zone (after the last row) so hover/click works “below” the last line.
+  {
+    const last = renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
+    const zone = document.createElement('div');
+    zone.className = 'ingredient-insert-zone';
+    if (last && isHeading(last)) {
+      // Adjacent to heading: block heading insertion here (but allow ingredient insertion).
+      zone.classList.add('ingredient-insert-zone--disabled');
+    }
+    let _didInsert = false;
+    const handleInsert = (e) => {
+      if (!e) return;
       if (_didInsert) return;
       _didInsert = true;
       try {
@@ -422,40 +532,47 @@ function rerenderIngredientsSectionFromModel() {
       } catch (_) {}
 
       try {
-        const active = window._activeIngredientHeadingEditor;
-        if (active && typeof active.commit === 'function') {
-          active.commit();
-          setTimeout(() => {
-            if (
-              typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-            ) {
-              window.recipeEditorInsertIngredientHeadingAt(
-                firstSection,
-                idx + 1
-              );
-            }
-          }, 0);
+        if (
+          document.body.classList.contains('ingredient-editing') ||
+          ingredientsSection.querySelector('.ingredient-edit-row.editing')
+        ) {
           return;
         }
       } catch (_) {}
+
+      const wantsHeading = !!e.altKey;
+      const insertIdx = renderRows.length;
+
+      if (wantsHeading) {
+        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+        if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+          window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+        }
+        return;
+      }
 
       try {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
-      if (typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
-        window.recipeEditorInsertIngredientHeadingAt(firstSection, idx + 1);
+      if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+        window.openIngredientEditRow({
+          parent: ingredientsSection,
+          replaceEl: zone,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: insertIdx,
+        });
       }
     };
     zone.addEventListener('pointerdown', handleInsert);
-    zone.addEventListener('contextmenu', (e) => {
-      if (e && e.ctrlKey) {
-        e.preventDefault();
-        handleInsert(e);
-      }
-    });
+    zone.addEventListener('click', handleInsert);
     ingredientsSection.appendChild(zone);
-  });
+  }
 
   appendIngredientAddCta({
     container: ingredientsSection,
@@ -605,8 +722,8 @@ function appendIngredientAddCta({ container, sectionRef }) {
   cta.appendChild(text);
 
   cta.addEventListener('click', () => {
-    if (typeof openIngredientEditRow === 'function') {
-      openIngredientEditRow({
+    if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+      window.openIngredientEditRow({
         parent: container,
         replaceEl: cta,
         mode: 'insert',
@@ -621,6 +738,16 @@ function appendIngredientAddCta({ container, sectionRef }) {
 function deleteIngredientRowFromSection(sectionRef, rowRef) {
   if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef)
     return null;
+  const idx = sectionRef.ingredients.indexOf(rowRef);
+  if (idx < 0) return null;
+  const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
+  return { idx, removed };
+}
+
+function deleteIngredientHeadingRowFromSection(sectionRef, rowRef) {
+  if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef)
+    return null;
+  if (!rowRef || rowRef.rowType !== 'heading') return null;
   const idx = sectionRef.ingredients.indexOf(rowRef);
   if (idx < 0) return null;
   const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
@@ -730,6 +857,91 @@ window.recipeEditorDeleteIngredientRow = async ({
     } else if (typeof window.showUndoToast === 'function') {
       window.showUndoToast({
         message: 'Ingredient removed from recipe',
+        onUndo: restore,
+      });
+    }
+  } catch (_) {}
+
+  return true;
+};
+
+window.recipeEditorDeleteIngredientHeadingRow = async ({
+  sectionRef,
+  rowRef,
+  headingClientId,
+} = {}) => {
+  if (!sectionRef || !rowRef) return false;
+
+  const snapshot = JSON.parse(JSON.stringify(rowRef));
+  const label =
+    snapshot && snapshot.text && String(snapshot.text).trim()
+      ? String(snapshot.text).trim()
+      : 'Section title';
+
+  try {
+    const ok =
+      window.ui && typeof window.ui.confirm === 'function'
+        ? await window.ui.confirm({
+            title: 'Remove Subhead',
+            message: `Remove "${label}"?\n\nThis won’t delete any ingredients.`,
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            danger: true,
+          })
+        : window.confirm(
+            `Remove "${label}"?\n\nThis won’t delete any ingredients.`
+          );
+    if (!ok) return false;
+  } catch (_) {}
+
+  const del = deleteIngredientHeadingRowFromSection(sectionRef, rowRef);
+  if (!del || !del.removed) return false;
+
+  try {
+    if (typeof markDirty === 'function') markDirty();
+  } catch (_) {}
+
+  try {
+    const cid = headingClientId || snapshot.headingClientId || null;
+    if (cid && window._editingIngredientHeadingClientId === String(cid)) {
+      window._editingIngredientHeadingClientId = null;
+    }
+    if (
+      window._activeIngredientHeadingEditor &&
+      cid &&
+      window._activeIngredientHeadingEditor.clientId === String(cid)
+    ) {
+      window._activeIngredientHeadingEditor = null;
+    }
+  } catch (_) {}
+
+  rerenderIngredientsSectionFromModel();
+
+  const restore = () => {
+    try {
+      if (!Array.isArray(sectionRef.ingredients)) sectionRef.ingredients = [];
+      const insertAt = Math.min(
+        Math.max(0, del.idx),
+        sectionRef.ingredients.length
+      );
+      sectionRef.ingredients.splice(insertAt, 0, snapshot);
+    } catch (_) {}
+    try {
+      rerenderIngredientsSectionFromModel();
+    } catch (_) {}
+  };
+
+  try {
+    const um = window.undoManager;
+    if (um && typeof um.push === 'function') {
+      um.push({
+        message: 'Subhead removed',
+        undo: restore,
+        timeoutMs: 8000,
+      });
+    } else if (typeof window.showUndoToast === 'function') {
+      window.showUndoToast({
+        message: 'Subhead removed',
         onUndo: restore,
       });
     }
@@ -982,8 +1194,7 @@ function renderRecipe(recipe) {
         zone.classList.add('ingredient-insert-zone--disabled');
       let _didInsert = false;
       const handleInsert = (e) => {
-        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-        if (!e || !e.ctrlKey) return;
+        if (!e) return;
         if (_didInsert) return;
         _didInsert = true;
         try {
@@ -992,39 +1203,66 @@ function renderRecipe(recipe) {
           }, 0);
         } catch (_) {}
 
+        // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
         try {
-          const active = window._activeIngredientHeadingEditor;
-          if (active && typeof active.commit === 'function') {
-            active.commit();
-            setTimeout(() => {
-              if (
-                typeof window.recipeEditorInsertIngredientHeadingAt ===
-                'function'
-              ) {
-                window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-              }
-            }, 0);
+          if (
+            document.body.classList.contains('ingredient-editing') ||
+            ingredientsSection.querySelector('.ingredient-edit-row.editing')
+          ) {
             return;
           }
         } catch (_) {}
 
+        const wantsHeading = !!e.altKey;
+
+        if (wantsHeading) {
+          // Do not allow consecutive headings.
+          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+
+          try {
+            const active = window._activeIngredientHeadingEditor;
+            if (active && typeof active.commit === 'function') {
+              active.commit();
+              setTimeout(() => {
+                if (
+                  typeof window.recipeEditorInsertIngredientHeadingAt ===
+                  'function'
+                ) {
+                  window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+                }
+              }, 0);
+              return;
+            }
+          } catch (_) {}
+
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+          } catch (_) {}
+          if (
+            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+          ) {
+            window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+          }
+          return;
+        }
+
+        // Normal click: insert an ingredient row at this position (index 0).
         try {
-          e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
-        if (
-          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-        ) {
-          window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
+        if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+          window.openIngredientEditRow({
+            parent: ingredientsSection,
+            replaceEl: zone,
+            mode: 'insert',
+            seedLine: null,
+            insertAtIndex: 0,
+          });
         }
       };
       zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('contextmenu', (e) => {
-        if (e && e.ctrlKey) {
-          e.preventDefault();
-          handleInsert(e);
-        }
-      });
+      zone.addEventListener('click', handleInsert);
       ingredientsSection.appendChild(zone);
     }
 
@@ -1084,8 +1322,93 @@ function renderRecipe(recipe) {
       }
       let _didInsert = false;
       const handleInsert = (e) => {
-        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-        if (!e || !e.ctrlKey) return;
+        if (!e) return;
+        if (_didInsert) return;
+        _didInsert = true;
+        try {
+          setTimeout(() => {
+            _didInsert = false;
+          }, 0);
+        } catch (_) {}
+
+        // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
+        try {
+          if (
+            document.body.classList.contains('ingredient-editing') ||
+            ingredientsSection.querySelector('.ingredient-edit-row.editing')
+          ) {
+            return;
+          }
+        } catch (_) {}
+
+        const insertIdx = idx + 1;
+        const wantsHeading = !!e.altKey;
+
+        if (wantsHeading) {
+          // Do not allow consecutive headings.
+          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+
+          try {
+            const active = window._activeIngredientHeadingEditor;
+            if (active && typeof active.commit === 'function') {
+              active.commit();
+              setTimeout(() => {
+                if (
+                  typeof window.recipeEditorInsertIngredientHeadingAt ===
+                  'function'
+                ) {
+                  window.recipeEditorInsertIngredientHeadingAt(
+                    firstSection,
+                    insertIdx
+                  );
+                }
+              }, 0);
+              return;
+            }
+          } catch (_) {}
+
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+          } catch (_) {}
+          if (
+            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+          ) {
+            window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+          }
+          return;
+        }
+
+        // Normal click: insert an ingredient row at this position.
+        try {
+          e.stopPropagation();
+        } catch (_) {}
+        if (window.openIngredientEditRow && typeof window.openIngredientEditRow === 'function') {
+          window.openIngredientEditRow({
+            parent: ingredientsSection,
+            replaceEl: zone,
+            mode: 'insert',
+            seedLine: null,
+            insertAtIndex: insertIdx,
+          });
+        }
+      };
+      zone.addEventListener('pointerdown', handleInsert);
+      zone.addEventListener('click', handleInsert);
+      ingredientsSection.appendChild(zone);
+    });
+
+    // Trailing insertion zone (after the last row) so hover/click works “below” the last line.
+    {
+      const last =
+        renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
+      const zone = document.createElement('div');
+      zone.className = 'ingredient-insert-zone';
+      if (last && isHeading(last))
+        zone.classList.add('ingredient-insert-zone--disabled');
+      let _didInsert = false;
+      const handleInsert = (e) => {
+        if (!e) return;
         if (_didInsert) return;
         _didInsert = true;
         try {
@@ -1095,43 +1418,52 @@ function renderRecipe(recipe) {
         } catch (_) {}
 
         try {
-          const active = window._activeIngredientHeadingEditor;
-          if (active && typeof active.commit === 'function') {
-            active.commit();
-            setTimeout(() => {
-              if (
-                typeof window.recipeEditorInsertIngredientHeadingAt ===
-                'function'
-              ) {
-                window.recipeEditorInsertIngredientHeadingAt(
-                  firstSection,
-                  idx + 1
-                );
-              }
-            }, 0);
+          if (
+            document.body.classList.contains('ingredient-editing') ||
+            ingredientsSection.querySelector('.ingredient-edit-row.editing')
+          ) {
             return;
           }
         } catch (_) {}
+
+        const wantsHeading = !!e.altKey;
+        const insertIdx = renderRows.length;
+
+        if (wantsHeading) {
+          if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+          } catch (_) {}
+          if (
+            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+          ) {
+            window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
+          }
+          return;
+        }
 
         try {
           e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
         if (
-          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+          window.openIngredientEditRow &&
+          typeof window.openIngredientEditRow === 'function'
         ) {
-          window.recipeEditorInsertIngredientHeadingAt(firstSection, idx + 1);
+          window.openIngredientEditRow({
+            parent: ingredientsSection,
+            replaceEl: zone,
+            mode: 'insert',
+            seedLine: null,
+            insertAtIndex: insertIdx,
+          });
         }
       };
       zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('contextmenu', (e) => {
-        if (e && e.ctrlKey) {
-          e.preventDefault();
-          handleInsert(e);
-        }
-      });
+      zone.addEventListener('click', handleInsert);
       ingredientsSection.appendChild(zone);
-    });
+    }
 
     appendIngredientAddCta({
       container: ingredientsSection,
@@ -1337,7 +1669,12 @@ function renderRecipe(recipe) {
       let _didInsert = false;
       const handleInsert = (e) => {
         if (zone.classList.contains('step-insert-zone--disabled')) return;
-        if (!e || !e.ctrlKey) return;
+        if (!e || !e.altKey) return;
+        // Read-mode-only: if a step is actively being edited, require blur/finish first.
+        try {
+          if (document.body.classList.contains('step-editing') || window.editingStepId)
+            return;
+        } catch (_) {}
         if (_didInsert) return;
         _didInsert = true;
         try {
@@ -1352,12 +1689,7 @@ function renderRecipe(recipe) {
         insertHeadingAt(0);
       };
       zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('contextmenu', (e) => {
-        if (e && e.ctrlKey) {
-          e.preventDefault();
-          handleInsert(e);
-        }
-      });
+      zone.addEventListener('click', handleInsert);
       stepsSection.appendChild(zone);
     }
 
@@ -1424,7 +1756,12 @@ function renderRecipe(recipe) {
       let _didInsert = false;
       const handleInsert = (e) => {
         if (zone.classList.contains('step-insert-zone--disabled')) return;
-        if (!e || !e.ctrlKey) return;
+        if (!e || !e.altKey) return;
+        // Read-mode-only: if a step is actively being edited, require blur/finish first.
+        try {
+          if (document.body.classList.contains('step-editing') || window.editingStepId)
+            return;
+        } catch (_) {}
         if (_didInsert) return;
         _didInsert = true;
         try {
@@ -1439,14 +1776,42 @@ function renderRecipe(recipe) {
         insertHeadingAt(idx + 1);
       };
       zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('contextmenu', (e) => {
-        if (e && e.ctrlKey) {
-          e.preventDefault();
-          handleInsert(e);
-        }
-      });
+      zone.addEventListener('click', handleInsert);
       stepsSection.appendChild(zone);
     });
+
+    // Trailing insertion zone (after the last node) so Option-hover works “below” the last line.
+    {
+      const last = nodes.length > 0 ? nodes[nodes.length - 1] : null;
+      const zone = document.createElement('div');
+      zone.className = 'step-insert-zone';
+      if (last && isHeading(last))
+        zone.classList.add('step-insert-zone--disabled');
+      let _didInsert = false;
+      const handleInsert = (e) => {
+        if (zone.classList.contains('step-insert-zone--disabled')) return;
+        if (!e || !e.altKey) return;
+        try {
+          if (document.body.classList.contains('step-editing') || window.editingStepId)
+            return;
+        } catch (_) {}
+        if (_didInsert) return;
+        _didInsert = true;
+        try {
+          setTimeout(() => {
+            _didInsert = false;
+          }, 0);
+        } catch (_) {}
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+        insertHeadingAt(nodes.length);
+      };
+      zone.addEventListener('pointerdown', handleInsert);
+      zone.addEventListener('click', handleInsert);
+      stepsSection.appendChild(zone);
+    }
   }
 
   // --- Steps (instructions) ---

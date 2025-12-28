@@ -113,6 +113,10 @@ function revertChanges() {
   window._activeStepInput = null;
   window._suppressStepCommit = false;
   window._hasPendingEdit = false;
+  try {
+    document.body.classList.remove('ingredient-editing', 'step-editing');
+    document.body.classList.remove('subhead-insert-mode');
+  } catch (_) {}
 
   if (window.getSelection) window.getSelection().removeAllRanges();
   clearSelectedStep();

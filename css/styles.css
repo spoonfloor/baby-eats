@@ -103,6 +103,18 @@
   /* App bar */
   --app-bar-title-size: 18px;
   --app-bar-gap: 12px;
+
+  /* --- Insert affordance positioning --- */
+  --ing-insert-icon-size: 20px;
+  /* Negative x pushes into left gutter */
+  --ing-insert-icon-x: -20px;
+  /* y is relative to the rail's vertical center */
+  --ing-insert-icon-y: 0px;
+
+  /* Expand the invisible hit target into the gutter so clicking the icon works */
+  --insert-hit-overhang-left: 44px;
+  /* Vertical hit area for insert zones (bigger than typical between-line gaps) */
+  --insert-hit-overhang-v: 18px;
 }
 
 /* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
@@ -588,21 +600,85 @@ body.shopping-editor-page .shopping-item-help {
   height: 0;
   margin: 0; /* rails must never affect layout */
   cursor: default;
-  z-index: 5;
+  z-index: 10;
+
+  /* Click target: give the element a real hit area without changing layout.
+     (padding creates the hit box; negative margins cancel the visual spacing) */
+  padding-top: var(--insert-hit-overhang-v);
+  padding-bottom: var(--insert-hit-overhang-v);
+  margin-top: calc(-1 * var(--insert-hit-overhang-v));
+  margin-bottom: calc(-1 * var(--insert-hit-overhang-v));
 }
 
 /* Hit target overlay (no layout impact) */
 .ingredient-insert-zone::after {
   content: '';
   position: absolute;
-  left: 0;
+  left: calc(-1 * var(--insert-hit-overhang-left));
   right: 0;
-  top: -8px;
-  height: 16px;
+  top: calc(-1 * var(--insert-hit-overhang-v));
+  height: calc(2 * var(--insert-hit-overhang-v));
 }
 
-.subhead-insert-mode .ingredient-insert-zone {
+/* Ingredient insert affordance icons (read mode only; hover-only) */
+.ingredient-insert-zone::before {
+  content: '';
+  position: absolute;
+  width: var(--ing-insert-icon-size);
+  height: var(--ing-insert-icon-size);
+  left: var(--ing-insert-icon-x);
+  top: calc(50% + var(--ing-insert-icon-y));
+  transform: translateY(-50%);
+
+  background-color: var(--theme-primary);
+  opacity: 0;
+  pointer-events: none;
+
+  /* Default icon = add ingredient */
+  -webkit-mask-image: url('../assets/add_ingredient.svg');
+  mask-image: url('../assets/add_ingredient.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Hover shows the ingredient (+) icon */
+body:not(.ingredient-editing):not(.step-editing)
+  #ingredientsSection
+  .ingredient-insert-zone:hover::before {
+  opacity: 0.4;
+}
+
+/* In insert-subhead mode (Option held), swap to subhead icon */
+body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
+  #ingredientsSection
+  .ingredient-insert-zone:hover::before {
+  -webkit-mask-image: url('../assets/add_subhead.svg');
+  mask-image: url('../assets/add_subhead.svg');
+}
+
+/* When adjacent to a heading, subhead insertion is disallowed: hide the subhead icon */
+body.subhead-insert-mode
+  #ingredientsSection
+  .ingredient-insert-zone.ingredient-insert-zone--disabled:hover::before {
+  opacity: 0;
+}
+
+/* Cursor hint in read mode */
+body:not(.ingredient-editing):not(.step-editing)
+  #ingredientsSection
+  .ingredient-insert-zone:hover {
   cursor: pointer;
+}
+
+/* Disable insert interactions while editing (read-mode-only affordance) */
+body.ingredient-editing #ingredientsSection .ingredient-insert-zone,
+body.step-editing #ingredientsSection .ingredient-insert-zone {
+  pointer-events: none;
+  cursor: default;
 }
 
 .step-insert-zone {
@@ -610,78 +686,74 @@ body.shopping-editor-page .shopping-item-help {
   height: 0;
   margin: 0; /* rails must never affect layout */
   cursor: default;
-  z-index: 5;
+  z-index: 10;
+
+  /* Click target: match ingredient insert-zone behavior */
+  padding-top: var(--insert-hit-overhang-v);
+  padding-bottom: var(--insert-hit-overhang-v);
+  margin-top: calc(-1 * var(--insert-hit-overhang-v));
+  margin-bottom: calc(-1 * var(--insert-hit-overhang-v));
 }
 
 .step-insert-zone::after {
   content: '';
   position: absolute;
-  left: 0;
+  left: calc(-1 * var(--insert-hit-overhang-left));
   right: 0;
-  top: -8px;
-  height: 16px;
+  top: calc(-1 * var(--insert-hit-overhang-v));
+  height: calc(2 * var(--insert-hit-overhang-v));
 }
 
-.subhead-insert-mode .step-insert-zone {
-  cursor: pointer;
-}
-
+/* Instructions: icon-only affordance (subhead/heading insert), hover-only + Option */
 .step-insert-zone::before {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
+  width: var(--ing-insert-icon-size);
+  height: var(--ing-insert-icon-size);
+  left: var(--ing-insert-icon-x);
+  top: calc(50% + var(--ing-insert-icon-y));
   transform: translateY(-50%);
-  background: transparent;
-  border-radius: 9999px;
+
+  background-color: var(--theme-primary);
+  opacity: 0;
+  pointer-events: none;
+
+  -webkit-mask-image: url('../assets/add_subhead.svg');
+  mask-image: url('../assets/add_subhead.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
-.subhead-insert-mode .step-insert-zone:hover::before {
-  background: #7abdff;
+/* Show only when Option is held (subhead-insert-mode) */
+body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
+  #stepsSection
+  .step-insert-zone:hover::before {
+  opacity: 0.4;
 }
 
-.subhead-insert-mode
+/* Disabled zones (adjacent to headings) show no icon */
+body.subhead-insert-mode
+  #stepsSection
   .step-insert-zone.step-insert-zone--disabled:hover::before {
-  background: transparent;
+  opacity: 0;
 }
 
-.step-insert-zone--disabled {
+/* Cursor hint only when insertion is possible */
+body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
+  #stepsSection
+  .step-insert-zone:hover {
+  cursor: pointer;
+}
+
+/* Disable insert interactions while editing steps (read-mode-only affordance) */
+body.step-editing #stepsSection .step-insert-zone,
+body.ingredient-editing #stepsSection .step-insert-zone {
+  pointer-events: none;
   cursor: default;
-}
-
-.step-insert-zone--disabled:hover::before {
-  background: transparent;
-}
-
-.ingredient-insert-zone::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
-  transform: translateY(-50%);
-  background: transparent;
-  border-radius: 9999px;
-}
-
-.subhead-insert-mode .ingredient-insert-zone:hover::before {
-  background: #7abdff;
-}
-
-.subhead-insert-mode
-  .ingredient-insert-zone.ingredient-insert-zone--disabled:hover::before {
-  background: transparent;
-}
-
-.ingredient-insert-zone--disabled {
-  cursor: default;
-}
-
-.ingredient-insert-zone--disabled:hover::before {
-  background: transparent;
 }
 
 /* --- Recipe list item hover --- */
