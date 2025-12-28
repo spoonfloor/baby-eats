@@ -512,6 +512,16 @@ body.shopping-editor-page .shopping-item-help {
   cursor: pointer;
 }
 
+/* When the empty-state CTA is present, suppress between-row insertion icons and interactions */
+#ingredientsSection:has(.ingredient-add-cta) .ingredient-insert-zone::before {
+  opacity: 0 !important;
+}
+
+#ingredientsSection:has(.ingredient-add-cta) .ingredient-insert-zone {
+  pointer-events: none;
+  cursor: default;
+}
+
 /* --- Downstream-only spacing rules (optical gap proxy: next.top - prev.bottom) --- */
 
 /* Reset any incidental margins on headings/subheads */
@@ -600,7 +610,8 @@ body.shopping-editor-page .shopping-item-help {
   height: 0;
   margin: 0; /* rails must never affect layout */
   cursor: default;
-  z-index: 10;
+  /* Keep insert zones behind real rows so they never steal hover/click. */
+  z-index: 0;
 
   /* Click target: give the element a real hit area without changing layout.
      (padding creates the hit box; negative margins cancel the visual spacing) */
@@ -686,7 +697,8 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   height: 0;
   margin: 0; /* rails must never affect layout */
   cursor: default;
-  z-index: 10;
+  /* Keep insert zones behind real rows so they never steal hover/click. */
+  z-index: 0;
 
   /* Click target: match ingredient insert-zone behavior */
   padding-top: var(--insert-hit-overhang-v);
@@ -970,6 +982,8 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   align-items: baseline;
   margin: 0;
   padding: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .instruction-line .step-num {
