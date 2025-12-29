@@ -722,8 +722,8 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Location is edited elsewhere; suppress it here.
-  // Field order: name first, everything else unchanged.
-  const labels = ['name', 'qty', 'unit', 'size', 'var', 'prep', 'notes', 'opt'];
+  // Field order: qty, unit, name, var, size, prep, notes, opt
+  const labels = ['qty', 'unit', 'name', 'var', 'size', 'prep', 'notes', 'opt'];
   labels.forEach((lab) => row.appendChild(makeCell(lab)));
 
   // Any keystroke in any ingredient field should immediately enable Cancel/Save.
@@ -1141,19 +1141,19 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     console.warn('⚠️ setupIngredientTypeaheadRow failed:', err);
   }
 
-  // Focus name by default, with caret at the beginning.
+  // Focus qty by default, with caret at the beginning.
   // IMPORTANT: defer by one tick so the click/pointer event that opened the tray
   // finishes first; otherwise focusout can immediately cancel an empty insert row.
-  const nameInput = row.querySelector(
-    '.ingredient-edit-input[data-field="name"]'
+  const qtyInput = row.querySelector(
+    '.ingredient-edit-input[data-field="qty"]'
   );
-  if (nameInput) {
+  if (qtyInput) {
     setTimeout(() => {
       try {
-        nameInput.focus();
-        nameInput.setSelectionRange(0, 0);
+        qtyInput.focus();
+        qtyInput.setSelectionRange(0, 0);
         // scrollToStart is handled by attachIngredientInputAutosize, but ensure it here too
-        nameInput.scrollLeft = 0;
+        qtyInput.scrollLeft = 0;
       } catch (_) {}
     }, 0);
   }
@@ -1208,8 +1208,8 @@ function renderIngredientEditRowScaffold() {
   };
 
   // Scaffold helper (currently unused): keep in sync with openIngredientEditRow.
-  // name | size | qty | unit | var | prep | notes | opt
-  const labels = ['name', 'qty', 'unit', 'size', 'var', 'prep', 'notes', 'opt'];
+  // qty | unit | name | var | size | prep | notes | opt
+  const labels = ['qty', 'unit', 'name', 'var', 'size', 'prep', 'notes', 'opt'];
 
   labels.forEach((lab) => {
     row.appendChild(makeCell(lab));

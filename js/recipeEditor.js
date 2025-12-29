@@ -1695,43 +1695,6 @@ function renderRecipe(recipe) {
       (n.type === 'heading' ||
         n.type === (window.StepNodeType && window.StepNodeType.HEADING));
 
-    // Top insertion zone (suppressed if next node is a heading)
-    {
-      const next = nodes.length > 0 ? nodes[0] : null;
-      const zone = document.createElement('div');
-      zone.className = 'step-insert-zone';
-      if (next && isHeading(next))
-        zone.classList.add('step-insert-zone--disabled');
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (zone.classList.contains('step-insert-zone--disabled')) return;
-        if (!e || !e.altKey) return;
-        // Read-mode-only: if a step is actively being edited, require blur/finish first.
-        try {
-          if (
-            document.body.classList.contains('step-editing') ||
-            window.editingStepId
-          )
-            return;
-        } catch (_) {}
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-        insertHeadingAt(0);
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      stepsSection.appendChild(zone);
-    }
-
     nodes.forEach((node, idx) => {
       const line = document.createElement('div');
       line.className = 'instruction-line numbered';
@@ -1786,79 +1749,7 @@ function renderRecipe(recipe) {
       stepsSection.appendChild(line);
 
       attachStepInlineEditor(text);
-
-      // Inter-row insertion zone (suppressed adjacent to headings)
-      const next = idx + 1 < nodes.length ? nodes[idx + 1] : null;
-      if (!next) return;
-      const zone = document.createElement('div');
-      zone.className = 'step-insert-zone';
-      if (isHeading(node) || isHeading(next))
-        zone.classList.add('step-insert-zone--disabled');
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (zone.classList.contains('step-insert-zone--disabled')) return;
-        if (!e || !e.altKey) return;
-        // Read-mode-only: if a step is actively being edited, require blur/finish first.
-        try {
-          if (
-            document.body.classList.contains('step-editing') ||
-            window.editingStepId
-          )
-            return;
-        } catch (_) {}
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-        insertHeadingAt(idx + 1);
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      stepsSection.appendChild(zone);
     });
-
-    // Trailing insertion zone (after the last node) so Option-hover works “below” the last line.
-    {
-      const last = nodes.length > 0 ? nodes[nodes.length - 1] : null;
-      const zone = document.createElement('div');
-      zone.className = 'step-insert-zone';
-      if (last && isHeading(last))
-        zone.classList.add('step-insert-zone--disabled');
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (zone.classList.contains('step-insert-zone--disabled')) return;
-        if (!e || !e.altKey) return;
-        try {
-          if (
-            document.body.classList.contains('step-editing') ||
-            window.editingStepId
-          )
-            return;
-        } catch (_) {}
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-        insertHeadingAt(nodes.length);
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      stepsSection.appendChild(zone);
-    }
   }
 
   // --- Steps (instructions) ---

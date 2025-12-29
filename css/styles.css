@@ -55,13 +55,14 @@
   /* --- Optical spacing knobs (px) ---
      All knobs target "optical gap" = next.top - prev.bottom.
      Downstream-only rule: knobs are applied as top spacing on the downstream element. */
-  --gap-instructions-wrap: 28px; /* A */
-  --gap-instructions-between-steps: 12px; /* B */
-  --gap-heading-to-next: 12px; /* C */
-  --gap-prev-to-heading: 20px; /* D */
-  --gap-section-header-to-first: 16px; /* E */
-  --gap-tight-list: 22px; /* F */
-  --gap-title-to-first-section: 30px; /* G */
+  --gap-instructions-wrap: 0px; /* A */
+  --gap-instructions-between-steps: 0px; /* B */
+  --gap-heading-to-next: 0px; /* C */
+  --gap-prev-to-heading: 0px; /* D */
+  --gap-section-header-to-first: 0px; /* E */
+  --gap-tight-list: 0px; /* F */
+  --gap-title-to-first-section: 0px; /* G */
+  --gap-ywn-card-spacing: 0px; /* H - space above/below You Will Need card */
 
   /* --- Servings row layout --- */
   --servings-pill-gap: 3px;
@@ -524,6 +525,11 @@ body.shopping-editor-page .shopping-item-help {
 
 /* --- Downstream-only spacing rules (optical gap proxy: next.top - prev.bottom) --- */
 
+/* Reset all instruction-line margins first (overrides universal reset) */
+.instruction-line {
+  margin: 0;
+}
+
 /* Reset any incidental margins on headings/subheads */
 .instruction-line[data-step-type='heading'],
 .ingredient-subsection-heading-line {
@@ -531,10 +537,10 @@ body.shopping-editor-page .shopping-item-help {
   padding: 0;
 }
 
-/* E: section header -> first item/subhead (header must not move) */
+/* E: section header -> first item/subhead/step */
 .section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
 .section-header + .ingredient-insert-zone + .ingredient-line,
-.section-header + .step-insert-zone + .instruction-line.numbered {
+#stepsSection .section-header + .instruction-line.numbered {
   margin-top: var(--gap-section-header-to-first);
 }
 
@@ -980,7 +986,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 .instruction-line {
   display: flex;
   align-items: baseline;
-  margin: 0;
+  /* margin: 0; — REMOVED: conflicts with downstream spacing knobs below */
   padding: 0;
   position: relative;
   z-index: 1;
@@ -1410,7 +1416,8 @@ h1.nav-text {
   padding-left: var(--section-card-offset);
   padding-right: var(--section-card-offset);
   border-radius: 12px;
-  margin: 24px 0;
+  margin-top: var(--gap-ywn-card-spacing);
+  margin-bottom: var(--gap-ywn-card-spacing);
   background: var(--theme-light);
   position: relative;
   left: calc(-1 * var(--section-card-offset));
