@@ -1027,6 +1027,10 @@ function setupInlineRowEditing(options) {
     }
   };
 
+  // Guards against duplicate commit/cancel when Enter triggers DOM replacement,
+  // which can synchronously fire focusout while we're still handling Enter.
+  let _isFinalizing = false;
+
   const handleClick = () => {
     if (!getIsEditing()) {
       enterEdit();
@@ -1035,24 +1039,30 @@ function setupInlineRowEditing(options) {
 
   const handleKeyDown = (e) => {
     if (!getIsEditing()) return;
+    if (_isFinalizing) return;
 
     if (e.key === 'Enter') {
       e.preventDefault();
 
       const empty = isEmpty();
+      _isFinalizing = true;
+
+      // IMPORTANT: end "editing" state BEFORE mutating DOM so any synchronous
+      // focusout caused by replacement won't trigger a second commit.
+      setIsEditing(false);
+      if (globalState.activeRow === rowElement) globalState.activeRow = null;
+
       if (!empty) {
         commit();
-        if (typeof onEnterCommit === 'function') {
-          onEnterCommit();
-        }
+        if (typeof onEnterCommit === 'function') onEnterCommit();
       } else {
         cancel();
       }
 
-      setIsEditing(false);
-      if (globalState.activeRow === rowElement) {
-        globalState.activeRow = null;
-      }
+      // Allow future edits in the next tick.
+      setTimeout(() => {
+        _isFinalizing = false;
+      }, 0);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       exitEdit(false);
@@ -1061,6 +1071,7 @@ function setupInlineRowEditing(options) {
 
   const handleFocusOut = (e) => {
     if (!getIsEditing()) return;
+    if (_isFinalizing) return;
 
     const next = e.relatedTarget;
     if (rowElement.contains(next)) return;

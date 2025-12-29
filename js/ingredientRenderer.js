@@ -884,7 +884,47 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
         clientId: `tmp-ing-${Date.now()}-${Math.random()
           .toString(16)
           .slice(2)}`,
+        // Pluralization fields (populated from DB below)
+        lemma: '',
+        pluralByDefault: false,
+        isMassNoun: false,
+        pluralOverride: '',
       };
+
+      // Fetch grammar/pluralization fields from the database
+      try {
+        const db = window.dbInstance;
+        if (db) {
+          const nameSafe = nameTrimmed.replace(/'/g, "''");
+          const variantMatch = (fields.var || '').trim();
+          const variantSafe = variantMatch.replace(/'/g, "''");
+          
+          let whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
+          
+          if (variantMatch) {
+            whereClause += ` AND LOWER(COALESCE(variant, '')) = LOWER('${variantSafe}')`;
+          } else {
+            whereClause += ` AND (variant IS NULL OR variant = '')`;
+          }
+          
+          const q = db.exec(
+            `SELECT lemma, plural_by_default, is_mass_noun, plural_override
+             FROM ingredients
+             WHERE ${whereClause}
+             LIMIT 1;`
+          );
+          
+          if (q.length && q[0].values.length) {
+            const [lemma, pluralByDefault, isMassNoun, pluralOverride] = q[0].values[0];
+            ingredient.lemma = lemma || '';
+            ingredient.pluralByDefault = !!pluralByDefault;
+            ingredient.isMassNoun = !!isMassNoun;
+            ingredient.pluralOverride = pluralOverride || '';
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not fetch ingredient grammar fields:', err);
+      }
 
       // v1: assume single ingredients section in the model
       const model = window.recipeData;
@@ -963,6 +1003,41 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
             : `tmp-ing-${Date.now()}`;
       }
 
+      // Update grammar/pluralization fields from DB if name or variant changed
+      try {
+        const db = window.dbInstance;
+        if (db) {
+          const nameSafe = nameTrimmed.replace(/'/g, "''");
+          const variantMatch = (fields.var || '').trim();
+          const variantSafe = variantMatch.replace(/'/g, "''");
+          
+          let whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
+          
+          if (variantMatch) {
+            whereClause += ` AND LOWER(COALESCE(variant, '')) = LOWER('${variantSafe}')`;
+          } else {
+            whereClause += ` AND (variant IS NULL OR variant = '')`;
+          }
+          
+          const q = db.exec(
+            `SELECT lemma, plural_by_default, is_mass_noun, plural_override
+             FROM ingredients
+             WHERE ${whereClause}
+             LIMIT 1;`
+          );
+          
+          if (q.length && q[0].values.length) {
+            const [lemma, pluralByDefault, isMassNoun, pluralOverride] = q[0].values[0];
+            modelRef.lemma = lemma || '';
+            modelRef.pluralByDefault = !!pluralByDefault;
+            modelRef.isMassNoun = !!isMassNoun;
+            modelRef.pluralOverride = pluralOverride || '';
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not fetch ingredient grammar fields:', err);
+      }
+
       // Keep the original rendered object in sync too (best-effort), so any other
       // logic that still holds that reference won't drift.
       if (seedLine && seedLine !== modelRef) {
@@ -974,6 +1049,10 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
         seedLine.prepNotes = modelRef.prepNotes;
         seedLine.parentheticalNote = modelRef.parentheticalNote;
         seedLine.isOptional = modelRef.isOptional;
+        seedLine.lemma = modelRef.lemma;
+        seedLine.pluralByDefault = modelRef.pluralByDefault;
+        seedLine.isMassNoun = modelRef.isMassNoun;
+        seedLine.pluralOverride = modelRef.pluralOverride;
         if (!seedLine.clientId) seedLine.clientId = modelRef.clientId;
       }
 
