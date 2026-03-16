@@ -42,27 +42,27 @@
   --z-dialog: 20000;
   --z-toast: 21000;
 
-  --step-line-height: 1.8;
-  --step-vertical-gap: 0px;
-  --step-padding-top: 0px;
-  --step-padding-bottom: 12px;
+  /* --- Typography & Line Height --- */
+  /* Line-height controls readability and text wrapping only.
+     All inter-element spacing is handled via margin. */
+  --text-line-height: 1.6; /* Global comfortable reading for body text */
+  --step-line-height: 1.6; /* Instructions line height */
+  --ingredients-line-height: 1.6; /* Ingredients line height */
 
-  /* Ingredients section line height (separate control from steps/instructions) */
-  --ingredients-line-height: 2;
+  /* --- Vertical Spacing Scale (margin-based) --- */
+  /* All values are inter-element spacing (margin-top on downstream element).
+     Hierarchy: tighter spacing = stronger relationship. */
 
-  /* --- System spacing scale (px) ---
-     A–F are the explicit vertical distances you described. */
-  /* --- Optical spacing knobs (px) ---
-     All knobs target "optical gap" = next.top - prev.bottom.
-     Downstream-only rule: knobs are applied as top spacing on the downstream element. */
-  --gap-instructions-wrap: 0px; /* A */
-  --gap-instructions-between-steps: 0px; /* B */
-  --gap-heading-to-next: 0px; /* C */
-  --gap-prev-to-heading: 0px; /* D */
-  --gap-section-header-to-first: 0px; /* E */
-  --gap-tight-list: 0px; /* F */
-  --gap-title-to-first-section: 0px; /* G */
-  --gap-ywn-card-spacing: 0px; /* H - space above/below You Will Need card */
+  --space-ingredient-item: 13px; /* Ingredient → ingredient (flowing list) */
+  --space-step-to-step: 22px; /* Step → step (sequential actions) */
+  --space-subhead-to-content: 12px; /* Subhead → first item below it */
+  --space-content-to-subhead: 36px; /* Item → subhead below it (section break) */
+  --space-section-header-to-content: 16px; /* INGREDIENTS/INSTRUCTIONS → first line */
+  --space-title-to-section: 48px; /* Recipe title → INGREDIENTS */
+  --space-ywn-card: 44px; /* Vertical space around YWN card */
+  --space-ywn-item: 7px; /* YWN: item → item (tight scanning) */
+  --space-ywn-subhead-to-item: 10px; /* YWN: subhead → item */
+  --space-ywn-item-to-subhead: 20px; /* YWN: item → subhead */
 
   /* --- Servings row layout --- */
   --servings-pill-gap: 3px;
@@ -466,19 +466,18 @@ body.shopping-editor-page .shopping-item-help {
    Scope to the Ingredients section only (YWN stays on default rhythm). */
 #ingredientsSection .ingredient-line,
 #ingredientsSection .ingredient-line * {
-  /* Ingredients rows use F as their wrap line optical gap (even if rarely wraps). */
-  line-height: calc(1em + var(--gap-tight-list));
+  line-height: var(--ingredients-line-height);
 }
 
-/* Ingredients inter-paragraph spacing uses Instructions A (optical gap) */
+/* Ingredients: item → item spacing */
 #ingredientsSection .ingredient-line + .ingredient-line {
-  margin-top: var(--gap-instructions-wrap);
+  margin-top: var(--space-ingredient-item);
 }
 
-/* YWN list is tighter: use F for both line-height and item spacing. */
+/* YWN list: tighter line-height and spacing for scanning */
 .you-will-need-card .ingredient-line,
 .you-will-need-card .ingredient-line * {
-  line-height: calc(1em + var(--gap-tight-list));
+  line-height: var(--text-line-height);
 }
 .you-will-need-card .ingredient-line {
   margin: 0;
@@ -499,13 +498,13 @@ body.shopping-editor-page .shopping-item-help {
 .ingredient-subsection-heading-text,
 .instruction-line[data-step-type='heading'] .step-text {
   /* Unified subsection heading style (Ingredients + Instructions) */
-  line-height: calc(1em + var(--gap-instructions-wrap));
+  line-height: var(--text-line-height);
   color: var(--theme-primary);
 }
 
-/* Ingredient subsection headings track Ingredients line-height (so Ingredients can be tuned independently). */
+/* Ingredient subsection headings: consistent line-height */
 #ingredientsSection .ingredient-subsection-heading-text {
-  line-height: calc(1em + var(--gap-instructions-wrap));
+  line-height: var(--text-line-height);
 }
 
 /* CTA uses ingredient-line for layout; only behavior remains here */
@@ -523,7 +522,9 @@ body.shopping-editor-page .shopping-item-help {
   cursor: default;
 }
 
-/* --- Downstream-only spacing rules (optical gap proxy: next.top - prev.bottom) --- */
+/* --- Inter-Element Spacing Rules --- */
+/* All spacing uses margin-top on the downstream element.
+   Pattern: .upstream-selector + .downstream-selector { margin-top: var(--space-x); } */
 
 /* Reset all instruction-line margins first (overrides universal reset) */
 .instruction-line {
@@ -537,65 +538,65 @@ body.shopping-editor-page .shopping-item-help {
   padding: 0;
 }
 
-/* E: section header -> first item/subhead/step */
+/* Section headers → first content */
 .section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
 .section-header + .ingredient-insert-zone + .ingredient-line,
 #stepsSection .section-header + .instruction-line.numbered {
-  margin-top: var(--gap-section-header-to-first);
+  margin-top: var(--space-section-header-to-content);
 }
 
-/* Instructions: step -> step = B */
+/* Instructions: step → step (main flow) */
 .instruction-line.numbered:not([data-step-type='heading'])
   + .instruction-line.numbered:not([data-step-type='heading']) {
-  margin-top: var(--gap-instructions-between-steps);
+  margin-top: var(--space-step-to-step);
 }
 
-/* Instructions: step -> heading = D (downstream heading) */
+/* Instructions: content → subhead (section break signal) */
 .instruction-line.numbered:not([data-step-type='heading'])
   + .instruction-line.numbered[data-step-type='heading'],
 .instruction-line.numbered[data-step-type='heading']
   + .instruction-line.numbered[data-step-type='heading'] {
-  margin-top: var(--gap-prev-to-heading);
+  margin-top: var(--space-content-to-subhead);
 }
 
-/* Instructions: heading -> next line = C (downstream next) */
+/* Instructions: subhead → next item (grouped under heading) */
 .instruction-line.numbered[data-step-type='heading']
   + .instruction-line.numbered {
-  margin-top: var(--gap-heading-to-next);
+  margin-top: var(--space-subhead-to-content);
 }
 
-/* Ingredients: ingredient -> subhead = D */
+/* Ingredients: item → subhead (section break) */
 #ingredientsSection .ingredient-line + .ingredient-subsection-heading-line,
 #ingredientsSection
   .ingredient-subsection-heading-line
   + .ingredient-subsection-heading-line {
-  margin-top: var(--gap-prev-to-heading);
+  margin-top: var(--space-content-to-subhead);
 }
 
-/* Ingredients: subhead -> next ingredient = C */
+/* Ingredients: subhead → item (grouped under heading) */
 #ingredientsSection .ingredient-subsection-heading-line + .ingredient-line {
-  margin-top: var(--gap-heading-to-next);
+  margin-top: var(--space-subhead-to-content);
 }
 
-/* YWN: header -> first label = E */
+/* YWN: header → first label */
 .you-will-need-card .section-header + .subsection-header {
-  margin-top: var(--gap-section-header-to-first);
+  margin-top: var(--space-section-header-to-content);
 }
 
-/* YWN: item -> label = D */
+/* YWN: item → label (tighter breaks in card) */
 .you-will-need-card .ingredient-line + .subsection-header,
 .you-will-need-card .subsection-header + .subsection-header {
-  margin-top: var(--gap-prev-to-heading);
+  margin-top: var(--space-ywn-item-to-subhead);
 }
 
-/* YWN: label -> first item = C */
+/* YWN: label → item (grouped in card) */
 .you-will-need-card .subsection-header + .ingredient-line {
-  margin-top: var(--gap-heading-to-next);
+  margin-top: var(--space-ywn-subhead-to-item);
 }
 
-/* YWN: item -> item tight spacing = F */
+/* YWN: item → item (tight scanning list) */
 .you-will-need-card .ingredient-line + .ingredient-line {
-  margin-top: var(--gap-tight-list);
+  margin-top: var(--space-ywn-item);
 }
 
 .ingredient-subsection-heading-text[contenteditable='true'] {
@@ -979,7 +980,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   /* IMPORTANT: avoid double top-spacing.
      page-main already pads for the fixed app bar, so content should start at 0. */
   margin: 0 auto;
-  padding: 0 24px; /* matches existing spacing expectations */
+  padding: 0 24px 80px 24px; /* Add bottom padding for scrolling last line into view */
 }
 
 /* Proper hanging indent for steps */
@@ -1009,8 +1010,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 
 .instruction-line .step-text {
   flex: 1;
-  /* Optical gap A for wrapped lines: line-height ≈ font box (1em) + A */
-  line-height: calc(1em + var(--gap-instructions-wrap));
+  line-height: var(--step-line-height);
 }
 
 .placeholder-prompt {
@@ -1075,8 +1075,8 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 .section-header {
   color: black;
   font-size: var(--header-font-size);
-  margin-top: var(--gap-title-to-first-section);
-  margin-bottom: 0; /* downstream-only: E is applied to the first item, not the header */
+  margin-top: var(--space-title-to-section);
+  margin-bottom: 0;
   text-transform: uppercase;
 }
 
@@ -1114,6 +1114,19 @@ h1.nav-text {
 .servings-line.editing {
   position: relative;
   left: var(--servings-pill-offset);
+}
+
+/* Unit editor: abbreviation subtitle (same look as recipe editor subtitle) */
+.unit-abbreviation-line {
+  margin: 0 0 0 0;
+  font-weight: 500;
+  color: var(--subtitle);
+}
+.unit-abbreviation-line[contenteditable='true'] {
+  outline: none;
+}
+.unit-abbreviation-line.editing-title {
+  color: var(--edit-mode-color);
 }
 
 /* Generic chip+field row shell (servings, ingredients, etc.) */
@@ -1411,21 +1424,23 @@ h1.nav-text {
 }
 
 .you-will-need-card {
-  padding-top: var(--section-card-offset);
-  padding-bottom: var(--section-card-offset);
+  padding-top: 20px;
+  padding-bottom: 20px;
   padding-left: var(--section-card-offset);
   padding-right: var(--section-card-offset);
   border-radius: 12px;
-  margin-top: var(--gap-ywn-card-spacing);
-  margin-bottom: var(--gap-ywn-card-spacing);
+  margin-top: var(--space-ywn-card);
+  margin-bottom: var(--space-ywn-card);
   background: var(--theme-light);
   position: relative;
   left: calc(-1 * var(--section-card-offset));
   width: calc(100% + (2 * var(--section-card-offset)));
 }
 
+/* Reset section header margins inside card for balanced padding */
 .you-will-need-card .section-header {
-  margin-top: 4px;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .ingredient-line a {

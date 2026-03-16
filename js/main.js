@@ -109,7 +109,7 @@ function enableTopLevelListKeyboardNav(listEl) {
     if (selectedIdx >= rows.length) selectedIdx = rows.length - 1;
 
     rows.forEach((li, i) =>
-      li.classList.toggle('is-selected', i === selectedIdx)
+      li.classList.toggle('is-selected', i === selectedIdx),
     );
     if (selectedIdx >= 0) {
       rows[selectedIdx]?.scrollIntoView?.({ block: 'nearest' });
@@ -205,7 +205,7 @@ function enableTopLevelListKeyboardNav(listEl) {
         rows[selectedIdx]?.click?.();
       }
     },
-    { capture: true }
+    { capture: true },
   );
 
   // Initial paint
@@ -237,18 +237,18 @@ initSqlJs({
     (body.classList.contains('recipes-page')
       ? 'recipes'
       : body.classList.contains('recipe-editor-page')
-      ? 'recipe-editor'
-      : body.classList.contains('shopping-page')
-      ? 'shopping'
-      : body.classList.contains('shopping-editor-page')
-      ? 'shopping-editor'
-      : body.classList.contains('units-page')
-      ? 'units'
-      : body.classList.contains('stores-page')
-      ? 'stores'
-      : body.classList.contains('store-editor-page')
-      ? 'store-editor'
-      : null);
+        ? 'recipe-editor'
+        : body.classList.contains('shopping-page')
+          ? 'shopping'
+          : body.classList.contains('shopping-editor-page')
+            ? 'shopping-editor'
+            : body.classList.contains('units-page')
+              ? 'units'
+              : body.classList.contains('stores-page')
+                ? 'stores'
+                : body.classList.contains('store-editor-page')
+                  ? 'store-editor'
+                  : null);
 
   // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
   const TOP_LEVEL_PAGES = ['recipes', 'shopping', 'units', 'stores'];
@@ -275,7 +275,7 @@ initSqlJs({
       e.preventDefault();
       window.location.href = `${TOP_LEVEL_PAGES[nextIdx]}.html`;
     },
-    { capture: true }
+    { capture: true },
   );
 
   // --- Cmd+↑: go to parent/back page on editor pages ---
@@ -303,7 +303,7 @@ initSqlJs({
       e.preventDefault();
       backBtn.click();
     },
-    { capture: true }
+    { capture: true },
   );
 
   const pageLoaders = {
@@ -429,7 +429,7 @@ async function loadRecipesPage() {
 
   // --- Load recipes ---
   const recipes = db.exec(
-    'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
+    'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;',
   );
   const list = document.getElementById('recipeList');
   list.innerHTML = '';
@@ -546,7 +546,7 @@ async function loadRecipesPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -614,7 +614,7 @@ async function loadRecipesPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -649,7 +649,7 @@ async function loadRecipesPage() {
 
       const query = searchInput.value.trim().toLowerCase();
       const filtered = recipeRows.filter(([id, title]) =>
-        title.toLowerCase().includes(query)
+        title.toLowerCase().includes(query),
       );
       renderRecipeList(filtered);
     });
@@ -734,7 +734,7 @@ async function loadShoppingPage() {
     try {
       const q = db.exec(
         `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
-        [name]
+        [name],
       );
       return !!(q.length && q[0].values && q[0].values.length);
     } catch (_) {
@@ -830,7 +830,7 @@ async function loadShoppingPage() {
 
         if (!hasVariantTable) {
           uniqueStable.sort((a, b) =>
-            a.localeCompare(b, undefined, { sensitivity: 'base' })
+            a.localeCompare(b, undefined, { sensitivity: 'base' }),
           );
         }
 
@@ -846,7 +846,7 @@ async function loadShoppingPage() {
     shoppingRows.sort((a, b) =>
       (a.name || '').localeCompare(b.name || '', undefined, {
         sensitivity: 'base',
-      })
+      }),
     );
   }
 
@@ -873,7 +873,7 @@ async function loadShoppingPage() {
           WHERE lower(i2.name) = lower(?)
         ) t;
         `,
-        [n, n]
+        [n, n],
       );
 
       if (q.length && q[0].values.length) {
@@ -908,12 +908,12 @@ async function loadShoppingPage() {
         try {
           db.run(
             'UPDATE ingredients SET is_deprecated = 1 WHERE lower(name) = lower(?);',
-            [n]
+            [n],
           );
         } catch (_) {
           db.run(
             'UPDATE ingredients SET hide_from_shopping_list = 1 WHERE lower(name) = lower(?);',
-            [n]
+            [n],
           );
         }
       } catch (err) {
@@ -935,7 +935,7 @@ async function loadShoppingPage() {
         // Gather ingredient IDs for this name (covers variants).
         const idsQ = db.exec(
           'SELECT ID FROM ingredients WHERE lower(name) = lower(?);',
-          [n]
+          [n],
         );
         const ids = idsQ.length ? idsQ[0].values.map(([id]) => Number(id)) : [];
 
@@ -945,19 +945,19 @@ async function loadShoppingPage() {
           try {
             db.run(
               'DELETE FROM ingredient_store_location WHERE ingredient_id = ?;',
-              [id]
+              [id],
             );
           } catch (_) {}
           try {
             db.run(
               'DELETE FROM recipe_ingredient_substitutes WHERE ingredient_id = ?;',
-              [id]
+              [id],
             );
           } catch (_) {}
           try {
             db.run(
               'DELETE FROM recipe_ingredient_map WHERE ingredient_id = ?;',
-              [id]
+              [id],
             );
           } catch (_) {}
         });
@@ -979,13 +979,13 @@ async function loadShoppingPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
       console.error(
         '❌ Failed to persist DB after removing shopping item:',
-        err
+        err,
       );
     }
 
@@ -1144,10 +1144,14 @@ async function loadShoppingPage() {
         try {
           requestAnimationFrame(() => {
             try {
-              const nextText = buildLineToFit(li, baseName || '', item.variants);
+              const nextText = buildLineToFit(
+                li,
+                baseName || '',
+                item.variants,
+              );
               li.textContent = nextText;
               li.title = `${baseName || ''}\n\nAll variants: ${item.variants.join(
-                ', '
+                ', ',
               )}`;
             } catch (_) {}
           });
@@ -1179,7 +1183,7 @@ async function loadShoppingPage() {
         const nameMatch = item.name.toLowerCase().includes(query);
         const variants = Array.isArray(item.variants) ? item.variants : [];
         const variantMatch = variants.some((v) =>
-          (v || '').toLowerCase().includes(query)
+          (v || '').toLowerCase().includes(query),
         );
         return nameMatch || variantMatch;
       });
@@ -1235,13 +1239,16 @@ async function loadShoppingPage() {
       const has = (c) => cols.includes(String(c).toLowerCase());
 
       const deriveLemmaFromTitle = (rawTitle) => {
-        const t = String(rawTitle || '').trim().toLowerCase();
+        const t = String(rawTitle || '')
+          .trim()
+          .toLowerCase();
         if (!t) return '';
         // Small heuristic singularizer (good enough for simple plurals).
         if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
         if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
         if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
-        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1) return t.slice(0, -1);
+        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1)
+          return t.slice(0, -1);
         return t;
       };
 
@@ -1275,13 +1282,13 @@ async function loadShoppingPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
       console.error(
         '❌ Failed to persist DB after creating shopping item:',
-        err
+        err,
       );
       uiToast('Failed to save database after creating shopping item.');
       return;
@@ -1313,10 +1320,17 @@ function wireChildEditorPage({
   backHref,
   onSave,
   extraFields,
+  normalizeTitle: normalizeTitleFn,
+  displayTitle: displayTitleFn,
+  subtitleEl,
+  initialSubtitle,
+  normalizeSubtitle: normalizeSubtitleFn,
 }) {
   if (!appBarTitleEl || !bodyTitleEl) return;
 
   const normalize = (value) => (value || '').trim();
+  const normalizeTitle = normalizeTitleFn || normalize;
+  const displayTitle = displayTitleFn || ((v) => v ?? '');
   const maybeAutoGrow = (el) => {
     try {
       if (el && typeof el.__feAutoGrowResize === 'function') {
@@ -1324,7 +1338,7 @@ function wireChildEditorPage({
       }
     } catch (_) {}
   };
-  let baselineTitle = normalize(initialTitle);
+  let baselineTitle = normalizeTitle(initialTitle);
   const extras = Array.isArray(extraFields) ? extraFields : [];
   let baselineExtras = {};
   extras.forEach((f) => {
@@ -1332,8 +1346,18 @@ function wireChildEditorPage({
     baselineExtras[String(f.key)] = normalize(f.initialValue);
   });
 
-  bodyTitleEl.textContent = baselineTitle || '';
-  appBarTitleEl.textContent = baselineTitle || '';
+  const hasSubtitle = !!subtitleEl && normalizeSubtitleFn;
+  let baselineSubtitle = hasSubtitle
+    ? initialSubtitle
+      ? normalizeSubtitleFn(initialSubtitle)
+      : ''
+    : '';
+
+  bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
+  appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
+  if (hasSubtitle) {
+    subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
+  }
 
   let isDirty = false;
 
@@ -1394,13 +1418,13 @@ function wireChildEditorPage({
     if (bodyTitleEl.isContentEditable) return;
 
     const starting = bodyTitleEl.textContent || '';
+    const startingStored = normalizeTitle(starting);
 
     bodyTitleEl.contentEditable = 'true';
     bodyTitleEl.classList.add('editing-title');
     bodyTitleEl.focus();
 
     const onInput = () => {
-      // First keystroke in the title should mark the page dirty.
       markDirty();
     };
 
@@ -1413,10 +1437,10 @@ function wireChildEditorPage({
     };
 
     const commit = () => {
-      const next = normalize(bodyTitleEl.textContent);
-      const changed = next !== starting;
-      bodyTitleEl.textContent = next;
-      appBarTitleEl.textContent = next;
+      const next = normalizeTitle(bodyTitleEl.textContent);
+      const changed = next !== startingStored;
+      bodyTitleEl.textContent = displayTitle(next);
+      appBarTitleEl.textContent = displayTitle(next);
       if (changed) markDirty();
     };
 
@@ -1447,6 +1471,54 @@ function wireChildEditorPage({
     bodyTitleEl.addEventListener('keydown', onKeyDown);
   });
 
+  if (hasSubtitle) {
+    subtitleEl.addEventListener('click', () => {
+      if (subtitleEl.isContentEditable) return;
+      const starting = subtitleEl.textContent || '';
+      const isPlaceholder = starting === 'Abbreviation';
+      subtitleEl.contentEditable = 'true';
+      subtitleEl.classList.add('editing-title');
+      subtitleEl.focus();
+
+      const onInput = () => markDirty();
+      const cleanup = () => {
+        subtitleEl.contentEditable = 'false';
+        subtitleEl.classList.remove('editing-title');
+        subtitleEl.removeEventListener('blur', onBlur);
+        subtitleEl.removeEventListener('keydown', onKeyDown);
+        subtitleEl.removeEventListener('input', onInput);
+      };
+      const commit = () => {
+        const raw = subtitleEl.textContent || '';
+        let next = normalizeSubtitleFn(raw);
+        if (isPlaceholder && next === 'abbreviation') next = '';
+        subtitleEl.textContent = next || 'Abbreviation';
+        if (next !== (baselineSubtitle || '')) markDirty();
+      };
+      const cancelEdit = () => {
+        subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
+      };
+      const onBlur = () => {
+        commit();
+        cleanup();
+      };
+      const onKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+          cleanup();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelEdit();
+          cleanup();
+        }
+      };
+      subtitleEl.addEventListener('blur', onBlur);
+      subtitleEl.addEventListener('input', onInput);
+      subtitleEl.addEventListener('keydown', onKeyDown);
+    });
+  }
+
   const doBack = async () => {
     if (
       !isDirty ||
@@ -1473,8 +1545,11 @@ function wireChildEditorPage({
     cancelBtn.addEventListener('click', (e) => {
       e.preventDefault();
       if (!isDirty) return;
-      bodyTitleEl.textContent = baselineTitle;
-      appBarTitleEl.textContent = baselineTitle;
+      bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
+      appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
+      if (hasSubtitle) {
+        subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
+      }
       extras.forEach((f) => {
         if (!f) return;
         const key = String(f.key || '');
@@ -1508,9 +1583,16 @@ function wireChildEditorPage({
     saveBtn.addEventListener('click', async (e) => {
       e.preventDefault();
 
-      const nextTitle = normalize(bodyTitleEl.textContent);
-      bodyTitleEl.textContent = nextTitle;
-      appBarTitleEl.textContent = nextTitle;
+      const nextTitle = normalizeTitle(bodyTitleEl.textContent);
+      bodyTitleEl.textContent = displayTitle(nextTitle) || '';
+      appBarTitleEl.textContent = displayTitle(nextTitle) || '';
+
+      let nextSubtitle = '';
+      if (hasSubtitle) {
+        const raw = subtitleEl.textContent || '';
+        nextSubtitle = raw === 'Abbreviation' ? '' : normalizeSubtitleFn(raw);
+        subtitleEl.textContent = nextSubtitle || 'Abbreviation';
+      }
 
       const extraValues = {};
       extras.forEach((f) => {
@@ -1535,7 +1617,12 @@ function wireChildEditorPage({
 
       try {
         if (typeof onSave === 'function') {
-          await onSave({ title: nextTitle, baselineTitle, extraValues });
+          await onSave({
+            title: nextTitle,
+            subtitle: hasSubtitle ? nextSubtitle : undefined,
+            baselineTitle,
+            extraValues,
+          });
         }
       } catch (err) {
         console.error('❌ Failed to save child editor:', err);
@@ -1545,10 +1632,9 @@ function wireChildEditorPage({
 
       isDirty = false;
       updateButtons();
-      // After a successful save, the saved title becomes the new cancel baseline.
       baselineTitle = nextTitle;
+      if (hasSubtitle) baselineSubtitle = nextSubtitle;
       baselineExtras = { ...baselineExtras, ...extraValues };
-      // NOTE: no navigation here; Save just persists and stays on page
     });
   }
 }
@@ -1718,8 +1804,8 @@ function loadShoppingItemEditorPage() {
           Number.isFinite(lineHeightRaw) && lineHeightRaw > 0
             ? lineHeightRaw
             : Number.isFinite(fontSize) && fontSize > 0
-            ? fontSize * 1.4
-            : 22; // fallback
+              ? fontSize * 1.4
+              : 22; // fallback
         const padTop = cs ? parseFloat(cs.paddingTop) : 0;
         const padBot = cs ? parseFloat(cs.paddingBottom) : 0;
         const pad =
@@ -1753,7 +1839,7 @@ function loadShoppingItemEditorPage() {
   };
 
   attachAutoGrowTextarea(
-    document.getElementById('shoppingItemVariantsTextarea')
+    document.getElementById('shoppingItemVariantsTextarea'),
   );
   attachAutoGrowTextarea(document.getElementById('shoppingItemSizesTextarea'));
 
@@ -1770,7 +1856,7 @@ function loadShoppingItemEditorPage() {
       } catch (err) {
         console.error(
           '❌ Failed to load DB from disk for shopping editor:',
-          err
+          err,
         );
         uiToast('No database loaded. Please go back to the welcome page.');
         throw err;
@@ -1787,7 +1873,11 @@ function loadShoppingItemEditorPage() {
     return { db, isElectron };
   };
 
-  const persistShoppingItem = async ({ title: next, baselineTitle, extraValues }) => {
+  const persistShoppingItem = async ({
+    title: next,
+    baselineTitle,
+    extraValues,
+  }) => {
     if (!next) return;
 
     const { db, isElectron } = await loadDbForShoppingEditor();
@@ -1846,16 +1936,22 @@ function loadShoppingItemEditorPage() {
       const has = (c) => cols.includes(String(c).toLowerCase());
 
       const deriveLemmaFromTitle = (rawTitle) => {
-        const t = String(rawTitle || '').trim().toLowerCase();
+        const t = String(rawTitle || '')
+          .trim()
+          .toLowerCase();
         if (!t) return '';
         // Small heuristic singularizer (good enough for simple plurals).
         if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
         if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
         if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
-        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1) return t.slice(0, -1);
+        if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1)
+          return t.slice(0, -1);
         return t;
       };
-      const norm = (s) => String(s || '').trim().toLowerCase();
+      const norm = (s) =>
+        String(s || '')
+          .trim()
+          .toLowerCase();
 
       // Cascade rule:
       // - If lemma is empty, fill it from the (new) title.
@@ -1864,7 +1960,9 @@ function loadShoppingItemEditorPage() {
       let lemmaToWrite = lemma;
       if (has('lemma')) {
         const oldDerived =
-          typeof baselineTitle === 'string' ? deriveLemmaFromTitle(baselineTitle) : '';
+          typeof baselineTitle === 'string'
+            ? deriveLemmaFromTitle(baselineTitle)
+            : '';
         const newDerived = deriveLemmaFromTitle(next);
         const lemmaNorm = norm(lemmaToWrite);
         if (!lemmaNorm) {
@@ -1896,7 +1994,7 @@ function loadShoppingItemEditorPage() {
         try {
           const q = db.exec(
             `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
-            [name]
+            [name],
           );
           return !!(q.length && q[0].values && q[0].values.length);
         } catch (_) {
@@ -2002,9 +2100,9 @@ function loadShoppingItemEditorPage() {
         const placeholders = insertCols.map(() => '?').join(', ');
         db.run(
           `INSERT INTO ingredients (${insertCols.join(
-            ', '
+            ', ',
           )}) VALUES (${placeholders});`,
-          insertVals
+          insertVals,
         );
         const idQ = db.exec('SELECT last_insert_rowid();');
         if (idQ.length && idQ[0].values.length) {
@@ -2031,7 +2129,7 @@ function loadShoppingItemEditorPage() {
             variants.forEach((v, idx) => {
               db.run(
                 'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order) VALUES (?, ?, ?);',
-                [iid, v, idx + 1]
+                [iid, v, idx + 1],
               );
             });
           }
@@ -2043,7 +2141,7 @@ function loadShoppingItemEditorPage() {
             sizes.forEach((s, idx) => {
               db.run(
                 'INSERT INTO ingredient_sizes (ingredient_id, size, sort_order) VALUES (?, ?, ?);',
-                [iid, s, idx + 1]
+                [iid, s, idx + 1],
               );
             });
           }
@@ -2072,7 +2170,7 @@ function loadShoppingItemEditorPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -2149,21 +2247,19 @@ function loadShoppingItemEditorPage() {
             "COALESCE(location_at_home, '')",
             has('lemma') ? "COALESCE(lemma, '')" : "''",
             has('plural_override') ? "COALESCE(plural_override, '')" : "''",
-            has('plural_by_default')
-              ? 'COALESCE(plural_by_default, 0)'
-              : '0',
+            has('plural_by_default') ? 'COALESCE(plural_by_default, 0)' : '0',
             has('is_mass_noun') ? 'COALESCE(is_mass_noun, 0)' : '0',
             has('is_food') ? 'COALESCE(is_food, 1)' : '1',
             has('is_deprecated')
               ? 'COALESCE(is_deprecated, 0)'
               : has('hide_from_shopping_list')
-              ? 'COALESCE(hide_from_shopping_list, 0)'
-              : '0',
+                ? 'COALESCE(hide_from_shopping_list, 0)'
+                : '0',
           ];
 
           const q = db.exec(
             `SELECT ${selectCols.join(', ')} FROM ingredients WHERE ID = ?;`,
-            [id]
+            [id],
           );
           if (q.length && q[0].values.length) {
             const row = q[0].values[0];
@@ -2185,7 +2281,7 @@ function loadShoppingItemEditorPage() {
           try {
             const vq = db.exec(
               `SELECT variant FROM ingredient_variants WHERE ingredient_id = ? ORDER BY sort_order ASC, id ASC;`,
-              [id]
+              [id],
             );
             if (vq.length && vq[0].values.length) {
               baselineVariants = vq[0].values
@@ -2198,7 +2294,7 @@ function loadShoppingItemEditorPage() {
           try {
             const sq = db.exec(
               `SELECT size FROM ingredient_sizes WHERE ingredient_id = ? ORDER BY sort_order ASC, id ASC;`,
-              [id]
+              [id],
             );
             if (sq.length && sq[0].values.length) {
               baselineSizes = sq[0].values
@@ -2227,7 +2323,7 @@ function loadShoppingItemEditorPage() {
                  FROM ingredients
                  WHERE location_at_home IS NOT NULL
                    AND trim(location_at_home) != ''
-                 ORDER BY location_at_home COLLATE NOCASE;`
+                 ORDER BY location_at_home COLLATE NOCASE;`,
               );
               const vals =
                 Array.isArray(q) &&
@@ -2252,7 +2348,7 @@ function loadShoppingItemEditorPage() {
                 .map((v) => String(v || '').trim())
                 .filter((v) => v.length > 0);
               items.sort((a, b) =>
-                a.localeCompare(b, undefined, { sensitivity: 'base' })
+                a.localeCompare(b, undefined, { sensitivity: 'base' }),
               );
               if (!q) return items;
               return items.filter((v) => v.toLowerCase().includes(q));
@@ -2300,12 +2396,13 @@ function loadShoppingItemEditorPage() {
             el: document.getElementById('shoppingItemPluralByDefaultToggle'),
             initialValue: baselinePluralByDefault === '1' ? '1' : '0',
             getValue: () =>
-              document.getElementById('shoppingItemPluralByDefaultToggle')?.checked
+              document.getElementById('shoppingItemPluralByDefaultToggle')
+                ?.checked
                 ? '1'
                 : '0',
             setValue: (v) => {
               const el = document.getElementById(
-                'shoppingItemPluralByDefaultToggle'
+                'shoppingItemPluralByDefaultToggle',
               );
               if (el) el.checked = String(v) === '1';
             },
@@ -2319,7 +2416,9 @@ function loadShoppingItemEditorPage() {
                 ? '1'
                 : '0',
             setValue: (v) => {
-              const el = document.getElementById('shoppingItemIsMassNounToggle');
+              const el = document.getElementById(
+                'shoppingItemIsMassNounToggle',
+              );
               if (el) el.checked = String(v) === '1';
             },
           },
@@ -2353,7 +2452,7 @@ function loadShoppingItemEditorPage() {
                 : '0',
             setValue: (v) => {
               const el = document.getElementById(
-                'shoppingItemIsDeprecatedToggle'
+                'shoppingItemIsDeprecatedToggle',
               );
               if (el) el.checked = String(v) === '1';
             },
@@ -2365,6 +2464,12 @@ function loadShoppingItemEditorPage() {
   }
 }
 
+function toSentenceCase(s) {
+  const t = (s || '').trim();
+  if (!t) return '';
+  return t[0].toUpperCase() + t.slice(1).toLowerCase();
+}
+
 function loadUnitEditorPage() {
   const view = document.getElementById('pageContent');
 
@@ -2372,13 +2477,24 @@ function loadUnitEditorPage() {
 
   const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
   const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
-  const titleText = storedName ? storedName : isNew ? 'New unit' : 'Unit';
+  const code = sessionStorage.getItem('selectedUnitCode') || '';
+  const titleDisplay = storedName
+    ? toSentenceCase(storedName)
+    : isNew
+      ? 'New unit'
+      : 'Unit';
+  const initialTitle = storedName
+    ? (storedName || '').trim().toLowerCase()
+    : isNew
+      ? 'new unit'
+      : 'unit';
 
-  // Shell only; shared editor wiring happens after injection.
-  initAppBar({ mode: 'editor', titleText });
+  initAppBar({ mode: 'editor', titleText: titleDisplay });
 
+  const abbreviationDisplay = code || 'Abbreviation';
   view.innerHTML = `
-    <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+    <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
+    <div id="unitAbbreviation" class="unit-abbreviation-line">${abbreviationDisplay}</div>
   `;
 
   if (typeof waitForAppBarReady === 'function') {
@@ -2389,11 +2505,18 @@ function loadUnitEditorPage() {
         saveBtn: document.getElementById('appBarSaveBtn'),
         appBarTitleEl: document.getElementById('appBarTitle'),
         bodyTitleEl: document.getElementById('childEditorTitle'),
-        initialTitle: titleText,
+        initialTitle,
         backHref: 'units.html',
-        onSave: async ({ title: next }) => {
-          const code = sessionStorage.getItem('selectedUnitCode') || '';
-          if (!code) return;
+        normalizeTitle: (s) => (s || '').trim().toLowerCase(),
+        displayTitle: toSentenceCase,
+        subtitleEl: document.getElementById('unitAbbreviation'),
+        initialSubtitle: code,
+        normalizeSubtitle: (s) => (s || '').trim().toLowerCase(),
+        onSave: async ({ title: next, subtitle: nextCode }) => {
+          const oldCode = (sessionStorage.getItem('selectedUnitCode') || '')
+            .trim()
+            .toLowerCase();
+          if (!oldCode && !isNew) return;
 
           const isElectron = !!window.electronAPI;
           let db;
@@ -2413,13 +2536,43 @@ function loadUnitEditorPage() {
 
           window.dbInstance = db;
 
-          // Persist: update the singular name for this unit code.
-          db.run('UPDATE units SET name_singular = ? WHERE code = ?;', [
-            next || '',
-            code,
-          ]);
+          const newCode = (nextCode ?? '').trim().toLowerCase();
 
-          // Persist DB to disk/localStorage.
+          if (oldCode && newCode !== oldCode) {
+            const safe = (x) => String(x || '').replace(/'/g, "''");
+            const exists = db.exec(
+              `SELECT 1 FROM units WHERE lower(trim(code)) = '${safe(newCode)}' AND lower(trim(code)) != lower(trim('${safe(oldCode)}')) LIMIT 1;`,
+            );
+            if (exists.length > 0 && exists[0].values.length > 0) {
+              uiToast('That abbreviation is already used by another unit.');
+              throw new Error('Duplicate unit code');
+            }
+            try {
+              db.run(
+                'UPDATE recipe_ingredient_map SET unit = ? WHERE unit = ?;',
+                [newCode, oldCode],
+              );
+            } catch (_) {}
+            try {
+              db.run(
+                'UPDATE recipe_ingredient_substitutes SET unit = ? WHERE unit = ?;',
+                [newCode, oldCode],
+              );
+            } catch (_) {}
+            db.run(
+              'UPDATE units SET code = ?, name_singular = ? WHERE code = ?;',
+              [newCode, next || '', oldCode],
+            );
+            sessionStorage.setItem('selectedUnitCode', newCode);
+          } else {
+            db.run('UPDATE units SET name_singular = ? WHERE code = ?;', [
+              next || '',
+              oldCode || newCode,
+            ]);
+            if (newCode && newCode !== oldCode)
+              sessionStorage.setItem('selectedUnitCode', newCode);
+          }
+
           const binaryArray = db.export();
           if (isElectron) {
             const ok = await window.electronAPI.saveDB(binaryArray);
@@ -2428,11 +2581,10 @@ function loadUnitEditorPage() {
           } else {
             localStorage.setItem(
               'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray))
+              JSON.stringify(Array.from(binaryArray)),
             );
           }
 
-          // Update session so reload reflects the new title immediately.
           sessionStorage.setItem('selectedUnitNameSingular', next || '');
           sessionStorage.removeItem('selectedUnitIsNew');
         },
@@ -2525,7 +2677,7 @@ async function loadUnitsPage() {
         namePlural,
         category,
         sortOrder,
-      })
+      }),
     );
   }
 
@@ -2560,7 +2712,7 @@ async function loadUnitsPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -2608,7 +2760,7 @@ async function loadUnitsPage() {
               WHERE lower(ris.unit) = lower(?)
             ) t;
             `,
-            [c, c]
+            [c, c],
           );
           if (q.length && q[0].values.length) {
             const v = Number(q[0].values[0][0]);
@@ -2686,7 +2838,7 @@ async function loadUnitsPage() {
         sessionStorage.setItem('selectedUnitCode', unit.code || '');
         sessionStorage.setItem(
           'selectedUnitNameSingular',
-          unit.nameSingular || ''
+          unit.nameSingular || '',
         );
         sessionStorage.setItem('selectedUnitNamePlural', unit.namePlural || '');
         sessionStorage.setItem('selectedUnitCategory', unit.category || '');
@@ -2775,7 +2927,7 @@ async function loadUnitsPage() {
           try {
             db.run(
               'UPDATE unit_suggestions SET is_hidden = 1 WHERE code = ?;',
-              [c.toLowerCase()]
+              [c.toLowerCase()],
             );
           } catch (err) {
             console.error('❌ Failed to hide unit suggestion:', err);
@@ -2827,7 +2979,7 @@ async function loadUnitsPage() {
           try {
             const ex = db.exec(
               'SELECT code, name_singular, name_plural, category FROM units WHERE lower(code) = lower(?) LIMIT 1;',
-              [codeLower]
+              [codeLower],
             );
             if (ex.length && ex[0].values.length) {
               try {
@@ -2840,15 +2992,15 @@ async function loadUnitsPage() {
               sessionStorage.setItem('selectedUnitCode', codeLower);
               sessionStorage.setItem(
                 'selectedUnitNameSingular',
-                ex[0].values[0][1] || ''
+                ex[0].values[0][1] || '',
               );
               sessionStorage.setItem(
                 'selectedUnitNamePlural',
-                ex[0].values[0][2] || ''
+                ex[0].values[0][2] || '',
               );
               sessionStorage.setItem(
                 'selectedUnitCategory',
-                ex[0].values[0][3] || ''
+                ex[0].values[0][3] || '',
               );
               sessionStorage.removeItem('selectedUnitIsNew');
               window.location.href = 'unitEditor.html';
@@ -2864,7 +3016,7 @@ async function loadUnitsPage() {
           let nextSort = 999999;
           try {
             const q = db.exec(
-              'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+              'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;',
             );
             if (q.length && q[0].values.length) {
               const v = Number(q[0].values[0][0]);
@@ -2874,7 +3026,7 @@ async function loadUnitsPage() {
 
           db.run(
             'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
-            [codeLower, nameSingular, namePlural, category, nextSort]
+            [codeLower, nameSingular, namePlural, category, nextSort],
           );
 
           // Remove from suggestions list once promoted.
@@ -2985,7 +3137,7 @@ async function loadUnitsPage() {
       let nextSort = null;
       try {
         const q = db.exec(
-          'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+          'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;',
         );
         if (q.length && q[0].values.length) {
           nextSort = q[0].values[0][0];
@@ -2996,7 +3148,7 @@ async function loadUnitsPage() {
 
       db.run(
         'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
-        [code, nameSingular, '', '', nextSort]
+        [code, nameSingular, '', '', nextSort],
       );
     } catch (err) {
       console.error('❌ Failed to create unit:', err);
@@ -3016,7 +3168,7 @@ async function loadUnitsPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -3067,7 +3219,7 @@ async function loadUnitsPage() {
       const filteredSuggestions = suggestionRows.filter((s) =>
         String(s.code || '')
           .toLowerCase()
-          .includes(query)
+          .includes(query),
       );
 
       renderUnitsList({
@@ -3188,7 +3340,7 @@ async function loadStoresPage() {
           // Delete dependent store_locations and join rows first.
           const locQ = db.exec(
             'SELECT ID FROM store_locations WHERE store_id = ?;',
-            [storeId]
+            [storeId],
           );
           const locIds = locQ.length
             ? locQ[0].values.map(([id]) => Number(id)).filter(Number.isFinite)
@@ -3198,7 +3350,7 @@ async function loadStoresPage() {
             try {
               db.run(
                 'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
-                [lid]
+                [lid],
               );
             } catch (_) {}
           });
@@ -3220,7 +3372,7 @@ async function loadStoresPage() {
           } else {
             localStorage.setItem(
               'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray))
+              JSON.stringify(Array.from(binaryArray)),
             );
           }
         } catch (err) {
@@ -3353,7 +3505,7 @@ async function loadStoresPage() {
       } else {
         localStorage.setItem(
           'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray))
+          JSON.stringify(Array.from(binaryArray)),
         );
       }
     } catch (err) {
@@ -3443,7 +3595,7 @@ function loadStoreEditorPage() {
             // Stores schema requires both chain_name and location_name.
             db.run(
               'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
-              [next || '', '']
+              [next || '', ''],
             );
 
             const idQ = db.exec('SELECT last_insert_rowid();');
@@ -3462,7 +3614,7 @@ function loadStoreEditorPage() {
           } else {
             localStorage.setItem(
               'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray))
+              JSON.stringify(Array.from(binaryArray)),
             );
           }
 
@@ -3504,7 +3656,7 @@ function initEditorPage({ saveBtn, cancelBtn, root }) {
   const wireDirtyTracking = (node) => {
     if (!node) return;
     const editables = node.querySelectorAll(
-      'input, textarea, select, [contenteditable="true"]'
+      'input, textarea, select, [contenteditable="true"]',
     );
     editables.forEach((el) => {
       el.addEventListener('input', markDirty);
@@ -3689,14 +3841,14 @@ async function loadRecipeEditorPage() {
   const hasAnySteps =
     Array.isArray(recipe.sections) &&
     recipe.sections.some(
-      (section) => Array.isArray(section.steps) && section.steps.length > 0
+      (section) => Array.isArray(section.steps) && section.steps.length > 0,
     );
 
   const hasAnyIngredients =
     Array.isArray(recipe.sections) &&
     recipe.sections.some(
       (section) =>
-        Array.isArray(section.ingredients) && section.ingredients.length > 0
+        Array.isArray(section.ingredients) && section.ingredients.length > 0,
     );
 
   // 🔍 Decide seeding separately for steps vs ingredients.
@@ -3827,7 +3979,7 @@ async function loadRecipeEditorPage() {
         } else {
           localStorage.setItem(
             'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
+            JSON.stringify(Array.from(binaryArray)),
           );
         }
 
@@ -3835,7 +3987,7 @@ async function loadRecipeEditorPage() {
         if (window.bridge && typeof bridge.loadRecipeFromDB === 'function') {
           const refreshed = bridge.loadRecipeFromDB(
             window.dbInstance,
-            window.recipeId
+            window.recipeId,
           );
           window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
           window.recipeData = JSON.parse(JSON.stringify(refreshed));
