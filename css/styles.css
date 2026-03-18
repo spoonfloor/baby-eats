@@ -296,7 +296,8 @@ body.shopping-editor-page .shopping-item-editor-card {
   margin-right: -12px;
 }
 
-body.shopping-editor-page .shopping-item-field {
+body.shopping-editor-page .shopping-item-field,
+body.store-editor-page .shopping-item-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -330,7 +331,8 @@ body.shopping-editor-page .shopping-item-input:focus {
   caret-color: var(--edit-mode-color);
 }
 
-body.shopping-editor-page .shopping-item-textarea {
+body.shopping-editor-page .shopping-item-textarea,
+body.store-editor-page .shopping-item-textarea {
   min-height: 56px;
   padding: 8px 10px;
   border-radius: 10px;
@@ -351,7 +353,8 @@ body.shopping-editor-page .shopping-item-textarea {
   resize: none;
 }
 
-body.shopping-editor-page .shopping-item-textarea:focus {
+body.shopping-editor-page .shopping-item-textarea:focus,
+body.store-editor-page .shopping-item-textarea:focus {
   outline: none;
   background-color: #e5eefa;
   border-color: #b5ceff;
@@ -417,86 +420,9 @@ body.store-editor-page .store-add-location-cta:hover {
   color: var(--theme-primary);
 }
 
+/* Aisle name + Items field stack (Items uses shared .shopping-item-field) */
 body.store-editor-page .store-aisle-items-field {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Inset list surface (mirrors Home location input on shopping item editor) */
-body.store-editor-page .store-aisle-items-list-shell {
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  padding: 8px 10px;
-  min-height: 44px;
-  box-sizing: border-box;
-}
-
-body.store-editor-page
-  .store-aisle-items-list-shell--interactive {
-  cursor: pointer;
-  user-select: none;
-}
-
-body.store-editor-page
-  .store-aisle-items-list-shell--interactive:focus {
-  outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-}
-
-body.store-editor-page .store-aisle-items-empty {
-  padding: 4px 0 6px;
-  cursor: pointer;
-  user-select: none;
-}
-
-body.store-editor-page .store-aisle-item-row {
-  font-size: 15px;
-  color: var(--font-color-near-black);
-  line-height: 1.45;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-body.store-editor-page .store-aisle-item-row:last-child {
-  border-bottom: none;
-  padding-bottom: 2px;
-}
-
-body.store-editor-page .store-aisle-items-editor {
-  margin: 0;
-}
-
-body.store-editor-page .store-aisle-items-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 96px;
-  margin: 0 0 10px 0;
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 15px;
-  line-height: 1.4;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  resize: vertical;
-  background: hsl(0, 0%, 100%);
-}
-
-body.store-editor-page .store-aisle-items-textarea:focus {
-  outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.store-editor-page .store-aisle-items-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  padding-top: 4px;
 }
 
 body.shopping-editor-page .shopping-item-status {

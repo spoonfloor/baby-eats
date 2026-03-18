@@ -1296,3 +1296,52 @@ function wireLabelToInput(labelEl, inputEl) {
     }
   });
 }
+
+/**
+ * Newline list textareas (shopping variants/sizes, store aisle items).
+ * @param {HTMLTextAreaElement} el
+ * @param {{ maxLines?: number }} [opts]
+ */
+function attachEditorTextareaAutoGrow(el, { maxLines = 8 } = {}) {
+  if (!el) return;
+  let computedMaxPx = 0;
+  const computeMaxPx = () => {
+    try {
+      const cs = window.getComputedStyle ? getComputedStyle(el) : null;
+      const fontSize = cs ? parseFloat(cs.fontSize) : 0;
+      const lineHeightRaw = cs ? parseFloat(cs.lineHeight) : 0;
+      const lineHeight =
+        Number.isFinite(lineHeightRaw) && lineHeightRaw > 0
+          ? lineHeightRaw
+          : Number.isFinite(fontSize) && fontSize > 0
+            ? fontSize * 1.4
+            : 22;
+      const padTop = cs ? parseFloat(cs.paddingTop) : 0;
+      const padBot = cs ? parseFloat(cs.paddingBottom) : 0;
+      const pad =
+        (Number.isFinite(padTop) ? padTop : 0) +
+        (Number.isFinite(padBot) ? padBot : 0);
+      const lines = Math.max(1, Number(maxLines) || 8);
+      return Math.round(pad + lineHeight * lines);
+    } catch (_) {
+      return 220;
+    }
+  };
+  const resize = () => {
+    try {
+      if (!computedMaxPx) computedMaxPx = computeMaxPx();
+      el.style.height = 'auto';
+      const next = Math.min(el.scrollHeight || 0, computedMaxPx);
+      el.style.height = `${Math.max(56, next)}px`;
+    } catch (_) {}
+  };
+  try {
+    el.__feAutoGrowResize = resize;
+  } catch (_) {}
+  el.addEventListener('input', resize);
+  try {
+    requestAnimationFrame(resize);
+  } catch (_) {
+    resize();
+  }
+}

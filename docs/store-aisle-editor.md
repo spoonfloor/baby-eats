@@ -82,9 +82,10 @@ There is **no** `store_aisles` table. `docs/store-db-info.md` describes a differ
 
 ## Completed work
 
-- **Store title + location:** Editable **location** subtitle (placeholder **Location**), same pattern as unit **Abbreviation**. **Save** persists both `stores.chain_name` and `stores.location_name` (previously only chain). `wireChildEditorPage` gained optional **`subtitlePlaceholder`** (default `Abbreviation`) so store vs unit can differ.
+- **Store title + description subtitle:** Editable store title and a subtitle bound to `stores.location_name`. Subtitle uses `wireChildEditorPage` with `subtitleEmptyMeansHidden: true` so it is **hidden when empty** and **only appears while the title is in edit mode**; placeholder is **“Add a description.”**. If a description is entered it persists on blur; if left empty it hides again after title edit ends.
 - **Aisles section** (only when the store row exists — valid `selectedStoreId`): header **Aisles** (pluralization-overrides-style label).
-- **Empty state:** **Add an aisle** (`placeholder-prompt`; click + Enter/Space). **New Aisle** dialog (`window.ui.prompt`, same shape as New Store: Create/Cancel) → `INSERT store_locations (store_id, name, sort_order)` with `sort_order = MAX+1` → persist DB → new card.
+- **Empty state:** **Add an aisle** (`placeholder-prompt`; click + Enter/Space). **New Aisle** dialog (`window.ui.prompt`, same shape as New Store: Create/Cancel) → `INSERT store_locations (store_id, name, sort_order)` with `sort_order = MAX+1` → persist DB → new card. With **1+** aisles, that hint is **hidden** until focus enters an aisle card (name or items field); it sits **below the focused card** and **hides on blur** when focus leaves cards + CTA.
 - **Cards:** One card per aisle; aisle **name** uses purple in-card label styling; **click to edit**, **Enter** or blur commits `UPDATE store_locations SET name`; **Esc** cancels; saves immediately (not tied to app-bar Save).
 - **First save without row ID:** After `INSERT stores`, page **reloads** so **Aisles** appears once `selectedStoreId` exists.
-- **CSS:** `body.store-editor-page` — aisle cards mirror shopping-item card layout; `.store-add-aisle-cta`, `.store-aisle-name.editing-title`.
+- **Aisle item list editor:** Each aisle card contains a single shopping-editor-style newline textarea (placeholder **“Add an item.”**), open-on-tap, with blur commit behavior via `commitAisleItemEdit` (unknown-item confirmation flow preserved) and **Esc restoring last committed** content; no extra Cancel/Commit buttons or nested editor chrome.
+- **CSS parity:** Store aisle item list uses the same `.shopping-item-field` / `.shopping-item-textarea` visuals + focus chrome as shopping lists (so it sits inside the list surface).

@@ -1357,21 +1357,67 @@ function wireChildEditorPage({
       : ''
     : '';
 
+  /** Store editor: no saved location — subtitle row only while title/subtitle editing or after user enters a location. */
+  const emptySubtitleFlow = () =>
+    !!(
+      subtitleEmptyMeansHidden &&
+      hasSubtitle &&
+      !(baselineSubtitle || '').trim()
+    );
+
+  let titleSessionActive = false;
+  let subtitleSessionActive = false;
+  /** True between pointerdown on subtitle and subtitle click (title blurs first). */
+  let subtitlePointerKeepAlive = false;
+  let pendingSubtitleDisplay = emptySubtitleFlow() ? '' : null;
+
   bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
   appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
 
   const syncSubtitleDomFromBaseline = () => {
     if (!hasSubtitle) return;
-    if (subtitleEmptyMeansHidden && !baselineSubtitle) {
-      subtitleEl.textContent = '';
-      subtitleEl.style.display = 'none';
-      if (subtitleRevealBtn) subtitleRevealBtn.style.display = '';
-    } else {
+    if (!subtitleEmptyMeansHidden) {
       subtitleEl.style.display = '';
       subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
+      try {
+        subtitleEl.removeAttribute('aria-hidden');
+      } catch (_) {}
+      return;
     }
+    if (!emptySubtitleFlow()) {
+      subtitleEl.style.display = '';
+      subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+      if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
+      try {
+        subtitleEl.removeAttribute('aria-hidden');
+      } catch (_) {}
+      pendingSubtitleDisplay = null;
+      return;
+    }
+    if (pendingSubtitleDisplay == null) pendingSubtitleDisplay = '';
+    const hasPending = (pendingSubtitleDisplay || '').trim().length > 0;
+    const showRow =
+      titleSessionActive ||
+      subtitleSessionActive ||
+      hasPending ||
+      subtitlePointerKeepAlive;
+    if (!showRow) {
+      subtitleEl.textContent = '';
+      subtitleEl.style.display = 'none';
+      subtitleEl.setAttribute('aria-hidden', 'true');
+      if (subtitleRevealBtn) subtitleRevealBtn.style.display = '';
+      return;
+    }
+    subtitleEl.style.display = '';
+    subtitleEl.removeAttribute('aria-hidden');
+    if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
+    if (subtitleSessionActive) return;
+    subtitleEl.textContent = hasPending
+      ? pendingSubtitleDisplay
+      : subtitlePlaceholder;
   };
+
   if (hasSubtitle) syncSubtitleDomFromBaseline();
 
   if (subtitleRevealBtn && subtitleEmptyMeansHidden && hasSubtitle) {
@@ -1383,6 +1429,16 @@ function wireChildEditorPage({
         subtitleEl.click();
       } catch (_) {}
     });
+  }
+
+  if (hasSubtitle && subtitleEmptyMeansHidden) {
+    subtitleEl.addEventListener(
+      'pointerdown',
+      () => {
+        if (emptySubtitleFlow()) subtitlePointerKeepAlive = true;
+      },
+      true,
+    );
   }
 
   let isDirty = false;
@@ -1446,6 +1502,9 @@ function wireChildEditorPage({
     const starting = bodyTitleEl.textContent || '';
     const startingStored = normalizeTitle(starting);
 
+    titleSessionActive = true;
+    if (emptySubtitleFlow()) syncSubtitleDomFromBaseline();
+
     bodyTitleEl.contentEditable = 'true';
     bodyTitleEl.classList.add('editing-title');
     bodyTitleEl.focus();
@@ -1460,6 +1519,17 @@ function wireChildEditorPage({
       bodyTitleEl.removeEventListener('blur', onBlur);
       bodyTitleEl.removeEventListener('keydown', onKeyDown);
       bodyTitleEl.removeEventListener('input', onInput);
+      titleSessionActive = false;
+      // While the store has no saved subtitle, don't immediately sync/hide on
+      // title blur. Subtitle clicking causes the title to blur first, and we
+      // need the subtitle click handler to still run reliably.
+      if (!emptySubtitleFlow()) syncSubtitleDomFromBaseline();
+      requestAnimationFrame(() => {
+        // Do not clear `subtitlePointerKeepAlive` here.
+        // Title blur happens before subtitle click; clearing early can hide
+        // the subtitle before its click handler runs.
+        syncSubtitleDomFromBaseline();
+      });
     };
 
     const commit = () => {
@@ -1500,11 +1570,33 @@ function wireChildEditorPage({
   if (hasSubtitle) {
     subtitleEl.addEventListener('click', () => {
       if (subtitleEl.isContentEditable) return;
+      subtitlePointerKeepAlive = false;
       const starting = subtitleEl.textContent || '';
-      const isPlaceholder = starting === subtitlePlaceholder;
+      const isPlaceholder =
+        starting.trim().toLowerCase() ===
+        subtitlePlaceholder.trim().toLowerCase();
+      const restoreOnCancelEmptyFlow = emptySubtitleFlow()
+        ? (pendingSubtitleDisplay || '').trim() ||
+          (isPlaceholder ? '' : starting)
+        : null;
+      subtitleSessionActive = true;
+      const pending = (pendingSubtitleDisplay || '').trim();
+      // Keep the hint text visible until the first real character is typed.
+      subtitleEl.textContent = isPlaceholder ? subtitlePlaceholder : starting;
       subtitleEl.contentEditable = 'true';
       subtitleEl.classList.add('editing-title');
       subtitleEl.focus();
+      // Put caret at the start so typing replaces the hint immediately.
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(subtitleEl);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch (_) {}
 
       const onInput = () => markDirty();
       const cleanup = () => {
@@ -1513,23 +1605,59 @@ function wireChildEditorPage({
         subtitleEl.removeEventListener('blur', onBlur);
         subtitleEl.removeEventListener('keydown', onKeyDown);
         subtitleEl.removeEventListener('input', onInput);
+        subtitleSessionActive = false;
+        syncSubtitleDomFromBaseline();
       };
       const commit = () => {
         const raw = subtitleEl.textContent || '';
         let next = normalizeSubtitleFn(raw);
         const ph = subtitlePlaceholder.toLowerCase();
         if (isPlaceholder && next.toLowerCase() === ph) next = '';
-        subtitleEl.textContent = next || subtitlePlaceholder;
+        if (emptySubtitleFlow()) {
+          pendingSubtitleDisplay = next;
+        }
+        if (!emptySubtitleFlow()) {
+          subtitleEl.textContent = next || subtitlePlaceholder;
+        }
         if (next !== (baselineSubtitle || '')) markDirty();
       };
       const cancelEdit = () => {
-        subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+        if (emptySubtitleFlow() && restoreOnCancelEmptyFlow !== null) {
+          subtitleEl.textContent = restoreOnCancelEmptyFlow;
+        } else {
+          subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+        }
       };
       const onBlur = () => {
         commit();
         cleanup();
       };
       const onKeyDown = (e) => {
+        // Placeholder behavior: keep visible on focus, but remove on first
+        // typed character so the hint doesn't get partially overwritten.
+        try {
+          const phNorm = subtitlePlaceholder.trim().toLowerCase();
+          const curNorm = (subtitleEl.textContent || '').trim().toLowerCase();
+          const isPrintable =
+            e.key &&
+            String(e.key).length === 1 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey;
+
+          if (curNorm === phNorm && isPrintable) {
+            subtitleEl.textContent = '';
+            const sel = window.getSelection && window.getSelection();
+            if (sel) {
+              const range = document.createRange();
+              range.selectNodeContents(subtitleEl);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          }
+        } catch (_) {}
+
         if (e.key === 'Enter') {
           e.preventDefault();
           commit();
@@ -1574,7 +1702,12 @@ function wireChildEditorPage({
       if (!isDirty) return;
       bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
       appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
-      if (hasSubtitle) syncSubtitleDomFromBaseline();
+      if (hasSubtitle) {
+        if (emptySubtitleFlow()) {
+          pendingSubtitleDisplay = (baselineSubtitle || '').trim();
+        }
+        syncSubtitleDomFromBaseline();
+      }
       extras.forEach((f) => {
         if (!f) return;
         const key = String(f.key || '');
@@ -1614,9 +1747,13 @@ function wireChildEditorPage({
 
       let nextSubtitle = '';
       if (hasSubtitle) {
-        const raw = subtitleEl.textContent || '';
-        nextSubtitle =
-          raw === subtitlePlaceholder ? '' : normalizeSubtitleFn(raw);
+        if (emptySubtitleFlow()) {
+          nextSubtitle = normalizeSubtitleFn(pendingSubtitleDisplay || '');
+        } else {
+          const raw = subtitleEl.textContent || '';
+          nextSubtitle =
+            raw === subtitlePlaceholder ? '' : normalizeSubtitleFn(raw);
+        }
       }
 
       const extraValues = {};
@@ -1660,7 +1797,11 @@ function wireChildEditorPage({
       baselineTitle = nextTitle;
       if (hasSubtitle) baselineSubtitle = nextSubtitle;
       baselineExtras = { ...baselineExtras, ...extraValues };
-      if (hasSubtitle) syncSubtitleDomFromBaseline();
+      if (hasSubtitle) {
+        if (emptySubtitleFlow()) pendingSubtitleDisplay = '';
+        else pendingSubtitleDisplay = null;
+        syncSubtitleDomFromBaseline();
+      }
     });
   }
 }
@@ -1812,62 +1953,12 @@ function loadShoppingItemEditorPage() {
     </div>
   `;
 
-  // Auto-grow textareas to preserve the "Docs list" feel (like steps editor).
-  // Cap is intentionally moderate; beyond that we rely on vertical scrolling.
-  //
-  // Important: these values are sometimes set programmatically (baseline load, Cancel),
-  // so we expose a callable resize hook rather than relying on synthetic input events
-  // (which could incorrectly mark the page dirty).
-  const attachAutoGrowTextarea = (el, { maxLines = 8 } = {}) => {
-    if (!el) return;
-    let computedMaxPx = 0;
-    const computeMaxPx = () => {
-      try {
-        const cs = window.getComputedStyle ? getComputedStyle(el) : null;
-        const fontSize = cs ? parseFloat(cs.fontSize) : 0;
-        const lineHeightRaw = cs ? parseFloat(cs.lineHeight) : 0;
-        const lineHeight =
-          Number.isFinite(lineHeightRaw) && lineHeightRaw > 0
-            ? lineHeightRaw
-            : Number.isFinite(fontSize) && fontSize > 0
-              ? fontSize * 1.4
-              : 22; // fallback
-        const padTop = cs ? parseFloat(cs.paddingTop) : 0;
-        const padBot = cs ? parseFloat(cs.paddingBottom) : 0;
-        const pad =
-          (Number.isFinite(padTop) ? padTop : 0) +
-          (Number.isFinite(padBot) ? padBot : 0);
-        const lines = Math.max(1, Number(maxLines) || 8);
-        return Math.round(pad + lineHeight * lines);
-      } catch (_) {
-        return 220;
-      }
-    };
-    const resize = () => {
-      try {
-        if (!computedMaxPx) computedMaxPx = computeMaxPx();
-        el.style.height = 'auto';
-        const next = Math.min(el.scrollHeight || 0, computedMaxPx);
-        el.style.height = `${Math.max(56, next)}px`;
-      } catch (_) {}
-    };
-    try {
-      // Intentionally non-standard property; internal hook only.
-      el.__feAutoGrowResize = resize;
-    } catch (_) {}
-    el.addEventListener('input', resize);
-    // size once now
-    try {
-      requestAnimationFrame(resize);
-    } catch (_) {
-      resize();
-    }
-  };
-
-  attachAutoGrowTextarea(
+  attachEditorTextareaAutoGrow(
     document.getElementById('shoppingItemVariantsTextarea'),
   );
-  attachAutoGrowTextarea(document.getElementById('shoppingItemSizesTextarea'));
+  attachEditorTextareaAutoGrow(
+    document.getElementById('shoppingItemSizesTextarea'),
+  );
 
   const loadDbForShoppingEditor = async () => {
     const isElectron = !!window.electronAPI;
@@ -3576,7 +3667,6 @@ function loadStoreEditorPage() {
     let aisleRows = [];
     /** @type {Map<number, string[]>} */
     let aisleItemsByAisle = new Map();
-    let editingAisleId = null;
 
     const normItemKey = (s) => String(s || '').trim().toLowerCase();
 
@@ -3681,7 +3771,7 @@ function loadStoreEditorPage() {
     const locTrim = (locationName || '').trim();
     const storeLocationBlock = locTrim
       ? `<div id="storeLocationSubtitle" class="unit-abbreviation-line"></div>`
-      : `<button type="button" id="storeLocationReveal" class="store-add-location-cta">Add location</button><div id="storeLocationSubtitle" class="unit-abbreviation-line" style="display:none" aria-hidden="true"></div>`;
+      : `<div id="storeLocationSubtitle" class="unit-abbreviation-line" style="display:none" aria-hidden="true"></div>`;
 
     initAppBar({ mode: 'editor', titleText });
 
@@ -3826,19 +3916,47 @@ function loadStoreEditorPage() {
       return 'ok';
     };
 
-    const startEditAisleItems = (aisleId) => {
-      if (editingAisleId != null && editingAisleId !== aisleId) {
-        uiToast('Finish editing the other aisle first.');
+    const aisleItemsTextUnchanged = (raw, committedArr) => {
+      const a = parseUniqueItemLines(raw);
+      const b = parseUniqueItemLines((committedArr || []).join('\n'));
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (normItemKey(a[i]) !== normItemKey(b[i])) return false;
+      }
+      return true;
+    };
+
+    const parkAddAisleCta = () => {
+      const list = document.getElementById('storeAislesList');
+      const cta = document.getElementById('storeAddAisleCta');
+      if (list && cta && list.contains(cta)) list.after(cta);
+    };
+
+    const syncAddAisleCtaAfterRender = () => {
+      const list = document.getElementById('storeAislesList');
+      const cta = document.getElementById('storeAddAisleCta');
+      if (!list || !cta) return;
+      if (aisleRows.length === 0) {
+        list.after(cta);
+        cta.hidden = false;
         return;
       }
-      editingAisleId = aisleId;
-      renderAisleCards();
+      list.after(cta);
+      cta.hidden = true;
+    };
+
+    const showAddAisleCtaBelowCard = (card) => {
+      const cta = document.getElementById('storeAddAisleCta');
+      if (!cta || !card) return;
+      card.after(cta);
+      cta.hidden = false;
     };
 
     const renderAisleCards = () => {
       const list = document.getElementById('storeAislesList');
       if (!list) return;
 
+      parkAddAisleCta();
       list.innerHTML = '';
       aisleRows.forEach((a) => {
         const card = document.createElement('div');
@@ -3851,7 +3969,6 @@ function loadStoreEditorPage() {
 
         nameEl.addEventListener('click', () => {
           if (nameEl.isContentEditable) return;
-          if (editingAisleId === a.id) return;
           const starting = (nameEl.textContent || '').trim() || a.name;
 
           nameEl.contentEditable = 'true';
@@ -3918,110 +4035,84 @@ function loadStoreEditorPage() {
 
         const items = aisleItemsByAisle.get(a.id) || [];
         const itemsField = document.createElement('div');
-        itemsField.className = 'store-aisle-items-field';
+        itemsField.className = 'shopping-item-field store-aisle-items-field';
 
-        const shell = document.createElement('div');
-        shell.className = 'store-aisle-items-list-shell';
+        const ta = document.createElement('textarea');
+        ta.className = 'shopping-item-textarea';
+        ta.value = items.join('\n');
+        ta.placeholder = 'Add an item.';
+        ta.setAttribute('aria-label', 'Aisle items');
+        ta.wrap = 'off';
+        attachEditorTextareaAutoGrow(ta, { maxLines: 10 });
 
-        if (editingAisleId === a.id) {
-          const wrap = document.createElement('div');
-          wrap.className = 'store-aisle-items-editor';
-          const ta = document.createElement('textarea');
-          ta.className = 'store-aisle-items-textarea';
-          ta.rows = Math.min(14, Math.max(4, items.length + 3));
-          ta.value = items.join('\n');
-          ta.setAttribute('aria-label', 'Items in this aisle');
+        const committedSnapshot = () => (aisleItemsByAisle.get(a.id) || []).join('\n');
 
-          const actions = document.createElement('div');
-          actions.className = 'store-aisle-items-actions';
-          const cancelItemsBtn = document.createElement('button');
-          cancelItemsBtn.type = 'button';
-          cancelItemsBtn.className = 'button button--secondary';
-          cancelItemsBtn.textContent = 'Cancel';
-          const commitItemsBtn = document.createElement('button');
-          commitItemsBtn.type = 'button';
-          commitItemsBtn.className = 'button';
-          commitItemsBtn.textContent = 'Commit';
-
-          cancelItemsBtn.addEventListener('click', () => {
-            editingAisleId = null;
-            renderAisleCards();
-          });
-          commitItemsBtn.addEventListener('click', () => {
-            void (async () => {
-              const res = await commitAisleItemEdit(a.id, ta.value);
-              if (res === 'ok') {
-                editingAisleId = null;
-                renderAisleCards();
-              }
-            })();
-          });
-          ta.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              editingAisleId = null;
-              renderAisleCards();
-            }
-          });
-
-          actions.appendChild(cancelItemsBtn);
-          actions.appendChild(commitItemsBtn);
-          wrap.appendChild(ta);
-          wrap.appendChild(actions);
-          shell.appendChild(wrap);
-          itemsField.appendChild(shell);
-
-          window.setTimeout(() => {
+        ta.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            ta.value = committedSnapshot();
             try {
-              ta.focus();
-              ta.setSelectionRange(ta.value.length, ta.value.length);
+              ta.__feAutoGrowResize();
             } catch (_) {}
-          }, 0);
-        } else {
-          if (items.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'store-aisle-items-empty placeholder-prompt';
-            empty.textContent = 'Add an item.';
-            empty.tabIndex = 0;
-            empty.setAttribute('role', 'button');
-            empty.addEventListener('click', () => startEditAisleItems(a.id));
-            empty.addEventListener('keydown', (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                startEditAisleItems(a.id);
-              }
-            });
-            shell.appendChild(empty);
-          } else {
-            items.forEach((name) => {
-              const row = document.createElement('div');
-              row.className = 'store-aisle-item-row';
-              row.textContent = name;
-              shell.appendChild(row);
-            });
-            shell.classList.add('store-aisle-items-list-shell--interactive');
-            shell.tabIndex = 0;
-            shell.setAttribute('role', 'button');
-            shell.setAttribute(
-              'aria-label',
-              'Edit items in this aisle',
-            );
-            const openItemsEditor = () => startEditAisleItems(a.id);
-            shell.addEventListener('click', openItemsEditor);
-            shell.addEventListener('keydown', (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                openItemsEditor();
-              }
-            });
           }
-          itemsField.appendChild(shell);
-        }
+        });
 
+        ta.addEventListener('blur', () => {
+          void (async () => {
+            const committed = aisleItemsByAisle.get(a.id) || [];
+            if (aisleItemsTextUnchanged(ta.value, committed)) return;
+            const res = await commitAisleItemEdit(a.id, ta.value);
+            if (res === 'ok') {
+              ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
+              try {
+                ta.__feAutoGrowResize();
+              } catch (_) {}
+            } else if (res === 'discard') {
+              ta.value = committedSnapshot();
+              try {
+                ta.__feAutoGrowResize();
+              } catch (_) {}
+            } else if (res === 'fix') {
+              window.setTimeout(() => {
+                try {
+                  ta.focus();
+                } catch (_) {}
+              }, 0);
+            }
+          })();
+        });
+
+        itemsField.appendChild(ta);
         card.appendChild(itemsField);
 
         list.appendChild(card);
       });
+      syncAddAisleCtaAfterRender();
+    };
+
+    const wireAddAisleCtaFocus = () => {
+      let tid = null;
+      const onFocusOut = () => {
+        if (aisleRows.length < 1) return;
+        window.clearTimeout(tid);
+        tid = window.setTimeout(() => {
+          tid = null;
+          const ae = document.activeElement;
+          const cta = document.getElementById('storeAddAisleCta');
+          const list = document.getElementById('storeAislesList');
+          if (!cta || !list) return;
+          if (ae && (cta.contains(ae) || ae.closest?.('.store-aisle-card')))
+            return;
+          cta.hidden = true;
+          list.after(cta);
+        }, 0);
+      };
+      view.addEventListener('focusin', (e) => {
+        if (aisleRows.length < 1) return;
+        const card = e.target?.closest?.('.store-aisle-card');
+        if (card) showAddAisleCtaBelowCard(card);
+      });
+      view.addEventListener('focusout', onFocusOut);
     };
 
     const wireAddAisle = () => {
@@ -4087,6 +4178,7 @@ function loadStoreEditorPage() {
     };
 
     renderAisleCards();
+    wireAddAisleCtaFocus();
     wireAddAisle();
 
     if (typeof waitForAppBarReady !== 'function') return;
@@ -4103,9 +4195,8 @@ function loadStoreEditorPage() {
         subtitleEl: document.getElementById('storeLocationSubtitle'),
         initialSubtitle: locTrim,
         normalizeSubtitle: (s) => (s || '').trim(),
-        subtitlePlaceholder: 'Location',
+        subtitlePlaceholder: 'Add a description.',
         subtitleEmptyMeansHidden: true,
-        subtitleRevealBtn: document.getElementById('storeLocationReveal'),
         onSave: async ({ title: next, subtitle: nextLoc }) => {
           const sid = sessionStorage.getItem('selectedStoreId');
           const isNewStore =
