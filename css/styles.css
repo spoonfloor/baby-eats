@@ -359,6 +359,146 @@ body.shopping-editor-page .shopping-item-textarea:focus {
   caret-color: var(--edit-mode-color);
 }
 
+/* Store editor: aisle cards (mirror shopping item card + purple labels) */
+body.store-editor-page .shopping-item-editor-card {
+  margin-top: 14px;
+  background: var(--field-bg);
+  border-radius: 14px;
+  padding: 18px 18px;
+  margin-left: -12px;
+  margin-right: -12px;
+}
+
+body.store-editor-page .store-aisles-section-label {
+  margin: 32px 0 6px 0;
+  color: var(--font-color-near-black);
+}
+
+body.store-editor-page .shopping-item-label,
+body.store-editor-page .store-aisle-name {
+  font-size: 13px;
+  color: var(--theme-primary);
+  letter-spacing: 0.2px;
+}
+
+body.store-editor-page .store-aisle-name {
+  cursor: text;
+  min-height: 1.25em;
+}
+
+body.store-editor-page .store-aisle-name.editing-title {
+  color: var(--edit-mode-color);
+  outline: none;
+}
+
+body.store-editor-page .store-add-aisle-cta {
+  margin-top: 10px;
+  padding: 10px 0 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+body.store-editor-page .store-add-location-cta {
+  display: block;
+  margin: 4px 0 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--subtitle);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body.store-editor-page .store-add-location-cta:hover {
+  color: var(--theme-primary);
+}
+
+body.store-editor-page .store-aisle-items-field {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Inset list surface (mirrors Home location input on shopping item editor) */
+body.store-editor-page .store-aisle-items-list-shell {
+  border-radius: 10px;
+  background-color: hsl(0, 0%, 98%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 10px;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+body.store-editor-page
+  .store-aisle-items-list-shell--interactive {
+  cursor: pointer;
+  user-select: none;
+}
+
+body.store-editor-page
+  .store-aisle-items-list-shell--interactive:focus {
+  outline: none;
+  background-color: #e5eefa;
+  border-color: #b5ceff;
+}
+
+body.store-editor-page .store-aisle-items-empty {
+  padding: 4px 0 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+body.store-editor-page .store-aisle-item-row {
+  font-size: 15px;
+  color: var(--font-color-near-black);
+  line-height: 1.45;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.store-editor-page .store-aisle-item-row:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+body.store-editor-page .store-aisle-items-editor {
+  margin: 0;
+}
+
+body.store-editor-page .store-aisle-items-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 96px;
+  margin: 0 0 10px 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  resize: vertical;
+  background: hsl(0, 0%, 100%);
+}
+
+body.store-editor-page .store-aisle-items-textarea:focus {
+  outline: none;
+  background-color: #e5eefa;
+  border-color: #b5ceff;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
+body.store-editor-page .store-aisle-items-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 body.shopping-editor-page .shopping-item-status {
   display: flex;
   flex-direction: column;

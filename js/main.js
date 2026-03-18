@@ -1325,9 +1325,13 @@ function wireChildEditorPage({
   subtitleEl,
   initialSubtitle,
   normalizeSubtitle: normalizeSubtitleFn,
+  subtitlePlaceholder: subtitlePlaceholderText,
+  subtitleEmptyMeansHidden = false,
+  subtitleRevealBtn = null,
 }) {
   if (!appBarTitleEl || !bodyTitleEl) return;
 
+  const subtitlePlaceholder = subtitlePlaceholderText || 'Abbreviation';
   const normalize = (value) => (value || '').trim();
   const normalizeTitle = normalizeTitleFn || normalize;
   const displayTitle = displayTitleFn || ((v) => v ?? '');
@@ -1355,8 +1359,30 @@ function wireChildEditorPage({
 
   bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
   appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
-  if (hasSubtitle) {
-    subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
+
+  const syncSubtitleDomFromBaseline = () => {
+    if (!hasSubtitle) return;
+    if (subtitleEmptyMeansHidden && !baselineSubtitle) {
+      subtitleEl.textContent = '';
+      subtitleEl.style.display = 'none';
+      if (subtitleRevealBtn) subtitleRevealBtn.style.display = '';
+    } else {
+      subtitleEl.style.display = '';
+      subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+      if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
+    }
+  };
+  if (hasSubtitle) syncSubtitleDomFromBaseline();
+
+  if (subtitleRevealBtn && subtitleEmptyMeansHidden && hasSubtitle) {
+    subtitleRevealBtn.addEventListener('click', () => {
+      subtitleRevealBtn.style.display = 'none';
+      subtitleEl.style.display = '';
+      subtitleEl.textContent = subtitlePlaceholder;
+      try {
+        subtitleEl.click();
+      } catch (_) {}
+    });
   }
 
   let isDirty = false;
@@ -1475,7 +1501,7 @@ function wireChildEditorPage({
     subtitleEl.addEventListener('click', () => {
       if (subtitleEl.isContentEditable) return;
       const starting = subtitleEl.textContent || '';
-      const isPlaceholder = starting === 'Abbreviation';
+      const isPlaceholder = starting === subtitlePlaceholder;
       subtitleEl.contentEditable = 'true';
       subtitleEl.classList.add('editing-title');
       subtitleEl.focus();
@@ -1491,12 +1517,13 @@ function wireChildEditorPage({
       const commit = () => {
         const raw = subtitleEl.textContent || '';
         let next = normalizeSubtitleFn(raw);
-        if (isPlaceholder && next === 'abbreviation') next = '';
-        subtitleEl.textContent = next || 'Abbreviation';
+        const ph = subtitlePlaceholder.toLowerCase();
+        if (isPlaceholder && next.toLowerCase() === ph) next = '';
+        subtitleEl.textContent = next || subtitlePlaceholder;
         if (next !== (baselineSubtitle || '')) markDirty();
       };
       const cancelEdit = () => {
-        subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
+        subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
       };
       const onBlur = () => {
         commit();
@@ -1547,9 +1574,7 @@ function wireChildEditorPage({
       if (!isDirty) return;
       bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
       appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
-      if (hasSubtitle) {
-        subtitleEl.textContent = baselineSubtitle || 'Abbreviation';
-      }
+      if (hasSubtitle) syncSubtitleDomFromBaseline();
       extras.forEach((f) => {
         if (!f) return;
         const key = String(f.key || '');
@@ -1590,8 +1615,8 @@ function wireChildEditorPage({
       let nextSubtitle = '';
       if (hasSubtitle) {
         const raw = subtitleEl.textContent || '';
-        nextSubtitle = raw === 'Abbreviation' ? '' : normalizeSubtitleFn(raw);
-        subtitleEl.textContent = nextSubtitle || 'Abbreviation';
+        nextSubtitle =
+          raw === subtitlePlaceholder ? '' : normalizeSubtitleFn(raw);
       }
 
       const extraValues = {};
@@ -1635,6 +1660,7 @@ function wireChildEditorPage({
       baselineTitle = nextTitle;
       if (hasSubtitle) baselineSubtitle = nextSubtitle;
       baselineExtras = { ...baselineExtras, ...extraValues };
+      if (hasSubtitle) syncSubtitleDomFromBaseline();
     });
   }
 }
@@ -3538,18 +3564,533 @@ function loadStoreEditorPage() {
     return;
   }
 
-  const isNew = sessionStorage.getItem('selectedStoreIsNew') === '1';
-  const storedChain = sessionStorage.getItem('selectedStoreChain') || '';
-  const titleText = storedChain ? storedChain : isNew ? 'New store' : 'Store';
+  void (async () => {
+    const isNew = sessionStorage.getItem('selectedStoreIsNew') === '1';
+    const idStr = sessionStorage.getItem('selectedStoreId');
+    const storeId = Number(idStr);
+    const hasPersistedStore = Number.isFinite(storeId) && storeId > 0;
 
-  // Shell only; shared editor wiring happens after injection.
-  initAppBar({ mode: 'editor', titleText });
+    let chain = sessionStorage.getItem('selectedStoreChain') || '';
+    let locationName = sessionStorage.getItem('selectedStoreLocation') || '';
+    /** @type {{ id: number, name: string }[]} */
+    let aisleRows = [];
+    /** @type {Map<number, string[]>} */
+    let aisleItemsByAisle = new Map();
+    let editingAisleId = null;
 
-  view.innerHTML = `
+    const normItemKey = (s) => String(s || '').trim().toLowerCase();
+
+    const parseUniqueItemLines = (raw) => {
+      const seen = new Set();
+      const out = [];
+      for (const line of String(raw || '').split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        const k = normItemKey(t);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(t);
+      }
+      return out;
+    };
+
+    const openStoreEditorDb = async () => {
+      const isElectron = !!window.electronAPI;
+      let db;
+      if (isElectron) {
+        const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+        const bytes = await window.electronAPI.loadDB(pathHint);
+        db = new SQL.Database(new Uint8Array(bytes));
+      } else {
+        const stored = localStorage.getItem('favoriteEatsDb');
+        if (!stored)
+          throw new Error('No DB in localStorage for store editor.');
+        db = new SQL.Database(new Uint8Array(JSON.parse(stored)));
+      }
+      window.dbInstance = db;
+      return db;
+    };
+
+    const persistStoreEditorDb = async (db) => {
+      const binaryArray = db.export();
+      if (window.electronAPI) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) throw new Error('Failed to save DB for store editor.');
+      } else {
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray)),
+        );
+      }
+    };
+
+    if (hasPersistedStore) {
+      try {
+        const db = await openStoreEditorDb();
+        const sr = db.exec(
+          'SELECT chain_name, location_name FROM stores WHERE ID = ?;',
+          [storeId],
+        );
+        if (sr.length && sr[0].values.length) {
+          const row = sr[0].values[0];
+          if (row[0] != null) chain = String(row[0]);
+          if (row[1] != null) locationName = String(row[1]);
+        }
+        const ar = db.exec(
+          'SELECT ID, name FROM store_locations WHERE store_id = ? ORDER BY COALESCE(sort_order, 999999), ID;',
+          [storeId],
+        );
+        if (ar.length && ar[0].values.length) {
+          aisleRows = ar[0].values.map(([id, name]) => ({
+            id: Number(id),
+            name: String(name || ''),
+          }));
+        }
+        aisleRows.forEach((r) => aisleItemsByAisle.set(r.id, []));
+        if (aisleRows.length) {
+          const ids = aisleRows.map((r) => r.id);
+          const ph = ids.map(() => '?').join(',');
+          const stmt = db.prepare(`
+            SELECT isl.store_location_id, i.name
+            FROM ingredient_store_location isl
+            JOIN ingredients i ON i.ID = isl.ingredient_id
+            WHERE isl.store_location_id IN (${ph})
+              AND COALESCE(i.is_deprecated, 0) = 0
+              AND COALESCE(i.hide_from_shopping_list, 0) = 0
+            ORDER BY isl.ID ASC
+          `);
+          stmt.bind(ids);
+          while (stmt.step()) {
+            const row = stmt.get();
+            const aid = Number(row[0]);
+            const name = String(row[1] || '');
+            const list = aisleItemsByAisle.get(aid);
+            if (!list) continue;
+            const k = normItemKey(name);
+            if (list.some((n) => normItemKey(n) === k)) continue;
+            list.push(name);
+          }
+          stmt.free();
+        }
+      } catch (err) {
+        console.warn('Store editor: failed to load store/aisles', err);
+      }
+    }
+
+    const titleText = chain ? chain : isNew ? 'New store' : 'Store';
+    const locTrim = (locationName || '').trim();
+    const storeLocationBlock = locTrim
+      ? `<div id="storeLocationSubtitle" class="unit-abbreviation-line"></div>`
+      : `<button type="button" id="storeLocationReveal" class="store-add-location-cta">Add location</button><div id="storeLocationSubtitle" class="unit-abbreviation-line" style="display:none" aria-hidden="true"></div>`;
+
+    initAppBar({ mode: 'editor', titleText });
+
+    const aislesBlock = hasPersistedStore
+      ? `
+    <div
+      id="storeAislesSectionLabel"
+      class="shopping-item-label store-aisles-section-label"
+    >
+      Aisles
+    </div>
+    <div id="storeAislesList" class="store-aisles-list" aria-label="Store aisles"></div>
+    <div id="storeAddAisleCta" class="store-add-aisle-cta" role="button" tabindex="0">
+      <span class="placeholder-prompt">Add an aisle</span>
+    </div>`
+      : '';
+
+    view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
+    ${storeLocationBlock}
+    ${aislesBlock}
   `;
 
-  if (typeof waitForAppBarReady === 'function') {
+    const commitAisleItemEdit = async (aisleId, rawText) => {
+      let lines = parseUniqueItemLines(rawText);
+      const db = await openStoreEditorDb();
+
+      const getVisibleCanonicalId = (name) => {
+        const stmt = db.prepare(`
+          SELECT ID FROM ingredients
+          WHERE lower(trim(name)) = lower(trim(?))
+            AND COALESCE(is_deprecated, 0) = 0
+            AND COALESCE(hide_from_shopping_list, 0) = 0
+          ORDER BY
+            CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
+            CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
+            ID ASC
+          LIMIT 1
+        `);
+        stmt.bind([name]);
+        let id = null;
+        if (stmt.step()) id = Number(stmt.get()[0]);
+        stmt.free();
+        return Number.isFinite(id) ? id : null;
+      };
+
+      const anyIngredientNamed = (name) => {
+        const stmt = db.prepare(
+          `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1`,
+        );
+        stmt.bind([name]);
+        const ok = stmt.step();
+        stmt.free();
+        return ok;
+      };
+
+      const blocked = new Set();
+      const unknown = [];
+      for (const name of lines) {
+        const id = getVisibleCanonicalId(name);
+        if (id) continue;
+        if (anyIngredientNamed(name)) blocked.add(normItemKey(name));
+        else unknown.push(name);
+      }
+
+      const unknownUnique = [];
+      const uk = new Set();
+      for (const n of unknown) {
+        const k = normItemKey(n);
+        if (uk.has(k)) continue;
+        uk.add(k);
+        unknownUnique.push(n);
+      }
+
+      if (blocked.size) {
+        const sample = lines.filter((l) => blocked.has(normItemKey(l)));
+        uiToast(
+          `Skipped (hidden or deprecated): ${sample.slice(0, 5).join(', ')}${sample.length > 5 ? '…' : ''}`,
+        );
+      }
+
+      const linesToWrite = lines.filter((l) => !blocked.has(normItemKey(l)));
+
+      if (unknownUnique.length) {
+        if (!window.ui?.dialogThreeChoice) {
+          uiToast('UI not ready.');
+          return 'discard';
+        }
+        const bullets = unknownUnique.map((n) => `• ${n}`).join('\n');
+        const choice = await window.ui.dialogThreeChoice({
+          title: 'Unknown items',
+          message: `These names are not in your ingredient list:\n\n${bullets}\n\nCreate new ingredients, fix typos, or discard this update.`,
+          discardText: 'Discard',
+          fixText: 'Fix input',
+          createText: 'Create',
+        });
+        if (choice === 'discard') return 'discard';
+        if (choice === 'fix') return 'fix';
+        for (const n of unknownUnique) {
+          try {
+            db.run('INSERT INTO ingredients (name) VALUES (?);', [n]);
+          } catch (e) {
+            console.warn('Store editor: insert ingredient', e);
+          }
+        }
+      }
+
+      const resolvedIds = [];
+      const seenId = new Set();
+      for (const name of linesToWrite) {
+        const id = getVisibleCanonicalId(name);
+        if (!id) {
+          uiToast(`Could not resolve “${name}”.`);
+          return 'discard';
+        }
+        if (seenId.has(id)) continue;
+        seenId.add(id);
+        resolvedIds.push(id);
+      }
+
+      db.run('DELETE FROM ingredient_store_location WHERE store_location_id = ?;', [
+        aisleId,
+      ]);
+      for (const iid of resolvedIds) {
+        db.run(
+          'INSERT INTO ingredient_store_location (ingredient_id, store_location_id) VALUES (?, ?);',
+          [iid, aisleId],
+        );
+      }
+      await persistStoreEditorDb(db);
+
+      const displayOrder = [];
+      const sk = new Set();
+      for (const name of linesToWrite) {
+        const k = normItemKey(name);
+        if (sk.has(k)) continue;
+        sk.add(k);
+        displayOrder.push(name);
+      }
+      aisleItemsByAisle.set(aisleId, displayOrder);
+      uiToast('Items saved.');
+      return 'ok';
+    };
+
+    const startEditAisleItems = (aisleId) => {
+      if (editingAisleId != null && editingAisleId !== aisleId) {
+        uiToast('Finish editing the other aisle first.');
+        return;
+      }
+      editingAisleId = aisleId;
+      renderAisleCards();
+    };
+
+    const renderAisleCards = () => {
+      const list = document.getElementById('storeAislesList');
+      if (!list) return;
+
+      list.innerHTML = '';
+      aisleRows.forEach((a) => {
+        const card = document.createElement('div');
+        card.className = 'shopping-item-editor-card store-aisle-card';
+        card.dataset.aisleId = String(a.id);
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'shopping-item-label store-aisle-name';
+        nameEl.textContent = a.name || 'Aisle';
+
+        nameEl.addEventListener('click', () => {
+          if (nameEl.isContentEditable) return;
+          if (editingAisleId === a.id) return;
+          const starting = (nameEl.textContent || '').trim() || a.name;
+
+          nameEl.contentEditable = 'true';
+          nameEl.classList.add('editing-title');
+          nameEl.focus();
+
+          const cleanup = () => {
+            nameEl.contentEditable = 'false';
+            nameEl.classList.remove('editing-title');
+            nameEl.removeEventListener('blur', onBlur);
+            nameEl.removeEventListener('keydown', onKeyDown);
+          };
+
+          const commit = async () => {
+            const next = (nameEl.textContent || '').trim();
+            if (!next) {
+              nameEl.textContent = starting || 'Aisle';
+              cleanup();
+              return;
+            }
+            if (next === starting) {
+              nameEl.textContent = next;
+              cleanup();
+              return;
+            }
+            try {
+              const db = await openStoreEditorDb();
+              db.run(
+                'UPDATE store_locations SET name = ? WHERE ID = ? AND store_id = ?;',
+                [next, a.id, storeId],
+              );
+              await persistStoreEditorDb(db);
+              a.name = next;
+              nameEl.textContent = next;
+            } catch (err) {
+              console.error('Failed to rename aisle', err);
+              uiToast('Could not save aisle name.');
+              nameEl.textContent = starting;
+            }
+            cleanup();
+          };
+
+          const onBlur = () => {
+            void commit();
+          };
+
+          const onKeyDown = (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              nameEl.removeEventListener('blur', onBlur);
+              void commit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              nameEl.textContent = starting;
+              cleanup();
+            }
+          };
+
+          nameEl.addEventListener('blur', onBlur);
+          nameEl.addEventListener('keydown', onKeyDown);
+        });
+
+        card.appendChild(nameEl);
+
+        const items = aisleItemsByAisle.get(a.id) || [];
+        const itemsField = document.createElement('div');
+        itemsField.className = 'store-aisle-items-field';
+
+        const shell = document.createElement('div');
+        shell.className = 'store-aisle-items-list-shell';
+
+        if (editingAisleId === a.id) {
+          const wrap = document.createElement('div');
+          wrap.className = 'store-aisle-items-editor';
+          const ta = document.createElement('textarea');
+          ta.className = 'store-aisle-items-textarea';
+          ta.rows = Math.min(14, Math.max(4, items.length + 3));
+          ta.value = items.join('\n');
+          ta.setAttribute('aria-label', 'Items in this aisle');
+
+          const actions = document.createElement('div');
+          actions.className = 'store-aisle-items-actions';
+          const cancelItemsBtn = document.createElement('button');
+          cancelItemsBtn.type = 'button';
+          cancelItemsBtn.className = 'button button--secondary';
+          cancelItemsBtn.textContent = 'Cancel';
+          const commitItemsBtn = document.createElement('button');
+          commitItemsBtn.type = 'button';
+          commitItemsBtn.className = 'button';
+          commitItemsBtn.textContent = 'Commit';
+
+          cancelItemsBtn.addEventListener('click', () => {
+            editingAisleId = null;
+            renderAisleCards();
+          });
+          commitItemsBtn.addEventListener('click', () => {
+            void (async () => {
+              const res = await commitAisleItemEdit(a.id, ta.value);
+              if (res === 'ok') {
+                editingAisleId = null;
+                renderAisleCards();
+              }
+            })();
+          });
+          ta.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              editingAisleId = null;
+              renderAisleCards();
+            }
+          });
+
+          actions.appendChild(cancelItemsBtn);
+          actions.appendChild(commitItemsBtn);
+          wrap.appendChild(ta);
+          wrap.appendChild(actions);
+          shell.appendChild(wrap);
+          itemsField.appendChild(shell);
+
+          window.setTimeout(() => {
+            try {
+              ta.focus();
+              ta.setSelectionRange(ta.value.length, ta.value.length);
+            } catch (_) {}
+          }, 0);
+        } else {
+          if (items.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'store-aisle-items-empty placeholder-prompt';
+            empty.textContent = 'Add an item.';
+            empty.tabIndex = 0;
+            empty.setAttribute('role', 'button');
+            empty.addEventListener('click', () => startEditAisleItems(a.id));
+            empty.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEditAisleItems(a.id);
+              }
+            });
+            shell.appendChild(empty);
+          } else {
+            items.forEach((name) => {
+              const row = document.createElement('div');
+              row.className = 'store-aisle-item-row';
+              row.textContent = name;
+              shell.appendChild(row);
+            });
+            shell.classList.add('store-aisle-items-list-shell--interactive');
+            shell.tabIndex = 0;
+            shell.setAttribute('role', 'button');
+            shell.setAttribute(
+              'aria-label',
+              'Edit items in this aisle',
+            );
+            const openItemsEditor = () => startEditAisleItems(a.id);
+            shell.addEventListener('click', openItemsEditor);
+            shell.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openItemsEditor();
+              }
+            });
+          }
+          itemsField.appendChild(shell);
+        }
+
+        card.appendChild(itemsField);
+
+        list.appendChild(card);
+      });
+    };
+
+    const wireAddAisle = () => {
+      const cta = document.getElementById('storeAddAisleCta');
+      if (!cta || !hasPersistedStore) return;
+
+      const run = async () => {
+        if (!window.ui) {
+          uiToast('UI not ready yet.');
+          return;
+        }
+        const name = await window.ui.prompt({
+          title: 'New Aisle',
+          label: 'Name',
+          value: '',
+          confirmText: 'Create',
+          cancelText: 'Cancel',
+          required: true,
+          normalize: (v) => (v || '').trim(),
+        });
+        if (!name) return;
+
+        try {
+          const db = await openStoreEditorDb();
+          const maxQ = db.exec(
+            'SELECT COALESCE(MAX(sort_order), 0) FROM store_locations WHERE store_id = ?;',
+            [storeId],
+          );
+          let nextSort = 1;
+          if (maxQ.length && maxQ[0].values.length) {
+            nextSort = Number(maxQ[0].values[0][0]) + 1;
+          }
+          db.run(
+            'INSERT INTO store_locations (store_id, name, sort_order) VALUES (?, ?, ?);',
+            [storeId, name, nextSort],
+          );
+          const idQ = db.exec('SELECT last_insert_rowid();');
+          const newId =
+            idQ.length && idQ[0].values.length
+              ? Number(idQ[0].values[0][0])
+              : null;
+          if (!Number.isFinite(newId)) {
+            uiToast('Failed to create aisle.');
+            return;
+          }
+          await persistStoreEditorDb(db);
+          aisleRows.push({ id: newId, name });
+          aisleItemsByAisle.set(newId, []);
+          renderAisleCards();
+        } catch (err) {
+          console.error('Failed to create aisle', err);
+          uiToast('Failed to create aisle. See console for details.');
+        }
+      };
+
+      cta.addEventListener('click', () => void run());
+      cta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void run();
+        }
+      });
+    };
+
+    renderAisleCards();
+    wireAddAisle();
+
+    if (typeof waitForAppBarReady !== 'function') return;
+
     waitForAppBarReady().then(() => {
       wireChildEditorPage({
         backBtn: document.getElementById('appBarBackBtn'),
@@ -3559,72 +4100,53 @@ function loadStoreEditorPage() {
         bodyTitleEl: document.getElementById('childEditorTitle'),
         initialTitle: titleText,
         backHref: 'stores.html',
-        onSave: async ({ title: next }) => {
-          const idStr = sessionStorage.getItem('selectedStoreId');
+        subtitleEl: document.getElementById('storeLocationSubtitle'),
+        initialSubtitle: locTrim,
+        normalizeSubtitle: (s) => (s || '').trim(),
+        subtitlePlaceholder: 'Location',
+        subtitleEmptyMeansHidden: true,
+        subtitleRevealBtn: document.getElementById('storeLocationReveal'),
+        onSave: async ({ title: next, subtitle: nextLoc }) => {
+          const sid = sessionStorage.getItem('selectedStoreId');
           const isNewStore =
             sessionStorage.getItem('selectedStoreIsNew') === '1';
 
-          const isElectron = !!window.electronAPI;
-          let db;
+          const db = await openStoreEditorDb();
+          const id = Number(sid);
+          const loc = (nextLoc ?? '').trim();
+          let insertedNewStore = false;
 
-          if (isElectron) {
-            const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
-            const bytes = await window.electronAPI.loadDB(pathHint);
-            const Uints = new Uint8Array(bytes);
-            db = new SQL.Database(Uints);
-          } else {
-            const stored = localStorage.getItem('favoriteEatsDb');
-            if (!stored)
-              throw new Error('No DB in localStorage for store editor.');
-            const Uints = new Uint8Array(JSON.parse(stored));
-            db = new SQL.Database(Uints);
-          }
-
-          window.dbInstance = db;
-
-          const id = Number(idStr);
-
-          // If the row already exists (created from the list-page Create flow),
-          // always UPDATE, even if it is flagged as "new".
           if (Number.isFinite(id)) {
-            db.run('UPDATE stores SET chain_name = ? WHERE ID = ?;', [
-              next || '',
-              id,
-            ]);
-          } else if (isNewStore || !idStr) {
-            // Stores schema requires both chain_name and location_name.
+            db.run(
+              'UPDATE stores SET chain_name = ?, location_name = ? WHERE ID = ?;',
+              [next || '', loc, id],
+            );
+          } else if (isNewStore || !sid) {
             db.run(
               'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
-              [next || '', ''],
+              [next || '', loc],
             );
-
             const idQ = db.exec('SELECT last_insert_rowid();');
             if (idQ.length && idQ[0].values.length) {
-              const newId = idQ[0].values[0][0];
-              sessionStorage.setItem('selectedStoreId', String(newId));
+              sessionStorage.setItem(
+                'selectedStoreId',
+                String(idQ[0].values[0][0]),
+              );
             }
+            insertedNewStore = true;
           }
 
-          // Persist DB to disk/localStorage.
-          const binaryArray = db.export();
-          if (isElectron) {
-            const ok = await window.electronAPI.saveDB(binaryArray);
-            if (ok === false)
-              throw new Error('Failed to save DB for store editor.');
-          } else {
-            localStorage.setItem(
-              'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray)),
-            );
-          }
-
-          // Update session so reload reflects the new title immediately.
+          await persistStoreEditorDb(db);
           sessionStorage.setItem('selectedStoreChain', next || '');
+          sessionStorage.setItem('selectedStoreLocation', loc);
           sessionStorage.removeItem('selectedStoreIsNew');
+          if (insertedNewStore) {
+            window.location.reload();
+          }
         },
       });
     });
-  }
+  })();
 }
 
 // Shared helper for *all* editor pages (shopping, units, stores, future)

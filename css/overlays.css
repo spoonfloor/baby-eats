@@ -187,6 +187,25 @@
   gap: 10px;
 }
 
+.ui-dialog-panel--three-choice {
+  width: min(560px, calc(100vw - 36px));
+}
+
+.ui-dialog-actions--three {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.button.button--danger-outline {
+  background: transparent;
+  color: #b00020;
+  border: 1px solid rgba(176, 0, 32, 0.45);
+}
+
+.button.button--danger-outline:hover {
+  background: rgba(176, 0, 32, 0.08);
+}
+
 /* Button variants (used by dialogs; safe for existing .button usage too) */
 .button.button--secondary {
   background: rgba(0, 0, 0, 0.08);

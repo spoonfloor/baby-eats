@@ -1,9 +1,11 @@
 - units editor
 - stores editor
-  - [ ] editable name
-  - [ ] editable subtitle
-  - [ ] 'aisles' section header
-  - [ ] 'Add an aisle' hint text
+  - [x] editable name
+  - [x] editable subtitle
+  - [ ] if no subtitle, don't display
+  - [x] 'aisles' section header
+  - [x] 'Add an aisle' hint text
+  - [ ] Once there are 1+ cards, 'Add an aisle' hint text hides on blur, reappears below active card of focus
   - [ ] aisle card UI
   - [ ] editable aisle name
   - [ ] 'Add an item' hint text

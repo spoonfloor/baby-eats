@@ -654,6 +654,121 @@ if (typeof window !== 'undefined') {
     });
   };
 
+  /**
+   * Three-outcome dialog (store editor unknown ingredients).
+   * Backdrop click and Escape resolve to "discard" (same as Discard).
+   */
+  const dialogThreeChoice = ({
+    title = '',
+    message = '',
+    discardText = 'Discard',
+    fixText = 'Fix input',
+    createText = 'Create',
+  } = {}) =>
+    new Promise((resolve) => {
+      const host = ensureDialogHost();
+      const prevFocus =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      const backdrop = document.createElement('div');
+      backdrop.className = 'ui-dialog-backdrop';
+
+      const panel = document.createElement('div');
+      panel.className = 'ui-dialog-panel ui-dialog-panel--three-choice';
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      panel.setAttribute('aria-label', (title || '').trim() || 'Confirm');
+
+      if (title) {
+        const titleEl = document.createElement('h2');
+        titleEl.className = 'ui-dialog-title';
+        titleEl.textContent = String(title);
+        panel.appendChild(titleEl);
+      }
+
+      if (message) {
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'ui-dialog-body';
+        bodyEl.textContent = String(message)
+          .replace(/\r\n/g, '\n')
+          .replace(/\n[ \t]+/g, '\n')
+          .trim();
+        panel.appendChild(bodyEl);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'ui-dialog-actions ui-dialog-actions--three';
+
+      const discardBtn = document.createElement('button');
+      discardBtn.type = 'button';
+      discardBtn.className = 'button button--secondary button--danger-outline';
+      discardBtn.textContent = discardText || 'Discard';
+
+      const fixBtn = document.createElement('button');
+      fixBtn.type = 'button';
+      fixBtn.className = 'button button--secondary';
+      fixBtn.textContent = fixText || 'Fix input';
+
+      const createBtn = document.createElement('button');
+      createBtn.type = 'button';
+      createBtn.className = 'button';
+      createBtn.textContent = createText || 'Create';
+
+      actions.appendChild(discardBtn);
+      actions.appendChild(fixBtn);
+      actions.appendChild(createBtn);
+      panel.appendChild(actions);
+
+      backdrop.appendChild(panel);
+      host.appendChild(backdrop);
+      host.dataset.open = '1';
+
+      const cleanup = () => {
+        try {
+          delete host.dataset.open;
+        } catch (_) {}
+        try {
+          if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        } catch (_) {}
+        try {
+          prevFocus?.focus?.();
+        } catch (_) {}
+      };
+
+      const finish = (choice) => {
+        cleanup();
+        resolve(choice);
+      };
+
+      discardBtn.addEventListener('click', () => finish('discard'));
+      fixBtn.addEventListener('click', () => finish('fix'));
+      createBtn.addEventListener('click', () => finish('create'));
+
+      backdrop.addEventListener('mousedown', (e) => {
+        if (e.target === backdrop) finish('discard');
+      });
+
+      panel.addEventListener(
+        'keydown',
+        (e) => {
+          if (!e) return;
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            finish('discard');
+            return;
+          }
+          trapTabKey(e, panel);
+        },
+        { capture: true }
+      );
+
+      window.setTimeout(() => {
+        try {
+          fixBtn.focus();
+        } catch (_) {}
+      }, 0);
+    });
+
   // Alert: default has *no title* (title "Alert" is redundant most of the time).
   const alertDialog = ({ title = '', message = '', okText = 'OK' } = {}) =>
     dialog({
@@ -846,6 +961,7 @@ if (typeof window !== 'undefined') {
 
   window.ui = Object.freeze({
     dialog,
+    dialogThreeChoice,
     alert: alertDialog,
     confirm: confirmDialog,
     prompt: promptDialog,
