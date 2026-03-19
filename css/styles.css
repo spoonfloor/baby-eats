@@ -394,7 +394,19 @@ body.store-editor-page .store-aisle-name {
   min-height: 1.25em;
 }
 
+/* Leave empty card width for Ctrl/⌘/right-click delete (match recipe row UX). */
+body.store-editor-page .store-aisle-name:not(.editing-title) {
+  max-width: 65%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.store-editor-page .store-aisle-name.editing-title {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
   color: var(--edit-mode-color);
   outline: none;
 }

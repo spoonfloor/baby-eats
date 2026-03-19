@@ -51,7 +51,7 @@ There is **no** `store_aisles` table. `docs/store-db-info.md` describes a differ
 
 **Delete aisle**
 
-- **Ctrl+click** on **blank / non-interactive** card surface only → confirm → remove from **draft**; **Save** applies permanent delete in DB.
+- **Ctrl/⌘+click** or **right-click** on **blank / non-interactive** card surface only (same as Stores list) → confirm → remove from **draft**; **Save** applies permanent delete in DB.
 
 **Later (not this pass)**
 
@@ -90,6 +90,6 @@ There is **no** `store_aisles` table. `docs/store-db-info.md` describes a differ
 - **Cards:** One card per aisle; purple in-card **name**; **click to edit**, **Enter** / blur update **draft**; **Esc** cancels name edit; **app-bar Save** persists names.
 - **First save without row ID:** After `INSERT stores`, page **reloads** so **Aisles** appears once `selectedStoreId` exists.
 - **Aisle item lists:** Newline textarea (**“Add an item.”**); **input** updates draft; **Esc** reverts to value at focus; **Save** resolves ingredients, **one batched** unknown-items dialog (Create / Fix / cancel save), dedupe, then rewrites **`ingredient_store_location`** per aisle. Deprecated/hidden ingredients skipped with toast.
-- **Delete aisle:** **Ctrl+click** on blank card surface (not name, not textarea) → confirm → removed from **draft**; DB delete on **Save**.
+- **Delete aisle:** **Ctrl/⌘+click** or **right-click** on blank card surface (not name, not textarea), same as Stores → confirm → removed from **draft**; **Undo** toast (~8s, same slot as recipe ingredient remove); DB delete on **Save**. Aisle title shows **ellipsis** when not editing so more card area is “empty” for delete.
 - **CSS parity:** `.shopping-item-field` / `.shopping-item-textarea` on aisle lists match shopping-item editor.
 - **Hint text size (store editor):** **“Add an aisle”** (`.store-add-aisle-cta .placeholder-prompt`) and aisle list placeholder **“Add an item.”** (`body.store-editor-page .shopping-item-textarea::placeholder`) use the same font size and family as typed list text (`var(--ingredient-editor-control-font-size)` / `var(--main-font)` in `css/styles.css`).

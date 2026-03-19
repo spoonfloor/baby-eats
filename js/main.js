@@ -3910,26 +3910,78 @@ function loadStoreEditorPage() {
         card.className = 'shopping-item-editor-card store-aisle-card';
         card.dataset.aisleId = String(a.id);
 
-        card.addEventListener('click', (e) => {
-          if (!e.ctrlKey || e.metaKey) return;
-          if (e.target.closest('.store-aisle-name') || e.target.closest('textarea'))
-            return;
-          e.preventDefault();
-          void (async () => {
-            const ok = await uiConfirm({
-              title: 'Delete aisle?',
-              message: `Permanently delete “${(a.name || 'Aisle').replace(/"/g, '')}” and its item list?`,
-              confirmText: 'Delete',
-              cancelText: 'Cancel',
-              danger: true,
-            });
-            if (!ok) return;
-            if (a.id > 0) deletedAisleIds.add(a.id);
-            aisleRows = aisleRows.filter((r) => r.id !== a.id);
-            aisleItemsByAisle.delete(a.id);
+        const aisleTargetIsNameOrList = (target) =>
+          target.closest('.store-aisle-name') || target.closest('textarea');
+
+        const attemptDeleteAisle = async () => {
+          const ok = await uiConfirm({
+            title: 'Delete aisle?',
+            message: `Permanently delete “${(a.name || 'Aisle').replace(/"/g, '')}” and its item list?`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            danger: true,
+          });
+          if (!ok) return;
+          const idx = aisleRows.findIndex((r) => r.id === a.id);
+          if (idx < 0) return;
+          const snapshot = { id: a.id, name: a.name };
+          const itemsSnap = [...(aisleItemsByAisle.get(a.id) || [])];
+          const wasPersisted = a.id > 0;
+
+          if (wasPersisted) deletedAisleIds.add(a.id);
+          aisleRows = aisleRows.filter((r) => r.id !== a.id);
+          aisleItemsByAisle.delete(a.id);
+          renderAisleCards();
+          refreshDirty();
+
+          const restore = () => {
+            try {
+              if (wasPersisted) deletedAisleIds.delete(snapshot.id);
+              const insertAt = Math.min(
+                Math.max(0, idx),
+                aisleRows.length,
+              );
+              aisleRows.splice(insertAt, 0, {
+                id: snapshot.id,
+                name: snapshot.name,
+              });
+              aisleItemsByAisle.set(snapshot.id, [...itemsSnap]);
+            } catch (_) {}
             renderAisleCards();
             refreshDirty();
-          })();
+          };
+
+          try {
+            const um = window.undoManager;
+            if (um && typeof um.push === 'function') {
+              um.push({
+                message: 'Aisle removed',
+                undo: restore,
+                timeoutMs: 8000,
+              });
+            } else if (typeof window.showUndoToast === 'function') {
+              window.showUndoToast({
+                message: 'Aisle removed',
+                onUndo: restore,
+              });
+            }
+          } catch (_) {}
+        };
+
+        card.addEventListener('click', (e) => {
+          const wantsDelete = e.ctrlKey || e.metaKey;
+          if (!wantsDelete) return;
+          if (aisleTargetIsNameOrList(e.target)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          void attemptDeleteAisle();
+        });
+
+        card.addEventListener('contextmenu', (e) => {
+          if (aisleTargetIsNameOrList(e.target)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          void attemptDeleteAisle();
         });
 
         const nameEl = document.createElement('div');
