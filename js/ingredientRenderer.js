@@ -578,9 +578,8 @@ function renderIngredient(line) {
     handleMaybeDelete(e);
   });
   div.addEventListener('contextmenu', (e) => {
-    // Treat right-click and ctrl/⌘-click equivalently for delete.
-    if (e) e.preventDefault();
-    handleMaybeDelete(e);
+    // Only suppress native menu when we actually consume delete.
+    if (handleMaybeDelete(e) && e) e.preventDefault();
   });
 
   div.addEventListener('click', (e) => {
@@ -589,6 +588,7 @@ function renderIngredient(line) {
 
     // Ctrl/⌘-click deletes the row (recipe-local).
     if (handleMaybeDelete(e)) return;
+    if (e && (e.ctrlKey || e.metaKey)) return;
 
     const parent = div.parentNode;
     if (!parent) return;
@@ -612,6 +612,83 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   const row = document.createElement('div');
   row.className = 'ingredient-edit-row editing';
   row.dataset.isEditing = 'true';
+
+  // Edit-mode delete gesture: ctrl/⌘-click or right-click on blank tray surface.
+  // Guard interactive controls so edit interactions stay safe and predictable.
+  const editTargetIsInteractive = (target) => {
+    if (!target || !target.closest) return false;
+    return !!target.closest(
+      'a, input, textarea, button, select, label, .field-pill, .ingredient-edit-cell'
+    );
+  };
+
+  const attemptDeleteFromEditRow = async () => {
+    if (mode === 'insert') return false;
+    try {
+      if (typeof commit === 'function') await commit();
+    } catch (_) {}
+
+    // After commit, the original edit row may have been replaced; resolve model row fresh.
+    try {
+      const model = window.recipeData;
+      const secs = Array.isArray(model?.sections) ? model.sections : [];
+      let targetSection = null;
+      let targetRow = null;
+
+      const rid = seedLine && seedLine.rimId != null ? String(seedLine.rimId) : '';
+      const cid = seedLine && seedLine.clientId ? String(seedLine.clientId) : '';
+
+      for (const sec of secs) {
+        const arr = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+        const hit = arr.find((ing) => {
+          if (!ing || ing.rowType === 'heading') return false;
+          if (rid && ing.rimId != null && String(ing.rimId) === rid) return true;
+          if (cid && ing.clientId && String(ing.clientId) === cid) return true;
+          return false;
+        });
+        if (hit) {
+          targetSection = sec;
+          targetRow = hit;
+          break;
+        }
+      }
+      if (!targetSection || !targetRow) return false;
+
+      if (typeof window.recipeEditorDeleteIngredientRow === 'function') {
+        return !!(await window.recipeEditorDeleteIngredientRow({
+          sectionRef: targetSection,
+          rowRef: targetRow,
+          focusId:
+            targetRow.rimId != null ? String(targetRow.rimId) : targetRow.clientId,
+          focusBy: targetRow.rimId != null ? 'rimId' : 'clientId',
+        }));
+      }
+    } catch (_) {}
+
+    return false;
+  };
+
+  const maybeDeleteFromEditRowEvent = (e) => {
+    if (!e) return false;
+    const wantsDelete = !!(e.ctrlKey || e.metaKey || e.type === 'contextmenu');
+    if (!wantsDelete) return false;
+    if (editTargetIsInteractive(e.target)) return false;
+
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+    } catch (_) {}
+
+    void attemptDeleteFromEditRow();
+    return true;
+  };
+
+  row.addEventListener('pointerdown', (e) => {
+    maybeDeleteFromEditRowEvent(e);
+  });
+  row.addEventListener('contextmenu', (e) => {
+    maybeDeleteFromEditRowEvent(e);
+  });
 
   // Read-mode-only affordances: mark that an ingredient row is being edited.
   try {

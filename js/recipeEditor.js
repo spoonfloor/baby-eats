@@ -786,36 +786,33 @@ window.recipeEditorDeleteIngredientRow = async ({
   // Capture a deep-ish snapshot for undo.
   const snapshot = JSON.parse(JSON.stringify(rowRef));
 
+  const labelParts = [];
+  if (snapshot.quantity != null && String(snapshot.quantity).trim()) {
+    labelParts.push(String(snapshot.quantity).trim());
+  }
+  if (snapshot.unit != null && String(snapshot.unit).trim()) {
+    labelParts.push(String(snapshot.unit).trim());
+  }
+  const nameBits = [];
+  if (snapshot.variant) nameBits.push(String(snapshot.variant).trim());
+  if (snapshot.name) nameBits.push(String(snapshot.name).trim());
+  if (snapshot.size) nameBits.push(String(snapshot.size).trim());
+  const nameStr = nameBits.filter(Boolean).join(' ');
+  if (nameStr) labelParts.push(nameStr);
+  const display = labelParts.filter(Boolean).join(' ').trim() || 'this ingredient';
+
   // Confirm before deleting (consistent with parent pages).
   try {
-    const labelParts = [];
-    if (snapshot.quantity != null && String(snapshot.quantity).trim()) {
-      labelParts.push(String(snapshot.quantity).trim());
-    }
-    if (snapshot.unit != null && String(snapshot.unit).trim()) {
-      labelParts.push(String(snapshot.unit).trim());
-    }
-    const nameBits = [];
-    if (snapshot.variant) nameBits.push(String(snapshot.variant).trim());
-    if (snapshot.name) nameBits.push(String(snapshot.name).trim());
-    if (snapshot.size) nameBits.push(String(snapshot.size).trim());
-    const nameStr = nameBits.filter(Boolean).join(' ');
-    if (nameStr) labelParts.push(nameStr);
-
-    const display =
-      labelParts.filter(Boolean).join(' ').trim() || 'this ingredient';
     const ok =
       window.ui && typeof window.ui.confirm === 'function'
         ? await window.ui.confirm({
-            title: 'Remove Ingredient',
-            message: `Remove "${display}" from this recipe?\n\nThis won’t delete it from your shopping items.`,
+            title: 'Remove this ingredient?',
+            message: `"${display}" will be removed from this recipe only.`,
             confirmText: 'Remove',
             cancelText: 'Cancel',
             danger: true,
           })
-        : window.confirm(
-            `Remove "${display}" from this recipe?\n\nThis won’t delete it from your shopping items.`
-          );
+        : window.confirm(`"${display}" will be removed from this recipe only.`);
     if (!ok) return false;
   } catch (_) {
     // If confirm fails for some reason, proceed (fail-open).
@@ -871,13 +868,13 @@ window.recipeEditorDeleteIngredientRow = async ({
     const um = window.undoManager;
     if (um && typeof um.push === 'function') {
       um.push({
-        message: 'Ingredient removed from recipe',
+        message: `Removed "${display}"`,
         undo: restore,
         timeoutMs: 8000,
       });
     } else if (typeof window.showUndoToast === 'function') {
       window.showUndoToast({
-        message: 'Ingredient removed from recipe',
+        message: `Removed "${display}"`,
         onUndo: restore,
       });
     }
