@@ -14,11 +14,11 @@
   - [x] responsive height/scrollable list capped at xx items in viewport
   - [x] Clicking item list enters edit mode (no need for edit button)
   - [x] paste box
-  - [ ] ability to reorder aisles
+  - [x] ability to reorder aisles
   - [x] aisle is deletable (ctrl click)
   - [x] freeform text editing
   - [x] suggested completion
-  - [ ] clicking below aisle shows add aisle hint text?
+  - [x] aisle hint text roll-over
 
 - recipe editor
   - paste box for ingredients

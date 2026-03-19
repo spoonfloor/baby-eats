@@ -3896,23 +3896,71 @@ function loadStoreEditorPage() {
     ${aislesBlock}
   `;
 
+    let hoveredAisleCard = null;
+    let hoverLeaveTid = null;
+    let pointerOverAddAisleCta = false;
+    const desktopHoverEnabled = (() => {
+      try {
+        return Boolean(
+          window.matchMedia &&
+            window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+        );
+      } catch (_) {
+        return false;
+      }
+    })();
+
     const parkAddAisleCta = () => {
       const list = document.getElementById('storeAislesList');
       const cta = document.getElementById('storeAddAisleCta');
       if (list && cta && list.contains(cta)) list.after(cta);
     };
 
-    const syncAddAisleCtaAfterRender = () => {
+    const getFocusedAisleCard = () =>
+      document.activeElement?.closest?.('.store-aisle-card') || null;
+
+    const syncAddAisleCtaByInteraction = () => {
       const list = document.getElementById('storeAislesList');
       const cta = document.getElementById('storeAddAisleCta');
       if (!list || !cta) return;
       if (aisleRows.length === 0) {
+        hoveredAisleCard = null;
         list.after(cta);
+        cta.hidden = false;
+        return;
+      }
+      if (hoveredAisleCard && !hoveredAisleCard.isConnected) {
+        hoveredAisleCard = null;
+      }
+      const focusCard = getFocusedAisleCard();
+      const targetCard =
+        desktopHoverEnabled && hoveredAisleCard ? hoveredAisleCard : focusCard;
+      if (targetCard) {
+        targetCard.after(cta);
         cta.hidden = false;
         return;
       }
       list.after(cta);
       cta.hidden = true;
+    };
+
+    const syncAddAisleCtaAfterRender = () => {
+      syncAddAisleCtaByInteraction();
+    };
+
+    const wireAddAisleCtaHover = () => {
+      if (!desktopHoverEnabled) return;
+      const cta = document.getElementById('storeAddAisleCta');
+      if (!cta) return;
+      cta.addEventListener('mouseenter', () => {
+        pointerOverAddAisleCta = true;
+        window.clearTimeout(hoverLeaveTid);
+      });
+      cta.addEventListener('mouseleave', () => {
+        pointerOverAddAisleCta = false;
+        if (hoveredAisleCard) hoveredAisleCard = null;
+        syncAddAisleCtaByInteraction();
+      });
     };
 
     const showAddAisleCtaBelowCard = (card) => {
@@ -3934,6 +3982,23 @@ function loadStoreEditorPage() {
         card.className = 'shopping-item-editor-card store-aisle-card';
         card.dataset.aisleId = String(a.id);
         card.tabIndex = 0;
+        if (desktopHoverEnabled) {
+          card.addEventListener('mouseenter', () => {
+            window.clearTimeout(hoverLeaveTid);
+            hoveredAisleCard = card;
+            syncAddAisleCtaByInteraction();
+          });
+          card.addEventListener('mouseleave', (e) => {
+            const cta = document.getElementById('storeAddAisleCta');
+            if (cta && cta.contains(e.relatedTarget)) return;
+            window.clearTimeout(hoverLeaveTid);
+            hoverLeaveTid = window.setTimeout(() => {
+              if (pointerOverAddAisleCta) return;
+              if (hoveredAisleCard === card) hoveredAisleCard = null;
+              syncAddAisleCtaByInteraction();
+            }, 120);
+          });
+        }
 
         const aisleTargetIsNameOrList = (target) =>
           target.closest('.store-aisle-name') ||
@@ -4231,14 +4296,7 @@ function loadStoreEditorPage() {
         window.clearTimeout(tid);
         tid = window.setTimeout(() => {
           tid = null;
-          const ae = document.activeElement;
-          const cta = document.getElementById('storeAddAisleCta');
-          const list = document.getElementById('storeAislesList');
-          if (!cta || !list) return;
-          if (ae && (cta.contains(ae) || ae.closest?.('.store-aisle-card')))
-            return;
-          cta.hidden = true;
-          list.after(cta);
+          syncAddAisleCtaByInteraction();
         }, 0);
       };
       view.addEventListener('focusin', (e) => {
@@ -4463,6 +4521,7 @@ function loadStoreEditorPage() {
     if (typeof waitForAppBarReady !== 'function') {
       renderAisleCards();
       wireAddAisleCtaFocus();
+      wireAddAisleCtaHover();
       wireAddAisle();
       return;
     }
@@ -4558,6 +4617,7 @@ function loadStoreEditorPage() {
       });
     renderAisleCards();
     wireAddAisleCtaFocus();
+    wireAddAisleCtaHover();
     wireAddAisle();
   })();
 }
