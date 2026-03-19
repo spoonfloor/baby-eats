@@ -304,6 +304,11 @@
         inp._typeaheadForceEmptyQueryOnce = false;
         return '';
       }
+      if (this.config && typeof this.config.getQuery === 'function') {
+        try {
+          return norm(this.config.getQuery(inp));
+        } catch (_) {}
+      }
       return inp ? norm(inp.value) : '';
     }
 
@@ -319,6 +324,10 @@
       const el = this.ensureEl();
       const anchor = this.anchorInput;
       const query = this.getQuery();
+      if (this.config && this.config.closeOnEmptyQuery && !query) {
+        this.close();
+        return;
+      }
 
       const reqId = ++this._updateReqId;
       const pool = await this.getPool();
@@ -474,7 +483,17 @@
       const v = norm(value);
       if (!v) return;
       const inp = this.anchorInput;
-      inp.value = v;
+      let caretPos = null;
+      const hasCustomSetValue =
+        this.config && typeof this.config.setValue === 'function';
+      if (hasCustomSetValue) {
+        try {
+          const res = this.config.setValue(v, inp);
+          if (res && Number.isFinite(res.caretPos)) caretPos = res.caretPos;
+        } catch (_) {}
+      } else {
+        inp.value = v;
+      }
       try {
         inp.dispatchEvent(new Event('input', { bubbles: true }));
       } catch (_) {}
@@ -483,7 +502,11 @@
       try {
         inp.focus();
         if (typeof inp.setSelectionRange === 'function') {
-          inp.setSelectionRange(inp.value.length, inp.value.length);
+          // If custom setValue returned a caret position, respect it (e.g. textarea line replacement).
+          if (caretPos != null) inp.setSelectionRange(caretPos, caretPos);
+          // Default behavior: keep caret at the end for normal inputs.
+          else if (!hasCustomSetValue)
+            inp.setSelectionRange(inp.value.length, inp.value.length);
         }
       } catch (_) {}
 
@@ -833,9 +856,24 @@
     openOnFocus,
     maxVisible,
     getItems,
+    getQuery,
+    setValue,
+    closeOnEmptyQuery,
+    openOnlyWhenQueryNonEmpty,
+    ignoreInputTypes,
   }) {
     if (!inputEl) return;
-    const cfg = { getPool, onPick, maxVisible, getItems };
+    const cfg = {
+      getPool,
+      onPick,
+      maxVisible,
+      getItems,
+      getQuery,
+      setValue,
+      closeOnEmptyQuery,
+      openOnlyWhenQueryNonEmpty,
+      ignoreInputTypes,
+    };
 
     // If Escape is used to cancel the row, suppress blur-time normalization/toasts.
     inputEl._typeaheadSuppressNextNormalize = false;
@@ -868,7 +906,30 @@
       // Ignore programmatic/synthetic input events (prefill/autosize).
       if (e && e.isTrusted === false) return;
 
+      const inputType =
+        e && typeof e.inputType === 'string' ? e.inputType : '';
+      if (
+        cfg.ignoreInputTypes &&
+        Array.isArray(cfg.ignoreInputTypes) &&
+        inputType &&
+        cfg.ignoreInputTypes.includes(inputType)
+      ) {
+        // Avoid opening/refreshing suggestions during paste/drop actions.
+        dropdown.close();
+        return;
+      }
+
       if (!dropdown.isOpen || dropdown.anchorInput !== inputEl) {
+        if (cfg.openOnlyWhenQueryNonEmpty) {
+          let q = '';
+          try {
+            q =
+              typeof cfg.getQuery === 'function'
+                ? norm(cfg.getQuery(inputEl))
+                : norm(inputEl.value);
+          } catch (_) {}
+          if (!q) return;
+        }
         dropdown.open(inputEl, cfg);
         return;
       }
@@ -1086,5 +1147,6 @@
     close: () => dropdown.close(),
     invalidate: invalidatePools,
     attach: (args) => attachTypeaheadToInput(args || {}),
+    getNamePool: async () => await getNamePool(),
   };
 })();

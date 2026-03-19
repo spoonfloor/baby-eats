@@ -1376,6 +1376,13 @@ function wireChildEditorPage({
   bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
   appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
 
+  const setSubtitlePlaceholderClass = (showPlaceholder) => {
+    try {
+      if (showPlaceholder) subtitleEl.classList.add('placeholder-prompt');
+      else subtitleEl.classList.remove('placeholder-prompt');
+    } catch (_) {}
+  };
+
   const syncSubtitleDomFromBaseline = () => {
     if (!hasSubtitle) return;
     const subDisplay = (lastCommittedSubtitle || '').trim()
@@ -1384,6 +1391,7 @@ function wireChildEditorPage({
     if (!subtitleEmptyMeansHidden) {
       subtitleEl.style.display = '';
       subtitleEl.textContent = subDisplay;
+      setSubtitlePlaceholderClass(subDisplay === subtitlePlaceholder);
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
       try {
         subtitleEl.removeAttribute('aria-hidden');
@@ -1393,6 +1401,7 @@ function wireChildEditorPage({
     if (!emptySubtitleFlow()) {
       subtitleEl.style.display = '';
       subtitleEl.textContent = subDisplay;
+      setSubtitlePlaceholderClass(subDisplay === subtitlePlaceholder);
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
       try {
         subtitleEl.removeAttribute('aria-hidden');
@@ -1407,6 +1416,7 @@ function wireChildEditorPage({
       subtitlePointerKeepAlive;
     if (!showRow) {
       subtitleEl.textContent = '';
+      setSubtitlePlaceholderClass(false);
       subtitleEl.style.display = 'none';
       subtitleEl.setAttribute('aria-hidden', 'true');
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = '';
@@ -1416,9 +1426,11 @@ function wireChildEditorPage({
     subtitleEl.removeAttribute('aria-hidden');
     if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
     if (subtitleSessionActive) return;
-    subtitleEl.textContent = hasPending
-      ? lastCommittedSubtitle
-      : subtitlePlaceholder;
+    const showingPlaceholder = !hasPending;
+    subtitleEl.textContent = showingPlaceholder
+      ? subtitlePlaceholder
+      : lastCommittedSubtitle;
+    setSubtitlePlaceholderClass(showingPlaceholder);
   };
 
   if (hasSubtitle) syncSubtitleDomFromBaseline();
@@ -1428,6 +1440,7 @@ function wireChildEditorPage({
       subtitleRevealBtn.style.display = 'none';
       subtitleEl.style.display = '';
       subtitleEl.textContent = subtitlePlaceholder;
+      setSubtitlePlaceholderClass(true);
       try {
         subtitleEl.click();
       } catch (_) {}
@@ -1592,6 +1605,7 @@ function wireChildEditorPage({
       // Keep the hint text visible until the first real character is typed.
       subtitleEl.textContent = isPlaceholder ? subtitlePlaceholder : starting;
       subtitleEl.contentEditable = 'true';
+      subtitleEl.classList.remove('placeholder-prompt');
       subtitleEl.classList.add('editing-title');
       subtitleEl.focus();
       // Put caret at the start so typing replaces the hint immediately.
@@ -4048,6 +4062,74 @@ function loadStoreEditorPage() {
         ta.wrap = 'off';
         attachEditorTextareaAutoGrow(ta, { maxLines: 10 });
 
+        // Ingredient-name suggestions for the aisle items "paste box".
+        // Uses shared typeahead infrastructure, but adapts it to textarea "current line".
+        try {
+          const taTypeahead = window.favoriteEatsTypeahead;
+          if (
+            taTypeahead &&
+            typeof taTypeahead.attach === 'function' &&
+            typeof taTypeahead.getNamePool === 'function'
+          ) {
+            const getCaretLineBounds = (textarea, caretPos) => {
+              const v = String(textarea.value || '');
+              const pos =
+                caretPos != null && Number.isFinite(caretPos)
+                  ? Number(caretPos)
+                  : textarea.selectionStart ?? 0;
+              const prevNl = v.lastIndexOf('\n', pos - 1);
+              const lineStart = prevNl === -1 ? 0 : prevNl + 1;
+              const nextNl = v.indexOf('\n', pos);
+              const lineEnd = nextNl === -1 ? v.length : nextNl;
+              return { lineStart, lineEnd };
+            };
+
+            const getCurrentLineText = (textarea) => {
+              const caretPos = textarea.selectionStart ?? 0;
+              const { lineStart, lineEnd } = getCaretLineBounds(
+                textarea,
+                caretPos,
+              );
+              return vSlice(textarea.value, lineStart, lineEnd);
+            };
+
+            // Small local helper (keeps code below readable).
+            const vSlice = (s, a, b) => String(s || '').slice(a, b);
+
+            taTypeahead.attach({
+              inputEl: ta,
+              getPool: async () => await taTypeahead.getNamePool(),
+              // Query is the current line, trimmed (so suggestions open only after 1+ non-space char).
+              getQuery: (textarea) =>
+                String(getCurrentLineText(textarea) || '').trim(),
+              // Replace the entire current line with the canonical ingredient name.
+              setValue: (picked, textarea) => {
+                const canonical = String(picked || '').trim();
+                const caretPos = textarea.selectionStart ?? 0;
+                const { lineStart, lineEnd } = getCaretLineBounds(
+                  textarea,
+                  caretPos,
+                );
+                const before = vSlice(textarea.value, 0, lineStart);
+                const after = vSlice(textarea.value, lineEnd, textarea.value.length);
+                textarea.value = before + canonical + after;
+                return { caretPos: lineStart + canonical.length };
+              },
+              closeOnEmptyQuery: true,
+              openOnlyWhenQueryNonEmpty: true,
+              // Avoid suggestion flicker when pasting a whole list.
+              ignoreInputTypes: ['insertFromPaste', 'insertFromDrop'],
+            });
+
+            // Caret changes without typing can leave stale suggestions; close on click to force refresh on typing.
+            ta.addEventListener('click', () => {
+              try {
+                if (typeof taTypeahead.close === 'function') taTypeahead.close();
+              } catch (_) {}
+            });
+          }
+        } catch (_) {}
+
         let escBaseline = [...items];
 
         ta.addEventListener('focus', () => {
@@ -4231,6 +4313,10 @@ function loadStoreEditorPage() {
             console.warn('Store editor: insert ingredient', e);
           }
         }
+        // New ingredient names should become available in the aisle items suggestions immediately.
+        try {
+          window.favoriteEatsTypeahead?.invalidate?.();
+        } catch (_) {}
       }
 
       for (const aid of [...deletedAisleIds]) {

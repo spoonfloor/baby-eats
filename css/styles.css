@@ -423,6 +423,11 @@ body.store-editor-page .store-add-aisle-cta .placeholder-prompt {
   font-family: var(--main-font);
 }
 
+/* Subtitle hint (“Add a description.”) matches add-aisle hint color/opacity only. */
+body.store-editor-page #storeLocationSubtitle.placeholder-prompt {
+  color: var(--placeholder-muted);
+}
+
 body.store-editor-page .store-add-location-cta {
   display: block;
   margin: 4px 0 0 0;
@@ -1204,9 +1209,11 @@ h1.nav-text {
   left: var(--servings-pill-offset);
 }
 
-/* Unit editor: abbreviation subtitle (same look as recipe editor subtitle) */
+/* Shared subtitle line (Unit editor abbreviation, Store editor location). One size for both. */
 .unit-abbreviation-line {
   margin: 0 0 0 0;
+  font-size: var(--body-font-size);
+  font-family: var(--main-font);
   font-weight: 500;
   color: var(--subtitle);
 }
