@@ -701,8 +701,8 @@ if (typeof window !== 'undefined') {
 
       const discardBtn = document.createElement('button');
       discardBtn.type = 'button';
-      discardBtn.className = 'button button--secondary button--danger-outline';
-      discardBtn.textContent = discardText || 'Discard';
+      discardBtn.className = 'button button--secondary';
+      discardBtn.textContent = discardText || 'Cancel';
 
       const fixBtn = document.createElement('button');
       fixBtn.type = 'button';
@@ -714,8 +714,8 @@ if (typeof window !== 'undefined') {
       createBtn.className = 'button';
       createBtn.textContent = createText || 'Create';
 
-      actions.appendChild(discardBtn);
       actions.appendChild(fixBtn);
+      actions.appendChild(discardBtn);
       actions.appendChild(createBtn);
       panel.appendChild(actions);
 

@@ -3482,7 +3482,7 @@ async function loadStoresPage() {
 
       const deleteStoreDeep = async (storeId, label) => {
         const ok = await uiConfirm({
-          title: 'Delete Store',
+          title: 'Delete store',
           message: `Delete '${label}'?`,
           confirmText: 'Delete',
           cancelText: 'Cancel',
@@ -4294,7 +4294,7 @@ function loadStoreEditorPage() {
         const choice = await window.ui.dialogThreeChoice({
           title: 'Unknown items',
           message: `These names are not in your ingredient list:\n\n${bullets}\n\nCreate new ingredients, fix typos, or cancel save.`,
-          discardText: 'Cancel save',
+          discardText: 'Cancel',
           fixText: 'Fix input',
           createText: 'Create',
         });
