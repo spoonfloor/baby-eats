@@ -8,17 +8,17 @@
     - [x] Edited subtitle text persist on blur and is written to DB
   - [x] 'aisles' section header
   - [x] 'Add an aisle' hint text
-  - [ ] Once there are 1+ cards, 'Add an aisle' hint text hides on blur, reappears below active card of focus
-  - [ ] aisle card UI
-  - [ ] editable aisle name
-    - [ ] no rule under aisle name; format matches
-  - [ ] 'Add an item' hint text appears in blank item list container
-  - [ ] responsive height/scrollable list capped at xx items in viewport
-  - [ ] Clicking item list enters edit mode (no need for edit button)
-  - [ ] paste box
+  - [x] Once there are 1+ cards, 'Add an aisle' hint text hides on blur, reappears below active card of focus
+  - [x] editable aisle name
+  - [x] 'Add an item' hint text appears in blank item list container
+  - [x] responsive height/scrollable list capped at xx items in viewport
+  - [x] Clicking item list enters edit mode (no need for edit button)
+  - [x] paste box
   - [ ] ability to reorder aisles
-  - [ ] aisle is deletable (ctrl click)
-  - [ ] freeform text editing with suggested completion
+  - [x] aisle is deletable (ctrl click)
+  - [x] freeform text editing
+  - [x] suggested completion
+  - [ ] clicking below aisle shows add aisle hint text?
 
 - recipe editor
   - paste box for ingredients

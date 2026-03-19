@@ -1996,6 +1996,12 @@ function loadShoppingItemEditorPage() {
   attachEditorTextareaAutoGrow(
     document.getElementById('shoppingItemSizesTextarea'),
   );
+  attachEditorNewlineListPaste(
+    document.getElementById('shoppingItemVariantsTextarea'),
+  );
+  attachEditorNewlineListPaste(
+    document.getElementById('shoppingItemSizesTextarea'),
+  );
 
   const loadDbForShoppingEditor = async () => {
     const isElectron = !!window.electronAPI;
@@ -4061,6 +4067,7 @@ function loadStoreEditorPage() {
         ta.setAttribute('aria-label', 'Aisle items');
         ta.wrap = 'off';
         attachEditorTextareaAutoGrow(ta, { maxLines: 10 });
+        attachEditorNewlineListPaste(ta);
 
         // Ingredient-name suggestions for the aisle items "paste box".
         // Uses shared typeahead infrastructure, but adapts it to textarea "current line".

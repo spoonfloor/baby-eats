@@ -1345,3 +1345,36 @@ function attachEditorTextareaAutoGrow(el, { maxLines = 8 } = {}) {
     resize();
   }
 }
+
+/**
+ * Shared paste behavior for newline list textareas.
+ * Keeps paste plain-text and normalizes Windows line endings.
+ * @param {HTMLTextAreaElement} el
+ */
+function attachEditorNewlineListPaste(el) {
+  if (!el) return;
+  el.addEventListener('paste', (e) => {
+    try {
+      const cd = e.clipboardData || window.clipboardData;
+      if (!cd || typeof cd.getData !== 'function') return;
+      const raw = cd.getData('text/plain');
+      if (typeof raw !== 'string' || raw.length === 0) return;
+      const normalized = raw.replace(/\r\n?/g, '\n');
+      // Let regular single-line paste behave naturally.
+      if (normalized.indexOf('\n') === -1) return;
+
+      e.preventDefault();
+      const start = Number.isFinite(el.selectionStart) ? el.selectionStart : 0;
+      const end = Number.isFinite(el.selectionEnd) ? el.selectionEnd : start;
+      const v = String(el.value || '');
+      el.value = v.slice(0, start) + normalized + v.slice(end);
+      const caret = start + normalized.length;
+      if (typeof el.setSelectionRange === 'function') {
+        el.setSelectionRange(caret, caret);
+      }
+      try {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (_) {}
+    } catch (_) {}
+  });
+}
