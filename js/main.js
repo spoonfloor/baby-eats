@@ -3765,6 +3765,9 @@ function loadStoreEditorPage() {
       for (const id of deletedAisleIds) if (!sd.includes(id)) return true;
       for (const id of sd) if (!deletedAisleIds.has(id)) return true;
       if (aisleRows.length !== draftSnapshot.aisleRows.length) return true;
+      for (let i = 0; i < aisleRows.length; i++) {
+        if (aisleRows[i]?.id !== draftSnapshot.aisleRows[i]?.id) return true;
+      }
       const snapRows = new Map(draftSnapshot.aisleRows.map((r) => [r.id, r]));
       for (const r of aisleRows) {
         const s = snapRows.get(r.id);
@@ -3926,12 +3929,27 @@ function loadStoreEditorPage() {
       parkAddAisleCta();
       list.innerHTML = '';
       aisleRows.forEach((a) => {
+        const aisleIndex = aisleRows.findIndex((r) => r.id === a.id);
         const card = document.createElement('div');
         card.className = 'shopping-item-editor-card store-aisle-card';
         card.dataset.aisleId = String(a.id);
+        card.tabIndex = 0;
 
         const aisleTargetIsNameOrList = (target) =>
-          target.closest('.store-aisle-name') || target.closest('textarea');
+          target.closest('.store-aisle-name') ||
+          target.closest('textarea') ||
+          target.closest('.store-aisle-move-controls');
+
+        const moveAisleByDelta = (delta) => {
+          const from = aisleRows.findIndex((r) => r.id === a.id);
+          if (from < 0) return;
+          const to = from + delta;
+          if (to < 0 || to >= aisleRows.length) return;
+          const [row] = aisleRows.splice(from, 1);
+          aisleRows.splice(to, 0, row);
+          renderAisleCards();
+          refreshDirty();
+        };
 
         const attemptDeleteAisle = async () => {
           const ok = await uiConfirm({
@@ -4003,6 +4021,44 @@ function loadStoreEditorPage() {
           e.stopPropagation();
           void attemptDeleteAisle();
         });
+
+        const moveControls = document.createElement('div');
+        moveControls.className = 'store-aisle-move-controls';
+        moveControls.setAttribute('aria-label', 'Reorder aisle');
+
+        const moveUpBtn = document.createElement('button');
+        moveUpBtn.className = 'store-aisle-move-btn';
+        moveUpBtn.type = 'button';
+        moveUpBtn.textContent = '⬆️';
+        moveUpBtn.setAttribute('aria-label', 'Move aisle up');
+        if (aisleIndex <= 0) {
+          moveUpBtn.disabled = true;
+          moveUpBtn.setAttribute('aria-disabled', 'true');
+        }
+        moveUpBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          moveAisleByDelta(-1);
+        });
+
+        const moveDownBtn = document.createElement('button');
+        moveDownBtn.className = 'store-aisle-move-btn';
+        moveDownBtn.type = 'button';
+        moveDownBtn.textContent = '⬇️';
+        moveDownBtn.setAttribute('aria-label', 'Move aisle down');
+        if (aisleIndex >= aisleRows.length - 1) {
+          moveDownBtn.disabled = true;
+          moveDownBtn.setAttribute('aria-disabled', 'true');
+        }
+        moveDownBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          moveAisleByDelta(1);
+        });
+
+        moveControls.appendChild(moveUpBtn);
+        moveControls.appendChild(moveDownBtn);
+        card.appendChild(moveControls);
 
         const nameEl = document.createElement('div');
         nameEl.className = 'shopping-item-label store-aisle-name';
@@ -4362,9 +4418,10 @@ function loadStoreEditorPage() {
       }
 
       for (const r of aisleRows) {
+        const sortOrder = aisleRows.findIndex((x) => x.id === r.id) + 1;
         db.run(
-          'UPDATE store_locations SET name = ? WHERE ID = ? AND store_id = ?;',
-          [r.name || 'Aisle', r.id, sid],
+          'UPDATE store_locations SET name = ?, sort_order = ? WHERE ID = ? AND store_id = ?;',
+          [r.name || 'Aisle', sortOrder, r.id, sid],
         );
       }
 

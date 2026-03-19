@@ -375,6 +375,7 @@ body.store-editor-page .shopping-item-editor-card {
   padding: 18px 18px;
   margin-left: -12px;
   margin-right: -12px;
+  position: relative;
 }
 
 body.store-editor-page .store-aisles-section-label {
@@ -450,6 +451,40 @@ body.store-editor-page .store-add-location-cta:hover {
 /* Aisle name + Items field stack (Items uses shared .shopping-item-field) */
 body.store-editor-page .store-aisle-items-field {
   padding-top: 4px;
+  padding-right: 20px;
+}
+
+body.store-editor-page .store-aisle-move-controls {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+body.store-editor-page .store-aisle-card:hover .store-aisle-move-controls,
+body.store-editor-page .store-aisle-card:focus-within .store-aisle-move-controls,
+body.store-editor-page .store-aisle-card:focus .store-aisle-move-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.store-editor-page .store-aisle-move-btn {
+  border: 0;
+  background: transparent;
+  line-height: 1;
+  padding: 2px;
+  cursor: pointer;
+}
+
+body.store-editor-page .store-aisle-move-btn:disabled,
+body.store-editor-page .store-aisle-move-btn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
 }
 
 body.shopping-editor-page .shopping-item-status {
