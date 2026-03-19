@@ -1328,6 +1328,7 @@ function wireChildEditorPage({
   subtitlePlaceholder: subtitlePlaceholderText,
   subtitleEmptyMeansHidden = false,
   subtitleRevealBtn = null,
+  extraDirtyState = null,
 }) {
   if (!appBarTitleEl || !bodyTitleEl) return;
 
@@ -1369,16 +1370,20 @@ function wireChildEditorPage({
   let subtitleSessionActive = false;
   /** True between pointerdown on subtitle and subtitle click (title blurs first). */
   let subtitlePointerKeepAlive = false;
-  let pendingSubtitleDisplay = emptySubtitleFlow() ? '' : null;
+  /** Shown after subtitle blur; survives sync until Save/Cancel (fixes draft wipe when baseline non-empty). */
+  let lastCommittedSubtitle = hasSubtitle ? baselineSubtitle || '' : '';
 
   bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
   appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
 
   const syncSubtitleDomFromBaseline = () => {
     if (!hasSubtitle) return;
+    const subDisplay = (lastCommittedSubtitle || '').trim()
+      ? lastCommittedSubtitle
+      : subtitlePlaceholder;
     if (!subtitleEmptyMeansHidden) {
       subtitleEl.style.display = '';
-      subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+      subtitleEl.textContent = subDisplay;
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
       try {
         subtitleEl.removeAttribute('aria-hidden');
@@ -1387,16 +1392,14 @@ function wireChildEditorPage({
     }
     if (!emptySubtitleFlow()) {
       subtitleEl.style.display = '';
-      subtitleEl.textContent = baselineSubtitle || subtitlePlaceholder;
+      subtitleEl.textContent = subDisplay;
       if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
       try {
         subtitleEl.removeAttribute('aria-hidden');
       } catch (_) {}
-      pendingSubtitleDisplay = null;
       return;
     }
-    if (pendingSubtitleDisplay == null) pendingSubtitleDisplay = '';
-    const hasPending = (pendingSubtitleDisplay || '').trim().length > 0;
+    const hasPending = (lastCommittedSubtitle || '').trim().length > 0;
     const showRow =
       titleSessionActive ||
       subtitleSessionActive ||
@@ -1414,7 +1417,7 @@ function wireChildEditorPage({
     if (subtitleRevealBtn) subtitleRevealBtn.style.display = 'none';
     if (subtitleSessionActive) return;
     subtitleEl.textContent = hasPending
-      ? pendingSubtitleDisplay
+      ? lastCommittedSubtitle
       : subtitlePlaceholder;
   };
 
@@ -1443,9 +1446,15 @@ function wireChildEditorPage({
 
   let isDirty = false;
 
+  const pageDirty = () =>
+    isDirty ||
+    (typeof extraDirtyState?.isDirty === 'function' &&
+      extraDirtyState.isDirty());
+
   const updateButtons = () => {
-    if (cancelBtn) cancelBtn.disabled = !isDirty;
-    if (saveBtn) saveBtn.disabled = !isDirty;
+    const d = pageDirty();
+    if (cancelBtn) cancelBtn.disabled = !d;
+    if (saveBtn) saveBtn.disabled = !d;
   };
 
   updateButtons(); // page starts clean
@@ -1576,11 +1585,10 @@ function wireChildEditorPage({
         starting.trim().toLowerCase() ===
         subtitlePlaceholder.trim().toLowerCase();
       const restoreOnCancelEmptyFlow = emptySubtitleFlow()
-        ? (pendingSubtitleDisplay || '').trim() ||
+        ? (lastCommittedSubtitle || '').trim() ||
           (isPlaceholder ? '' : starting)
         : null;
       subtitleSessionActive = true;
-      const pending = (pendingSubtitleDisplay || '').trim();
       // Keep the hint text visible until the first real character is typed.
       subtitleEl.textContent = isPlaceholder ? subtitlePlaceholder : starting;
       subtitleEl.contentEditable = 'true';
@@ -1613,12 +1621,7 @@ function wireChildEditorPage({
         let next = normalizeSubtitleFn(raw);
         const ph = subtitlePlaceholder.toLowerCase();
         if (isPlaceholder && next.toLowerCase() === ph) next = '';
-        if (emptySubtitleFlow()) {
-          pendingSubtitleDisplay = next;
-        }
-        if (!emptySubtitleFlow()) {
-          subtitleEl.textContent = next || subtitlePlaceholder;
-        }
+        lastCommittedSubtitle = next;
         if (next !== (baselineSubtitle || '')) markDirty();
       };
       const cancelEdit = () => {
@@ -1676,7 +1679,7 @@ function wireChildEditorPage({
 
   const doBack = async () => {
     if (
-      !isDirty ||
+      !pageDirty() ||
       (await uiConfirm({
         title: 'Discard Changes?',
         message: 'Discard unsaved changes?',
@@ -1699,14 +1702,17 @@ function wireChildEditorPage({
   if (cancelBtn) {
     cancelBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!isDirty) return;
+      if (!pageDirty()) return;
       bodyTitleEl.textContent = displayTitle(baselineTitle) || '';
       appBarTitleEl.textContent = displayTitle(baselineTitle) || '';
       if (hasSubtitle) {
-        if (emptySubtitleFlow()) {
-          pendingSubtitleDisplay = (baselineSubtitle || '').trim();
-        }
+        lastCommittedSubtitle = baselineSubtitle || '';
         syncSubtitleDomFromBaseline();
+      }
+      try {
+        extraDirtyState?.onCancel?.();
+      } catch (err) {
+        console.warn('extraDirtyState.onCancel', err);
       }
       extras.forEach((f) => {
         if (!f) return;
@@ -1740,6 +1746,7 @@ function wireChildEditorPage({
   if (saveBtn) {
     saveBtn.addEventListener('click', async (e) => {
       e.preventDefault();
+      if (!pageDirty()) return;
 
       const nextTitle = normalizeTitle(bodyTitleEl.textContent);
       bodyTitleEl.textContent = displayTitle(nextTitle) || '';
@@ -1747,13 +1754,22 @@ function wireChildEditorPage({
 
       let nextSubtitle = '';
       if (hasSubtitle) {
-        if (emptySubtitleFlow()) {
-          nextSubtitle = normalizeSubtitleFn(pendingSubtitleDisplay || '');
-        } else {
-          const raw = subtitleEl.textContent || '';
-          nextSubtitle =
-            raw === subtitlePlaceholder ? '' : normalizeSubtitleFn(raw);
+        let raw = lastCommittedSubtitle;
+        try {
+          if (subtitleEl?.isContentEditable) {
+            const t = subtitleEl.textContent || '';
+            const ph = subtitlePlaceholder.trim().toLowerCase();
+            raw =
+              t.trim().toLowerCase() === ph
+                ? ''
+                : normalizeSubtitleFn(t);
+          } else {
+            raw = normalizeSubtitleFn(lastCommittedSubtitle || '');
+          }
+        } catch (_) {
+          raw = normalizeSubtitleFn(lastCommittedSubtitle || '');
         }
+        nextSubtitle = normalizeSubtitleFn(raw || '');
       }
 
       const extraValues = {};
@@ -1787,23 +1803,30 @@ function wireChildEditorPage({
           });
         }
       } catch (err) {
+        if (err && err.silent) return;
         console.error('❌ Failed to save child editor:', err);
         uiToast('Failed to save changes. See console for details.');
         return;
       }
 
       isDirty = false;
+      try {
+        extraDirtyState?.onAfterSaveSuccess?.();
+      } catch (err2) {
+        console.warn('extraDirtyState.onAfterSaveSuccess', err2);
+      }
       updateButtons();
       baselineTitle = nextTitle;
-      if (hasSubtitle) baselineSubtitle = nextSubtitle;
-      baselineExtras = { ...baselineExtras, ...extraValues };
       if (hasSubtitle) {
-        if (emptySubtitleFlow()) pendingSubtitleDisplay = '';
-        else pendingSubtitleDisplay = null;
-        syncSubtitleDomFromBaseline();
+        baselineSubtitle = nextSubtitle;
+        lastCommittedSubtitle = nextSubtitle;
       }
+      baselineExtras = { ...baselineExtras, ...extraValues };
+      if (hasSubtitle) syncSubtitleDomFromBaseline();
     });
   }
+
+  return { refreshDirty: updateButtons };
 }
 
 function loadShoppingItemEditorPage() {
@@ -3667,6 +3690,11 @@ function loadStoreEditorPage() {
     let aisleRows = [];
     /** @type {Map<number, string[]>} */
     let aisleItemsByAisle = new Map();
+    /** @type {Set<number>} */
+    let deletedAisleIds = new Set();
+    let nextTempAisleId = -1;
+    let draftSnapshot = null;
+    let refreshDirty = () => {};
 
     const normItemKey = (s) => String(s || '').trim().toLowerCase();
 
@@ -3682,6 +3710,54 @@ function loadStoreEditorPage() {
         out.push(t);
       }
       return out;
+    };
+
+    const cloneDraftSnapshot = () => ({
+      aisleRows: aisleRows.map((r) => ({ id: r.id, name: r.name })),
+      items: Object.fromEntries(
+        [...aisleItemsByAisle.entries()].map(([k, v]) => [String(k), [...v]]),
+      ),
+      deletedIds: [...deletedAisleIds],
+    });
+    const restoreDraftFromSnapshot = (snap) => {
+      if (!snap) return;
+      aisleRows = snap.aisleRows.map((r) => ({ id: r.id, name: r.name }));
+      aisleItemsByAisle = new Map();
+      for (const [ks, v] of Object.entries(snap.items || {})) {
+        const n = Number(ks);
+        aisleItemsByAisle.set(Number.isFinite(n) ? n : ks, [...v]);
+      }
+      deletedAisleIds = new Set(snap.deletedIds || []);
+    };
+    const itemsListEqual = (a, b) => {
+      const pa = parseUniqueItemLines((a || []).join('\n'));
+      const pb = parseUniqueItemLines((b || []).join('\n'));
+      if (pa.length !== pb.length) return false;
+      for (let i = 0; i < pa.length; i++) {
+        if (normItemKey(pa[i]) !== normItemKey(pb[i])) return false;
+      }
+      return true;
+    };
+    const aislesDraftDirty = () => {
+      if (!draftSnapshot) return false;
+      const sd = draftSnapshot.deletedIds || [];
+      if (deletedAisleIds.size !== sd.length) return true;
+      for (const id of deletedAisleIds) if (!sd.includes(id)) return true;
+      for (const id of sd) if (!deletedAisleIds.has(id)) return true;
+      if (aisleRows.length !== draftSnapshot.aisleRows.length) return true;
+      const snapRows = new Map(draftSnapshot.aisleRows.map((r) => [r.id, r]));
+      for (const r of aisleRows) {
+        const s = snapRows.get(r.id);
+        if (!s) return true;
+        if ((r.name || '') !== (s.name || '')) return true;
+        const cur = aisleItemsByAisle.get(r.id) || [];
+        const snapItems = draftSnapshot.items[String(r.id)] || [];
+        if (!itemsListEqual(cur, snapItems)) return true;
+      }
+      for (const id of snapRows.keys()) {
+        if (!aisleRows.some((row) => row.id === id)) return true;
+      }
+      return false;
     };
 
     const openStoreEditorDb = async () => {
@@ -3767,6 +3843,8 @@ function loadStoreEditorPage() {
       }
     }
 
+    if (hasPersistedStore) draftSnapshot = cloneDraftSnapshot();
+
     const titleText = chain ? chain : isNew ? 'New store' : 'Store';
     const locTrim = (locationName || '').trim();
     const storeLocationBlock = locTrim
@@ -3794,137 +3872,6 @@ function loadStoreEditorPage() {
     ${storeLocationBlock}
     ${aislesBlock}
   `;
-
-    const commitAisleItemEdit = async (aisleId, rawText) => {
-      let lines = parseUniqueItemLines(rawText);
-      const db = await openStoreEditorDb();
-
-      const getVisibleCanonicalId = (name) => {
-        const stmt = db.prepare(`
-          SELECT ID FROM ingredients
-          WHERE lower(trim(name)) = lower(trim(?))
-            AND COALESCE(is_deprecated, 0) = 0
-            AND COALESCE(hide_from_shopping_list, 0) = 0
-          ORDER BY
-            CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
-            CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
-            ID ASC
-          LIMIT 1
-        `);
-        stmt.bind([name]);
-        let id = null;
-        if (stmt.step()) id = Number(stmt.get()[0]);
-        stmt.free();
-        return Number.isFinite(id) ? id : null;
-      };
-
-      const anyIngredientNamed = (name) => {
-        const stmt = db.prepare(
-          `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1`,
-        );
-        stmt.bind([name]);
-        const ok = stmt.step();
-        stmt.free();
-        return ok;
-      };
-
-      const blocked = new Set();
-      const unknown = [];
-      for (const name of lines) {
-        const id = getVisibleCanonicalId(name);
-        if (id) continue;
-        if (anyIngredientNamed(name)) blocked.add(normItemKey(name));
-        else unknown.push(name);
-      }
-
-      const unknownUnique = [];
-      const uk = new Set();
-      for (const n of unknown) {
-        const k = normItemKey(n);
-        if (uk.has(k)) continue;
-        uk.add(k);
-        unknownUnique.push(n);
-      }
-
-      if (blocked.size) {
-        const sample = lines.filter((l) => blocked.has(normItemKey(l)));
-        uiToast(
-          `Skipped (hidden or deprecated): ${sample.slice(0, 5).join(', ')}${sample.length > 5 ? '…' : ''}`,
-        );
-      }
-
-      const linesToWrite = lines.filter((l) => !blocked.has(normItemKey(l)));
-
-      if (unknownUnique.length) {
-        if (!window.ui?.dialogThreeChoice) {
-          uiToast('UI not ready.');
-          return 'discard';
-        }
-        const bullets = unknownUnique.map((n) => `• ${n}`).join('\n');
-        const choice = await window.ui.dialogThreeChoice({
-          title: 'Unknown items',
-          message: `These names are not in your ingredient list:\n\n${bullets}\n\nCreate new ingredients, fix typos, or discard this update.`,
-          discardText: 'Discard',
-          fixText: 'Fix input',
-          createText: 'Create',
-        });
-        if (choice === 'discard') return 'discard';
-        if (choice === 'fix') return 'fix';
-        for (const n of unknownUnique) {
-          try {
-            db.run('INSERT INTO ingredients (name) VALUES (?);', [n]);
-          } catch (e) {
-            console.warn('Store editor: insert ingredient', e);
-          }
-        }
-      }
-
-      const resolvedIds = [];
-      const seenId = new Set();
-      for (const name of linesToWrite) {
-        const id = getVisibleCanonicalId(name);
-        if (!id) {
-          uiToast(`Could not resolve “${name}”.`);
-          return 'discard';
-        }
-        if (seenId.has(id)) continue;
-        seenId.add(id);
-        resolvedIds.push(id);
-      }
-
-      db.run('DELETE FROM ingredient_store_location WHERE store_location_id = ?;', [
-        aisleId,
-      ]);
-      for (const iid of resolvedIds) {
-        db.run(
-          'INSERT INTO ingredient_store_location (ingredient_id, store_location_id) VALUES (?, ?);',
-          [iid, aisleId],
-        );
-      }
-      await persistStoreEditorDb(db);
-
-      const displayOrder = [];
-      const sk = new Set();
-      for (const name of linesToWrite) {
-        const k = normItemKey(name);
-        if (sk.has(k)) continue;
-        sk.add(k);
-        displayOrder.push(name);
-      }
-      aisleItemsByAisle.set(aisleId, displayOrder);
-      uiToast('Items saved.');
-      return 'ok';
-    };
-
-    const aisleItemsTextUnchanged = (raw, committedArr) => {
-      const a = parseUniqueItemLines(raw);
-      const b = parseUniqueItemLines((committedArr || []).join('\n'));
-      if (a.length !== b.length) return false;
-      for (let i = 0; i < a.length; i++) {
-        if (normItemKey(a[i]) !== normItemKey(b[i])) return false;
-      }
-      return true;
-    };
 
     const parkAddAisleCta = () => {
       const list = document.getElementById('storeAislesList');
@@ -3963,16 +3910,40 @@ function loadStoreEditorPage() {
         card.className = 'shopping-item-editor-card store-aisle-card';
         card.dataset.aisleId = String(a.id);
 
+        card.addEventListener('click', (e) => {
+          if (!e.ctrlKey || e.metaKey) return;
+          if (e.target.closest('.store-aisle-name') || e.target.closest('textarea'))
+            return;
+          e.preventDefault();
+          void (async () => {
+            const ok = await uiConfirm({
+              title: 'Delete aisle?',
+              message: `Permanently delete “${(a.name || 'Aisle').replace(/"/g, '')}” and its item list?`,
+              confirmText: 'Delete',
+              cancelText: 'Cancel',
+              danger: true,
+            });
+            if (!ok) return;
+            if (a.id > 0) deletedAisleIds.add(a.id);
+            aisleRows = aisleRows.filter((r) => r.id !== a.id);
+            aisleItemsByAisle.delete(a.id);
+            renderAisleCards();
+            refreshDirty();
+          })();
+        });
+
         const nameEl = document.createElement('div');
         nameEl.className = 'shopping-item-label store-aisle-name';
         nameEl.textContent = a.name || 'Aisle';
 
-        nameEl.addEventListener('click', () => {
+        nameEl.addEventListener('click', (ev) => {
+          ev.stopPropagation();
           if (nameEl.isContentEditable) return;
-          const starting = (nameEl.textContent || '').trim() || a.name;
+          const starting = (a.name || '').trim() || 'Aisle';
 
           nameEl.contentEditable = 'true';
           nameEl.classList.add('editing-title');
+          nameEl.textContent = starting;
           nameEl.focus();
 
           const cleanup = () => {
@@ -3982,47 +3953,27 @@ function loadStoreEditorPage() {
             nameEl.removeEventListener('keydown', onKeyDown);
           };
 
-          const commit = async () => {
-            const next = (nameEl.textContent || '').trim();
-            if (!next) {
-              nameEl.textContent = starting || 'Aisle';
-              cleanup();
-              return;
-            }
-            if (next === starting) {
-              nameEl.textContent = next;
-              cleanup();
-              return;
-            }
-            try {
-              const db = await openStoreEditorDb();
-              db.run(
-                'UPDATE store_locations SET name = ? WHERE ID = ? AND store_id = ?;',
-                [next, a.id, storeId],
-              );
-              await persistStoreEditorDb(db);
-              a.name = next;
-              nameEl.textContent = next;
-            } catch (err) {
-              console.error('Failed to rename aisle', err);
-              uiToast('Could not save aisle name.');
-              nameEl.textContent = starting;
-            }
+          const commitLocal = () => {
+            let next = (nameEl.textContent || '').trim();
+            if (!next) next = starting;
+            a.name = next;
+            nameEl.textContent = next || 'Aisle';
             cleanup();
+            refreshDirty();
           };
 
           const onBlur = () => {
-            void commit();
+            commitLocal();
           };
 
           const onKeyDown = (e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               nameEl.removeEventListener('blur', onBlur);
-              void commit();
+              commitLocal();
             } else if (e.key === 'Escape') {
               e.preventDefault();
-              nameEl.textContent = starting;
+              nameEl.textContent = a.name || 'Aisle';
               cleanup();
             }
           };
@@ -4045,41 +3996,27 @@ function loadStoreEditorPage() {
         ta.wrap = 'off';
         attachEditorTextareaAutoGrow(ta, { maxLines: 10 });
 
-        const committedSnapshot = () => (aisleItemsByAisle.get(a.id) || []).join('\n');
+        let escBaseline = [...items];
+
+        ta.addEventListener('focus', () => {
+          escBaseline = parseUniqueItemLines(ta.value);
+        });
+
+        ta.addEventListener('input', () => {
+          aisleItemsByAisle.set(a.id, parseUniqueItemLines(ta.value));
+          refreshDirty();
+        });
 
         ta.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             e.preventDefault();
-            ta.value = committedSnapshot();
+            ta.value = escBaseline.join('\n');
+            aisleItemsByAisle.set(a.id, [...escBaseline]);
             try {
               ta.__feAutoGrowResize();
             } catch (_) {}
+            refreshDirty();
           }
-        });
-
-        ta.addEventListener('blur', () => {
-          void (async () => {
-            const committed = aisleItemsByAisle.get(a.id) || [];
-            if (aisleItemsTextUnchanged(ta.value, committed)) return;
-            const res = await commitAisleItemEdit(a.id, ta.value);
-            if (res === 'ok') {
-              ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
-              try {
-                ta.__feAutoGrowResize();
-              } catch (_) {}
-            } else if (res === 'discard') {
-              ta.value = committedSnapshot();
-              try {
-                ta.__feAutoGrowResize();
-              } catch (_) {}
-            } else if (res === 'fix') {
-              window.setTimeout(() => {
-                try {
-                  ta.focus();
-                } catch (_) {}
-              }, 0);
-            }
-          })();
         });
 
         itemsField.appendChild(ta);
@@ -4135,37 +4072,11 @@ function loadStoreEditorPage() {
         });
         if (!name) return;
 
-        try {
-          const db = await openStoreEditorDb();
-          const maxQ = db.exec(
-            'SELECT COALESCE(MAX(sort_order), 0) FROM store_locations WHERE store_id = ?;',
-            [storeId],
-          );
-          let nextSort = 1;
-          if (maxQ.length && maxQ[0].values.length) {
-            nextSort = Number(maxQ[0].values[0][0]) + 1;
-          }
-          db.run(
-            'INSERT INTO store_locations (store_id, name, sort_order) VALUES (?, ?, ?);',
-            [storeId, name, nextSort],
-          );
-          const idQ = db.exec('SELECT last_insert_rowid();');
-          const newId =
-            idQ.length && idQ[0].values.length
-              ? Number(idQ[0].values[0][0])
-              : null;
-          if (!Number.isFinite(newId)) {
-            uiToast('Failed to create aisle.');
-            return;
-          }
-          await persistStoreEditorDb(db);
-          aisleRows.push({ id: newId, name });
-          aisleItemsByAisle.set(newId, []);
-          renderAisleCards();
-        } catch (err) {
-          console.error('Failed to create aisle', err);
-          uiToast('Failed to create aisle. See console for details.');
-        }
+        const tid = nextTempAisleId--;
+        aisleRows.push({ id: tid, name });
+        aisleItemsByAisle.set(tid, []);
+        renderAisleCards();
+        refreshDirty();
       };
 
       cta.addEventListener('click', () => void run());
@@ -4177,66 +4088,275 @@ function loadStoreEditorPage() {
       });
     };
 
+    const flushStoreAislesDraft = async (db, sid) => {
+      const getVisibleCanonicalId = (name) => {
+        const stmt = db.prepare(`
+          SELECT ID FROM ingredients
+          WHERE lower(trim(name)) = lower(trim(?))
+            AND COALESCE(is_deprecated, 0) = 0
+            AND COALESCE(hide_from_shopping_list, 0) = 0
+          ORDER BY
+            CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
+            CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
+            ID ASC
+          LIMIT 1
+        `);
+        stmt.bind([name]);
+        let vid = null;
+        if (stmt.step()) vid = Number(stmt.get()[0]);
+        stmt.free();
+        return Number.isFinite(vid) ? vid : null;
+      };
+      const anyIngredientNamed = (name) => {
+        const stmt = db.prepare(
+          `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1`,
+        );
+        stmt.bind([name]);
+        const ok = stmt.step();
+        stmt.free();
+        return ok;
+      };
+
+      const blockedKeys = new Set();
+      const unknownUnique = [];
+      const uk = new Set();
+      for (const r of aisleRows) {
+        const lines = [...(aisleItemsByAisle.get(r.id) || [])];
+        for (const name of lines) {
+          const vid = getVisibleCanonicalId(name);
+          if (vid) continue;
+          if (anyIngredientNamed(name)) blockedKeys.add(normItemKey(name));
+          else {
+            const k = normItemKey(name);
+            if (!uk.has(k)) {
+              uk.add(k);
+              unknownUnique.push(name);
+            }
+          }
+        }
+      }
+
+      if (blockedKeys.size) {
+        const sample = [];
+        outer: for (const r of aisleRows) {
+          for (const n of aisleItemsByAisle.get(r.id) || []) {
+            if (blockedKeys.has(normItemKey(n))) {
+              sample.push(n);
+              if (sample.length >= 5) break outer;
+            }
+          }
+        }
+        uiToast(
+          `Skipped (hidden or deprecated): ${sample.join(', ')}${blockedKeys.size > 5 ? '…' : ''}`,
+        );
+      }
+
+      if (unknownUnique.length) {
+        if (!window.ui?.dialogThreeChoice) {
+          uiToast('UI not ready.');
+          throw { silent: true };
+        }
+        const bullets = unknownUnique.map((n) => `• ${n}`).join('\n');
+        const choice = await window.ui.dialogThreeChoice({
+          title: 'Unknown items',
+          message: `These names are not in your ingredient list:\n\n${bullets}\n\nCreate new ingredients, fix typos, or cancel save.`,
+          discardText: 'Cancel save',
+          fixText: 'Fix input',
+          createText: 'Create',
+        });
+        if (choice === 'discard') {
+          uiToast('Save cancelled.');
+          throw { silent: true };
+        }
+        if (choice === 'fix') {
+          uiToast('Fix item names, then save again.');
+          throw { silent: true };
+        }
+        for (const n of unknownUnique) {
+          try {
+            db.run('INSERT INTO ingredients (name) VALUES (?);', [n]);
+          } catch (e) {
+            console.warn('Store editor: insert ingredient', e);
+          }
+        }
+      }
+
+      for (const aid of [...deletedAisleIds]) {
+        db.run(
+          'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
+          [aid],
+        );
+        db.run('DELETE FROM store_locations WHERE ID = ? AND store_id = ?;', [
+          aid,
+          sid,
+        ]);
+      }
+      deletedAisleIds.clear();
+
+      const toRemap = aisleRows.filter((r) => r.id < 0);
+      for (const r of toRemap) {
+        const maxQ = db.exec(
+          'SELECT COALESCE(MAX(sort_order), 0) FROM store_locations WHERE store_id = ?;',
+          [sid],
+        );
+        let nextSort = 1;
+        if (maxQ.length && maxQ[0].values.length) {
+          nextSort = Number(maxQ[0].values[0][0]) + 1;
+        }
+        db.run(
+          'INSERT INTO store_locations (store_id, name, sort_order) VALUES (?, ?, ?);',
+          [sid, r.name || 'Aisle', nextSort],
+        );
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        const newId = Number(idQ[0].values[0][0]);
+        const oldId = r.id;
+        const items = aisleItemsByAisle.get(oldId) || [];
+        aisleItemsByAisle.delete(oldId);
+        aisleItemsByAisle.set(newId, [...items]);
+        r.id = newId;
+      }
+
+      for (const r of aisleRows) {
+        db.run(
+          'UPDATE store_locations SET name = ? WHERE ID = ? AND store_id = ?;',
+          [r.name || 'Aisle', r.id, sid],
+        );
+      }
+
+      for (const r of aisleRows) {
+        const lines = [...(aisleItemsByAisle.get(r.id) || [])].filter(
+          (ln) => !blockedKeys.has(normItemKey(ln)),
+        );
+        const resolvedIds = [];
+        const seenId = new Set();
+        for (const name of lines) {
+          const iid = getVisibleCanonicalId(name);
+          if (!Number.isFinite(iid)) continue;
+          if (seenId.has(iid)) continue;
+          seenId.add(iid);
+          resolvedIds.push(iid);
+        }
+        db.run(
+          'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
+          [r.id],
+        );
+        for (const iid of resolvedIds) {
+          db.run(
+            'INSERT INTO ingredient_store_location (ingredient_id, store_location_id) VALUES (?, ?);',
+            [iid, r.id],
+          );
+        }
+        const displayOrder = [];
+        const sk = new Set();
+        for (const name of lines) {
+          const k = normItemKey(name);
+          if (sk.has(k)) continue;
+          sk.add(k);
+          displayOrder.push(name);
+        }
+        aisleItemsByAisle.set(r.id, displayOrder);
+      }
+    };
+
+    if (typeof waitForAppBarReady !== 'function') {
+      renderAisleCards();
+      wireAddAisleCtaFocus();
+      wireAddAisle();
+      return;
+    }
+
+    await waitForAppBarReady();
+    const pageCtl = wireChildEditorPage({
+      backBtn: document.getElementById('appBarBackBtn'),
+      cancelBtn: document.getElementById('appBarCancelBtn'),
+      saveBtn: document.getElementById('appBarSaveBtn'),
+      appBarTitleEl: document.getElementById('appBarTitle'),
+      bodyTitleEl: document.getElementById('childEditorTitle'),
+      initialTitle: titleText,
+      backHref: 'stores.html',
+      subtitleEl: document.getElementById('storeLocationSubtitle'),
+      initialSubtitle: locTrim,
+      normalizeSubtitle: (s) => (s || '').trim(),
+      subtitlePlaceholder: 'Add a description.',
+      subtitleEmptyMeansHidden: true,
+      extraDirtyState: hasPersistedStore
+        ? {
+            isDirty: () => aislesDraftDirty(),
+            onCancel: () => {
+              restoreDraftFromSnapshot(draftSnapshot);
+              renderAisleCards();
+            },
+            onAfterSaveSuccess: () => {
+              draftSnapshot = cloneDraftSnapshot();
+            },
+          }
+        : null,
+      onSave: async ({ title: next, subtitle: nextLoc }) => {
+        const sid = sessionStorage.getItem('selectedStoreId');
+        const isNewStore =
+          sessionStorage.getItem('selectedStoreIsNew') === '1';
+
+        const db = await openStoreEditorDb();
+        const id = Number(sid);
+        const loc = (nextLoc ?? '').trim();
+        let insertedNewStore = false;
+
+        if (Number.isFinite(id)) {
+          if (hasPersistedStore) {
+            for (const card of document.querySelectorAll('.store-aisle-card')) {
+              const aid = Number(card.dataset.aisleId);
+              const row = aisleRows.find((r) => r.id === aid);
+              if (!row) continue;
+              const ne = card.querySelector('.store-aisle-name');
+              if (ne) {
+                const t = (ne.textContent || '').trim();
+                if (t) row.name = t;
+              }
+              const ta = card.querySelector('textarea');
+              if (ta) {
+                aisleItemsByAisle.set(aid, parseUniqueItemLines(ta.value));
+              }
+            }
+            await flushStoreAislesDraft(db, id);
+          }
+          db.run(
+            'UPDATE stores SET chain_name = ?, location_name = ? WHERE ID = ?;',
+            [next || '', loc, id],
+          );
+        } else if (isNewStore || !sid) {
+          db.run(
+            'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
+            [next || '', loc],
+          );
+          const idQ = db.exec('SELECT last_insert_rowid();');
+          if (idQ.length && idQ[0].values.length) {
+            sessionStorage.setItem(
+              'selectedStoreId',
+              String(idQ[0].values[0][0]),
+            );
+          }
+          insertedNewStore = true;
+        }
+
+        await persistStoreEditorDb(db);
+        sessionStorage.setItem('selectedStoreChain', next || '');
+        sessionStorage.setItem('selectedStoreLocation', loc);
+        sessionStorage.removeItem('selectedStoreIsNew');
+        if (insertedNewStore) {
+          window.location.reload();
+        } else if (hasPersistedStore) {
+          renderAisleCards();
+        }
+      },
+    });
+    refreshDirty =
+      (pageCtl && pageCtl.refreshDirty) ||
+      (() => {
+        /* noop */
+      });
     renderAisleCards();
     wireAddAisleCtaFocus();
     wireAddAisle();
-
-    if (typeof waitForAppBarReady !== 'function') return;
-
-    waitForAppBarReady().then(() => {
-      wireChildEditorPage({
-        backBtn: document.getElementById('appBarBackBtn'),
-        cancelBtn: document.getElementById('appBarCancelBtn'),
-        saveBtn: document.getElementById('appBarSaveBtn'),
-        appBarTitleEl: document.getElementById('appBarTitle'),
-        bodyTitleEl: document.getElementById('childEditorTitle'),
-        initialTitle: titleText,
-        backHref: 'stores.html',
-        subtitleEl: document.getElementById('storeLocationSubtitle'),
-        initialSubtitle: locTrim,
-        normalizeSubtitle: (s) => (s || '').trim(),
-        subtitlePlaceholder: 'Add a description.',
-        subtitleEmptyMeansHidden: true,
-        onSave: async ({ title: next, subtitle: nextLoc }) => {
-          const sid = sessionStorage.getItem('selectedStoreId');
-          const isNewStore =
-            sessionStorage.getItem('selectedStoreIsNew') === '1';
-
-          const db = await openStoreEditorDb();
-          const id = Number(sid);
-          const loc = (nextLoc ?? '').trim();
-          let insertedNewStore = false;
-
-          if (Number.isFinite(id)) {
-            db.run(
-              'UPDATE stores SET chain_name = ?, location_name = ? WHERE ID = ?;',
-              [next || '', loc, id],
-            );
-          } else if (isNewStore || !sid) {
-            db.run(
-              'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
-              [next || '', loc],
-            );
-            const idQ = db.exec('SELECT last_insert_rowid();');
-            if (idQ.length && idQ[0].values.length) {
-              sessionStorage.setItem(
-                'selectedStoreId',
-                String(idQ[0].values[0][0]),
-              );
-            }
-            insertedNewStore = true;
-          }
-
-          await persistStoreEditorDb(db);
-          sessionStorage.setItem('selectedStoreChain', next || '');
-          sessionStorage.setItem('selectedStoreLocation', loc);
-          sessionStorage.removeItem('selectedStoreIsNew');
-          if (insertedNewStore) {
-            window.location.reload();
-          }
-        },
-      });
-    });
   })();
 }
 

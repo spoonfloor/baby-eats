@@ -51,7 +51,7 @@ There is **no** `store_aisles` table. `docs/store-db-info.md` describes a differ
 
 **Delete aisle**
 
-- **Ctrl+click** on **blank / non-interactive** card surface only (**not** editable title, **not** item list) → confirm dialog (established pattern) → **permanent** delete from DB (aisle row + related mappings as appropriate).
+- **Ctrl+click** on **blank / non-interactive** card surface only → confirm → remove from **draft**; **Save** applies permanent delete in DB.
 
 **Later (not this pass)**
 
@@ -77,15 +77,19 @@ There is **no** `store_aisles` table. `docs/store-db-info.md` describes a differ
 
 ## Open implementation detail
 
-- **Chunk 1:** Listing/updating/inserting `store_locations` is done inline in `loadStoreEditorPage` via SQL.js (`openStoreEditorDb` / `persistStoreEditorDb`), same stack as store list/delete.
-- Still to wire: **`ingredient_store_location`** CRUD per aisle; reuse shopping-item list + new-ingredient patterns from `loadShoppingItemEditorPage` / related.
+- **`ingredient_store_location`** per aisle is wired on **Save** from `loadStoreEditorPage` (batched with aisle create/rename/delete).
+- **Not done:** shopping-style **suggestions** on list focus, **paste** affordances, and **“add below active”** flow tied to pending unknown items (spec above; current UX is simpler).
 
 ## Completed work
 
-- **Store title + description subtitle:** Editable store title and a subtitle bound to `stores.location_name`. Subtitle uses `wireChildEditorPage` with `subtitleEmptyMeansHidden: true` so it is **hidden when empty** and **only appears while the title is in edit mode**; placeholder is **“Add a description.”**. If a description is entered it persists on blur; if left empty it hides again after title edit ends.
+- **Store title + description subtitle:** Editable store title and subtitle bound to `stores.location_name`. Subtitle uses `wireChildEditorPage` with `subtitleEmptyMeansHidden: true` (hidden when empty; appears while title is in edit mode); placeholder **“Add a description.”** Draft subtitle text **stays visible after blur** (including when a description was already saved) until **Save** or **Cancel** — fixed via `lastCommittedSubtitle` in `wireChildEditorPage` (also benefits **unit editor** abbreviation row).
 - **Aisles section** (only when the store row exists — valid `selectedStoreId`): header **Aisles** (pluralization-overrides-style label).
-- **Empty state:** **Add an aisle** (`placeholder-prompt`; click + Enter/Space). **New Aisle** dialog (`window.ui.prompt`, same shape as New Store: Create/Cancel) → `INSERT store_locations (store_id, name, sort_order)` with `sort_order = MAX+1` → persist DB → new card. With **1+** aisles, that hint is **hidden** until focus enters an aisle card (name or items field); it sits **below the focused card** and **hides on blur** when focus leaves cards + CTA.
-- **Cards:** One card per aisle; aisle **name** uses purple in-card label styling; **click to edit**, **Enter** or blur commits `UPDATE store_locations SET name`; **Esc** cancels; saves immediately (not tied to app-bar Save).
+- **Draft-until-Save (aisles):** Aisle names, item lists, **new aisles**, and **deleted aisles** (see below) are held in memory until **app-bar Save**; one DB persist writes store row + all aisle changes. **Cancel** / **back** (with confirm) restores aisle draft from a load-time snapshot.
+- **Dirty state:** `wireChildEditorPage` supports optional **`extraDirtyState`** (`isDirty`, `onCancel`, `onAfterSaveSuccess`) plus **`refreshDirty`** so aisle edits enable Save/Cancel alongside title/subtitle. App bar is wired **before** aisle cards render so buttons update immediately. **`onSave`** may throw **`{ silent: true }`** to abort without a generic failure toast (e.g. user cancels unknown-items dialog on Save).
+- **Empty state:** **Add an aisle** (`placeholder-prompt`; click + Enter/Space). **New Aisle** dialog → new card in **draft** until **Save** (`INSERT` on Save). With **1+** aisles, hint **hidden** until focus enters an aisle card; **below the focused card**; hides on blur when focus leaves cards + CTA.
+- **Cards:** One card per aisle; purple in-card **name**; **click to edit**, **Enter** / blur update **draft**; **Esc** cancels name edit; **app-bar Save** persists names.
 - **First save without row ID:** After `INSERT stores`, page **reloads** so **Aisles** appears once `selectedStoreId` exists.
-- **Aisle item list editor:** Each aisle card contains a single shopping-editor-style newline textarea (placeholder **“Add an item.”**), open-on-tap, with blur commit behavior via `commitAisleItemEdit` (unknown-item confirmation flow preserved) and **Esc restoring last committed** content; no extra Cancel/Commit buttons or nested editor chrome.
-- **CSS parity:** Store aisle item list uses the same `.shopping-item-field` / `.shopping-item-textarea` visuals + focus chrome as shopping lists (so it sits inside the list surface).
+- **Aisle item lists:** Newline textarea (**“Add an item.”**); **input** updates draft; **Esc** reverts to value at focus; **Save** resolves ingredients, **one batched** unknown-items dialog (Create / Fix / cancel save), dedupe, then rewrites **`ingredient_store_location`** per aisle. Deprecated/hidden ingredients skipped with toast.
+- **Delete aisle:** **Ctrl+click** on blank card surface (not name, not textarea) → confirm → removed from **draft**; DB delete on **Save**.
+- **CSS parity:** `.shopping-item-field` / `.shopping-item-textarea` on aisle lists match shopping-item editor.
+- **Hint text size (store editor):** **“Add an aisle”** (`.store-add-aisle-cta .placeholder-prompt`) and aisle list placeholder **“Add an item.”** (`body.store-editor-page .shopping-item-textarea::placeholder`) use the same font size and family as typed list text (`var(--ingredient-editor-control-font-size)` / `var(--main-font)` in `css/styles.css`).

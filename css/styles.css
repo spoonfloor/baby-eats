@@ -362,6 +362,11 @@ body.store-editor-page .shopping-item-textarea:focus {
   caret-color: var(--edit-mode-color);
 }
 
+body.store-editor-page .shopping-item-textarea::placeholder {
+  font-size: var(--ingredient-editor-control-font-size);
+  font-family: var(--main-font);
+}
+
 /* Store editor: aisle cards (mirror shopping item card + purple labels) */
 body.store-editor-page .shopping-item-editor-card {
   margin-top: 14px;
@@ -399,6 +404,11 @@ body.store-editor-page .store-add-aisle-cta {
   padding: 10px 0 6px;
   cursor: pointer;
   user-select: none;
+}
+
+body.store-editor-page .store-add-aisle-cta .placeholder-prompt {
+  font-size: var(--ingredient-editor-control-font-size);
+  font-family: var(--main-font);
 }
 
 body.store-editor-page .store-add-location-cta {
