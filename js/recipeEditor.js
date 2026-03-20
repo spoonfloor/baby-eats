@@ -145,33 +145,10 @@ function ensureIngredientSubheadInsertModeWiring() {
   if (window._ingredientSubheadInsertModeWired) return;
   window._ingredientSubheadInsertModeWired = true;
 
-  const setMode = (flag) => {
-    try {
-      document.body.classList.toggle('subhead-insert-mode', !!flag);
-    } catch (_) {}
-  };
-
-  // Default off.
-  setMode(false);
-
-  document.addEventListener('keydown', (e) => {
-    if (!e) return;
-    // Only Option/Alt toggles insert mode.
-    if (e.key === 'Alt' || e.altKey) {
-      setMode(true);
-    }
-  });
-
-  document.addEventListener('keyup', (e) => {
-    if (!e) return;
-    // On keyup, drop the mode when Option/Alt is no longer held.
-    if (e.key === 'Alt' || !e.altKey) {
-      setMode(false);
-    }
-  });
-
-  // If the window loses focus, ensure mode is off (avoid “stuck” state).
-  window.addEventListener('blur', () => setMode(false));
+  // Hard-off: subhead insert mode is disabled.
+  try {
+    document.body.classList.remove('subhead-insert-mode');
+  } catch (_) {}
 }
 
 // --- Ingredient ordering helpers (main Ingredients list) ---
@@ -734,23 +711,135 @@ function appendIngredientAddCta({ container, sectionRef }) {
   const cta = document.createElement('div');
   // Share layout class with ingredient rows so spacing/line-height rules are identical.
   cta.className = 'ingredient-line ingredient-add-cta';
+
   const text = document.createElement('span');
-  text.className = 'placeholder-prompt';
-  text.textContent = 'Add an ingredient.';
+  text.className = 'placeholder-prompt ingredient-add-cta-copy';
+
+  const ingredientBtn = document.createElement('button');
+  ingredientBtn.type = 'button';
+  ingredientBtn.className = 'ingredient-add-cta-action';
+  ingredientBtn.textContent = 'Add an ingredient';
+  ingredientBtn.setAttribute('aria-label', 'Add an ingredient');
+
+  const headingBtn = document.createElement('button');
+  headingBtn.type = 'button';
+  headingBtn.className = 'ingredient-add-cta-action';
+  headingBtn.textContent = 'section title';
+  headingBtn.setAttribute('aria-label', 'Add a section title');
+
+  const tail = document.createElement('span');
+  tail.textContent = '.';
+  const spacer = document.createTextNode(' ');
+  const middle = document.createTextNode(' or ');
+
+  text.appendChild(ingredientBtn);
+  text.appendChild(spacer);
+  text.appendChild(middle);
+  text.appendChild(headingBtn);
+  text.appendChild(tail);
   cta.appendChild(text);
 
-  cta.addEventListener('click', () => {
-    if (
-      window.openIngredientEditRow &&
-      typeof window.openIngredientEditRow === 'function'
-    ) {
-      window.openIngredientEditRow({
-        parent: container,
-        replaceEl: cta,
-        mode: 'insert',
-        seedLine: null,
-      });
+  const getInsertIndexAtCta = () => {
+    try {
+      const children = Array.from(container.children || []);
+      const ctaIdx = children.indexOf(cta);
+      if (ctaIdx < 0) return Array.isArray(sectionRef.ingredients) ? sectionRef.ingredients.length : 0;
+      let count = 0;
+      for (let i = 0; i < ctaIdx; i += 1) {
+        const el = children[i];
+        if (!el || !el.matches) continue;
+        if (
+          el.matches('.ingredient-line') ||
+          el.matches('.ingredient-subsection-heading-line')
+        ) {
+          count += 1;
+        }
+      }
+      return count;
+    } catch (_) {
+      return Array.isArray(sectionRef.ingredients) ? sectionRef.ingredients.length : 0;
     }
+  };
+
+  const runAfterActiveHeadingCommit = (fn) => {
+    try {
+      const active = window._activeIngredientHeadingEditor;
+      if (active && typeof active.commit === 'function') {
+        active.commit();
+        setTimeout(() => {
+          try {
+            fn();
+          } catch (_) {}
+        }, 0);
+        return;
+      }
+    } catch (_) {}
+    fn();
+  };
+
+  const bindCtaAction = (btn, run) => {
+    let consumedPointerDown = false;
+
+    btn.addEventListener('pointerdown', (e) => {
+      if (!e || e.button !== 0) return;
+      consumedPointerDown = true;
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+      run();
+    });
+
+    btn.addEventListener('click', (e) => {
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+      if (consumedPointerDown) {
+        consumedPointerDown = false;
+        return;
+      }
+      run();
+    });
+  };
+
+  bindCtaAction(ingredientBtn, () => {
+    runAfterActiveHeadingCommit(() => {
+      if (
+        window.openIngredientEditRow &&
+        typeof window.openIngredientEditRow === 'function'
+      ) {
+        window.openIngredientEditRow({
+          parent: container,
+          replaceEl: cta,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: getInsertIndexAtCta(),
+        });
+      }
+    });
+  });
+
+  bindCtaAction(headingBtn, () => {
+    runAfterActiveHeadingCommit(() => {
+      // Always resolve the live model section — the closed-over sectionRef may
+      // point to a stale pre-clone object from renderRecipe's local `recipe`.
+      const liveSection =
+        window.recipeData &&
+        Array.isArray(window.recipeData.sections) &&
+        window.recipeData.sections[0]
+          ? window.recipeData.sections[0]
+          : sectionRef;
+      if (!Array.isArray(liveSection.ingredients)) liveSection.ingredients = [];
+      if (
+        typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
+      ) {
+        window.recipeEditorInsertIngredientHeadingAt(
+          liveSection,
+          getInsertIndexAtCta()
+        );
+      }
+    });
   });
 
   container.appendChild(cta);

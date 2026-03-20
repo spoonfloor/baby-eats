@@ -1,4 +1,5 @@
 - units editor
+
 - stores editor
   - [x] changes to page must trigger/clear dirty state appropriately
   - [x] editable name
@@ -19,11 +20,16 @@
   - [x] freeform text editing
   - [x] suggested completion
   - [x] aisle hint text roll-over
+  - 'Aisles' header should match all caps section headers on recipe page
 
 - recipe editor
   - paste box for ingredients
   - paste box for instructions
-  - delete an ingredient (ctrl click)
+  - [x] delete an ingredient (ctrl click)
+  - delete hover mechanism for adding ingredients and subheads to a recipe
+  - add space below section title (ie more padding above hint)
+  - fix section title placeholder text; is too light
+  - hint should persist while ingredient card is focused
 
 **Open questions**
 

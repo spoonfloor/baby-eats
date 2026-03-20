@@ -3878,12 +3878,12 @@ function loadStoreEditorPage() {
 
     const aislesBlock = hasPersistedStore
       ? `
-    <div
+    <h2
       id="storeAislesSectionLabel"
-      class="shopping-item-label store-aisles-section-label"
+      class="section-header store-aisles-section-label"
     >
       Aisles
-    </div>
+    </h2>
     <div id="storeAislesList" class="store-aisles-list" aria-label="Store aisles"></div>
     <div id="storeAddAisleCta" class="store-add-aisle-cta" role="button" tabindex="0">
       <span class="placeholder-prompt">Add an aisle</span>
