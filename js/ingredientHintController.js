@@ -19,6 +19,7 @@
   'use strict';
 
   const ACTIVE_CLASS = 'ingredient-slot--hint-active';
+  const HOVER_HANDOFF_GRACE_MS = 120;
 
   let _teardown = null;
 
@@ -34,6 +35,7 @@
     let hoverTarget = null;   // slot or header element currently hovered
     let focusTarget = null;   // slot that currently owns an active editor
     let hoverOverCta = false; // cursor is over the CTA itself (keep it alive)
+    let hoverClearTimer = null;
 
     const slots = () => section.querySelectorAll('.ingredient-slot');
     const headerCta = () => section.querySelector('.ingredient-header-cta');
@@ -59,6 +61,28 @@
       if (!slotHasActiveEditor(focusTarget)) {
         focusTarget = null;
       }
+    }
+
+    function cancelPendingHoverClear() {
+      if (hoverClearTimer) {
+        clearTimeout(hoverClearTimer);
+        hoverClearTimer = null;
+      }
+    }
+
+    function clearHoverNow() {
+      cancelPendingHoverClear();
+      hoverTarget = null;
+      resolve();
+    }
+
+    function scheduleHoverClear() {
+      cancelPendingHoverClear();
+      hoverClearTimer = setTimeout(() => {
+        hoverClearTimer = null;
+        hoverTarget = null;
+        resolve();
+      }, HOVER_HANDOFF_GRACE_MS);
     }
 
     // --- Resolve: who gets the hint? ---
@@ -102,6 +126,8 @@
     }
 
     function onMouseOver(e) {
+      cancelPendingHoverClear();
+
       // If cursor moved onto a CTA, flag it so we don't hide on mouseout.
       const cta = e.target.closest && e.target.closest('.ingredient-add-cta');
       if (cta && section.contains(cta)) {
@@ -127,11 +153,14 @@
           // Check if we moved back onto the parent slot
           const entity = related ? findEntity(related) : null;
           if (entity) {
+            cancelPendingHoverClear();
             hoverTarget = entity;
+            resolve();
+          } else if (related && section.contains(related)) {
+            scheduleHoverClear();
           } else {
-            hoverTarget = null;
+            clearHoverNow();
           }
-          resolve();
         }
         return;
       }
@@ -153,11 +182,23 @@
       const nextEntity = related ? findEntity(related) : null;
       if (nextEntity === hoverTarget) return;
 
-      hoverTarget = nextEntity;
-      resolve();
+      if (nextEntity) {
+        cancelPendingHoverClear();
+        hoverTarget = nextEntity;
+        resolve();
+        return;
+      }
+
+      if (related && section.contains(related)) {
+        scheduleHoverClear();
+        return;
+      }
+
+      clearHoverNow();
     }
 
     function onMouseLeave() {
+      cancelPendingHoverClear();
       hoverTarget = null;
       hoverOverCta = false;
       resolve();
@@ -217,6 +258,7 @@
       section.removeEventListener('focusin', onFocusIn);
       section.removeEventListener('focusout', onFocusOut);
       observer.disconnect();
+      cancelPendingHoverClear();
       hoverTarget = null;
       focusTarget = null;
       hoverOverCta = false;

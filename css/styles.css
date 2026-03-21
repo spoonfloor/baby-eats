@@ -1247,7 +1247,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 /* Same edit-blue placeholder style for ingredient subsection headings. */
 .ingredient-subsection-heading-text.placeholder-prompt--editblue::before {
   content: attr(data-placeholder);
-  color: rgba(33, 132, 255, 0.55);
+  color: var(--edit-mode-color);
   pointer-events: none;
 }
 
