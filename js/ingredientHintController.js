@@ -54,12 +54,37 @@
       );
     }
 
+    function escapeAttrValue(value) {
+      const raw = String(value || '');
+      if (window.CSS && typeof window.CSS.escape === 'function') {
+        return window.CSS.escape(raw);
+      }
+      return raw.replace(/["\\]/g, '\\$&');
+    }
+
+    function getActiveHeadingEditorSlot() {
+      const active = window._activeIngredientHeadingEditor;
+      const clientId =
+        active && active.clientId != null ? String(active.clientId) : '';
+      if (!clientId) return null;
+
+      const text = section.querySelector(
+        `.ingredient-subsection-heading-text[data-heading-client-id="${escapeAttrValue(
+          clientId
+        )}"]`
+      );
+      const slot = text && text.closest ? text.closest('.ingredient-slot') : null;
+      return slot && section.contains(slot) ? slot : null;
+    }
+
     function normalizeTargets() {
       if (hoverTarget && (!hoverTarget.isConnected || !section.contains(hoverTarget))) {
         hoverTarget = null;
       }
       if (!slotHasActiveEditor(focusTarget)) {
-        focusTarget = null;
+        // Subheading edit sessions should keep owning their hint until commit/cancel,
+        // even if focus bookkeeping briefly drops during rerender or hover handoff.
+        focusTarget = getActiveHeadingEditorSlot();
       }
     }
 

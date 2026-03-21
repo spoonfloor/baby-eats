@@ -522,97 +522,199 @@ function createPerLineCta(insertIndex) {
   const headingBtn = document.createElement('button');
   headingBtn.type = 'button';
   headingBtn.className = 'ingredient-add-cta-action';
-  headingBtn.textContent = 'section title';
+  headingBtn.textContent = 'title';
   headingBtn.dataset.ctaAction = 'add-heading';
 
+  const pasteBtn = document.createElement('button');
+  pasteBtn.type = 'button';
+  pasteBtn.className = 'ingredient-add-cta-action';
+  pasteBtn.textContent = 'paste content';
+  pasteBtn.dataset.ctaAction = 'paste-content';
+
   text.appendChild(ingredientBtn);
-  text.appendChild(document.createTextNode(' or '));
+  text.appendChild(document.createTextNode(', '));
   text.appendChild(headingBtn);
+  text.appendChild(document.createTextNode(', or '));
+  text.appendChild(pasteBtn);
   text.appendChild(document.createTextNode('.'));
   cta.appendChild(text);
 
   return cta;
 }
 
-function handleCtaAction(ingredientsSection, cta, btn) {
-  if (
-    document.body.classList.contains('ingredient-editing') ||
-    ingredientsSection.querySelector('.ingredient-edit-row.editing')
-  ) {
-    return;
+function waitForIngredientCtaTick() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+function getActiveIngredientEditor() {
+  const active = window._activeIngredientEditor;
+  if (!active || !active.rowElement || !active.rowElement.isConnected) {
+    return null;
   }
+  return active;
+}
+
+function getActiveHeadingEditor() {
+  const active = window._activeIngredientHeadingEditor;
+  if (!active || !active.clientId) return null;
+  return active;
+}
+
+async function prepareActiveHeadingEditorForAction(action, cta, insertIndex) {
+  const active = getActiveHeadingEditor();
+  if (!active) {
+    return { shouldProceed: true, insertIndex };
+  }
+
+  const activeSlot = active.slotElement;
+  const clickedOwnSlotCta =
+    !!activeSlot && !!cta && !!cta.closest && activeSlot === cta.closest('.ingredient-slot');
+  const isBlankHeading =
+    typeof active.isEmpty === 'function' ? active.isEmpty() : false;
+
+  try {
+    if (isBlankHeading && action === 'add-heading' && clickedOwnSlotCta) {
+      return { shouldProceed: false, insertIndex };
+    }
+
+    if (isBlankHeading) {
+      if (typeof active.cancel === 'function') {
+        active.cancel();
+      }
+      await waitForIngredientCtaTick();
+      return { shouldProceed: true, insertIndex };
+    }
+
+    if (typeof active.commit === 'function') {
+      active.commit();
+      await waitForIngredientCtaTick();
+    }
+  } catch (_) {
+    return { shouldProceed: false, insertIndex };
+  }
+
+  return { shouldProceed: true, insertIndex };
+}
+
+async function prepareActiveIngredientEditorForAction(action, cta, insertIndex) {
+  const active = getActiveIngredientEditor();
+  if (!active) {
+    return { shouldProceed: true, insertIndex };
+  }
+
+  if (action !== 'add-heading') {
+    return { shouldProceed: false, insertIndex };
+  }
+
+  const isBlankInsert =
+    !!active.isInsert &&
+    typeof active.isEmpty === 'function' &&
+    active.isEmpty();
+  const clickedOwnTrailingCta =
+    !!active.isInsert && !!active.ctaAnchorEl && active.ctaAnchorEl === cta;
+
+  try {
+    if (isBlankInsert) {
+      if (typeof active.cancel === 'function') {
+        active.cancel();
+      }
+      await waitForIngredientCtaTick();
+      return { shouldProceed: true, insertIndex };
+    }
+
+    if (typeof active.commit === 'function') {
+      await active.commit();
+      await waitForIngredientCtaTick();
+    }
+
+    return {
+      shouldProceed: true,
+      insertIndex: clickedOwnTrailingCta ? insertIndex + 1 : insertIndex,
+    };
+  } catch (_) {
+    return { shouldProceed: false, insertIndex };
+  }
+}
+
+async function handleCtaAction(ingredientsSection, cta, btn) {
+  if (!ingredientsSection || !cta || !btn) return;
 
   const insertIndex = parseInt(cta.dataset.insertIndex, 10);
   const action = btn.dataset.ctaAction;
 
-  const runAfterActiveHeadingCommit = (fn) => {
-    try {
-      const active = window._activeIngredientHeadingEditor;
-      if (active && typeof active.commit === 'function') {
-        active.commit();
-        setTimeout(() => {
-          try { fn(); } catch (_) {}
-        }, 0);
-        return;
-      }
-    } catch (_) {}
-    fn();
-  };
+  if (action === 'paste-content') {
+    console.log('ingredient CTA: paste content');
+    return;
+  }
+  if (!Number.isFinite(insertIndex)) return;
+
+  const headingPrep = await prepareActiveHeadingEditorForAction(
+    action,
+    cta,
+    insertIndex
+  );
+  if (!headingPrep.shouldProceed) return;
+
+  const prep = await prepareActiveIngredientEditorForAction(
+    action,
+    cta,
+    headingPrep.insertIndex
+  );
+  if (!prep.shouldProceed) return;
+  const nextInsertIndex = prep.insertIndex;
 
   if (action === 'add-heading') {
-    runAfterActiveHeadingCommit(() => {
-      const sec = window.recipeData?.sections?.[0];
-      if (sec && typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
-        window.recipeEditorInsertIngredientHeadingAt(sec, insertIndex);
-      }
-    });
+    const sec = window.recipeData?.sections?.[0];
+    if (sec && typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+      window.recipeEditorInsertIngredientHeadingAt(sec, nextInsertIndex);
+    }
     return;
   }
 
   if (action === 'add-ingredient') {
-    runAfterActiveHeadingCommit(() => {
-      const sec = window.recipeData?.sections?.[0];
-      if (!sec) return;
-      const liveIdx = Array.isArray(sec.ingredients)
-        ? Math.min(insertIndex, sec.ingredients.length)
-        : insertIndex;
+    const sec = window.recipeData?.sections?.[0];
+    if (!sec) return;
+    const liveIdx = Array.isArray(sec.ingredients)
+      ? Math.min(nextInsertIndex, sec.ingredients.length)
+      : nextInsertIndex;
 
-      const isPerLine = cta.classList.contains('ingredient-add-cta--per-line');
-      if (isPerLine) {
-        const anchor = document.createElement('div');
-        const slot = cta.closest('.ingredient-slot');
-        if (slot) {
-          slot.after(anchor);
-        } else {
-          ingredientsSection.appendChild(anchor);
-        }
-        if (typeof window.openIngredientEditRow === 'function') {
-          window.openIngredientEditRow({
-            parent: ingredientsSection,
-            replaceEl: anchor,
-            mode: 'insert',
-            seedLine: null,
-            insertAtIndex: liveIdx,
-          });
-        }
+    const isPerLine = cta.classList.contains('ingredient-add-cta--per-line');
+    if (isPerLine) {
+      const anchor = document.createElement('div');
+      const slot = cta.closest('.ingredient-slot');
+      if (slot) {
+        slot.after(anchor);
       } else {
-        const liveCta = cta.isConnected
-          ? cta
-          : ingredientsSection.querySelector(
-              '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
-            );
-        if (!liveCta) return;
-        if (typeof window.openIngredientEditRow === 'function') {
-          window.openIngredientEditRow({
-            parent: ingredientsSection,
-            replaceEl: liveCta,
-            mode: 'insert',
-            seedLine: null,
-            insertAtIndex: liveIdx,
-          });
-        }
+        ingredientsSection.appendChild(anchor);
       }
-    });
+      if (typeof window.openIngredientEditRow === 'function') {
+        window.openIngredientEditRow({
+          parent: ingredientsSection,
+          replaceEl: anchor,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: liveIdx,
+        });
+      }
+    } else {
+      const liveCta = cta.isConnected
+        ? cta
+        : ingredientsSection.querySelector(
+            '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
+          );
+      if (!liveCta) return;
+      if (typeof window.openIngredientEditRow === 'function') {
+        window.openIngredientEditRow({
+          parent: ingredientsSection,
+          replaceEl: liveCta,
+          mode: 'insert',
+          seedLine: null,
+          insertAtIndex: liveIdx,
+        });
+      }
+    }
   }
 }
 

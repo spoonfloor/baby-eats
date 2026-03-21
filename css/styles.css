@@ -55,8 +55,12 @@
 
   --space-ingredient-item: 13px; /* Ingredient → ingredient (flowing list) */
   --space-step-to-step: 22px; /* Step → step (sequential actions) */
-  --space-subhead-to-content: 12px; /* Subhead → first item below it */
-  --space-content-to-subhead: 36px; /* Item → subhead below it (section break) */
+  --space-subhead-to-content: var(
+    --space-ingredient-item
+  ); /* Subhead → first item below it */
+  --space-content-to-subhead: var(
+    --space-ingredient-item
+  ); /* Item → subhead below it (section break) */
   --space-section-header-to-content: 16px; /* INGREDIENTS/INSTRUCTIONS → first line */
   --space-title-to-section: 48px; /* Recipe title → INGREDIENTS */
   --space-ywn-card: 44px; /* Vertical space around YWN card */
@@ -648,6 +652,28 @@ body.shopping-editor-page .shopping-item-help {
   color: var(--placeholder-muted);
   text-decoration: none;
   cursor: pointer;
+}
+
+body.ingredient-insert-blank-active
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"] {
+  cursor: default;
+  color: var(--placeholder-muted);
+}
+
+body.ingredient-insert-blank-active
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"]:hover,
+body.ingredient-insert-blank-active
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"]:focus-visible {
+  color: var(--placeholder-muted);
+  outline: none;
+}
+
+.ingredient-add-cta-action.ingredient-add-cta-action--inert,
+.ingredient-add-cta-action.ingredient-add-cta-action--inert:hover,
+.ingredient-add-cta-action.ingredient-add-cta-action--inert:focus-visible {
+  color: var(--placeholder-muted);
+  cursor: default;
+  outline: none;
 }
 
 .ingredient-add-cta-action:hover,

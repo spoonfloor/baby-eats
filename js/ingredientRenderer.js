@@ -240,6 +240,29 @@ function renderIngredientHeading(row) {
     window._editingIngredientHeadingClientId = clientId;
     div.classList.add('editing');
 
+    const slotEl =
+      div.closest && div.closest('.ingredient-slot')
+        ? div.closest('.ingredient-slot')
+        : null;
+    const getOwnHeadingCtaButton = () => {
+      if (!slotEl || !slotEl.querySelector) return null;
+      return slotEl.querySelector(
+        '.ingredient-add-cta-action[data-cta-action="add-heading"]'
+      );
+    };
+    const syncHeadingActionAffordance = (disabled) => {
+      const btn = getOwnHeadingCtaButton();
+      if (!(btn instanceof HTMLElement)) return;
+      btn.classList.toggle('ingredient-add-cta-action--inert', !!disabled);
+      if (disabled) {
+        btn.setAttribute('aria-disabled', 'true');
+        btn.tabIndex = -1;
+      } else {
+        btn.removeAttribute('aria-disabled');
+        btn.removeAttribute('tabindex');
+      }
+    };
+
     // Enter edit mode. Keep placeholder class until the user types.
     text.contentEditable = 'true';
     text.textContent = startValue;
@@ -258,6 +281,7 @@ function renderIngredientHeading(row) {
     let suppressCommitOnce = false;
 
     const cleanup = () => {
+      syncHeadingActionAffordance(false);
       text.contentEditable = 'false';
       div.classList.remove('editing');
       window._editingIngredientHeadingClientId = null;
@@ -328,9 +352,14 @@ function renderIngredientHeading(row) {
     // can commit/delete the active heading before forcing a rerender.
     window._activeIngredientHeadingEditor = {
       clientId,
+      slotElement: slotEl,
+      isEmpty: () => normalizeIngredientHeadingText(text.textContent || '') === '',
       commit,
       cancel,
     };
+    syncHeadingActionAffordance(
+      normalizeIngredientHeadingText(text.textContent || '') === ''
+    );
 
     const onInput = (e) => {
       if (e && e.isTrusted === false) return;
@@ -350,6 +379,7 @@ function renderIngredientHeading(row) {
             'placeholder-prompt--editblue'
           );
         }
+        syncHeadingActionAffordance(!v);
       } catch (_) {}
     };
 
@@ -610,6 +640,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   if (!parent || !replaceEl) return;
   const isInsert = mode === 'insert';
   const insertAt = insertAtIndex;
+  const replaceElIsCta = replaceEl.classList.contains('ingredient-add-cta');
 
   const row = document.createElement('div');
   row.className = 'ingredient-edit-row editing';
@@ -696,6 +727,32 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   try {
     document.body.classList.add('ingredient-editing');
   } catch (_) {}
+
+  const syncAddIngredientActionAffordance = (disabled) => {
+    const shouldDisable = !!disabled;
+    try {
+      document.body.classList.toggle(
+        'ingredient-insert-blank-active',
+        shouldDisable
+      );
+    } catch (_) {}
+
+    try {
+      const buttons = document.querySelectorAll(
+        '.ingredient-add-cta-action[data-cta-action="add-ingredient"]'
+      );
+      buttons.forEach((btn) => {
+        if (!(btn instanceof HTMLElement)) return;
+        if (shouldDisable) {
+          btn.setAttribute('aria-disabled', 'true');
+          btn.tabIndex = -1;
+        } else {
+          btn.removeAttribute('aria-disabled');
+          btn.removeAttribute('tabindex');
+        }
+      });
+    } catch (_) {}
+  };
 
   // Hidden focus target to support a "neutral" state within edit mode:
   // clicking tray background can move focus off inputs without exiting edit mode.
@@ -812,6 +869,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     const t = e && e.target;
     if (t && t.classList && t.classList.contains('ingredient-edit-input')) {
       markDirtyOnce();
+      syncActiveIngredientEditorState();
     }
   });
 
@@ -822,6 +880,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     const t = e && e.target;
     if (t && t.classList && t.classList.contains('ingredient-edit-input')) {
       markDirtyOnce();
+      syncActiveIngredientEditorState();
     }
   });
 
@@ -870,9 +929,39 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   // DOM replacement can be triggered by multiple paths (Escape + focusout, etc.).
   // Make replacement idempotent and always replace via the row's current parent.
   let _didFinalizeSwap = false;
+  const activeEditorState = {
+    rowElement: row,
+    isInsert,
+    insertAtIndex: Number.isFinite(Number(insertAt)) ? Number(insertAt) : 0,
+    ctaAnchorEl: replaceElIsCta ? replaceEl : null,
+    isEmpty: () => isEmpty(),
+    commit: async () => {
+      await commit();
+    },
+    cancel: () => {
+      cancel();
+    },
+  };
+  const syncActiveIngredientEditorState = () => {
+    if (window._activeIngredientEditor !== activeEditorState) return;
+    const disableAddIngredient = !!(
+      !_didFinalizeSwap &&
+      row.isConnected &&
+      isInsert &&
+      isEmpty()
+    );
+    syncAddIngredientActionAffordance(disableAddIngredient);
+  };
+  const clearActiveIngredientEditorState = () => {
+    if (window._activeIngredientEditor === activeEditorState) {
+      window._activeIngredientEditor = null;
+    }
+    syncAddIngredientActionAffordance(false);
+  };
   const finalizeSwap = (nextEl) => {
     if (_didFinalizeSwap) return;
     _didFinalizeSwap = true;
+    clearActiveIngredientEditorState();
     try {
       try {
         document.body.classList.remove('ingredient-editing');
@@ -1023,7 +1112,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
 
       // If the insert flow replaced an insert-rail element, rerender to restore rails.
       // After the rerender, focus the new card so the existing focusin handler
-      // reveals the "Add an ingredient" CTA below it.
+      // reveals the ingredient add-hint CTA below it.
       try {
         const insertedClientId = ingredient.clientId;
         if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
@@ -1069,6 +1158,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
           try {
             document.body.classList.remove('ingredient-editing');
           } catch (_) {}
+          clearActiveIngredientEditorState();
           _didFinalizeSwap = true;
           if (row && row.parentNode) row.parentNode.removeChild(row);
         } catch (_) {}
@@ -1176,14 +1266,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Replace in DOM first, then enter edit mode with the shared controller.
-  // When the CTA ("Add an ingredient") is the element being replaced, keep it
+  // When the ingredient add-hint CTA is the element being replaced, keep it
   // in the DOM so the hint stays visible below the edit row while typing.
-  const replaceElIsCta = replaceEl.classList.contains('ingredient-add-cta');
   if (replaceElIsCta) {
     parent.insertBefore(row, replaceEl);
   } else {
     parent.replaceChild(row, replaceEl);
   }
+
+  window._activeIngredientEditor = activeEditorState;
+  syncActiveIngredientEditorState();
 
   if (typeof setupInlineRowEditing === 'function') {
     let _isEditing = false;
