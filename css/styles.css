@@ -660,6 +660,54 @@ body.shopping-editor-page .shopping-item-help {
   outline-offset: 2px;
 }
 
+/* --- Ingredient slots (wrapper for line + per-line CTA) --- */
+.ingredient-slot {
+  position: relative;
+}
+
+/* Per-line CTA: hidden by default, revealed by JS hint controller */
+.ingredient-slot > .ingredient-add-cta {
+  display: none;
+}
+
+.ingredient-slot.ingredient-slot--hint-active > .ingredient-add-cta {
+  display: flex;
+}
+
+/* INGREDIENTS header hint CTA:
+   - persistent in empty state
+   - hover-activated in non-empty state */
+.ingredient-header-cta {
+  display: none;
+}
+
+.ingredient-header-cta.ingredient-header-cta--persistent,
+.ingredient-header-cta.ingredient-header-cta--active {
+  display: flex;
+}
+
+/* Slot spacing (applied via JS classes to avoid fragile sibling selectors) */
+.ingredient-slot--spacing-first {
+  margin-top: var(--space-section-header-to-content);
+}
+
+.ingredient-slot--spacing-item-item {
+  margin-top: var(--space-ingredient-item);
+}
+
+.ingredient-slot--spacing-heading-item {
+  margin-top: var(--space-subhead-to-content);
+}
+
+.ingredient-slot--spacing-item-heading {
+  margin-top: var(--space-content-to-subhead);
+}
+
+/* Fallback sibling rule for first slot after header + insert-zone */
+.section-header + .ingredient-insert-zone + .ingredient-slot {
+  margin-top: var(--space-section-header-to-content);
+}
+
 /* When the empty-state CTA is present, suppress between-row insertion icons and interactions */
 #ingredientsSection:has(.ingredient-add-cta) .ingredient-insert-zone::before {
   opacity: 0 !important;
@@ -847,6 +895,7 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   pointer-events: none;
   cursor: default;
 }
+
 
 .step-insert-zone {
   position: relative;

@@ -30,6 +30,8 @@
   - add space below section title (ie more padding above hint)
   - fix section title placeholder text; is too light
   - hint should persist while ingredient card is focused
+  - remove enforcement of existing ingredients
+  - trigger new ingredient dialog on save
 
 **Open questions**
 

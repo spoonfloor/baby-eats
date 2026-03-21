@@ -133,6 +133,7 @@ function findIngredientSectionForHeadingClientId(clientId) {
 function renderIngredientHeading(row) {
   const div = document.createElement('div');
   div.className = 'ingredient-subsection-heading-line';
+  div.tabIndex = 0;
   if (row && row.headingClientId) {
     div.dataset.headingClientId = String(row.headingClientId);
   }
@@ -382,6 +383,7 @@ function renderIngredient(line) {
 
   const div = document.createElement('div');
   div.className = 'ingredient-line';
+  div.tabIndex = 0;
   if (line && line.rimId != null) {
     div.dataset.rimId = String(line.rimId);
   }
@@ -1020,11 +1022,20 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
       if (readOnlyLine) finalizeSwap(readOnlyLine);
 
       // If the insert flow replaced an insert-rail element, rerender to restore rails.
+      // After the rerender, focus the new card so the existing focusin handler
+      // reveals the "Add an ingredient" CTA below it.
       try {
+        const insertedClientId = ingredient.clientId;
         if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
           setTimeout(() => {
             try {
               window.recipeEditorRerenderIngredientsFromModel();
+            } catch (_) {}
+            try {
+              const card = document.querySelector(
+                `.ingredient-line[data-client-id="${insertedClientId}"]`
+              );
+              if (card) card.focus({ preventScroll: true });
             } catch (_) {}
           }, 0);
         }
@@ -1165,7 +1176,14 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Replace in DOM first, then enter edit mode with the shared controller.
-  parent.replaceChild(row, replaceEl);
+  // When the CTA ("Add an ingredient") is the element being replaced, keep it
+  // in the DOM so the hint stays visible below the edit row while typing.
+  const replaceElIsCta = replaceEl.classList.contains('ingredient-add-cta');
+  if (replaceElIsCta) {
+    parent.insertBefore(row, replaceEl);
+  } else {
+    parent.replaceChild(row, replaceEl);
+  }
 
   if (typeof setupInlineRowEditing === 'function') {
     let _isEditing = false;

@@ -261,12 +261,13 @@ function rerenderIngredientsSectionFromModel() {
 
   ingredientsSection.innerHTML = '';
 
+  wireIngredientCtaDelegation(ingredientsSection);
+
   const ingredientsHeader = document.createElement('h2');
   ingredientsHeader.className = 'section-header';
   ingredientsHeader.textContent = 'Ingredients';
   ingredientsSection.appendChild(ingredientsHeader);
 
-  // v1: Ingredients render from the first section (bridge loads a single synthetic section).
   const firstSection =
     Array.isArray(recipe.sections) && recipe.sections[0]
       ? recipe.sections[0]
@@ -277,100 +278,33 @@ function rerenderIngredientsSectionFromModel() {
     : [];
 
   const isHeading = (row) => row && row.rowType === 'heading';
-  const renderRows = rows;
 
   ensureIngredientSubheadInsertModeWiring();
 
-  // Top insertion zone (suppressed if next row is a heading)
+  // Top insertion zone (kept for future subhead-insert-mode; currently disabled)
   {
-    const next = renderRows.length > 0 ? renderRows[0] : null;
+    const next = rows.length > 0 ? rows[0] : null;
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
     if (next && isHeading(next))
       zone.classList.add('ingredient-insert-zone--disabled');
-    let _didInsert = false;
-    const handleInsert = (e) => {
-      if (!e) return;
-      if (_didInsert) return;
-      _didInsert = true;
-      try {
-        setTimeout(() => {
-          _didInsert = false;
-        }, 0);
-      } catch (_) {}
-
-      // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
-      try {
-        if (
-          document.body.classList.contains('ingredient-editing') ||
-          ingredientsSection.querySelector('.ingredient-edit-row.editing')
-        ) {
-          return;
-        }
-      } catch (_) {}
-
-      const wantsHeading = !!e.altKey;
-
-      if (wantsHeading) {
-        // Do not allow consecutive headings.
-        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-
-        // If a heading editor is active, commit/delete it first; Option-click insertion
-        // prevents normal focus changes so blur won't run.
-        try {
-          const active = window._activeIngredientHeadingEditor;
-          if (active && typeof active.commit === 'function') {
-            active.commit();
-            // After commit triggers a rerender, perform the insert on next tick.
-            setTimeout(() => {
-              if (
-                typeof window.recipeEditorInsertIngredientHeadingAt ===
-                'function'
-              ) {
-                window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-              }
-            }, 0);
-            return;
-          }
-        } catch (_) {}
-
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-
-        if (
-          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-        ) {
-          window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-        }
-        return;
-      }
-
-      // Normal click: insert an ingredient row at this position (index 0).
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch (_) {}
-      if (
-        window.openIngredientEditRow &&
-        typeof window.openIngredientEditRow === 'function'
-      ) {
-        window.openIngredientEditRow({
-          parent: ingredientsSection,
-          replaceEl: zone,
-          mode: 'insert',
-          seedLine: null,
-          insertAtIndex: 0,
-        });
-      }
-    };
-    zone.addEventListener('pointerdown', handleInsert);
-    zone.addEventListener('click', handleInsert);
     ingredientsSection.appendChild(zone);
   }
 
-  renderRows.forEach((row, idx) => {
+  // Shared INGREDIENTS-title CTA:
+  // - empty state: persistently visible below the title
+  // - non-empty state: shown only when the title is hovered
+  {
+    const headerCta = createPerLineCta(0);
+    headerCta.classList.remove('ingredient-add-cta--per-line');
+    headerCta.classList.add('ingredient-header-cta');
+    if (rows.length === 0) {
+      headerCta.classList.add('ingredient-header-cta--persistent');
+    }
+    ingredientsSection.appendChild(headerCta);
+  }
+
+  rows.forEach((row, idx) => {
     let el = null;
     if (row && row.rowType === 'heading') {
       if (typeof window.renderIngredientHeading === 'function') {
@@ -385,16 +319,13 @@ function rerenderIngredientsSectionFromModel() {
       }
     } else {
       if (typeof renderIngredient === 'function') {
-        if (row && row.rowType !== 'heading') {
-          // Ensure every ingredient row has a stable clientId for in-session operations (delete/undo).
-          if (!row.clientId) {
-            row.clientId =
-              row.rimId != null
-                ? `i-${row.rimId}`
-                : `tmp-ing-${Date.now()}-${Math.random()
-                    .toString(16)
-                    .slice(2)}`;
-          }
+        if (!row.clientId) {
+          row.clientId =
+            row.rimId != null
+              ? `i-${row.rimId}`
+              : `tmp-ing-${Date.now()}-${Math.random()
+                  .toString(16)
+                  .slice(2)}`;
         }
         el = renderIngredient(row);
       } else {
@@ -407,172 +338,48 @@ function rerenderIngredientsSectionFromModel() {
         el.appendChild(span);
       }
     }
-    if (el) ingredientsSection.appendChild(el);
 
-    // Inter-row insertion zone (between idx and idx+1), suppressed adjacent to headings
-    const next = idx + 1 < renderRows.length ? renderRows[idx + 1] : null;
+    // Wrap in slot (line + per-line CTA; CSS handles show/hide)
+    const slot = document.createElement('div');
+    slot.className = 'ingredient-slot';
+
+    if (idx === 0) {
+      slot.classList.add('ingredient-slot--spacing-first');
+    } else {
+      const prev = rows[idx - 1];
+      if (isHeading(row)) {
+        slot.classList.add('ingredient-slot--spacing-item-heading');
+      } else if (isHeading(prev)) {
+        slot.classList.add('ingredient-slot--spacing-heading-item');
+      } else {
+        slot.classList.add('ingredient-slot--spacing-item-item');
+      }
+    }
+
+    if (el) slot.appendChild(el);
+    slot.appendChild(createPerLineCta(idx + 1));
+    ingredientsSection.appendChild(slot);
+
+    // Inter-row insertion zone (kept for future subhead-insert-mode)
+    const next = idx + 1 < rows.length ? rows[idx + 1] : null;
     if (!next) return;
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
     if (isHeading(row) || isHeading(next)) {
       zone.classList.add('ingredient-insert-zone--disabled');
     }
-    let _didInsert = false;
-    const handleInsert = (e) => {
-      if (!e) return;
-      if (_didInsert) return;
-      _didInsert = true;
-      try {
-        setTimeout(() => {
-          _didInsert = false;
-        }, 0);
-      } catch (_) {}
-
-      // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
-      try {
-        if (
-          document.body.classList.contains('ingredient-editing') ||
-          ingredientsSection.querySelector('.ingredient-edit-row.editing')
-        ) {
-          return;
-        }
-      } catch (_) {}
-
-      const insertIdx = idx + 1;
-      const wantsHeading = !!e.altKey;
-
-      if (wantsHeading) {
-        // Do not allow consecutive headings.
-        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-
-        try {
-          const active = window._activeIngredientHeadingEditor;
-          if (active && typeof active.commit === 'function') {
-            active.commit();
-            setTimeout(() => {
-              if (
-                typeof window.recipeEditorInsertIngredientHeadingAt ===
-                'function'
-              ) {
-                window.recipeEditorInsertIngredientHeadingAt(
-                  firstSection,
-                  insertIdx
-                );
-              }
-            }, 0);
-            return;
-          }
-        } catch (_) {}
-
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-
-        if (
-          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-        ) {
-          window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
-        }
-        return;
-      }
-
-      // Normal click: insert an ingredient row at this position.
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch (_) {}
-      if (
-        window.openIngredientEditRow &&
-        typeof window.openIngredientEditRow === 'function'
-      ) {
-        window.openIngredientEditRow({
-          parent: ingredientsSection,
-          replaceEl: zone,
-          mode: 'insert',
-          seedLine: null,
-          insertAtIndex: insertIdx,
-        });
-      }
-    };
-    zone.addEventListener('pointerdown', handleInsert);
-    zone.addEventListener('click', handleInsert);
     ingredientsSection.appendChild(zone);
   });
 
-  // Trailing insertion zone (after the last row) so hover/click works “below” the last line.
-  {
-    const last =
-      renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
+  // Trailing insertion zone
+  if (rows.length > 0) {
+    const last = rows[rows.length - 1];
     const zone = document.createElement('div');
     zone.className = 'ingredient-insert-zone';
-    if (last && isHeading(last)) {
-      // Adjacent to heading: block heading insertion here (but allow ingredient insertion).
+    if (last && isHeading(last))
       zone.classList.add('ingredient-insert-zone--disabled');
-    }
-    let _didInsert = false;
-    const handleInsert = (e) => {
-      if (!e) return;
-      if (_didInsert) return;
-      _didInsert = true;
-      try {
-        setTimeout(() => {
-          _didInsert = false;
-        }, 0);
-      } catch (_) {}
-
-      try {
-        if (
-          document.body.classList.contains('ingredient-editing') ||
-          ingredientsSection.querySelector('.ingredient-edit-row.editing')
-        ) {
-          return;
-        }
-      } catch (_) {}
-
-      const wantsHeading = !!e.altKey;
-      const insertIdx = renderRows.length;
-
-      if (wantsHeading) {
-        if (zone.classList.contains('ingredient-insert-zone--disabled')) return;
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-        if (
-          typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-        ) {
-          window.recipeEditorInsertIngredientHeadingAt(firstSection, insertIdx);
-        }
-        return;
-      }
-
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch (_) {}
-      if (
-        window.openIngredientEditRow &&
-        typeof window.openIngredientEditRow === 'function'
-      ) {
-        window.openIngredientEditRow({
-          parent: ingredientsSection,
-          replaceEl: zone,
-          mode: 'insert',
-          seedLine: null,
-          insertAtIndex: insertIdx,
-        });
-      }
-    };
-    zone.addEventListener('pointerdown', handleInsert);
-    zone.addEventListener('click', handleInsert);
     ingredientsSection.appendChild(zone);
   }
-
-  appendIngredientAddCta({
-    container: ingredientsSection,
-    sectionRef: firstSection,
-  });
 
   // Focus a newly inserted heading, if any.
   try {
@@ -592,6 +399,13 @@ function rerenderIngredientsSectionFromModel() {
   try {
     if (typeof window.recipeEditorRerenderYouWillNeedFromModel === 'function') {
       window.recipeEditorRerenderYouWillNeedFromModel();
+    }
+  } catch (_) {}
+
+  // Wire up the centralized hint controller.
+  try {
+    if (typeof window.initIngredientHintController === 'function') {
+      window.initIngredientHintController(ingredientsSection);
     }
   } catch (_) {}
 }
@@ -689,28 +503,12 @@ function rerenderYouWillNeedFromModel() {
 
 window.recipeEditorRerenderYouWillNeedFromModel = rerenderYouWillNeedFromModel;
 
-// Render a single UI-only CTA for adding an ingredient (no data placeholders).
-function appendIngredientAddCta({ container, sectionRef }) {
-  if (!container || !sectionRef) return;
-  // Avoid duplicate CTAs if rerendering without clearing.
-  const existing = container.querySelector('.ingredient-add-cta');
-  if (existing) existing.remove();
+// --- Per-line CTA infrastructure (replaces the old single-CTA approach) ---
 
-  // If an edit row is active, defer showing the CTA until the edit flow finishes.
-  const hasActiveEdit = !!container.querySelector(
-    '.ingredient-edit-row.editing'
-  );
-  if (hasActiveEdit) return;
-
-  // In non-empty state, do not render a CTA.
-  const hasAnyIngredients = Array.isArray(sectionRef.ingredients)
-    ? sectionRef.ingredients.some((r) => r && r.rowType !== 'heading')
-    : false;
-  if (hasAnyIngredients) return;
-
+function createPerLineCta(insertIndex) {
   const cta = document.createElement('div');
-  // Share layout class with ingredient rows so spacing/line-height rules are identical.
-  cta.className = 'ingredient-line ingredient-add-cta';
+  cta.className = 'ingredient-line ingredient-add-cta ingredient-add-cta--per-line';
+  cta.dataset.insertIndex = String(insertIndex);
 
   const text = document.createElement('span');
   text.className = 'placeholder-prompt ingredient-add-cta-copy';
@@ -719,47 +517,33 @@ function appendIngredientAddCta({ container, sectionRef }) {
   ingredientBtn.type = 'button';
   ingredientBtn.className = 'ingredient-add-cta-action';
   ingredientBtn.textContent = 'Add an ingredient';
-  ingredientBtn.setAttribute('aria-label', 'Add an ingredient');
+  ingredientBtn.dataset.ctaAction = 'add-ingredient';
 
   const headingBtn = document.createElement('button');
   headingBtn.type = 'button';
   headingBtn.className = 'ingredient-add-cta-action';
   headingBtn.textContent = 'section title';
-  headingBtn.setAttribute('aria-label', 'Add a section title');
-
-  const tail = document.createElement('span');
-  tail.textContent = '.';
-  const spacer = document.createTextNode(' ');
-  const middle = document.createTextNode(' or ');
+  headingBtn.dataset.ctaAction = 'add-heading';
 
   text.appendChild(ingredientBtn);
-  text.appendChild(spacer);
-  text.appendChild(middle);
+  text.appendChild(document.createTextNode(' or '));
   text.appendChild(headingBtn);
-  text.appendChild(tail);
+  text.appendChild(document.createTextNode('.'));
   cta.appendChild(text);
 
-  const getInsertIndexAtCta = () => {
-    try {
-      const children = Array.from(container.children || []);
-      const ctaIdx = children.indexOf(cta);
-      if (ctaIdx < 0) return Array.isArray(sectionRef.ingredients) ? sectionRef.ingredients.length : 0;
-      let count = 0;
-      for (let i = 0; i < ctaIdx; i += 1) {
-        const el = children[i];
-        if (!el || !el.matches) continue;
-        if (
-          el.matches('.ingredient-line') ||
-          el.matches('.ingredient-subsection-heading-line')
-        ) {
-          count += 1;
-        }
-      }
-      return count;
-    } catch (_) {
-      return Array.isArray(sectionRef.ingredients) ? sectionRef.ingredients.length : 0;
-    }
-  };
+  return cta;
+}
+
+function handleCtaAction(ingredientsSection, cta, btn) {
+  if (
+    document.body.classList.contains('ingredient-editing') ||
+    ingredientsSection.querySelector('.ingredient-edit-row.editing')
+  ) {
+    return;
+  }
+
+  const insertIndex = parseInt(cta.dataset.insertIndex, 10);
+  const action = btn.dataset.ctaAction;
 
   const runAfterActiveHeadingCommit = (fn) => {
     try {
@@ -767,9 +551,7 @@ function appendIngredientAddCta({ container, sectionRef }) {
       if (active && typeof active.commit === 'function') {
         active.commit();
         setTimeout(() => {
-          try {
-            fn();
-          } catch (_) {}
+          try { fn(); } catch (_) {}
         }, 0);
         return;
       }
@@ -777,72 +559,94 @@ function appendIngredientAddCta({ container, sectionRef }) {
     fn();
   };
 
-  const bindCtaAction = (btn, run) => {
-    let consumedPointerDown = false;
-
-    btn.addEventListener('pointerdown', (e) => {
-      if (!e || e.button !== 0) return;
-      consumedPointerDown = true;
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch (_) {}
-      run();
-    });
-
-    btn.addEventListener('click', (e) => {
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch (_) {}
-      if (consumedPointerDown) {
-        consumedPointerDown = false;
-        return;
-      }
-      run();
-    });
-  };
-
-  bindCtaAction(ingredientBtn, () => {
+  if (action === 'add-heading') {
     runAfterActiveHeadingCommit(() => {
-      if (
-        window.openIngredientEditRow &&
-        typeof window.openIngredientEditRow === 'function'
-      ) {
-        window.openIngredientEditRow({
-          parent: container,
-          replaceEl: cta,
-          mode: 'insert',
-          seedLine: null,
-          insertAtIndex: getInsertIndexAtCta(),
-        });
+      const sec = window.recipeData?.sections?.[0];
+      if (sec && typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
+        window.recipeEditorInsertIngredientHeadingAt(sec, insertIndex);
       }
     });
+    return;
+  }
+
+  if (action === 'add-ingredient') {
+    runAfterActiveHeadingCommit(() => {
+      const sec = window.recipeData?.sections?.[0];
+      if (!sec) return;
+      const liveIdx = Array.isArray(sec.ingredients)
+        ? Math.min(insertIndex, sec.ingredients.length)
+        : insertIndex;
+
+      const isPerLine = cta.classList.contains('ingredient-add-cta--per-line');
+      if (isPerLine) {
+        const anchor = document.createElement('div');
+        const slot = cta.closest('.ingredient-slot');
+        if (slot) {
+          slot.after(anchor);
+        } else {
+          ingredientsSection.appendChild(anchor);
+        }
+        if (typeof window.openIngredientEditRow === 'function') {
+          window.openIngredientEditRow({
+            parent: ingredientsSection,
+            replaceEl: anchor,
+            mode: 'insert',
+            seedLine: null,
+            insertAtIndex: liveIdx,
+          });
+        }
+      } else {
+        const liveCta = cta.isConnected
+          ? cta
+          : ingredientsSection.querySelector(
+              '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
+            );
+        if (!liveCta) return;
+        if (typeof window.openIngredientEditRow === 'function') {
+          window.openIngredientEditRow({
+            parent: ingredientsSection,
+            replaceEl: liveCta,
+            mode: 'insert',
+            seedLine: null,
+            insertAtIndex: liveIdx,
+          });
+        }
+      }
+    });
+  }
+}
+
+function wireIngredientCtaDelegation(ingredientsSection) {
+  if (!ingredientsSection || ingredientsSection._ctaDelegated) return;
+  ingredientsSection._ctaDelegated = true;
+
+  let consumedPointerDown = false;
+
+  ingredientsSection.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('.ingredient-add-cta-action');
+    if (!btn || e.button !== 0) return;
+    const cta = btn.closest('.ingredient-add-cta');
+    if (!cta) return;
+
+    consumedPointerDown = true;
+    e.preventDefault();
+    e.stopPropagation();
+    handleCtaAction(ingredientsSection, cta, btn);
   });
 
-  bindCtaAction(headingBtn, () => {
-    runAfterActiveHeadingCommit(() => {
-      // Always resolve the live model section — the closed-over sectionRef may
-      // point to a stale pre-clone object from renderRecipe's local `recipe`.
-      const liveSection =
-        window.recipeData &&
-        Array.isArray(window.recipeData.sections) &&
-        window.recipeData.sections[0]
-          ? window.recipeData.sections[0]
-          : sectionRef;
-      if (!Array.isArray(liveSection.ingredients)) liveSection.ingredients = [];
-      if (
-        typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-      ) {
-        window.recipeEditorInsertIngredientHeadingAt(
-          liveSection,
-          getInsertIndexAtCta()
-        );
-      }
-    });
+  ingredientsSection.addEventListener('click', (e) => {
+    const btn = e.target.closest('.ingredient-add-cta-action');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (consumedPointerDown) {
+      consumedPointerDown = false;
+      return;
+    }
+    const cta = btn.closest('.ingredient-add-cta');
+    if (!cta) return;
+    handleCtaAction(ingredientsSection, cta, btn);
   });
-
-  container.appendChild(cta);
 }
 
 function deleteIngredientRowFromSection(sectionRef, rowRef) {
@@ -1262,7 +1066,6 @@ function renderRecipe(recipe) {
     </div>
   `;
 
-  const ingredientsSection = container.querySelector('#ingredientsSection');
   const stepsSection = container.querySelector('#stepsSection');
 
   // Unified servings row just under the title
@@ -1274,417 +1077,9 @@ function renderRecipe(recipe) {
     attachTitleEditor(titleEl);
   }
 
-  // Ingredients list
+  // Ingredients list + "You will need" — delegate to the shared rerender fn.
   if (recipe.sections && recipe.sections.length > 0) {
-    ensureIngredientSubheadInsertModeWiring();
-    const ingredientsHeader = document.createElement('h2');
-    ingredientsHeader.className = 'section-header';
-    ingredientsHeader.textContent = 'Ingredients';
-    ingredientsSection.appendChild(ingredientsHeader);
-
-    // v1: Ingredients render from the first section (bridge loads a single synthetic section).
-    const firstSection = recipe.sections[0];
-    if (firstSection) stripIngredientPlaceholders(firstSection);
-    const rows = Array.isArray(firstSection?.ingredients)
-      ? firstSection.ingredients
-      : [];
-
-    const isHeading = (row) => row && row.rowType === 'heading';
-    const renderRows = rows;
-
-    // Top insertion zone (suppressed if next row is a heading)
-    {
-      const next = renderRows.length > 0 ? renderRows[0] : null;
-      const zone = document.createElement('div');
-      zone.className = 'ingredient-insert-zone';
-      if (next && isHeading(next))
-        zone.classList.add('ingredient-insert-zone--disabled');
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (!e) return;
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-
-        // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
-        try {
-          if (
-            document.body.classList.contains('ingredient-editing') ||
-            ingredientsSection.querySelector('.ingredient-edit-row.editing')
-          ) {
-            return;
-          }
-        } catch (_) {}
-
-        const wantsHeading = !!e.altKey;
-
-        if (wantsHeading) {
-          // Do not allow consecutive headings.
-          if (zone.classList.contains('ingredient-insert-zone--disabled'))
-            return;
-
-          try {
-            const active = window._activeIngredientHeadingEditor;
-            if (active && typeof active.commit === 'function') {
-              active.commit();
-              setTimeout(() => {
-                if (
-                  typeof window.recipeEditorInsertIngredientHeadingAt ===
-                  'function'
-                ) {
-                  window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-                }
-              }, 0);
-              return;
-            }
-          } catch (_) {}
-
-          try {
-            e.preventDefault();
-            e.stopPropagation();
-          } catch (_) {}
-          if (
-            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-          ) {
-            window.recipeEditorInsertIngredientHeadingAt(firstSection, 0);
-          }
-          return;
-        }
-
-        // Normal click: insert an ingredient row at this position (index 0).
-        try {
-          e.stopPropagation();
-        } catch (_) {}
-        if (
-          window.openIngredientEditRow &&
-          typeof window.openIngredientEditRow === 'function'
-        ) {
-          window.openIngredientEditRow({
-            parent: ingredientsSection,
-            replaceEl: zone,
-            mode: 'insert',
-            seedLine: null,
-            insertAtIndex: 0,
-          });
-        }
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      ingredientsSection.appendChild(zone);
-    }
-
-    renderRows.forEach((row, idx) => {
-      let line = null;
-
-      if (row && row.rowType === 'heading') {
-        if (typeof window.renderIngredientHeading === 'function') {
-          line = window.renderIngredientHeading(row);
-        } else {
-          line = document.createElement('div');
-          line.className = 'ingredient-subsection-heading-line';
-          const span = document.createElement('span');
-          span.className = 'ingredient-subsection-heading-text';
-          span.textContent = row.text || '';
-          line.appendChild(span);
-        }
-      } else {
-        // Prefer shared ingredient renderer (handles placeholders, click-to-edit, etc.)
-        if (typeof renderIngredient === 'function') {
-          line = renderIngredient(row);
-        } else {
-          // Fallback: legacy manual rendering (no inline-edit wiring)
-          line = document.createElement('div');
-          line.className = 'ingredient-line';
-
-          const span = document.createElement('span');
-
-          const qty =
-            row.quantity && !isNaN(parseFloat(row.quantity))
-              ? decimalToFractionDisplay(parseFloat(row.quantity)) + ' '
-              : row.quantity
-              ? row.quantity + ' '
-              : '';
-
-          const unit = row.unit ? row.unit + ' ' : '';
-          const name = row.name || '';
-          const text = `${qty || ''}${unit || ''}${name}`.trim();
-
-          span.textContent = text;
-
-          line.appendChild(span);
-        }
-      }
-
-      if (line) {
-        ingredientsSection.appendChild(line);
-      }
-
-      // Inter-row insertion zone (between idx and idx+1), suppressed adjacent to headings
-      const next = idx + 1 < renderRows.length ? renderRows[idx + 1] : null;
-      if (!next) return;
-      const zone = document.createElement('div');
-      zone.className = 'ingredient-insert-zone';
-      if (isHeading(row) || isHeading(next)) {
-        zone.classList.add('ingredient-insert-zone--disabled');
-      }
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (!e) return;
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-
-        // Read-mode-only: if an ingredient edit row is active, require blur/finish first.
-        try {
-          if (
-            document.body.classList.contains('ingredient-editing') ||
-            ingredientsSection.querySelector('.ingredient-edit-row.editing')
-          ) {
-            return;
-          }
-        } catch (_) {}
-
-        const insertIdx = idx + 1;
-        const wantsHeading = !!e.altKey;
-
-        if (wantsHeading) {
-          // Do not allow consecutive headings.
-          if (zone.classList.contains('ingredient-insert-zone--disabled'))
-            return;
-
-          try {
-            const active = window._activeIngredientHeadingEditor;
-            if (active && typeof active.commit === 'function') {
-              active.commit();
-              setTimeout(() => {
-                if (
-                  typeof window.recipeEditorInsertIngredientHeadingAt ===
-                  'function'
-                ) {
-                  window.recipeEditorInsertIngredientHeadingAt(
-                    firstSection,
-                    insertIdx
-                  );
-                }
-              }, 0);
-              return;
-            }
-          } catch (_) {}
-
-          try {
-            e.preventDefault();
-            e.stopPropagation();
-          } catch (_) {}
-          if (
-            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-          ) {
-            window.recipeEditorInsertIngredientHeadingAt(
-              firstSection,
-              insertIdx
-            );
-          }
-          return;
-        }
-
-        // Normal click: insert an ingredient row at this position.
-        try {
-          e.stopPropagation();
-        } catch (_) {}
-        if (
-          window.openIngredientEditRow &&
-          typeof window.openIngredientEditRow === 'function'
-        ) {
-          window.openIngredientEditRow({
-            parent: ingredientsSection,
-            replaceEl: zone,
-            mode: 'insert',
-            seedLine: null,
-            insertAtIndex: insertIdx,
-          });
-        }
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      ingredientsSection.appendChild(zone);
-    });
-
-    // Trailing insertion zone (after the last row) so hover/click works “below” the last line.
-    {
-      const last =
-        renderRows.length > 0 ? renderRows[renderRows.length - 1] : null;
-      const zone = document.createElement('div');
-      zone.className = 'ingredient-insert-zone';
-      if (last && isHeading(last))
-        zone.classList.add('ingredient-insert-zone--disabled');
-      let _didInsert = false;
-      const handleInsert = (e) => {
-        if (!e) return;
-        if (_didInsert) return;
-        _didInsert = true;
-        try {
-          setTimeout(() => {
-            _didInsert = false;
-          }, 0);
-        } catch (_) {}
-
-        try {
-          if (
-            document.body.classList.contains('ingredient-editing') ||
-            ingredientsSection.querySelector('.ingredient-edit-row.editing')
-          ) {
-            return;
-          }
-        } catch (_) {}
-
-        const wantsHeading = !!e.altKey;
-        const insertIdx = renderRows.length;
-
-        if (wantsHeading) {
-          if (zone.classList.contains('ingredient-insert-zone--disabled'))
-            return;
-          try {
-            e.preventDefault();
-            e.stopPropagation();
-          } catch (_) {}
-          if (
-            typeof window.recipeEditorInsertIngredientHeadingAt === 'function'
-          ) {
-            window.recipeEditorInsertIngredientHeadingAt(
-              firstSection,
-              insertIdx
-            );
-          }
-          return;
-        }
-
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
-        if (
-          window.openIngredientEditRow &&
-          typeof window.openIngredientEditRow === 'function'
-        ) {
-          window.openIngredientEditRow({
-            parent: ingredientsSection,
-            replaceEl: zone,
-            mode: 'insert',
-            seedLine: null,
-            insertAtIndex: insertIdx,
-          });
-        }
-      };
-      zone.addEventListener('pointerdown', handleInsert);
-      zone.addEventListener('click', handleInsert);
-      ingredientsSection.appendChild(zone);
-    }
-
-    appendIngredientAddCta({
-      container: ingredientsSection,
-      sectionRef: firstSection,
-    });
-
-    // Focus a newly inserted heading, if any.
-    try {
-      const pending = window._pendingFocusIngredientHeadingClientId;
-      if (pending) {
-        window._pendingFocusIngredientHeadingClientId = null;
-        const target = ingredientsSection.querySelector(
-          `[data-heading-client-id="${pending}"]`
-        );
-        if (target && typeof target.click === 'function') {
-          target.click();
-        }
-      }
-    } catch (_) {}
-  }
-
-  // --- You will need section ---
-  const allIngredientsRaw = Array.isArray(recipe.sections)
-    ? recipe.sections.flatMap((s) => s.ingredients || [])
-    : [];
-
-  // Strip out headings; ingredients array should already be placeholder-free.
-  const allIngredients = allIngredientsRaw.filter(
-    (row) => row && row.rowType !== 'heading'
-  );
-
-  // Always show the card; content depends on whether we have any real ingredients.
-  const needWrapper = document.createElement('div');
-  needWrapper.className = 'you-will-need-card';
-  container.insertBefore(needWrapper, stepsSection);
-
-  const needHeader = document.createElement('h2');
-  needHeader.className = 'section-header';
-  needHeader.textContent = 'You will need';
-  needWrapper.appendChild(needHeader);
-
-  if (allIngredients.length === 0) {
-    // Read-only placeholder for this section only.
-    const line = document.createElement('div');
-    line.className = 'ingredient-line';
-    const span = document.createElement('span');
-
-    span.className = 'placeholder-prompt';
-
-    span.textContent = 'No ingredients yet. Add some above.';
-    line.appendChild(span);
-    needWrapper.appendChild(line);
-  } else {
-    const grouped = {};
-    allIngredients.forEach((ing) => {
-      const loc = ing.locationAtHome || '';
-      if (!grouped[loc]) grouped[loc] = [];
-      grouped[loc].push(ing);
-    });
-
-    Object.keys(grouped).forEach((loc) => {
-      grouped[loc] = mergeByIngredient(grouped[loc]);
-    });
-
-    NEED_LOCATION_ORDER.forEach((loc) => {
-      const items = grouped[loc];
-      if (!items || !items.length) return;
-
-      const subHeader = document.createElement('div');
-      subHeader.className = 'subsection-header';
-      subHeader.textContent = loc ? capitalizeWords(loc) : 'Misc';
-      needWrapper.appendChild(subHeader);
-
-      sortIngredients(items, NEED_LOCATION_ORDER).forEach((ing) => {
-        const line = document.createElement('div');
-        line.className = 'ingredient-line';
-        const span = document.createElement('span');
-        span.textContent = formatNeedLine(ing);
-        line.appendChild(span);
-        needWrapper.appendChild(line);
-      });
-    });
-
-    const measures = computeMeasures(allIngredients);
-    if (measures.length > 0) {
-      const measureHeader = document.createElement('div');
-      measureHeader.className = 'subsection-header';
-      measureHeader.textContent = 'Measures';
-      needWrapper.appendChild(measureHeader);
-
-      measures.forEach((m) => {
-        const line = document.createElement('div');
-        line.className = 'ingredient-line';
-        const span = document.createElement('span');
-        span.textContent = formatMeasureLabel(m);
-        line.appendChild(span);
-        needWrapper.appendChild(line);
-      });
-    }
+    rerenderIngredientsSectionFromModel();
   }
 
   // --- StepNode-based instructions renderer (Phase 1) ---
