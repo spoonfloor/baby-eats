@@ -225,6 +225,147 @@
   background: #8f001a;
 }
 
+/* --- Unknown Items dialog (shared by Store + Recipe editors) --- */
+.ui-dialog-panel.ui-dialog-panel--unknown-items {
+  width: min(520px, calc(100vw - 36px));
+  max-height: min(78vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ui-unknown-items-title {
+  margin: 0;
+  font-size: var(--header-font-size);
+  font-weight: var(--main-font-weight);
+}
+
+.ui-unknown-items-subtitle {
+  margin: 0;
+  font-size: var(--body-font-size);
+  line-height: 1.45;
+  color: var(--font-color-near-black);
+}
+
+.ui-unknown-items-list-wrap {
+  overflow: auto;
+  max-height: 360px;
+}
+
+.ui-unknown-items-table-head,
+.ui-unknown-items-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.ui-unknown-items-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+  border-bottom: 0;
+  font-size: 12px;
+  color: var(--subtitle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ui-unknown-items-col-suggestions-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-unknown-items-col-suggestions-head.is-disabled {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.ui-unknown-items-apply-all {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--theme-primary);
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ui-unknown-items-apply-all[hidden] {
+  display: none !important;
+}
+
+.ui-unknown-items-apply-all:disabled {
+  color: rgba(0, 0, 0, 0.45);
+  cursor: default;
+  text-decoration: none;
+}
+
+.ui-unknown-items-original-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: text;
+}
+
+.ui-unknown-items-original-text.is-purple {
+  color: var(--theme-primary);
+}
+
+.ui-unknown-items-original-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--edit-mode-color);
+  font: inherit;
+  line-height: inherit;
+  padding: 0;
+  caret-color: var(--edit-mode-color);
+}
+
+.ui-unknown-items-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.ui-unknown-items-suggestion-pill {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.ui-unknown-items-empty-state {
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--subtitle);
+}
+
+.ui-unknown-items-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* --- Legacy HTML modals (kept for backwards-compat) --- */
 .modal.hidden {
   display: none;

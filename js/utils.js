@@ -769,6 +769,492 @@ if (typeof window !== 'undefined') {
       }, 0);
     });
 
+  const suggestUnknownItem = (rawValue, pool) => {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return '';
+    const p = Array.isArray(pool) ? pool : [];
+    const rawLower = raw.toLowerCase();
+    const exact = p.find((n) => String(n || '').trim().toLowerCase() === rawLower);
+    if (exact) return '';
+
+    const includes = p
+      .map((n) => String(n || '').trim())
+      .filter((n) => n.length > 0)
+      .filter((n) => n.toLowerCase().includes(rawLower) || rawLower.includes(n.toLowerCase()));
+    if (includes.length > 0) {
+      includes.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      return includes[0] || '';
+    }
+
+    const a = rawLower;
+    const levenshtein = (x, y) => {
+      if (x === y) return 0;
+      if (!x.length) return y.length;
+      if (!y.length) return x.length;
+      const v0 = new Array(y.length + 1);
+      const v1 = new Array(y.length + 1);
+      for (let i = 0; i <= y.length; i++) v0[i] = i;
+      for (let i = 0; i < x.length; i++) {
+        v1[0] = i + 1;
+        for (let j = 0; j < y.length; j++) {
+          const cost = x[i] === y[j] ? 0 : 1;
+          v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+        }
+        for (let j = 0; j <= y.length; j++) v0[j] = v1[j];
+      }
+      return v0[y.length];
+    };
+
+    let best = '';
+    let bestDist = Infinity;
+    p.forEach((n) => {
+      const candidate = String(n || '').trim();
+      if (!candidate) return;
+      const d = levenshtein(a, candidate.toLowerCase());
+      if (d < bestDist) {
+        bestDist = d;
+        best = candidate;
+      } else if (d === bestDist && candidate.localeCompare(best, undefined, { sensitivity: 'base' }) < 0) {
+        best = candidate;
+      }
+    });
+
+    if (!best) return '';
+    const maxDistance = a.length <= 5 ? 1 : 2;
+    return bestDist <= maxDistance ? best : '';
+  };
+
+  const unknownItemsDialog = ({
+    title = '',
+    message = '',
+    items = [],
+    suggestionPool = [],
+    applyAllText = 'Apply all',
+    cancelText = 'Cancel',
+    editText = 'Edit',
+    saveText = 'Save',
+  } = {}) =>
+    new Promise((resolve) => {
+      const titleTemplate = String(title || '').trim();
+      const titleIsCountTemplate = /^new items \(\d+\)$/i.test(titleTemplate);
+      const host = ensureDialogHost();
+      const prevFocus =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      const normKey = (s) => String(s || '').trim().toLowerCase();
+      const uniqueRows = [];
+      const seen = new Set();
+
+      (Array.isArray(items) ? items : []).forEach((entry, idx) => {
+        const original =
+          entry && typeof entry === 'object'
+            ? String(entry.original != null ? entry.original : '')
+            : String(entry != null ? entry : '');
+        const key = normKey(original);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+
+        const inputSuggestion =
+          entry && typeof entry === 'object' ? String(entry.suggestion || '').trim() : '';
+        const suggested = inputSuggestion || suggestUnknownItem(original, suggestionPool);
+        uniqueRows.push({
+          id: `unknown-${idx}-${Date.now()}`,
+          original,
+          value: original,
+          suggestion: suggested,
+          suggestionApplied: false,
+          isPurple: false,
+        });
+      });
+
+      const backdrop = document.createElement('div');
+      backdrop.className = 'ui-dialog-backdrop';
+
+      const panel = document.createElement('div');
+      panel.className = 'ui-dialog-panel ui-dialog-panel--unknown-items';
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      panel.setAttribute('aria-label', (title || '').trim() || 'Unknown items');
+
+      const titleEl = document.createElement('h2');
+      titleEl.className = 'ui-unknown-items-title';
+      titleEl.textContent = title || `New items (${uniqueRows.length})`;
+      panel.appendChild(titleEl);
+
+      const defaultUnknownMessage =
+        'These items are not in your database. Edit, match to existing items, or save as new ones.';
+      const allResolvedMessage =
+        'All items are in your database. You may save changes without creating new items.';
+
+      const subtitleEl = document.createElement('div');
+      subtitleEl.className = 'ui-unknown-items-subtitle';
+      subtitleEl.textContent = message || defaultUnknownMessage;
+      panel.appendChild(subtitleEl);
+
+      const listWrap = document.createElement('div');
+      listWrap.className = 'ui-unknown-items-list-wrap';
+
+      const head = document.createElement('div');
+      head.className = 'ui-unknown-items-table-head';
+      const headOriginal = document.createElement('div');
+      headOriginal.textContent = 'Original';
+      const headSuggestions = document.createElement('div');
+      headSuggestions.className = 'ui-unknown-items-col-suggestions-head';
+      const headSuggestionsText = document.createElement('span');
+      headSuggestionsText.textContent = 'Suggestions';
+      const applyAllBtn = document.createElement('button');
+      applyAllBtn.className = 'ui-unknown-items-apply-all';
+      applyAllBtn.dataset.role = 'apply-all';
+      applyAllBtn.type = 'button';
+      applyAllBtn.textContent = String(applyAllText || 'Apply all');
+      headSuggestions.appendChild(headSuggestionsText);
+      headSuggestions.appendChild(applyAllBtn);
+      head.appendChild(headOriginal);
+      head.appendChild(headSuggestions);
+      listWrap.appendChild(head);
+
+      const body = document.createElement('div');
+      listWrap.appendChild(body);
+      panel.appendChild(listWrap);
+
+      const actions = document.createElement('div');
+      actions.className = 'ui-unknown-items-actions';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'button button--secondary';
+      cancelBtn.textContent = cancelText || 'Cancel';
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'button button--secondary';
+      editBtn.textContent = editText || 'Edit';
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'button';
+      saveBtn.textContent = saveText || 'Save';
+      actions.appendChild(cancelBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(saveBtn);
+      panel.appendChild(actions);
+
+      backdrop.appendChild(panel);
+      host.appendChild(backdrop);
+      host.dataset.open = '1';
+
+      let editingId = null;
+      let editingStartValue = '';
+      let pendingCaret = null; // { rowId, index|null }
+
+      const getRowById = (id) => uniqueRows.find((r) => r.id === id) || null;
+      const knownSet = new Set(
+        (Array.isArray(suggestionPool) ? suggestionPool : [])
+          .map((n) => String(n || '').trim().toLowerCase())
+          .filter((n) => n.length > 0)
+      );
+      const isKnownName = (v) => knownSet.has(String(v || '').trim().toLowerCase());
+      const unresolvedCount = () => uniqueRows.filter((r) => !isKnownName(r.value)).length;
+
+      const computeCaretIndexFromPointer = ({ textEl, text, clientX }) => {
+        try {
+          if (!textEl || !String(text || '').length) return null;
+          const style = window.getComputedStyle(textEl);
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
+          ctx.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} / ${style.lineHeight} ${style.fontFamily}`;
+          const rect = textEl.getBoundingClientRect();
+          const localX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+          let bestIdx = 0;
+          let bestDist = Infinity;
+          for (let i = 0; i <= text.length; i++) {
+            const w = ctx.measureText(text.slice(0, i)).width;
+            const d = Math.abs(w - localX);
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = i;
+            }
+          }
+          return bestIdx;
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const cleanup = () => {
+        try {
+          delete host.dataset.open;
+        } catch (_) {}
+        try {
+          if (window.favoriteEatsTypeahead && typeof window.favoriteEatsTypeahead.close === 'function') {
+            window.favoriteEatsTypeahead.close();
+          }
+        } catch (_) {}
+        try {
+          if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        } catch (_) {}
+        try {
+          prevFocus?.focus?.();
+        } catch (_) {}
+      };
+
+      const finishCancel = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      const finishSave = () => {
+        const rows = uniqueRows.map((r) => ({
+          original: String(r.original || '').trim(),
+          value: String(r.value || '').trim() || String(r.original || '').trim(),
+        }));
+        cleanup();
+        resolve({ rows });
+      };
+
+      const applySuggestionForRow = (row) => {
+        if (!row || !row.suggestion || row.suggestionApplied) return;
+        row.value = row.suggestion;
+        row.suggestionApplied = true;
+        row.isPurple = true;
+      };
+
+      const invalidateSuggestionForRow = (row) => {
+        if (!row) return;
+        row.suggestion = '';
+        row.suggestionApplied = true;
+      };
+
+      const openEditorById = (rowId) => {
+        const row = getRowById(rowId);
+        if (!row) return;
+        editingId = rowId;
+        editingStartValue = row.value;
+        renderRows();
+        const input = body.querySelector('input[data-role="edit-original"]');
+        if (input && input instanceof HTMLInputElement) {
+          input.focus();
+          let pos = input.value.length;
+          if (pendingCaret && pendingCaret.rowId === rowId && Number.isFinite(pendingCaret.index)) {
+            pos = Math.max(0, Math.min(Number(pendingCaret.index), input.value.length));
+          }
+          input.setSelectionRange(pos, pos);
+          pendingCaret = null;
+          const rowEl = input.closest('.ui-unknown-items-row');
+          if (rowEl && typeof rowEl.scrollIntoView === 'function') {
+            rowEl.scrollIntoView({ block: 'nearest' });
+          }
+          if (window.favoriteEatsTypeahead && typeof window.favoriteEatsTypeahead.attach === 'function') {
+            window.favoriteEatsTypeahead.attach({
+              inputEl: input,
+              getPool: async () => suggestionPool,
+              openOnFocus: true,
+              maxVisible: 8,
+            });
+          }
+        }
+      };
+
+      const closeEditor = () => {
+        editingId = null;
+        editingStartValue = '';
+        try {
+          if (window.favoriteEatsTypeahead && typeof window.favoriteEatsTypeahead.close === 'function') {
+            window.favoriteEatsTypeahead.close();
+          }
+        } catch (_) {}
+      };
+
+      const refreshHeaderState = () => {
+        const unresolved = unresolvedCount();
+        titleEl.textContent =
+          !titleTemplate || titleIsCountTemplate
+            ? `New items (${unresolved})`
+            : titleTemplate;
+        subtitleEl.textContent = unresolved === 0 ? allResolvedMessage : message || defaultUnknownMessage;
+      };
+
+      const renderRows = () => {
+        refreshHeaderState();
+
+        const hasSuggestions = uniqueRows.some((r) => {
+          if (!r || !r.suggestion || r.suggestionApplied) return false;
+          // If this row is already manually matched to an existing known name,
+          // do not count it as needing a suggestion action.
+          if (isKnownName(r.value)) return false;
+          return true;
+        });
+        applyAllBtn.hidden = !hasSuggestions;
+        headSuggestionsText.textContent = hasSuggestions ? 'Suggestions' : 'No suggestions';
+        if (!uniqueRows.length) {
+          body.innerHTML = '<div class="ui-unknown-items-empty-state">No pending items.</div>';
+          return;
+        }
+        body.innerHTML = uniqueRows
+          .map((row) => {
+            const isEditing = editingId === row.id;
+            const showSuggestion = !!row.suggestion && !row.suggestionApplied;
+            return `
+              <div class="ui-unknown-items-row">
+                ${
+                  isEditing
+                    ? `<input
+                         class="ui-unknown-items-original-input"
+                         data-role="edit-original"
+                         data-id="${row.id}"
+                         type="text"
+                         value="${String(row.value || '')
+                           .replaceAll('&', '&amp;')
+                           .replaceAll('<', '&lt;')
+                           .replaceAll('>', '&gt;')
+                           .replaceAll('"', '&quot;')}"
+                       />`
+                    : `<button class="ui-unknown-items-original-btn" data-role="open-edit" data-id="${row.id}" type="button">
+                         <span class="ui-unknown-items-original-text ${row.isPurple ? 'is-purple' : ''}">${String(
+                           row.value || ''
+                         )
+                           .replaceAll('&', '&amp;')
+                           .replaceAll('<', '&lt;')
+                           .replaceAll('>', '&gt;')
+                           .replaceAll('"', '&quot;')}</span>
+                       </button>`
+                }
+                <div class="ui-unknown-items-suggestion">
+                  ${
+                    showSuggestion
+                      ? `<button class="ui-unknown-items-suggestion-pill" data-role="apply-suggestion" data-id="${
+                          row.id
+                        }" type="button">${String(row.suggestion || '')
+                          .replaceAll('&', '&amp;')
+                          .replaceAll('<', '&lt;')
+                          .replaceAll('>', '&gt;')
+                          .replaceAll('"', '&quot;')}</button>`
+                      : ''
+                  }
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+      };
+
+      renderRows();
+
+      cancelBtn.addEventListener('click', finishCancel);
+      saveBtn.addEventListener('click', finishSave);
+      editBtn.addEventListener('click', () => {
+        if (!uniqueRows.length) return;
+        pendingCaret = { rowId: uniqueRows[0].id, index: 0 };
+        openEditorById(uniqueRows[0].id);
+      });
+
+      panel.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        const roleEl = t.closest('[data-role]');
+        if (!(roleEl instanceof HTMLElement)) return;
+        const role = roleEl.dataset.role;
+        const id = roleEl.dataset.id;
+        if (role === 'apply-all') {
+          if (applyAllBtn.hidden) return;
+          uniqueRows.forEach((row) => applySuggestionForRow(row));
+          renderRows();
+          return;
+        }
+        if (role === 'apply-suggestion' && id) {
+          const row = getRowById(id);
+          applySuggestionForRow(row);
+          renderRows();
+          return;
+        }
+        if (role === 'open-edit' && id) {
+          const textNode = roleEl.querySelector('.ui-unknown-items-original-text');
+          const row = getRowById(id);
+          const idx =
+            textNode && row
+              ? computeCaretIndexFromPointer({
+                  textEl: textNode,
+                  text: row.value,
+                  clientX: Number(e.clientX || 0),
+                })
+              : null;
+          pendingCaret = { rowId: id, index: idx };
+          openEditorById(id);
+        }
+      });
+
+      panel.addEventListener('input', (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLInputElement)) return;
+        if (t.dataset.role !== 'edit-original') return;
+        const row = getRowById(t.dataset.id || '');
+        if (!row) return;
+        row.value = t.value;
+        if (row.value !== editingStartValue) {
+          row.isPurple = false;
+          invalidateSuggestionForRow(row);
+        }
+        refreshHeaderState();
+      });
+
+      panel.addEventListener(
+        'blur',
+        (e) => {
+          const t = e.target;
+          if (!(t instanceof HTMLInputElement)) return;
+          if (t.dataset.role !== 'edit-original') return;
+          const row = getRowById(t.dataset.id || '');
+          if (row) {
+            row.value = t.value;
+            if (row.value !== editingStartValue) {
+              row.isPurple = false;
+              invalidateSuggestionForRow(row);
+            }
+          }
+          closeEditor();
+          renderRows();
+        },
+        true
+      );
+
+      panel.addEventListener(
+        'keydown',
+        (e) => {
+          if (!e) return;
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            finishCancel();
+            return;
+          }
+          trapTabKey(e, panel);
+          const t = e.target;
+          if (!(t instanceof HTMLInputElement)) return;
+          if (t.dataset.role !== 'edit-original') return;
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            t.blur();
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            const row = getRowById(t.dataset.id || '');
+            if (row) row.value = editingStartValue;
+            closeEditor();
+            renderRows();
+          }
+        },
+        { capture: true }
+      );
+
+      backdrop.addEventListener('mousedown', (e) => {
+        if (e.target === backdrop) finishCancel();
+      });
+
+      window.setTimeout(() => {
+        try {
+          saveBtn.focus();
+        } catch (_) {}
+      }, 0);
+    });
+
   // Alert: default has *no title* (title "Alert" is redundant most of the time).
   const alertDialog = ({ title = '', message = '', okText = 'OK' } = {}) =>
     dialog({
@@ -962,6 +1448,7 @@ if (typeof window !== 'undefined') {
   window.ui = Object.freeze({
     dialog,
     dialogThreeChoice,
+    unknownItems: unknownItemsDialog,
     alert: alertDialog,
     confirm: confirmDialog,
     prompt: promptDialog,

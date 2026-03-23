@@ -4,6 +4,9 @@
 (function () {
   if (typeof window === 'undefined') return;
 
+  // Blur-time near-match correction for ingredient name/unit/variant (Levenshtein vs pool).
+  const INGREDIENT_BLUR_NORMALIZATION_ENABLED = false;
+
   // --- Global per-session exemption set for normalization ("Undo" exempts exact raw string)
   const normalizationExemptions = new Set();
   window._typeaheadNormalizationExemptions = normalizationExemptions;
@@ -1080,6 +1083,7 @@
           nameInput._typeaheadSuppressNextNormalize = false;
           return;
         }
+        if (!INGREDIENT_BLUR_NORMALIZATION_ENABLED) return;
         await maybeNormalizeOnBlur(nameInput, async () => await getNamePool());
       });
     }
@@ -1097,6 +1101,7 @@
           unitInput._typeaheadSuppressNextNormalize = false;
           return;
         }
+        if (!INGREDIENT_BLUR_NORMALIZATION_ENABLED) return;
         await maybeNormalizeOnBlur(unitInput, async () => await getUnitPool(), {
           mode: 'unit',
         });
@@ -1133,6 +1138,7 @@
           varInput._typeaheadSuppressNextNormalize = false;
           return;
         }
+        if (!INGREDIENT_BLUR_NORMALIZATION_ENABLED) return;
         const n = getScopeName();
         await maybeNormalizeOnBlur(
           varInput,

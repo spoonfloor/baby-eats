@@ -11,6 +11,7 @@
   /* --- Colors: theme + surfaces + roles --- */
   --theme-primary: #6d49ff;
   --theme-secondary: #7f5cff;
+  --button-primary-hover: #6d49ff;
   --theme-primary-transparent: #6d49ff20;
 
   --theme-light: hsl(252, 100%, 96%);
@@ -27,6 +28,8 @@
   --field-fg: var(--font-color-near-black);
 
   --edit-mode-color: #2184ff;
+  /* Master ingredient hidden in Shopping (deprecated) — recipe read-only cue */
+  --ingredient-deprecated-fg: #f33128;
 
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
@@ -38,7 +41,7 @@
 
   /* --- Z-index scale (keep consistent across dropdowns/dialogs/toasts) --- */
   --z-app-chrome: 1000;
-  --z-dropdown: 10000;
+  --z-dropdown: 22000;
   --z-dialog: 20000;
   --z-toast: 21000;
 
@@ -108,6 +111,17 @@
   /* App bar */
   --app-bar-title-size: 18px;
   --app-bar-gap: 12px;
+  --shopping-filter-chip-font-size: var(--ingredient-editor-control-font-size);
+  --shopping-filter-chip-font-weight: var(--body-font-weight);
+  --shopping-filter-chip-height: 30px;
+  --shopping-filter-chip-gap: 8px;
+  --shopping-filter-chip-padding-x: 14px;
+  --shopping-filter-chip-border: rgba(109, 73, 255, 0.25);
+  --shopping-filter-chip-bg: var(--pill-bg);
+  --shopping-filter-chip-fg: var(--theme-primary);
+  --shopping-filter-chip-active-bg: var(--theme-secondary);
+  --shopping-filter-chip-active-fg: #fff;
+  --shopping-filter-chip-track-padding-start: 12px;
 
   /* --- Insert affordance positioning --- */
   --ing-insert-icon-size: 20px;
@@ -166,6 +180,10 @@
   outline: none;
   height: 44px;
   cursor: pointer;
+}
+
+.button:not(:disabled):not(.button--secondary):not(.button--danger):not(.button--danger-outline):hover {
+  background: var(--button-primary-hover);
 }
 
 /* Disabled state overrides */
@@ -587,6 +605,12 @@ body.shopping-editor-page .shopping-item-help {
   position: relative;
   z-index: 1;
   margin: 0; /* spacing is handled via downstream-only margin-top rules below */
+}
+
+/* Read-only recipe list: deprecated master ingredient (not used in edit tray) */
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .ingredient-text,
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link {
+  color: var(--ingredient-deprecated-fg);
 }
 
 /* overrides.css sets `line-height` on `*`, so we must set it on the actual text nodes too.
@@ -1184,6 +1208,85 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   color: white;
 }
 
+/* Shopping page filter chips */
+body.shopping-page .shopping-filter-chip-dock {
+  position: fixed;
+  z-index: 990;
+  pointer-events: none;
+}
+
+body.shopping-page .shopping-filter-chip-viewport {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  pointer-events: auto;
+}
+
+body.shopping-page .shopping-filter-chip-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+body.shopping-page .shopping-filter-chip-track {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--shopping-filter-chip-gap);
+  min-width: 100%;
+  white-space: nowrap;
+  padding: 1px 0;
+  padding-left: var(--shopping-filter-chip-track-padding-start);
+}
+
+body.shopping-page .shopping-filter-chip {
+  appearance: none;
+  border: none;
+  border-radius: 9999px;
+  background: var(--shopping-filter-chip-bg);
+  color: var(--shopping-filter-chip-fg);
+  height: var(--shopping-filter-chip-height);
+  padding: 0 var(--shopping-filter-chip-padding-x);
+  font-family: var(--main-font);
+  font-size: var(--shopping-filter-chip-font-size);
+  font-weight: var(--shopping-filter-chip-font-weight);
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.shopping-page .shopping-filter-chip.is-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+body.shopping-page .shopping-filter-chip.is-active {
+  background: var(--shopping-filter-chip-active-bg);
+  color: var(--shopping-filter-chip-active-fg);
+}
+
+body.shopping-page .shopping-filter-chip:hover {
+  background: color-mix(
+    in srgb,
+    var(--shopping-filter-chip-bg) 90%,
+    var(--shopping-filter-chip-active-bg) 10%
+  );
+}
+
+/* Active: opacity on a saturated fill + white text reads stronger than the number suggests;
+   use a tiny background nudge instead of whole-chip opacity. */
+body.shopping-page .shopping-filter-chip.is-active:hover {
+  background: color-mix(
+    in srgb,
+    var(--shopping-filter-chip-active-bg) 92%,
+    #000 8%
+  );
+}
+
+body.shopping-page .shopping-filter-chip:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 1px;
+}
+
 /* .recipe-list-wrapper {
   position: absolute;
   top: var(--app-bar-height);
@@ -1570,6 +1673,12 @@ h1.nav-text {
 .ingredient-edit-input--name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Deprecated master ingredient: name stays red in the tray until that field is focused (blue). */
+.ingredient-edit-row--deprecated.editing
+  .ingredient-edit-input--name:not(:focus) {
+  color: var(--ingredient-deprecated-fg);
 }
 
 .ingredient-edit-input:not([type='checkbox']):focus {

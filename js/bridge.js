@@ -314,6 +314,13 @@ function loadRecipeFromDB(db, recipeId) {
   const hasPluralByDefault = ingHas('plural_by_default');
   const hasIsMassNoun = ingHas('is_mass_noun');
   const hasPluralOverride = ingHas('plural_override');
+  const hasIngDeprecated = ingHas('is_deprecated');
+  const hasIngHideLegacy = ingHas('hide_from_shopping_list');
+  const ingredientDeprecatedSql = hasIngDeprecated
+    ? 'COALESCE(i.is_deprecated, 0) AS ingredient_deprecated'
+    : hasIngHideLegacy
+      ? 'COALESCE(i.hide_from_shopping_list, 0) AS ingredient_deprecated'
+      : '0 AS ingredient_deprecated';
 
   const selectParts = [
     'rim.ID',
@@ -338,6 +345,7 @@ function loadRecipeFromDB(db, recipeId) {
       ? "COALESCE(i.parenthetical_note, '') AS parenthetical_note"
       : "'' AS parenthetical_note",
     'i.location_at_home',
+    ingredientDeprecatedSql,
   ];
 
   const orderParts = [];
@@ -378,6 +386,7 @@ function loadRecipeFromDB(db, recipeId) {
           isOptional,
           parentheticalNote,
           locationAtHome,
+          ingredientDeprecated,
         ]) => ({
           rowType: 'ingredient',
           rimId,
@@ -400,6 +409,7 @@ function loadRecipeFromDB(db, recipeId) {
           isOptional: !!isOptional,
           parentheticalNote: parentheticalNote || '',
           locationAtHome: locationAtHome ? locationAtHome.toLowerCase() : '',
+          isDeprecated: !!ingredientDeprecated,
         })
       )
     : [];

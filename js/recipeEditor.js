@@ -129,6 +129,7 @@ function mergeByIngredient(list) {
         existing.quantity += ing.quantity;
       }
       existing.isOptional = existing.isOptional || ing.isOptional;
+      existing.isDeprecated = !!(existing.isDeprecated || ing.isDeprecated);
     }
   });
 

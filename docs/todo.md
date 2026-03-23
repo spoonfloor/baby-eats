@@ -20,18 +20,21 @@
   - [x] freeform text editing
   - [x] suggested completion
   - [x] aisle hint text roll-over
-  - 'Aisles' header should match all caps section headers on recipe page
+  - [x] 'Aisles' header should match all caps section headers on recipe page
 
 - recipe editor
+  - [x] delete an ingredient (ctrl click)
+  - [x] delete hover mechanism for adding ingredients and subheads to a recipe
+  - [x] add space below section title (ie more padding above hint)
+  - [x] fix section title placeholder text; is too light
+  - [x] hint should persist while ingredient card is focused
+  - [x] remove enforcement of existing ingredients
   - paste box for ingredients
   - paste box for instructions
-  - [x] delete an ingredient (ctrl click)
-  - delete hover mechanism for adding ingredients and subheads to a recipe
-  - add space below section title (ie more padding above hint)
-  - fix section title placeholder text; is too light
-  - hint should persist while ingredient card is focused
-  - remove enforcement of existing ingredients
-  - trigger new ingredient dialog on save
+  - design Unknown items flow for unknown ingredients, variants, and units
+  - add item color coding
+    - removed items
+    - unknown names
 
 **Open questions**
 

@@ -96,6 +96,125 @@
         gap: 10px;
         flex-wrap: wrap;
       }
+      .new-items-demo {
+        width: 100%;
+      }
+      .new-items-modal {
+        width: min(520px, calc(100vw - 36px));
+        max-height: min(78vh, 760px);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .new-items-header {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .new-items-title {
+        font-size: var(--header-font-size);
+        font-weight: 400;
+      }
+      .new-items-subtitle {
+        font-size: var(--body-font-size);
+        line-height: 1.45;
+        color: var(--font-color-near-black);
+        margin-top: 4px;
+      }
+      .new-items-list-wrap {
+        overflow: auto;
+        max-height: 360px;
+      }
+      .new-items-table-head,
+      .new-items-row {
+        display: grid;
+        grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
+        gap: 12px;
+        align-items: center;
+        padding: 10px 0;
+      }
+      .new-items-table-head {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #fff;
+        border-bottom: 0;
+        font-size: 12px;
+        color: var(--subtitle);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .new-items-col-suggestion-head {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .new-items-apply-all-inline {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--theme-primary);
+        font: inherit;
+        font-size: 11px;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .new-items-original-btn {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        padding: 0;
+        cursor: pointer;
+      }
+      .new-items-original-text.is-purple {
+        color: var(--theme-primary);
+      }
+      .new-items-original-input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        line-height: inherit;
+        padding: 0;
+        caret-color: var(--edit-mode-color);
+      }
+      .new-items-suggestion {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+      }
+      .new-items-suggestion-label {
+        appearance: none;
+        border: 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--pill-bg);
+        color: var(--pill-fg);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 13px;
+      }
+      .new-items-empty-state {
+        padding: 8px 0;
+        font-size: 14px;
+        color: var(--subtitle);
+      }
+      .new-items-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
     </style>
   </head>
   <body>
@@ -192,82 +311,45 @@
           <button class="button" id="demoToastUndo">Show Toast + Action</button>
         </div>
       </div>
+
+      <div class="gallery-section">
+        <h2>Unknown Items Modal Mockup</h2>
+        <div class="gallery-row">
+          <div class="ui-dialog-backdrop ui-dialog-backdrop--inline new-items-demo">
+            <div class="ui-dialog-panel ui-dialog-panel--inline new-items-modal">
+              <div class="new-items-header">
+                <div>
+                  <div class="new-items-title" id="newItemsTitle">New items (4)</div>
+                  <div class="new-items-subtitle">
+                    These items are not in your database. Edit, match to existing items, or save as new ones.
+                  </div>
+                </div>
+              </div>
+
+              <div class="new-items-list-wrap" id="newItemsSuggestionsWrap">
+                <div class="new-items-table-head">
+                  <div>Original</div>
+                  <div class="new-items-col-suggestion-head">
+                    <span>Suggestions</span>
+                    <button class="new-items-apply-all-inline" id="newItemsApplyAll" type="button">Apply all</button>
+                  </div>
+                </div>
+                <div id="newItemsSuggestions"></div>
+              </div>
+
+              <div class="new-items-footer">
+                <button class="button button--secondary" type="button">Cancel</button>
+                <button class="button button--secondary" id="newItemsEditFirst" type="button">Edit</button>
+                <button class="button" type="button">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script src="js/utils.js"></script>
-    <script>
-      const ui = () => window.ui;
-
-      const goBack = () => {
-        try {
-          if (window.history && typeof window.history.back === 'function') {
-            window.history.back();
-            return;
-          }
-        } catch (_) {}
-        window.location.href = 'recipes.html';
-      };
-
-      document.getElementById('galleryBackBtn')?.addEventListener('click', () => {
-        goBack();
-      });
-
-      document.getElementById('demoAlert')?.addEventListener('click', () => {
-        ui()?.alert({ title: 'Heads up', message: 'This is an alert.' });
-      });
-
-      document.getElementById('demoConfirm')?.addEventListener('click', async () => {
-        await ui()?.confirm({ title: 'Confirm', message: 'Proceed?', confirmText: 'OK', cancelText: 'Cancel' });
-      });
-
-      document.getElementById('demoDangerConfirm')?.addEventListener('click', async () => {
-        await ui()?.confirm({
-          title: 'Delete',
-          message: 'Delete “Sample Item”?',
-          confirmText: 'Delete',
-          cancelText: 'Cancel',
-          danger: true,
-        });
-      });
-
-      document.getElementById('demoPrompt')?.addEventListener('click', async () => {
-        await ui()?.prompt({
-          title: '',
-          message: 'Enter a new name:',
-          label: 'Name',
-          value: 'Draft',
-          required: true,
-        });
-      });
-
-      document.getElementById('demoForm')?.addEventListener('click', async () => {
-        await ui()?.form({
-          title: 'New Unit',
-          fields: [
-            { key: 'code', label: 'Code', required: true },
-            { key: 'name', label: 'Name (singular)', required: true },
-          ],
-          confirmText: 'Create',
-          cancelText: 'Cancel',
-        });
-      });
-
-      document.getElementById('demoToast')?.addEventListener('click', () => {
-        ui()?.toast({ message: 'Saved.' });
-      });
-
-      document.getElementById('demoToastUndo')?.addEventListener('click', () => {
-        ui()?.toast({ message: 'Ingredient removed.', actionText: 'Undo', onAction: () => console.log('undo!') });
-      });
-
-      // Secret exit: Cmd/Ctrl + ArrowUp to go back
-      document.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
-          e.preventDefault();
-          goBack();
-        }
-      });
-    </script>
+    <script src="js/dialogGallery.js"></script>
   </body>
 </html>
 

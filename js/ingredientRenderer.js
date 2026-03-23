@@ -1,5 +1,27 @@
 // Ingredient editor
 
+/** Hidden shopping item (deprecated master row): prefer is_deprecated, else legacy hide_from_shopping_list. */
+function getIngredientDeprecatedFlagFromDb(db, whereClause) {
+  if (!db || !whereClause) return false;
+  try {
+    const info = db.exec('PRAGMA table_info(ingredients);');
+    const cols = info.length
+      ? info[0].values.map((r) => String(r[1] || '').toLowerCase())
+      : [];
+    const has = (c) => cols.includes(c);
+    let expr = null;
+    if (has('is_deprecated')) expr = 'COALESCE(is_deprecated, 0)';
+    else if (has('hide_from_shopping_list'))
+      expr = 'COALESCE(hide_from_shopping_list, 0)';
+    if (!expr) return false;
+    const q = db.exec(
+      `SELECT ${expr} FROM ingredients WHERE ${whereClause} LIMIT 1;`
+    );
+    if (q.length && q[0].values.length) return !!q[0].values[0][0];
+  } catch (_) {}
+  return false;
+}
+
 function attachIngredientInputAutosize(input) {
   if (!input) return;
 
@@ -424,6 +446,9 @@ function renderIngredient(line) {
   div.dataset.quantity = line.quantity;
   div.dataset.unit = line.unit;
   div.dataset.name = line.name;
+  if (line && line.isDeprecated) {
+    div.classList.add('ingredient-line--deprecated');
+  }
 
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
@@ -645,6 +670,9 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   const row = document.createElement('div');
   row.className = 'ingredient-edit-row editing';
   row.dataset.isEditing = 'true';
+  if (seedLine && seedLine.isDeprecated) {
+    row.classList.add('ingredient-edit-row--deprecated');
+  }
 
   // Edit-mode delete gesture: ctrl/⌘-click or right-click on blank tray surface.
   // Guard interactive controls so edit interactions stay safe and predictable.
@@ -1057,6 +1085,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
         pluralByDefault: false,
         isMassNoun: false,
         pluralOverride: '',
+        isDeprecated: false,
       };
 
       // Fetch grammar/pluralization fields from the database
@@ -1089,6 +1118,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
             ingredient.isMassNoun = !!isMassNoun;
             ingredient.pluralOverride = pluralOverride || '';
           }
+          ingredient.isDeprecated = getIngredientDeprecatedFlagFromDb(db, whereClause);
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch ingredient grammar fields:', err);
@@ -1111,8 +1141,8 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
       if (readOnlyLine) finalizeSwap(readOnlyLine);
 
       // If the insert flow replaced an insert-rail element, rerender to restore rails.
-      // After the rerender, focus the new card so the existing focusin handler
-      // reveals the ingredient add-hint CTA below it.
+      // After the rerender, reveal the inserted row's CTA without focusing the card;
+      // focusing the tabindex row paints a browser-native focus ring.
       try {
         const insertedClientId = ingredient.clientId;
         if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
@@ -1124,7 +1154,13 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
               const card = document.querySelector(
                 `.ingredient-line[data-client-id="${insertedClientId}"]`
               );
-              if (card) card.focus({ preventScroll: true });
+              const slot = card && card.closest ? card.closest('.ingredient-slot') : null;
+              if (slot && slot.classList) {
+                document
+                  .querySelectorAll('.ingredient-slot.ingredient-slot--hint-active')
+                  .forEach((el) => el.classList.remove('ingredient-slot--hint-active'));
+                slot.classList.add('ingredient-slot--hint-active');
+              }
             } catch (_) {}
           }, 0);
         }
@@ -1211,6 +1247,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
             modelRef.isMassNoun = !!isMassNoun;
             modelRef.pluralOverride = pluralOverride || '';
           }
+          modelRef.isDeprecated = getIngredientDeprecatedFlagFromDb(db, whereClause);
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch ingredient grammar fields:', err);
@@ -1231,6 +1268,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
         seedLine.pluralByDefault = modelRef.pluralByDefault;
         seedLine.isMassNoun = modelRef.isMassNoun;
         seedLine.pluralOverride = modelRef.pluralOverride;
+        seedLine.isDeprecated = modelRef.isDeprecated;
         if (!seedLine.clientId) seedLine.clientId = modelRef.clientId;
       }
 

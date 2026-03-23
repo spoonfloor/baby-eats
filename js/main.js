@@ -79,6 +79,61 @@ function isTypingContext(target) {
   return !!(el?.closest(selector) || active?.closest(selector));
 }
 
+const LAST_PAGE_SESSION_KEY = 'favoriteEats:last-page-id';
+const SHOPPING_FILTER_CHIPS_SESSION_KEY = 'favoriteEats:shopping-filter-chips';
+
+function detectPageIdFromBody() {
+  const body = document.body;
+  if (!body) return null;
+  return (
+    body.dataset.page ||
+    (body.classList.contains('recipes-page')
+      ? 'recipes'
+      : body.classList.contains('recipe-editor-page')
+        ? 'recipe-editor'
+        : body.classList.contains('shopping-page')
+          ? 'shopping'
+          : body.classList.contains('shopping-editor-page')
+            ? 'shopping-editor'
+            : body.classList.contains('units-page')
+              ? 'units'
+              : body.classList.contains('unit-editor-page')
+                ? 'unit-editor'
+                : body.classList.contains('stores-page')
+                  ? 'stores'
+                  : body.classList.contains('store-editor-page')
+                    ? 'store-editor'
+                    : null)
+  );
+}
+
+function getLastVisitedPageId() {
+  try {
+    return String(sessionStorage.getItem(LAST_PAGE_SESSION_KEY) || '')
+      .trim()
+      .toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+function markCurrentPageAsLastVisited() {
+  try {
+    const previous = getLastVisitedPageId();
+    window.__favoriteEatsPreviousPageId = previous;
+  } catch (_) {
+    window.__favoriteEatsPreviousPageId = '';
+  }
+  try {
+    const current = detectPageIdFromBody();
+    if (!current) return;
+    sessionStorage.setItem(LAST_PAGE_SESSION_KEY, String(current).toLowerCase());
+  } catch (_) {}
+}
+
+// Track previous page id across full page navigations.
+markCurrentPageAsLastVisited();
+
 function enableTopLevelListKeyboardNav(listEl) {
   if (!(listEl instanceof Element)) return null;
 
@@ -229,26 +284,7 @@ initSqlJs({
 
   // --- page load routing ---
 
-  const body = document.body;
-
-  // Prefer data-page; fall back to legacy body classes for now.
-  const pageId =
-    body.dataset.page ||
-    (body.classList.contains('recipes-page')
-      ? 'recipes'
-      : body.classList.contains('recipe-editor-page')
-        ? 'recipe-editor'
-        : body.classList.contains('shopping-page')
-          ? 'shopping'
-          : body.classList.contains('shopping-editor-page')
-            ? 'shopping-editor'
-            : body.classList.contains('units-page')
-              ? 'units'
-              : body.classList.contains('stores-page')
-                ? 'stores'
-                : body.classList.contains('store-editor-page')
-                  ? 'store-editor'
-                  : null);
+  const pageId = detectPageIdFromBody();
 
   // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages (Recipes <-> Shopping <-> Units <-> Stores) ---
   const TOP_LEVEL_PAGES = ['recipes', 'shopping', 'units', 'stores'];
@@ -742,55 +778,83 @@ async function loadShoppingPage() {
     }
   };
 
+  const tableHasColumn = (tableName, columnName) => {
+    try {
+      const q = db.exec(`PRAGMA table_info(${tableName});`);
+      const rows =
+        Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
+          ? q[0].values
+          : [];
+      const cols = rows
+        .map((r) => (Array.isArray(r) ? String(r[1] || '').toLowerCase() : ''))
+        .filter(Boolean);
+      return cols.includes(String(columnName || '').toLowerCase());
+    } catch (_) {
+      return false;
+    }
+  };
+
   // When available, prefer the list table so Shopping can display multiple variants.
   const hasVariantTable = tableExists('ingredient_variants');
+  const hasIsDeprecatedCol = tableHasColumn('ingredients', 'is_deprecated');
+  const hasIsFoodCol = tableHasColumn('ingredients', 'is_food');
+  const hasLegacyHideCol = tableHasColumn(
+    'ingredients',
+    'hide_from_shopping_list',
+  );
+  const deprecatedExpr = hasIsDeprecatedCol
+    ? 'COALESCE(i.is_deprecated, 0)'
+    : hasLegacyHideCol
+      ? 'COALESCE(i.hide_from_shopping_list, 0)'
+      : '0';
+  const homeExpr = `COALESCE(i.location_at_home, '')`;
+  const isFoodExpr = hasIsFoodCol ? 'COALESCE(i.is_food, 1)' : '1';
   const baseSelectSql = hasVariantTable
     ? `
-      SELECT i.ID, i.name, COALESCE(v.variant, i.variant) AS variant
+      SELECT i.ID,
+             i.name,
+             COALESCE(v.variant, i.variant) AS variant,
+             ${deprecatedExpr} AS is_deprecated,
+             ${homeExpr} AS location_at_home,
+             ${isFoodExpr} AS is_food
       FROM ingredients i
       LEFT JOIN ingredient_variants v ON v.ingredient_id = i.ID
     `
     : `
-      SELECT ID, name, variant
-      FROM ingredients
+      SELECT i.ID,
+             i.name,
+             i.variant,
+             ${deprecatedExpr} AS is_deprecated,
+             ${homeExpr} AS location_at_home,
+             ${isFoodExpr} AS is_food
+      FROM ingredients i
     `;
 
-  let result = [];
-  try {
-    result = db.exec(`
-      ${baseSelectSql}
-      WHERE COALESCE(is_deprecated, 0) = 0
-      ORDER BY
-        ${hasVariantTable ? 'i.name' : 'name'} COLLATE NOCASE
-        ${
-          hasVariantTable
-            ? ', i.ID ASC, COALESCE(v.sort_order, 999999) ASC, COALESCE(v.id, 999999) ASC'
-            : ''
-        };
-    `);
-  } catch (_) {
-    result = db.exec(`
-      ${baseSelectSql}
-      WHERE hide_from_shopping_list = 0
-      ORDER BY
-        ${hasVariantTable ? 'i.name' : 'name'} COLLATE NOCASE
-        ${
-          hasVariantTable
-            ? ', i.ID ASC, COALESCE(v.sort_order, 999999) ASC, COALESCE(v.id, 999999) ASC'
-            : ''
-        };
-    `);
-  }
+  const result = db.exec(`
+    ${baseSelectSql}
+    ORDER BY
+      i.name COLLATE NOCASE
+      ${
+        hasVariantTable
+          ? ', i.ID ASC, COALESCE(v.sort_order, 999999) ASC, COALESCE(v.id, 999999) ASC'
+          : ''
+      };
+  `);
 
   // Normalize into the same shape the UI already expects, but
   // aggregate variants by ingredient name so each name appears once.
   let shoppingRows = [];
   if (result.length > 0) {
-    const rawRows = result[0].values.map(([id, name, variant]) => ({
-      id,
-      name,
-      variant: variant || '',
-    }));
+    const rawRows = result[0].values.map(
+      ([id, name, variant, isDeprecated, locationAtHome, isFood]) => ({
+        id,
+        name,
+        variant: variant || '',
+        isDeprecated: Number(isDeprecated || 0) === 1,
+        locationAtHome: String(locationAtHome || ''),
+        isFood: Number(isFood ?? 1) === 1,
+      }),
+    );
 
     const byName = new Map();
 
@@ -802,12 +866,18 @@ async function loadShoppingPage() {
           id: row.id,
           name: row.name || '',
           variants: [],
+          _deprecatedFlags: [],
+          _homeLocations: [],
+          _foodFlags: [],
         });
       }
 
       if (row.variant) {
         byName.get(key).variants.push(row.variant);
       }
+      byName.get(key)._deprecatedFlags.push(!!row.isDeprecated);
+      byName.get(key)._homeLocations.push(String(row.locationAtHome || ''));
+      byName.get(key)._foodFlags.push(row.isFood !== false);
     });
 
     // Dedupe variants, then flatten into an array.
@@ -839,6 +909,22 @@ async function loadShoppingPage() {
         item.variants = [];
       }
 
+      item.isDeprecated =
+        Array.isArray(item._deprecatedFlags) && item._deprecatedFlags.length > 0
+          ? item._deprecatedFlags.every(Boolean)
+          : false;
+      item.locationAtHome =
+        Array.isArray(item._homeLocations) && item._homeLocations.length > 0
+          ? String(item._homeLocations[0] || '')
+          : '';
+      item.isFood =
+        Array.isArray(item._foodFlags) && item._foodFlags.length > 0
+          ? item._foodFlags.some(Boolean)
+          : true;
+      delete item._deprecatedFlags;
+      delete item._homeLocations;
+      delete item._foodFlags;
+
       return item;
     });
 
@@ -849,6 +935,195 @@ async function loadShoppingPage() {
       }),
     );
   }
+
+  const shoppingLocationChipDefs = [
+    { id: 'fridge', label: 'fridge' },
+    { id: 'freezer', label: 'freezer' },
+    { id: 'above fridge', label: 'above fridge' },
+    { id: 'pantry', label: 'pantry' },
+    { id: 'cereal cabinet', label: 'cereal cabinet' },
+    { id: 'spices', label: 'spices' },
+    { id: 'fruit stand', label: 'fruit stand' },
+    { id: 'coffee bar', label: 'coffee bar' },
+    { id: 'none', label: 'none' },
+  ];
+  const shoppingFilterChipDefs = [
+    { id: 'hidden', label: 'hidden', kind: 'flag' },
+    { id: 'not food', label: 'not food', kind: 'flag' },
+    ...shoppingLocationChipDefs.map((c) => ({ ...c, kind: 'location' })),
+  ];
+  const activeFilterChips = new Set();
+  let shoppingChipCounts = new Map();
+  let filterChipDockEl = null;
+  let filterChipTrackEl = null;
+  const previousPageId = String(window.__favoriteEatsPreviousPageId || '').trim();
+  const shouldRestoreChipState =
+    previousPageId === 'shopping' || previousPageId === 'shopping-editor';
+
+  const persistShoppingChipState = () => {
+    try {
+      sessionStorage.setItem(
+        SHOPPING_FILTER_CHIPS_SESSION_KEY,
+        JSON.stringify(Array.from(activeFilterChips)),
+      );
+    } catch (_) {}
+  };
+
+  const clearShoppingChipState = () => {
+    try {
+      sessionStorage.removeItem(SHOPPING_FILTER_CHIPS_SESSION_KEY);
+    } catch (_) {}
+  };
+
+  const restoreShoppingChipState = () => {
+    if (!shouldRestoreChipState) {
+      clearShoppingChipState();
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem(SHOPPING_FILTER_CHIPS_SESSION_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const knownIds = new Set(shoppingFilterChipDefs.map((c) => String(c.id)));
+      parsed.forEach((chipId) => {
+        const id = String(chipId || '').trim().toLowerCase();
+        if (knownIds.has(id)) activeFilterChips.add(id);
+      });
+    } catch (_) {}
+  };
+
+  const normalizeLocationForChip = (raw) => {
+    const v = String(raw || '').trim().toLowerCase();
+    if (!v || v === 'measures') return 'none';
+    const known = shoppingLocationChipDefs.some((c) => c.id === v);
+    return known ? v : 'none';
+  };
+
+  const recomputeShoppingChipCounts = () => {
+    const counts = new Map();
+    shoppingFilterChipDefs.forEach((c) => counts.set(c.id, 0));
+    shoppingRows.forEach((item) => {
+      if (item && item.isDeprecated) {
+        counts.set('hidden', (counts.get('hidden') || 0) + 1);
+      }
+      if (item && item.isFood === false) {
+        counts.set('not food', (counts.get('not food') || 0) + 1);
+      }
+      const locId = normalizeLocationForChip(item?.locationAtHome);
+      counts.set(locId, (counts.get(locId) || 0) + 1);
+    });
+    shoppingChipCounts = counts;
+  };
+
+  const pruneInactiveShoppingChipState = () => {
+    let changed = false;
+    Array.from(activeFilterChips).forEach((chipId) => {
+      const count = Number(shoppingChipCounts.get(chipId) || 0);
+      if (count <= 0) {
+        activeFilterChips.delete(chipId);
+        changed = true;
+      }
+    });
+    if (changed) persistShoppingChipState();
+  };
+
+  const syncShoppingFilterChipDock = () => {
+    if (!filterChipDockEl || !searchInput) return;
+    const rect = searchInput.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+    const appBarBottom = document
+      .querySelector('.app-bar-wrapper')
+      ?.getBoundingClientRect?.().bottom;
+    const safeTop = Number.isFinite(appBarBottom)
+      ? Math.max(rect.bottom + 8, appBarBottom + 8)
+      : rect.bottom + 8;
+    filterChipDockEl.style.left = `${Math.round(rect.left)}px`;
+    filterChipDockEl.style.width = `${Math.round(rect.width)}px`;
+    filterChipDockEl.style.top = `${Math.round(safeTop)}px`;
+  };
+
+  const rerenderShoppingFilterChips = () => {
+    if (!filterChipTrackEl) return;
+    filterChipTrackEl.innerHTML = '';
+    shoppingFilterChipDefs.forEach((chipDef) => {
+      const chipId = String(chipDef?.id || '').toLowerCase();
+      const count = Number(shoppingChipCounts.get(chipId) || 0);
+      const isDisabled = count <= 0;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'shopping-filter-chip';
+      chip.textContent = chipDef?.label || chipId;
+      chip.disabled = isDisabled;
+      if (isDisabled) chip.classList.add('is-disabled');
+      if (activeFilterChips.has(chipId)) chip.classList.add('is-active');
+      chip.addEventListener('click', () => {
+        if (isDisabled) return;
+        if (activeFilterChips.has(chipId)) activeFilterChips.delete(chipId);
+        else activeFilterChips.add(chipId);
+        persistShoppingChipState();
+        rerenderShoppingFilterChips();
+        applyShoppingFilters();
+      });
+      filterChipTrackEl.appendChild(chip);
+    });
+  };
+
+  const mountShoppingFilterChips = () => {
+    if (!searchInput) return;
+    let dock = document.getElementById('shoppingFilterChipDock');
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = 'shoppingFilterChipDock';
+      dock.className = 'shopping-filter-chip-dock';
+
+      const viewport = document.createElement('div');
+      viewport.className = 'shopping-filter-chip-viewport';
+      const track = document.createElement('div');
+      track.className = 'shopping-filter-chip-track';
+      viewport.appendChild(track);
+      dock.appendChild(viewport);
+      document.body.appendChild(dock);
+    }
+    filterChipDockEl = dock;
+    filterChipTrackEl = dock.querySelector('.shopping-filter-chip-track');
+
+    recomputeShoppingChipCounts();
+    rerenderShoppingFilterChips();
+    syncShoppingFilterChipDock();
+    window.addEventListener('resize', syncShoppingFilterChipDock);
+  };
+
+  const getFilteredShoppingRows = () => {
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    const hiddenOnly = activeFilterChips.has('hidden');
+    const notFoodOnly = activeFilterChips.has('not food');
+    const activeLocationIds = shoppingLocationChipDefs
+      .map((c) => c.id)
+      .filter((id) => activeFilterChips.has(id));
+    return shoppingRows.filter((item) => {
+      const name = String(item.name || '').toLowerCase();
+      const variants = Array.isArray(item.variants) ? item.variants : [];
+      const matchesSearch =
+        !query ||
+        name.includes(query) ||
+        variants.some((v) => String(v || '').toLowerCase().includes(query));
+      const matchesHidden = hiddenOnly
+        ? item.isDeprecated === true
+        : item.isDeprecated !== true;
+      const matchesFood = notFoodOnly ? item.isFood === false : true;
+      const locationId = normalizeLocationForChip(item?.locationAtHome);
+      const matchesLocation =
+        activeLocationIds.length === 0 || activeLocationIds.includes(locationId);
+      return matchesSearch && matchesHidden && matchesFood && matchesLocation;
+    });
+  };
+
+  const applyShoppingFilters = () => {
+    const query = (searchInput?.value || '').trim();
+    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
+    renderShoppingList(getFilteredShoppingRows());
+  };
 
   function countRecipesUsingShoppingName(name) {
     const n = (name || '').trim();
@@ -1163,38 +1438,21 @@ async function loadShoppingPage() {
     listNav?.syncAfterRender?.();
   }
 
+  restoreShoppingChipState();
+  mountShoppingFilterChips();
+  pruneInactiveShoppingChipState();
   // Initial render
-  renderShoppingList(shoppingRows);
+  applyShoppingFilters();
 
-  // Search: filter by name and variant text (case-insensitive)
+  // Search + chips: filter by name/variant text and hidden chip state.
   if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-
     searchInput.addEventListener('input', () => {
-      const query = searchInput.value.trim().toLowerCase();
-      clearBtn.style.display = query ? 'inline' : 'none';
-
-      if (!query) {
-        renderShoppingList(shoppingRows);
-        return;
-      }
-
-      const filtered = shoppingRows.filter((item) => {
-        const nameMatch = item.name.toLowerCase().includes(query);
-        const variants = Array.isArray(item.variants) ? item.variants : [];
-        const variantMatch = variants.some((v) =>
-          (v || '').toLowerCase().includes(query),
-        );
-        return nameMatch || variantMatch;
-      });
-
-      renderShoppingList(filtered);
+      applyShoppingFilters();
     });
 
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
-      clearBtn.style.display = 'none';
-      renderShoppingList(shoppingRows);
+      applyShoppingFilters();
       searchInput.focus();
     });
 
@@ -4344,33 +4602,8 @@ function loadStoreEditorPage() {
     };
 
     const flushStoreAislesDraft = async (db, sid) => {
-      const getVisibleCanonicalId = (name) => {
-        const stmt = db.prepare(`
-          SELECT ID FROM ingredients
-          WHERE lower(trim(name)) = lower(trim(?))
-            AND COALESCE(is_deprecated, 0) = 0
-            AND COALESCE(hide_from_shopping_list, 0) = 0
-          ORDER BY
-            CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
-            CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
-            ID ASC
-          LIMIT 1
-        `);
-        stmt.bind([name]);
-        let vid = null;
-        if (stmt.step()) vid = Number(stmt.get()[0]);
-        stmt.free();
-        return Number.isFinite(vid) ? vid : null;
-      };
-      const anyIngredientNamed = (name) => {
-        const stmt = db.prepare(
-          `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1`,
-        );
-        stmt.bind([name]);
-        const ok = stmt.step();
-        stmt.free();
-        return ok;
-      };
+      const { getVisibleCanonicalId, anyIngredientNamed } =
+        createIngredientLookupHelpers(db);
 
       const blockedKeys = new Set();
       const unknownUnique = [];
@@ -4407,27 +4640,44 @@ function loadStoreEditorPage() {
       }
 
       if (unknownUnique.length) {
-        if (!window.ui?.dialogThreeChoice) {
+        if (!window.ui?.unknownItems) {
           uiToast('UI not ready.');
           throw { silent: true };
         }
-        const bullets = unknownUnique.map((n) => `• ${n}`).join('\n');
-        const choice = await window.ui.dialogThreeChoice({
-          title: 'Unknown items',
-          message: `These names are not in your ingredient list:\n\n${bullets}\n\nCreate new ingredients, fix typos, or cancel save.`,
-          discardText: 'Cancel',
-          fixText: 'Fix input',
-          createText: 'Create',
+        const resolved = await resolveUnknownIngredientNames({
+          db,
+          names: unknownUnique,
+          title: `New items (${unknownUnique.length})`,
+          message:
+            'These items are not in your database. Edit, match to existing items, or save as new ones.',
         });
-        if (choice === 'discard') {
+        if (!resolved) {
           uiToast('Save cancelled.');
           throw { silent: true };
         }
-        if (choice === 'fix') {
-          uiToast('Fix item names, then save again.');
-          throw { silent: true };
+
+        const replacementMap = resolved.map;
+        for (const r of aisleRows) {
+          const lines = [...(aisleItemsByAisle.get(r.id) || [])];
+          const replaced = lines.map((n) => {
+            const key = normItemKey(n);
+            return replacementMap.get(key) || n;
+          });
+          aisleItemsByAisle.set(r.id, parseUniqueItemLines(replaced.join('\n')));
         }
-        for (const n of unknownUnique) {
+
+        const createQueue = [];
+        const createSeen = new Set();
+        for (const n of resolved.finalNames) {
+          const t = String(n || '').trim();
+          const k = normItemKey(t);
+          if (!t || createSeen.has(k)) continue;
+          createSeen.add(k);
+          if (anyIngredientNamed(t)) continue;
+          createQueue.push(t);
+        }
+
+        for (const n of createQueue) {
           try {
             db.run('INSERT INTO ingredients (name) VALUES (?);', [n]);
           } catch (e) {
@@ -4761,6 +5011,132 @@ function initBottomNav() {
   });
 }
 
+function getIngredientTableColumnSet(db) {
+  try {
+    const q = db.exec('PRAGMA table_info(ingredients);');
+    const rows = Array.isArray(q) && q.length > 0 ? q[0].values : [];
+    return new Set(rows.map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase()));
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function createIngredientVisibilitySql(colsSet) {
+  const hasDeprecated = colsSet.has('is_deprecated');
+  const hasHideLegacy = colsSet.has('hide_from_shopping_list');
+  if (hasDeprecated && hasHideLegacy) {
+    return 'COALESCE(is_deprecated, 0) = 0 AND COALESCE(hide_from_shopping_list, 0) = 0';
+  }
+  if (hasDeprecated) return 'COALESCE(is_deprecated, 0) = 0';
+  if (hasHideLegacy) return 'COALESCE(hide_from_shopping_list, 0) = 0';
+  return '1 = 1';
+}
+
+function getVisibleIngredientNamePool(db) {
+  const colsSet = getIngredientTableColumnSet(db);
+  const visibilitySql = createIngredientVisibilitySql(colsSet);
+  try {
+    const q = db.exec(
+      `
+      SELECT DISTINCT name
+      FROM ingredients
+      WHERE name IS NOT NULL
+        AND trim(name) != ''
+        AND ${visibilitySql}
+      ORDER BY name COLLATE NOCASE;
+      `
+    );
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    return q[0].values
+      .map((row) => (Array.isArray(row) ? row[0] : null))
+      .map((v) => String(v || '').trim())
+      .filter((v) => v.length > 0);
+  } catch (_) {
+    return [];
+  }
+}
+
+function createIngredientLookupHelpers(db) {
+  const colsSet = getIngredientTableColumnSet(db);
+  const visibilitySql = createIngredientVisibilitySql(colsSet);
+  const getVisibleCanonicalId = (name) => {
+    const stmt = db.prepare(
+      `
+      SELECT ID
+      FROM ingredients
+      WHERE lower(trim(name)) = lower(trim(?))
+        AND ${visibilitySql}
+      ORDER BY
+        CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
+        CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
+        ID ASC
+      LIMIT 1;
+      `
+    );
+    stmt.bind([name]);
+    let id = null;
+    if (stmt.step()) id = Number(stmt.get()[0]);
+    stmt.free();
+    return Number.isFinite(id) ? id : null;
+  };
+
+  const anyIngredientNamed = (name) => {
+    const stmt = db.prepare(
+      `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1;`
+    );
+    stmt.bind([name]);
+    const ok = stmt.step();
+    stmt.free();
+    return ok;
+  };
+
+  return { getVisibleCanonicalId, anyIngredientNamed };
+}
+
+async function resolveUnknownIngredientNames({
+  db,
+  names,
+  title = '',
+  message = '',
+}) {
+  if (!db) return null;
+  const list = Array.isArray(names) ? names : [];
+  if (!list.length) return { map: new Map(), finalNames: [] };
+  const ui = window.ui;
+  if (!ui || typeof ui.unknownItems !== 'function') {
+    return null;
+  }
+  const suggestionPool = getVisibleIngredientNamePool(db);
+  const result = await ui.unknownItems({
+    title: title || `New items (${list.length})`,
+    message:
+      message ||
+      'These items are not in your database. Edit, match to existing items, or save as new ones.',
+    items: list,
+    suggestionPool,
+    applyAllText: 'Apply all',
+    cancelText: 'Cancel',
+    editText: 'Edit',
+    saveText: 'Save',
+  });
+  if (!result || !Array.isArray(result.rows)) return null;
+
+  const map = new Map();
+  const finalNames = [];
+  const seenFinal = new Set();
+  result.rows.forEach((row) => {
+    const key = String(row?.original || '').trim().toLowerCase();
+    const replacement = String(row?.value || '').trim();
+    if (!key || !replacement) return;
+    map.set(key, replacement);
+    const rk = replacement.toLowerCase();
+    if (seenFinal.has(rk)) return;
+    seenFinal.add(rk);
+    finalNames.push(replacement);
+  });
+  return { map, finalNames };
+}
+
 // --- Recipe editor loader ---
 async function loadRecipeEditorPage() {
   const isElectron = !!window.electronAPI;
@@ -4956,6 +5332,58 @@ async function loadRecipeEditorPage() {
 
       // Real save path (DB + persist-to-disk/localStorage), reusing existing helpers
       try {
+        try {
+          const db = window.dbInstance;
+          const recipeModel = window.recipeData;
+          if (db && recipeModel && Array.isArray(recipeModel.sections)) {
+            const { getVisibleCanonicalId, anyIngredientNamed } =
+              createIngredientLookupHelpers(db);
+            const unknownUnique = [];
+            const seenUnknown = new Set();
+            recipeModel.sections.forEach((sec) => {
+              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+              rows.forEach((row) => {
+                if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                const rawName = String(row.name || '').trim();
+                if (!rawName) return;
+                if (getVisibleCanonicalId(rawName)) return;
+                if (anyIngredientNamed(rawName)) return;
+                const key = rawName.toLowerCase();
+                if (seenUnknown.has(key)) return;
+                seenUnknown.add(key);
+                unknownUnique.push(rawName);
+              });
+            });
+
+            if (unknownUnique.length) {
+              const resolved = await resolveUnknownIngredientNames({
+                db,
+                names: unknownUnique,
+                title: `New items (${unknownUnique.length})`,
+                message:
+                  'These items are not in your database. Edit, match to existing items, or save as new ones.',
+              });
+              if (!resolved) {
+                uiToast('Save cancelled.');
+                return;
+              }
+              const replacementMap = resolved.map;
+              recipeModel.sections.forEach((sec) => {
+                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                rows.forEach((row) => {
+                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                  const key = String(row.name || '').trim().toLowerCase();
+                  if (!key) return;
+                  const nextName = replacementMap.get(key);
+                  if (nextName) row.name = nextName;
+                });
+              });
+            }
+          }
+        } catch (unknownErr) {
+          console.warn('Unknown-item resolution skipped:', unknownErr);
+        }
+
         if (typeof saveRecipeToDB === 'function') {
           await saveRecipeToDB();
         }
