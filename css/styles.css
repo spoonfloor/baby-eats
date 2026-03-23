@@ -1321,6 +1321,13 @@ body.shopping-page .shopping-filter-chip:focus-visible {
   z-index: 1;
 }
 
+/* Whole step rows are clickable when not editing. */
+.instruction-line:not(.editing),
+.instruction-line:not(.editing) .step-num,
+.instruction-line:not(.editing) .step-text {
+  cursor: pointer;
+}
+
 .instruction-line .step-num {
   flex: 0 0 2em; /* reserve fixed width for numbers */
 }
@@ -1559,6 +1566,22 @@ h1.nav-text {
   white-space: nowrap;
 }
 
+/* Paste-content insert tray: same card treatment, single full-width field. */
+.ingredient-paste-row .ingredient-edit-cell--paste {
+  display: flex;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.ingredient-paste-input {
+  width: 100%;
+  max-width: none;
+  min-height: calc(var(--servings-field-height) * 2);
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Treat each pill+field pair like a "word" in a text editor: intrinsic width, no reserved columns. */
 .ingredient-edit-cell--qty,
 .ingredient-edit-cell--unit,
@@ -1668,6 +1691,16 @@ h1.nav-text {
 .ingredient-edit-input {
   width: var(--ingredient-field-empty-width);
   max-width: var(--ingredient-field-max-width);
+}
+
+.ingredient-paste-row {
+  align-items: stretch;
+}
+
+.ingredient-paste-row .ingredient-paste-input {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
 }
 
 .ingredient-edit-input--name {
@@ -1794,6 +1827,7 @@ h1.nav-text {
 .instruction-line.editing .step-text,
 .instruction-line.editing .step-textarea {
   color: var(--edit-mode-color);
+  cursor: text;
 }
 
 /* Selection highlight inside step textarea */

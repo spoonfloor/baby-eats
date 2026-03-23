@@ -1141,26 +1141,14 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
       if (readOnlyLine) finalizeSwap(readOnlyLine);
 
       // If the insert flow replaced an insert-rail element, rerender to restore rails.
-      // After the rerender, reveal the inserted row's CTA without focusing the card;
-      // focusing the tabindex row paints a browser-native focus ring.
+      // After rerender, request delayed hint activation for the inserted row.
       try {
         const insertedClientId = ingredient.clientId;
         if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
           setTimeout(() => {
             try {
+              window._pendingIngredientHintClientId = insertedClientId;
               window.recipeEditorRerenderIngredientsFromModel();
-            } catch (_) {}
-            try {
-              const card = document.querySelector(
-                `.ingredient-line[data-client-id="${insertedClientId}"]`
-              );
-              const slot = card && card.closest ? card.closest('.ingredient-slot') : null;
-              if (slot && slot.classList) {
-                document
-                  .querySelectorAll('.ingredient-slot.ingredient-slot--hint-active')
-                  .forEach((el) => el.classList.remove('ingredient-slot--hint-active'));
-                slot.classList.add('ingredient-slot--hint-active');
-              }
             } catch (_) {}
           }, 0);
         }
@@ -1384,9 +1372,261 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   }
 }
 
+function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
+  if (!parent || !replaceEl) return;
+  const insertAt = insertAtIndex;
+  const replaceElIsCta = replaceEl.classList.contains('ingredient-add-cta');
+
+  const row = document.createElement('div');
+  row.className = 'ingredient-edit-row ingredient-paste-row editing';
+  row.dataset.isEditing = 'true';
+
+  try {
+    document.body.classList.add('ingredient-editing');
+  } catch (_) {}
+
+  const syncAddIngredientActionAffordance = (disabled) => {
+    const shouldDisable = !!disabled;
+    try {
+      document.body.classList.toggle(
+        'ingredient-insert-blank-active',
+        shouldDisable
+      );
+    } catch (_) {}
+
+    try {
+      const buttons = document.querySelectorAll(
+        '.ingredient-add-cta-action[data-cta-action="add-ingredient"]'
+      );
+      buttons.forEach((btn) => {
+        if (!(btn instanceof HTMLElement)) return;
+        if (shouldDisable) {
+          btn.setAttribute('aria-disabled', 'true');
+          btn.tabIndex = -1;
+        } else {
+          btn.removeAttribute('aria-disabled');
+          btn.removeAttribute('tabindex');
+        }
+      });
+    } catch (_) {}
+  };
+
+  const blurTarget = document.createElement('div');
+  blurTarget.className = 'inline-edit-blur-target';
+  blurTarget.tabIndex = -1;
+  blurTarget.setAttribute('aria-hidden', 'true');
+  row.appendChild(blurTarget);
+
+  const cell = document.createElement('div');
+  cell.className = 'ingredient-edit-cell ingredient-edit-cell--paste';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'ingredient-edit-input ingredient-paste-input';
+  textarea.dataset.field = 'paste';
+  textarea.placeholder = 'Paste content';
+  textarea.setAttribute('aria-label', 'Paste content');
+  textarea.wrap = 'soft';
+  textarea.rows = 3;
+  cell.appendChild(textarea);
+  row.appendChild(cell);
+
+  try {
+    if (typeof attachEditorTextareaAutoGrow === 'function') {
+      attachEditorTextareaAutoGrow(textarea, { maxLines: 12 });
+    }
+  } catch (_) {}
+
+  let hasPendingEdit = false;
+  const markDirtyOnce = () => {
+    if (hasPendingEdit) return;
+    hasPendingEdit = true;
+    if (typeof markDirty === 'function') {
+      markDirty();
+    }
+  };
+  row.addEventListener('input', (e) => {
+    if (e && e.isTrusted === false) return;
+    const t = e && e.target;
+    if (t === textarea) {
+      markDirtyOnce();
+      syncActiveIngredientEditorState();
+    }
+  });
+
+  const getCommittedHeadingText = () => {
+    const raw = String(textarea.value || '');
+    const firstLine = raw.split(/\r?\n/, 1)[0] || '';
+    return normalizeIngredientHeadingText(firstLine);
+  };
+
+  let _didFinalizeSwap = false;
+  const activeEditorState = {
+    rowElement: row,
+    isInsert: true,
+    insertAtIndex: Number.isFinite(Number(insertAt)) ? Number(insertAt) : 0,
+    ctaAnchorEl: replaceElIsCta ? replaceEl : null,
+    isEmpty: () => isEmpty(),
+    commit: async () => {
+      await commit();
+    },
+    cancel: () => {
+      cancel();
+    },
+  };
+  const syncActiveIngredientEditorState = () => {
+    if (window._activeIngredientEditor !== activeEditorState) return;
+    const disableAddIngredient = !!(!_didFinalizeSwap && row.isConnected && isEmpty());
+    syncAddIngredientActionAffordance(disableAddIngredient);
+  };
+  const clearActiveIngredientEditorState = () => {
+    if (window._activeIngredientEditor === activeEditorState) {
+      window._activeIngredientEditor = null;
+    }
+    syncAddIngredientActionAffordance(false);
+  };
+  const finalizeSwap = (nextEl) => {
+    if (_didFinalizeSwap) return;
+    _didFinalizeSwap = true;
+    clearActiveIngredientEditorState();
+    try {
+      try {
+        document.body.classList.remove('ingredient-editing');
+      } catch (_) {}
+      const p = row.parentNode;
+      if (p && nextEl) {
+        p.replaceChild(nextEl, row);
+      }
+    } catch (_) {}
+  };
+
+  const restoreOriginal = () => finalizeSwap(replaceEl);
+
+  const isEmpty = () => !getCommittedHeadingText();
+
+  const commit = async () => {
+    const headingText = getCommittedHeadingText();
+    if (!headingText) {
+      restoreOriginal();
+      return;
+    }
+
+    let sectionRef = null;
+    try {
+      const model = window.recipeData;
+      if (model && Array.isArray(model.sections) && model.sections[0]) {
+        sectionRef = model.sections[0];
+        if (!Array.isArray(sectionRef.ingredients)) sectionRef.ingredients = [];
+        const raw = Number(insertAt);
+        const idx = Number.isFinite(raw) ? raw : sectionRef.ingredients.length;
+        const safeIdx = Math.max(0, Math.min(idx, sectionRef.ingredients.length));
+        const heading = {
+          rowType: 'heading',
+          headingId: null,
+          headingClientId: `tmp-h-${Date.now()}-${Math.floor(
+            Math.random() * 100000
+          )}`,
+          sortOrder: null,
+          text: headingText,
+        };
+        sectionRef.ingredients.splice(safeIdx, 0, heading);
+      } else {
+        restoreOriginal();
+        return;
+      }
+    } catch (_) {
+      restoreOriginal();
+      return;
+    }
+
+    try {
+      if (!hasPendingEdit && typeof markDirty === 'function') {
+        markDirty();
+      }
+    } catch (_) {}
+
+    // Keep immediate in-place visual replacement; full rerender restores slot rails.
+    const readOnlyLine = document.createElement('div');
+    readOnlyLine.className = 'ingredient-subsection-heading-line';
+    const text = document.createElement('span');
+    text.className = 'ingredient-subsection-heading-text';
+    text.textContent = headingText;
+    readOnlyLine.appendChild(text);
+    finalizeSwap(readOnlyLine);
+
+    try {
+      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+        setTimeout(() => {
+          try {
+            window.recipeEditorRerenderIngredientsFromModel();
+          } catch (_) {}
+        }, 0);
+      }
+    } catch (_) {}
+  };
+
+  const cancel = () => {
+    restoreOriginal();
+  };
+
+  if (replaceElIsCta) {
+    parent.insertBefore(row, replaceEl);
+  } else {
+    parent.replaceChild(row, replaceEl);
+  }
+
+  window._activeIngredientEditor = activeEditorState;
+  syncActiveIngredientEditorState();
+
+  if (typeof setupInlineRowEditing === 'function') {
+    let _isEditing = false;
+    const controller = setupInlineRowEditing({
+      rowElement: row,
+      isEmpty,
+      commit,
+      cancel,
+      getIsEditing: () => _isEditing,
+      setIsEditing: (flag) => {
+        _isEditing = !!flag;
+        row.classList.toggle('editing', _isEditing);
+      },
+      onEnterCommit: () => {
+        try {
+          if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+            window.recipeEditorRerenderIngredientsFromModel();
+          }
+        } catch (_) {}
+      },
+    });
+    if (controller && typeof controller.enterEdit === 'function') {
+      controller.enterEdit();
+    } else {
+      row.classList.add('editing');
+    }
+  } else {
+    row.classList.add('editing');
+  }
+
+  // Keep multiline support while preserving Enter-to-commit.
+  textarea.addEventListener('keydown', (e) => {
+    if (!e) return;
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.stopPropagation();
+    }
+  });
+
+  setTimeout(() => {
+    try {
+      textarea.focus();
+      textarea.setSelectionRange(0, 0);
+      textarea.scrollTop = 0;
+      textarea.scrollLeft = 0;
+    } catch (_) {}
+  }, 0);
+}
+
 // Expose for other modules (recipeEditor.js) that call into the ingredient editor.
 try {
   window.openIngredientEditRow = openIngredientEditRow;
+  window.openIngredientPasteRow = openIngredientPasteRow;
 } catch (_) {}
 
 function renderIngredientEditRowScaffold() {

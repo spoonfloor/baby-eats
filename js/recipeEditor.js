@@ -605,7 +605,7 @@ async function prepareActiveIngredientEditorForAction(action, cta, insertIndex) 
     return { shouldProceed: true, insertIndex };
   }
 
-  if (action !== 'add-heading') {
+  if (action !== 'add-heading' && action !== 'paste-content') {
     return { shouldProceed: false, insertIndex };
   }
 
@@ -644,11 +644,6 @@ async function handleCtaAction(ingredientsSection, cta, btn) {
 
   const insertIndex = parseInt(cta.dataset.insertIndex, 10);
   const action = btn.dataset.ctaAction;
-
-  if (action === 'paste-content') {
-    console.log('ingredient CTA: paste content');
-    return;
-  }
   if (!Number.isFinite(insertIndex)) return;
 
   const headingPrep = await prepareActiveHeadingEditorForAction(
@@ -670,6 +665,47 @@ async function handleCtaAction(ingredientsSection, cta, btn) {
     const sec = window.recipeData?.sections?.[0];
     if (sec && typeof window.recipeEditorInsertIngredientHeadingAt === 'function') {
       window.recipeEditorInsertIngredientHeadingAt(sec, nextInsertIndex);
+    }
+    return;
+  }
+
+  if (action === 'paste-content') {
+    const sec = window.recipeData?.sections?.[0];
+    if (!sec) return;
+    const liveIdx = Array.isArray(sec.ingredients)
+      ? Math.min(nextInsertIndex, sec.ingredients.length)
+      : nextInsertIndex;
+
+    const isPerLine = cta.classList.contains('ingredient-add-cta--per-line');
+    if (isPerLine) {
+      const anchor = document.createElement('div');
+      const slot = cta.closest('.ingredient-slot');
+      if (slot) {
+        slot.after(anchor);
+      } else {
+        ingredientsSection.appendChild(anchor);
+      }
+      if (typeof window.openIngredientPasteRow === 'function') {
+        window.openIngredientPasteRow({
+          parent: ingredientsSection,
+          replaceEl: anchor,
+          insertAtIndex: liveIdx,
+        });
+      }
+    } else {
+      const liveCta = cta.isConnected
+        ? cta
+        : ingredientsSection.querySelector(
+            '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
+          );
+      if (!liveCta) return;
+      if (typeof window.openIngredientPasteRow === 'function') {
+        window.openIngredientPasteRow({
+          parent: ingredientsSection,
+          replaceEl: liveCta,
+          insertAtIndex: liveIdx,
+        });
+      }
     }
     return;
   }

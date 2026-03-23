@@ -20,6 +20,7 @@
 
   const ACTIVE_CLASS = 'ingredient-slot--hint-active';
   const HOVER_HANDOFF_GRACE_MS = 120;
+  const HINT_ACTIVATION_DELAY_MS = 400;
 
   let _teardown = null;
 
@@ -36,6 +37,10 @@
     let focusTarget = null;   // slot that currently owns an active editor
     let hoverOverCta = false; // cursor is over the CTA itself (keep it alive)
     let hoverClearTimer = null;
+    let activationTimer = null;
+    let pendingActivationTarget = null;
+    let activeTarget = null;
+    let requestedTarget = null; // one-shot target requested by insert flow
 
     const slots = () => section.querySelectorAll('.ingredient-slot');
     const headerCta = () => section.querySelector('.ingredient-header-cta');
@@ -86,6 +91,9 @@
         // even if focus bookkeeping briefly drops during rerender or hover handoff.
         focusTarget = getActiveHeadingEditorSlot();
       }
+      if (requestedTarget && (!requestedTarget.isConnected || !section.contains(requestedTarget))) {
+        requestedTarget = null;
+      }
     }
 
     function cancelPendingHoverClear() {
@@ -110,20 +118,21 @@
       }, HOVER_HANDOFF_GRACE_MS);
     }
 
-    // --- Resolve: who gets the hint? ---
-    function resolve() {
-      normalizeTargets();
+    function cancelPendingActivation() {
+      if (activationTimer) {
+        clearTimeout(activationTimer);
+        activationTimer = null;
+      }
+      pendingActivationTarget = null;
+    }
 
-      // Priority: hover > edit-mode focus > non-edit focus > nothing.
-      // Hover always wins. When nothing is hovered, the focused entity
-      // (edit tray open) keeps its hint.
-      const winner = hoverTarget || focusTarget || null;
-
+    function applyWinnerNow(winner) {
       // Clear all
       slots().forEach((s) => s.classList.remove(ACTIVE_CLASS));
       const hCta = headerCta();
       if (hCta) hCta.classList.remove('ingredient-header-cta--active');
 
+      activeTarget = winner || null;
       if (!winner) return;
 
       if (winner.classList.contains('section-header')) {
@@ -131,6 +140,73 @@
       } else if (winner.classList.contains('ingredient-slot')) {
         winner.classList.add(ACTIVE_CLASS);
       }
+      if (winner === requestedTarget) {
+        requestedTarget = null;
+      }
+    }
+
+    function consumePendingRequestedTarget() {
+      const clientId =
+        window._pendingIngredientHintClientId != null
+          ? String(window._pendingIngredientHintClientId)
+          : '';
+      if (!clientId) return;
+
+      window._pendingIngredientHintClientId = null;
+      const card = section.querySelector(
+        `.ingredient-line[data-client-id="${escapeAttrValue(clientId)}"]`
+      );
+      const slot = card && card.closest ? card.closest('.ingredient-slot') : null;
+      if (slot && section.contains(slot)) {
+        requestedTarget = slot;
+      }
+    }
+
+    function getDesiredWinner() {
+      // Priority: hover > edit-mode focus > requested one-shot target > nothing.
+      // Hover always wins. When nothing is hovered, the focused entity
+      // (edit tray open) keeps its hint.
+      return hoverTarget || focusTarget || requestedTarget || null;
+    }
+
+    function scheduleActivation(winner) {
+      if (!winner) return;
+      if (activeTarget === winner) return;
+      if (pendingActivationTarget === winner) return;
+
+      cancelPendingActivation();
+      pendingActivationTarget = winner;
+      activationTimer = setTimeout(() => {
+        activationTimer = null;
+        pendingActivationTarget = null;
+        normalizeTargets();
+        consumePendingRequestedTarget();
+        const desired = getDesiredWinner();
+        if (desired !== winner) {
+          resolve();
+          return;
+        }
+        applyWinnerNow(winner);
+      }, HINT_ACTIVATION_DELAY_MS);
+    }
+
+    // --- Resolve: who gets the hint? ---
+    function resolve() {
+      normalizeTargets();
+      consumePendingRequestedTarget();
+
+      // Any direct user intent cancels a stale one-shot post-add target.
+      if (hoverTarget || focusTarget) {
+        requestedTarget = null;
+      }
+      const winner = getDesiredWinner();
+
+      if (!winner) {
+        cancelPendingActivation();
+        applyWinnerNow(null);
+        return;
+      }
+      scheduleActivation(winner);
     }
 
     // --- Hover tracking (per-slot + header) ---
@@ -284,9 +360,12 @@
       section.removeEventListener('focusout', onFocusOut);
       observer.disconnect();
       cancelPendingHoverClear();
+      cancelPendingActivation();
       hoverTarget = null;
       focusTarget = null;
       hoverOverCta = false;
+      activeTarget = null;
+      requestedTarget = null;
     };
   }
 

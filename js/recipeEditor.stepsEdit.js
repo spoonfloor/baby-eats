@@ -137,6 +137,10 @@ function normalizeStepText(raw) {
 
   let newVal = String(raw);
 
+  // Remove invisible zero-width characters so "visually blank" lines
+  // cannot survive normalization.
+  newVal = newVal.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
   // collapse internal whitespace
   newVal = newVal.replace(/\s+/g, ' ');
 
@@ -176,6 +180,22 @@ function createSiblingStepFromExisting(sourceStep, instructions) {
 
 function attachStepInlineEditor(textEl) {
   if (!textEl) return;
+  const lineEl = textEl.closest('.instruction-line');
+
+  // Make the full row clickable (number gutter + text area), so clicking
+  // anywhere on a step line enters inline edit mode.
+  if (lineEl && !lineEl.dataset.rowClickProxyBound) {
+    lineEl.dataset.rowClickProxyBound = '1';
+    lineEl.addEventListener('click', (e) => {
+      if (window.editingStepId) return;
+      if (textEl.isContentEditable || lineEl.classList.contains('editing')) return;
+
+      // Text clicks are already handled by the text click listener below.
+      if (e.target === textEl || textEl.contains(e.target)) return;
+
+      textEl.click();
+    });
+  }
 
   textEl.addEventListener('click', () => {
     if (window.editingStepId) return; // one at a time
@@ -184,7 +204,6 @@ function attachStepInlineEditor(textEl) {
     window._dirtyBeforeThisEdit =
       typeof isDirty !== 'undefined' && isDirty === true;
 
-    const lineEl = textEl.closest('.instruction-line');
     if (!lineEl) return;
 
     if (typeof setActiveStep === 'function') {
@@ -406,6 +425,7 @@ function attachStepInlineEditor(textEl) {
       textEl.removeEventListener('keydown', onKeyDown);
       textEl.removeEventListener('blur', onBlur);
       textEl.removeEventListener('input', onInput);
+      textEl.removeEventListener('paste', onPaste);
 
       if (typeof markDirty === 'function') {
         markDirty();
@@ -428,15 +448,15 @@ function attachStepInlineEditor(textEl) {
       const effectiveVal =
         startedFromPlaceholder && placeholderActive ? '' : newVal;
 
-      // Steps: blanks are “real” steps (never auto-delete).
-      // Headings: blanks should disappear on blur/Enter so placeholder text never persists.
+      // Never persist blank instruction rows.
+      // The single-line placeholder case is preserved in commitWithValue().
       const isHeadingLine =
         (lineEl && lineEl.dataset && lineEl.dataset.stepType === 'heading') ||
         (textEl &&
           textEl.closest &&
           textEl.closest('.instruction-line')?.dataset?.stepType === 'heading');
 
-      commitWithValue(effectiveVal, { deleteIfEmpty: !!isHeadingLine });
+      commitWithValue(effectiveVal, { deleteIfEmpty: true });
     };
 
     const handleEnterSplit = () => {
@@ -463,6 +483,11 @@ function attachStepInlineEditor(textEl) {
 
       const leftVal = normalizeStepText(leftRaw);
       const rightVal = normalizeStepText(rightRaw);
+
+      // Do not create a second empty step when there is nothing to split (e.g. odd whitespace).
+      if (!leftVal && !rightVal) {
+        return;
+      }
 
       // Lookup current step in model BEFORE committing, since commitWithValue
       // clears editingStepId.
@@ -871,6 +896,7 @@ function attachStepInlineEditor(textEl) {
         textEl.removeEventListener('keydown', onKeyDown);
         textEl.removeEventListener('blur', onBlur);
         textEl.removeEventListener('input', onInput);
+        textEl.removeEventListener('paste', onPaste);
 
         // If this split was the only thing making things dirty, we can revert
         if (
@@ -968,6 +994,7 @@ function attachStepInlineEditor(textEl) {
       textEl.removeEventListener('keydown', onKeyDown);
       textEl.removeEventListener('blur', onBlur);
       textEl.removeEventListener('input', onInput);
+      textEl.removeEventListener('paste', onPaste);
 
       if (onlyThisEditIsDirty && typeof revertChanges === 'function') {
         revertChanges();
@@ -1191,169 +1218,14 @@ function attachStepInlineEditor(textEl) {
         const sel = getSelectionOffsetsInStep(textEl);
         const fullText = textEl.textContent || '';
         const atStart = sel && sel.start === 0 && sel.end === 0;
-        const atEnd =
-          sel && sel.start === fullText.length && sel.end === fullText.length;
-
-        const norm = normalizeStepText(fullText);
-        const isBlank = !norm;
 
         e.preventDefault();
 
         // Special-case: caret at very beginning of line
         if (atStart) {
-          // Prevent blur -> commit from deleting this step while we
-          // programmatically create/select a neighbor.
-          const prevSuppress = window._suppressStepCommit === true;
-          window._suppressStepCommit = true;
-
-          const currentStepId = window.editingStepId;
-
-          if (!currentStepId) {
-            console.log('[BKS] early return: no currentStepId', {
-              editingStepId: window.editingStepId,
-              domStepId: textEl && textEl.dataset && textEl.dataset.stepId,
-            });
-
-            return;
-          }
-
-          // Save current text into the model (normalize but never delete here)
-          const raw = textEl.textContent || '';
-          const newVal = normalizeStepText(raw);
-          commitWithValue(newVal, { deleteIfEmpty: false });
-
-          // Re-find step after commit
-          const found = findStepInModel(currentStepId);
-          if (!found) return;
-
-          const { stepsArr, idx, step } = found;
-          if (!Array.isArray(stepsArr) || idx < 0 || !step) return;
-
-          // Insert a new *blank* sibling step BEFORE this one
-          const newStep = createSiblingStepFromExisting(step, '');
-          stepsArr.splice(idx, 0, newStep);
-
-          // Phase 1 — mirror the blank insert into the StepNode model (if present).
-          if (Array.isArray(window.stepNodes)) {
-            const nodes = window.stepNodes;
-            const baseIdStr = String(step.id ?? step.ID);
-            const baseIdx = nodes.findIndex((n) => String(n.id) === baseIdStr);
-
-            if (baseIdx !== -1) {
-              const stepNodeModelRef =
-                window.StepNodeModel && typeof window.StepNodeModel === 'object'
-                  ? window.StepNodeModel
-                  : null;
-              const stepNodeTypeRef =
-                window.StepNodeType && typeof window.StepNodeType === 'object'
-                  ? window.StepNodeType
-                  : null;
-
-              const prevNode = nodes[baseIdx - 1] || null;
-              const baseNode = nodes[baseIdx] || null;
-
-              let newOrder =
-                baseNode && typeof baseNode.order === 'number'
-                  ? baseNode.order - 1
-                  : baseIdx;
-
-              if (
-                prevNode &&
-                typeof prevNode.order === 'number' &&
-                typeof baseNode?.order === 'number' &&
-                !Number.isNaN(prevNode.order) &&
-                !Number.isNaN(baseNode.order) &&
-                prevNode.order < baseNode.order
-              ) {
-                newOrder = (prevNode.order + baseNode.order) / 2;
-              }
-
-              const nodePayload = {
-                id: newStep.id ?? newStep.ID,
-                type:
-                  (baseNode && baseNode.type) ||
-                  (stepNodeTypeRef && stepNodeTypeRef.STEP) ||
-                  'step',
-                text: newStep.instructions ?? '',
-                order: newOrder,
-              };
-
-              const newNode =
-                stepNodeModelRef &&
-                typeof stepNodeModelRef.createStepNode === 'function'
-                  ? stepNodeModelRef.createStepNode(nodePayload)
-                  : nodePayload;
-
-              nodes.splice(baseIdx, 0, newNode);
-
-              if (
-                stepNodeModelRef &&
-                typeof stepNodeModelRef.normalizeStepNodeOrder === 'function'
-              ) {
-                window.stepNodes =
-                  stepNodeModelRef.normalizeStepNodeOrder(nodes);
-              }
-            }
-          }
-
-          // DOM: insert new blank line above the current line
-
-          const parent = lineEl.parentElement;
-          if (parent) {
-            const newLine = document.createElement('div');
-            newLine.className = 'instruction-line numbered';
-
-            // Inherit section id from the current line/text
-            const sectionId =
-              lineEl.dataset.sectionId || textEl.dataset.sectionId || '';
-            if (sectionId) {
-              newLine.dataset.sectionId = sectionId;
-            }
-
-            const numSpan = document.createElement('span');
-            numSpan.className = 'step-num';
-            numSpan.textContent = ''; // filled by renumber
-
-            const textSpan = document.createElement('span');
-            textSpan.className = 'step-text';
-            textSpan.dataset.stepId = String(newStep.id ?? newStep.ID);
-            textSpan.textContent = '';
-
-            ensureStepTextNotEmpty(textSpan);
-
-            if (sectionId) {
-              textSpan.dataset.sectionId = sectionId;
-            }
-
-            newLine.appendChild(numSpan);
-            newLine.appendChild(textSpan);
-            parent.insertBefore(newLine, lineEl);
-
-            // Wire inline editor for the new blank step
-            attachStepInlineEditor(textSpan);
-
-            // Renumber + sync
-            const stepsContainer = document.getElementById('stepsSection');
-            renumberSteps(stepsContainer);
-            if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
-
-            if (typeof markDirty === 'function') {
-              markDirty();
-            }
-
-            // Start editing again in the original step (content line)
-            textEl.dispatchEvent(
-              new MouseEvent('click', {
-                bubbles: true,
-              })
-            );
-          }
-
-          // Allow future commits again (the blur we just caused was suppressed).
-          if (!prevSuppress) {
-            window._suppressStepCommit = false;
-          }
-
+          // Do not create a blank predecessor row.
+          // Keep the caret anchored at the start of this step.
+          setCaretAtTextOffset(textEl, 0);
           return;
         }
 
@@ -1394,6 +1266,12 @@ function attachStepInlineEditor(textEl) {
       }
 
       const current = textEl.textContent || '';
+
+      // Any non-empty content (typing, paste, IME, etc.) ends placeholder-only mode
+      // so blur commits real text instead of forcing ''.
+      if (startedFromPlaceholder && current.length > 0) {
+        placeholderActive = false;
+      }
 
       // If there's real text, never show the pseudo placeholder.
       if (
@@ -1491,9 +1369,279 @@ function attachStepInlineEditor(textEl) {
       }
     };
 
+    const setCaretAtTextOffset = (targetEl, targetOffset) => {
+      if (!targetEl) return;
+      try {
+        const sel = window.getSelection();
+        if (!sel) return;
+
+        const fullText = targetEl.textContent || '';
+        let remaining = Math.max(0, Math.min(fullText.length, targetOffset));
+
+        const range = document.createRange();
+        const walker = document.createTreeWalker(targetEl, NodeFilter.SHOW_TEXT);
+
+        let node = walker.nextNode();
+        while (node) {
+          const len = node.textContent.length;
+          if (remaining <= len) {
+            range.setStart(node, remaining);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+          }
+          remaining -= len;
+          node = walker.nextNode();
+        }
+
+        range.selectNodeContents(targetEl);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (_) {}
+    };
+
+    const applyInlinePlainTextPaste = (insertText) => {
+      const fullText = textEl.textContent || '';
+      const sel = getSelectionOffsetsInStep(textEl);
+      const start = sel ? sel.start : fullText.length;
+      const end = sel ? sel.end : fullText.length;
+
+      const nextRaw = `${fullText.slice(0, start)}${insertText}${fullText.slice(end)}`;
+      const nextText = normalizeStepText(nextRaw);
+      const caretHintRaw = `${fullText.slice(0, start)}${insertText}`;
+      const caretHint = normalizeStepText(caretHintRaw).length;
+
+      textEl.textContent = nextText;
+      textEl.classList.remove('placeholder-prompt');
+      try {
+        if (lineEl && lineEl.classList) {
+          lineEl.classList.remove('instruction-line--placeholder');
+        }
+      } catch (_) {}
+
+      ensureStepTextNotEmpty(textEl);
+      setCaretAtTextOffset(textEl, caretHint);
+
+      if (nextText) {
+        placeholderActive = false;
+      }
+
+      if (!window._hasPendingEdit) {
+        window._hasPendingEdit = true;
+      }
+      if (typeof markDirty === 'function') {
+        markDirty();
+      }
+    };
+
+    const onPaste = (e) => {
+      const cd = e && (e.clipboardData || window.clipboardData);
+      if (!cd || typeof cd.getData !== 'function') return;
+
+      const raw = cd.getData('text/plain');
+      if (typeof raw !== 'string') return;
+
+      // Plain-text only; never allow rich content into step rows.
+      e.preventDefault();
+
+      const normalized = raw.replace(/\r\n?/g, '\n');
+      // Drop blank lines so pasted extra newlines do not create numbered empty steps.
+      const pastedLines = normalized
+        .split('\n')
+        .map((line) => normalizeStepText(line))
+        .filter((line) => !!line);
+
+      // Ignore blank-only paste payloads.
+      if (pastedLines.length === 0) return;
+
+      if (pastedLines.length === 1) {
+        applyInlinePlainTextPaste(pastedLines[0]);
+        return;
+      }
+
+      const found = findStepInModel(window.editingStepId);
+      if (!found) {
+        applyInlinePlainTextPaste(pastedLines.join(' '));
+        return;
+      }
+
+      const fullText = textEl.textContent || '';
+      const sel = getSelectionOffsetsInStep(textEl);
+      const start = sel ? sel.start : fullText.length;
+      const end = sel ? sel.end : fullText.length;
+
+      const leftRaw = fullText.slice(0, start);
+      const rightRaw = fullText.slice(end);
+
+      const firstLine = pastedLines[0];
+      const lastLine = pastedLines[pastedLines.length - 1];
+      const middleLines = pastedLines.slice(1, -1);
+
+      const leftMerged = normalizeStepText(`${leftRaw}${firstLine}`);
+      const rightMerged = normalizeStepText(`${lastLine}${rightRaw}`);
+
+      const { stepsArr, idx, step } = found;
+      if (!Array.isArray(stepsArr) || idx < 0 || !step) {
+        applyInlinePlainTextPaste(pastedLines.join(' '));
+        return;
+      }
+
+      // Update current step with text-before-caret + first pasted line.
+      step.instructions = leftMerged;
+      textEl.textContent = leftMerged;
+      textEl.classList.remove('placeholder-prompt');
+      try {
+        if (lineEl && lineEl.classList) {
+          lineEl.classList.remove('instruction-line--placeholder');
+        }
+      } catch (_) {}
+      ensureStepTextNotEmpty(textEl);
+      placeholderActive = false;
+
+      const sectionId = lineEl.dataset.sectionId || textEl.dataset.sectionId || '';
+      const linesToInsert = middleLines.concat([rightMerged]);
+      const createdSteps = [];
+
+      // Create one new step per pasted line (excluding the first line used above).
+      // Pasted rows are always normal steps (never inferred headings).
+      let seed = step;
+      linesToInsert.forEach((lineText) => {
+        const newStep = createSiblingStepFromExisting(seed, lineText);
+        newStep.type = 'step';
+        createdSteps.push(newStep);
+        seed = newStep;
+      });
+
+      if (createdSteps.length > 0) {
+        stepsArr.splice(idx + 1, 0, ...createdSteps);
+      }
+
+      // Mirror inserted text rows into StepNode model (if present).
+      if (Array.isArray(window.stepNodes) && createdSteps.length > 0) {
+        const nodes = window.stepNodes;
+        const stepNodeModelRef =
+          window.StepNodeModel && typeof window.StepNodeModel === 'object'
+            ? window.StepNodeModel
+            : null;
+        const stepNodeTypeRef =
+          window.StepNodeType && typeof window.StepNodeType === 'object'
+            ? window.StepNodeType
+            : null;
+
+        const currentId = String(step.id ?? step.ID ?? '');
+        const currentNodeIdx = nodes.findIndex((n) => String(n.id) === currentId);
+        if (currentNodeIdx !== -1) {
+          nodes[currentNodeIdx].text = leftMerged;
+        }
+
+        let anchorId = currentId;
+        createdSteps.forEach((created) => {
+          const anchorIdx = nodes.findIndex((n) => String(n.id) === String(anchorId));
+          if (anchorIdx === -1) return;
+
+          const baseNode = nodes[anchorIdx];
+          const nextNode = nodes[anchorIdx + 1] || null;
+
+          const baseOrder =
+            typeof baseNode.order === 'number' && !Number.isNaN(baseNode.order)
+              ? baseNode.order
+              : anchorIdx + 1;
+          let newOrder = baseOrder + 1;
+          if (
+            nextNode &&
+            typeof nextNode.order === 'number' &&
+            !Number.isNaN(nextNode.order) &&
+            nextNode.order > baseOrder
+          ) {
+            newOrder = (baseOrder + nextNode.order) / 2;
+          }
+
+          const nodePayload = {
+            id: created.id ?? created.ID,
+            type:
+              (stepNodeTypeRef && stepNodeTypeRef.STEP) ||
+              (baseNode && baseNode.type) ||
+              'step',
+            text: created.instructions ?? '',
+            order: newOrder,
+          };
+
+          const newNode =
+            stepNodeModelRef &&
+            typeof stepNodeModelRef.createStepNode === 'function'
+              ? stepNodeModelRef.createStepNode(nodePayload)
+              : nodePayload;
+
+          nodes.splice(anchorIdx + 1, 0, newNode);
+          anchorId = String(created.id ?? created.ID ?? '');
+        });
+
+        if (
+          stepNodeModelRef &&
+          typeof stepNodeModelRef.normalizeStepNodeOrder === 'function'
+        ) {
+          window.stepNodes = stepNodeModelRef.normalizeStepNodeOrder(nodes);
+        }
+      }
+
+      // Insert new DOM rows directly after the current line.
+      const parent = lineEl.parentElement;
+      if (parent && createdSteps.length > 0) {
+        let anchorEl = lineEl;
+        createdSteps.forEach((created) => {
+          const newLine = document.createElement('div');
+          newLine.className = 'instruction-line numbered';
+          if (sectionId) newLine.dataset.sectionId = sectionId;
+          newLine.dataset.stepId = String(created.id ?? created.ID);
+          newLine.dataset.stepType = 'step';
+
+          const numSpan = document.createElement('span');
+          numSpan.className = 'step-num';
+          numSpan.textContent = '';
+
+          const textSpan = document.createElement('span');
+          textSpan.className = 'step-text';
+          textSpan.dataset.stepId = String(created.id ?? created.ID);
+          if (sectionId) textSpan.dataset.sectionId = sectionId;
+          textSpan.textContent = created.instructions ?? '';
+
+          ensureStepTextNotEmpty(textSpan);
+
+          newLine.appendChild(numSpan);
+          newLine.appendChild(textSpan);
+
+          if (anchorEl.nextSibling) {
+            parent.insertBefore(newLine, anchorEl.nextSibling);
+          } else {
+            parent.appendChild(newLine);
+          }
+          anchorEl = newLine;
+
+          attachStepInlineEditor(textSpan);
+        });
+      }
+
+      const stepsContainer = document.getElementById('stepsSection');
+      renumberSteps(stepsContainer);
+      if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
+
+      if (!window._hasPendingEdit) {
+        window._hasPendingEdit = true;
+      }
+      if (typeof markDirty === 'function') {
+        markDirty();
+      }
+
+      // Keep edit mode active on the current row after structural insert.
+      setCaretAtTextOffset(textEl, (textEl.textContent || '').length);
+    };
+
     textEl.addEventListener('keydown', onKeyDown);
     textEl.addEventListener('blur', onBlur);
     textEl.addEventListener('input', onInput);
+    textEl.addEventListener('paste', onPaste);
   });
 }
 

@@ -4154,8 +4154,11 @@ function loadStoreEditorPage() {
     ${aislesBlock}
   `;
 
+    const ADD_AISLE_HINT_ACTIVATION_DELAY_MS = 400;
     let hoveredAisleCard = null;
     let hoverLeaveTid = null;
+    let addAisleActivateTid = null;
+    let pendingAisleCard = null;
     let pointerOverAddAisleCta = false;
     const desktopHoverEnabled = (() => {
       try {
@@ -4174,6 +4177,14 @@ function loadStoreEditorPage() {
       if (list && cta && list.contains(cta)) list.after(cta);
     };
 
+    const cancelAddAisleActivation = () => {
+      if (addAisleActivateTid) {
+        window.clearTimeout(addAisleActivateTid);
+        addAisleActivateTid = null;
+      }
+      pendingAisleCard = null;
+    };
+
     const getFocusedAisleCard = () =>
       document.activeElement?.closest?.('.store-aisle-card') || null;
 
@@ -4182,6 +4193,7 @@ function loadStoreEditorPage() {
       const cta = document.getElementById('storeAddAisleCta');
       if (!list || !cta) return;
       if (aisleRows.length === 0) {
+        cancelAddAisleActivation();
         hoveredAisleCard = null;
         list.after(cta);
         cta.hidden = false;
@@ -4198,6 +4210,7 @@ function loadStoreEditorPage() {
         cta.hidden = false;
         return;
       }
+      cancelAddAisleActivation();
       list.after(cta);
       cta.hidden = true;
     };
@@ -4221,11 +4234,17 @@ function loadStoreEditorPage() {
       });
     };
 
-    const showAddAisleCtaBelowCard = (card) => {
-      const cta = document.getElementById('storeAddAisleCta');
-      if (!cta || !card) return;
-      card.after(cta);
-      cta.hidden = false;
+    const scheduleAddAisleCtaActivation = (card) => {
+      if (!card || aisleRows.length < 1) return;
+      pendingAisleCard = card;
+      if (addAisleActivateTid) window.clearTimeout(addAisleActivateTid);
+      addAisleActivateTid = window.setTimeout(() => {
+        addAisleActivateTid = null;
+        const stillPending = pendingAisleCard === card;
+        const stillConnected = !!(card && card.isConnected);
+        if (!stillPending || !stillConnected) return;
+        syncAddAisleCtaByInteraction();
+      }, ADD_AISLE_HINT_ACTIVATION_DELAY_MS);
     };
 
     const renderAisleCards = () => {
@@ -4244,11 +4263,12 @@ function loadStoreEditorPage() {
           card.addEventListener('mouseenter', () => {
             window.clearTimeout(hoverLeaveTid);
             hoveredAisleCard = card;
-            syncAddAisleCtaByInteraction();
+            scheduleAddAisleCtaActivation(card);
           });
           card.addEventListener('mouseleave', (e) => {
             const cta = document.getElementById('storeAddAisleCta');
             if (cta && cta.contains(e.relatedTarget)) return;
+            cancelAddAisleActivation();
             window.clearTimeout(hoverLeaveTid);
             hoverLeaveTid = window.setTimeout(() => {
               if (pointerOverAddAisleCta) return;
@@ -4560,7 +4580,7 @@ function loadStoreEditorPage() {
       view.addEventListener('focusin', (e) => {
         if (aisleRows.length < 1) return;
         const card = e.target?.closest?.('.store-aisle-card');
-        if (card) showAddAisleCtaBelowCard(card);
+        if (card) scheduleAddAisleCtaActivation(card);
       });
       view.addEventListener('focusout', onFocusOut);
     };
@@ -5378,6 +5398,9 @@ async function loadRecipeEditorPage() {
                   if (nextName) row.name = nextName;
                 });
               });
+              if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+                window.recipeEditorRerenderIngredientsFromModel();
+              }
             }
           }
         } catch (unknownErr) {

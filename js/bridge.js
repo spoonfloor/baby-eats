@@ -530,6 +530,19 @@ function saveRecipeToDB(db, recipe) {
   const rid = recipe.id || window.recipeId;
   if (!rid) throw new Error('No recipe id');
 
+  const normalizeStepInstructions = (raw) => {
+    if (raw == null) return '';
+    let next = String(raw);
+    next = next.replace(/[\u200B-\u200D\uFEFF]/g, '');
+    next = next.replace(/\s+/g, ' ');
+    next = next.trim();
+    next = next.replace(/\s+([.,!?:;])/g, '$1');
+    next = next.replace(/([.,!?:;])\s+/g, '$1 ');
+    next = next.trim();
+    if (/^[.,!?:;]+$/.test(next)) return '';
+    return next;
+  };
+
   // 1) Gather model steps by section (source of truth for text/section)
   const sections = Array.isArray(recipe.sections) ? recipe.sections : [];
   const byId = new Map(); // stepId -> {section_id, instructions, ID}
@@ -537,22 +550,26 @@ function saveRecipeToDB(db, recipe) {
   sections.forEach((sec) => {
     const sid = sec.ID ?? sec.id ?? null;
     (sec.steps || []).forEach((s) => {
+      const normalizedInstructions = normalizeStepInstructions(s.instructions);
+      if (!normalizedInstructions) return;
       const stepId = s.ID ?? s.id ?? null;
       if (stepId != null) {
         byId.set(String(stepId), {
           ID: stepId,
           section_id: s.section_id ?? sid,
-          instructions: s.instructions,
+          instructions: normalizedInstructions,
         });
       }
     });
     bySection.set(
       sid,
-      (sec.steps || []).map((s) => ({
-        ID: s.ID ?? s.id ?? null,
-        section_id: s.section_id ?? sid,
-        instructions: s.instructions,
-      }))
+      (sec.steps || [])
+        .map((s) => ({
+          ID: s.ID ?? s.id ?? null,
+          section_id: s.section_id ?? sid,
+          instructions: normalizeStepInstructions(s.instructions),
+        }))
+        .filter((s) => !!s.instructions)
     );
   });
 
