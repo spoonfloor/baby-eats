@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS "ingredients" (
 	"plural_by_default"	INTEGER NOT NULL DEFAULT 0,
 	"is_mass_noun"	INTEGER NOT NULL DEFAULT 0,
 	"plural_override"	TEXT,
+	"is_hidden"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("ID" AUTOINCREMENT)
 );
 CREATE TABLE IF NOT EXISTS "recipe_ingredient_headings" (
@@ -57,15 +58,15 @@ CREATE TABLE IF NOT EXISTS "recipe_ingredient_map" (
 	"ingredient_id"	INTEGER NOT NULL,
 	"section_id"	INTEGER,
 	"quantity"	TEXT,
-	"quantity_min"	REAL,
-	"quantity_max"	REAL,
-	"quantity_is_approx"	INTEGER NOT NULL DEFAULT 0,
 	"unit"	TEXT,
 	"prep_notes"	TEXT,
 	"is_optional"	INTEGER DEFAULT 0,
 	"subrecipe_id"	INTEGER,
 	"sort_order"	INTEGER,
 	"parenthetical_note"	TEXT,
+	"quantity_min"	REAL,
+	"quantity_max"	REAL,
+	"quantity_is_approx"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("ID" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID"),
 	FOREIGN KEY("recipe_id") REFERENCES "recipes"("ID"),

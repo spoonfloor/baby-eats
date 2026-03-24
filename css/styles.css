@@ -471,6 +471,77 @@ body.store-editor-page .store-aisle-items-field {
   padding-right: 20px;
 }
 
+body.store-editor-page .store-variant-picker {
+  margin-top: 8px;
+}
+
+body.store-editor-page .store-variant-picker-hidden-input {
+  display: none;
+}
+
+body.store-editor-page .store-variant-picker--inline {
+  margin-top: 0;
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background-color: #e5eefa;
+  border: 1px solid #b5ceff;
+  color: var(--edit-mode-color);
+  box-sizing: border-box;
+}
+
+body.store-editor-page .store-variant-picker-inline-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+body.store-editor-page .store-variant-picker-inline-name {
+  font-size: var(--ingredient-editor-control-font-size);
+  font-family: var(--main-font);
+  color: var(--edit-mode-color);
+}
+
+body.store-editor-page .store-variant-picker-name {
+  font-size: var(--ingredient-editor-control-font-size);
+  color: var(--field-fg);
+  margin-bottom: 8px;
+}
+
+body.store-editor-page .store-variant-picker-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.store-editor-page .store-variant-picker-pills--inline {
+  display: inline-flex;
+}
+
+body.store-editor-page .store-variant-picker-pill {
+  transition:
+    opacity 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
+}
+
+body.store-editor-page .store-variant-picker-pill.is-on {
+  opacity: 1;
+}
+
+body.store-editor-page .store-variant-picker-pill.is-off {
+  opacity: 0.5;
+}
+
+body.store-editor-page .store-variant-picker-pill.is-on:hover {
+  filter: brightness(0.98);
+}
+
+body.store-editor-page .store-variant-picker-pill.is-off:hover {
+  opacity: 0.66;
+}
+
 body.store-editor-page .store-aisle-move-controls {
   position: absolute;
   top: 10px;

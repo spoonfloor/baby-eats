@@ -797,6 +797,7 @@ async function loadShoppingPage() {
   // When available, prefer the list table so Shopping can display multiple variants.
   const hasVariantTable = tableExists('ingredient_variants');
   const hasIsDeprecatedCol = tableHasColumn('ingredients', 'is_deprecated');
+  const hasIsHiddenCol = tableHasColumn('ingredients', 'is_hidden');
   const hasIsFoodCol = tableHasColumn('ingredients', 'is_food');
   const hasLegacyHideCol = tableHasColumn(
     'ingredients',
@@ -809,12 +810,14 @@ async function loadShoppingPage() {
       : '0';
   const homeExpr = `COALESCE(i.location_at_home, '')`;
   const isFoodExpr = hasIsFoodCol ? 'COALESCE(i.is_food, 1)' : '1';
+  const isHiddenExpr = hasIsHiddenCol ? 'COALESCE(i.is_hidden, 0)' : '0';
   const baseSelectSql = hasVariantTable
     ? `
       SELECT i.ID,
              i.name,
              COALESCE(v.variant, i.variant) AS variant,
              ${deprecatedExpr} AS is_deprecated,
+             ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS location_at_home,
              ${isFoodExpr} AS is_food
       FROM ingredients i
@@ -825,6 +828,7 @@ async function loadShoppingPage() {
              i.name,
              i.variant,
              ${deprecatedExpr} AS is_deprecated,
+             ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS location_at_home,
              ${isFoodExpr} AS is_food
       FROM ingredients i
@@ -846,11 +850,12 @@ async function loadShoppingPage() {
   let shoppingRows = [];
   if (result.length > 0) {
     const rawRows = result[0].values.map(
-      ([id, name, variant, isDeprecated, locationAtHome, isFood]) => ({
+      ([id, name, variant, isDeprecated, isHidden, locationAtHome, isFood]) => ({
         id,
         name,
         variant: variant || '',
         isDeprecated: Number(isDeprecated || 0) === 1,
+        isHidden: Number(isHidden || 0) === 1,
         locationAtHome: String(locationAtHome || ''),
         isFood: Number(isFood ?? 1) === 1,
       }),
@@ -867,6 +872,7 @@ async function loadShoppingPage() {
           name: row.name || '',
           variants: [],
           _deprecatedFlags: [],
+          _hiddenFlags: [],
           _homeLocations: [],
           _foodFlags: [],
         });
@@ -876,6 +882,7 @@ async function loadShoppingPage() {
         byName.get(key).variants.push(row.variant);
       }
       byName.get(key)._deprecatedFlags.push(!!row.isDeprecated);
+      byName.get(key)._hiddenFlags.push(!!row.isHidden);
       byName.get(key)._homeLocations.push(String(row.locationAtHome || ''));
       byName.get(key)._foodFlags.push(row.isFood !== false);
     });
@@ -913,6 +920,10 @@ async function loadShoppingPage() {
         Array.isArray(item._deprecatedFlags) && item._deprecatedFlags.length > 0
           ? item._deprecatedFlags.every(Boolean)
           : false;
+      item.isHidden =
+        Array.isArray(item._hiddenFlags) && item._hiddenFlags.length > 0
+          ? item._hiddenFlags.every(Boolean)
+          : false;
       item.locationAtHome =
         Array.isArray(item._homeLocations) && item._homeLocations.length > 0
           ? String(item._homeLocations[0] || '')
@@ -922,6 +933,7 @@ async function loadShoppingPage() {
           ? item._foodFlags.some(Boolean)
           : true;
       delete item._deprecatedFlags;
+      delete item._hiddenFlags;
       delete item._homeLocations;
       delete item._foodFlags;
 
@@ -948,6 +960,7 @@ async function loadShoppingPage() {
     { id: 'none', label: 'none' },
   ];
   const shoppingFilterChipDefs = [
+    { id: 'removed', label: 'removed', kind: 'flag' },
     { id: 'hidden', label: 'hidden', kind: 'flag' },
     { id: 'not food', label: 'not food', kind: 'flag' },
     ...shoppingLocationChipDefs.map((c) => ({ ...c, kind: 'location' })),
@@ -988,6 +1001,11 @@ async function loadShoppingPage() {
       const knownIds = new Set(shoppingFilterChipDefs.map((c) => String(c.id)));
       parsed.forEach((chipId) => {
         const id = String(chipId || '').trim().toLowerCase();
+        // Back-compat: old "hidden" chip represented deprecated/removed.
+        if (id === 'hidden' && knownIds.has('removed')) {
+          activeFilterChips.add('removed');
+          return;
+        }
         if (knownIds.has(id)) activeFilterChips.add(id);
       });
     } catch (_) {}
@@ -1005,6 +1023,9 @@ async function loadShoppingPage() {
     shoppingFilterChipDefs.forEach((c) => counts.set(c.id, 0));
     shoppingRows.forEach((item) => {
       if (item && item.isDeprecated) {
+        counts.set('removed', (counts.get('removed') || 0) + 1);
+      }
+      if (item && item.isHidden) {
         counts.set('hidden', (counts.get('hidden') || 0) + 1);
       }
       if (item && item.isFood === false) {
@@ -1096,6 +1117,7 @@ async function loadShoppingPage() {
 
   const getFilteredShoppingRows = () => {
     const query = (searchInput?.value || '').trim().toLowerCase();
+    const removedOnly = activeFilterChips.has('removed');
     const hiddenOnly = activeFilterChips.has('hidden');
     const notFoodOnly = activeFilterChips.has('not food');
     const activeLocationIds = shoppingLocationChipDefs
@@ -1108,14 +1130,23 @@ async function loadShoppingPage() {
         !query ||
         name.includes(query) ||
         variants.some((v) => String(v || '').toLowerCase().includes(query));
-      const matchesHidden = hiddenOnly
+      const matchesRemoved = removedOnly
         ? item.isDeprecated === true
         : item.isDeprecated !== true;
+      const matchesHidden = hiddenOnly
+        ? item.isHidden === true
+        : item.isHidden !== true;
       const matchesFood = notFoodOnly ? item.isFood === false : true;
       const locationId = normalizeLocationForChip(item?.locationAtHome);
       const matchesLocation =
         activeLocationIds.length === 0 || activeLocationIds.includes(locationId);
-      return matchesSearch && matchesHidden && matchesFood && matchesLocation;
+      return (
+        matchesSearch &&
+        matchesRemoved &&
+        matchesHidden &&
+        matchesFood &&
+        matchesLocation
+      );
     });
   };
 
@@ -1220,6 +1251,15 @@ async function loadShoppingPage() {
           try {
             db.run(
               'DELETE FROM ingredient_store_location WHERE ingredient_id = ?;',
+              [id],
+            );
+          } catch (_) {}
+          try {
+            db.run(
+              `DELETE FROM ingredient_variant_store_location
+               WHERE ingredient_variant_id IN (
+                 SELECT id FROM ingredient_variants WHERE ingredient_id = ?
+               );`,
               [id],
             );
           } catch (_) {}
@@ -1444,7 +1484,7 @@ async function loadShoppingPage() {
   // Initial render
   applyShoppingFilters();
 
-  // Search + chips: filter by name/variant text and hidden chip state.
+  // Search + chips: filter by name/variant text and active chip states.
   if (searchInput && clearBtn) {
     searchInput.addEventListener('input', () => {
       applyShoppingFilters();
@@ -2188,12 +2228,19 @@ function loadShoppingItemEditorPage() {
         <div class="shopping-item-status-row">
           <label class="shopping-item-toggle">
             <input id="shoppingItemIsDeprecatedToggle" type="checkbox" />
+            <span>Removed</span>
+          </label>
+        </div>
+
+        <div id="shoppingItemIsHiddenRow" class="shopping-item-status-row">
+          <label class="shopping-item-toggle">
+            <input id="shoppingItemIsHiddenToggle" type="checkbox" />
             <span>Hidden</span>
           </label>
         </div>
 
         <div class="shopping-item-help">
-          Hidden items have been removed from Shopping and can be deleted once they
+          Removed items have been removed from Shopping and can be deleted once they
           aren't used by any recipe.
         </div>
       </div>
@@ -2308,6 +2355,7 @@ function loadShoppingItemEditorPage() {
       const home = (extraValues && extraValues.home) || '';
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
       const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
+      const isHiddenRaw = (extraValues && extraValues.is_hidden) || '';
       const lemma = (extraValues && extraValues.lemma) || '';
       const pluralOverride = (extraValues && extraValues.plural_override) || '';
       const pluralByDefaultRaw =
@@ -2316,6 +2364,7 @@ function loadShoppingItemEditorPage() {
 
       const isFood = isFoodRaw === '1' ? 1 : 0;
       const isDeprecated = isDeprecatedRaw === '1' ? 1 : 0;
+      const isHidden = isHiddenRaw === '1' ? 1 : 0;
       const pluralByDefault = pluralByDefaultRaw === '1' ? 1 : 0;
       const isMassNoun = isMassNounRaw === '1' ? 1 : 0;
 
@@ -2469,6 +2518,10 @@ function loadShoppingItemEditorPage() {
           sets.push('hide_from_shopping_list = ?');
           vals.push(isDeprecated);
         }
+        if (has('is_hidden')) {
+          sets.push('is_hidden = ?');
+          vals.push(isHidden);
+        }
 
         vals.push(id);
         db.run(`UPDATE ingredients SET ${sets.join(', ')} WHERE ID = ?;`, vals);
@@ -2513,6 +2566,10 @@ function loadShoppingItemEditorPage() {
         } else if (has('hide_from_shopping_list')) {
           insertCols.push('hide_from_shopping_list');
           insertVals.push(isDeprecated);
+        }
+        if (has('is_hidden')) {
+          insertCols.push('is_hidden');
+          insertVals.push(isHidden);
         }
 
         const placeholders = insertCols.map(() => '?').join(', ');
@@ -2609,6 +2666,7 @@ function loadShoppingItemEditorPage() {
       let baselineHome = '';
       let baselineIsFood = '1';
       let baselineIsDeprecated = '0';
+      let baselineIsHidden = '0';
       let baselineLemma = '';
       let baselinePluralOverride = '';
       let baselinePluralByDefault = '0';
@@ -2658,6 +2716,7 @@ function loadShoppingItemEditorPage() {
           setVisible('shoppingItemPluralOverrideField', showPluralOverride);
           setVisible('shoppingItemPluralByDefaultRow', showPluralByDefault);
           setVisible('shoppingItemIsMassNounRow', showIsMassNoun);
+          setVisible('shoppingItemIsHiddenRow', has('is_hidden'));
 
           const selectCols = [
             "COALESCE(variant, '')",
@@ -2673,6 +2732,7 @@ function loadShoppingItemEditorPage() {
               : has('hide_from_shopping_list')
                 ? 'COALESCE(hide_from_shopping_list, 0)'
                 : '0',
+            has('is_hidden') ? 'COALESCE(is_hidden, 0)' : '0',
           ];
 
           const q = db.exec(
@@ -2691,6 +2751,7 @@ function loadShoppingItemEditorPage() {
             baselineIsMassNoun = String(row[6] != null ? row[6] : '0');
             baselineIsFood = String(row[7] != null ? row[7] : '1');
             baselineIsDeprecated = String(row[8] != null ? row[8] : '0');
+            baselineIsHidden = String(row[9] != null ? row[9] : '0');
           }
 
           // Note: overrides are always visible (no disclosure); nothing to auto-open.
@@ -2872,6 +2933,19 @@ function loadShoppingItemEditorPage() {
               const el = document.getElementById(
                 'shoppingItemIsDeprecatedToggle',
               );
+              if (el) el.checked = String(v) === '1';
+            },
+          },
+          {
+            key: 'is_hidden',
+            el: document.getElementById('shoppingItemIsHiddenToggle'),
+            initialValue: baselineIsHidden === '1' ? '1' : '0',
+            getValue: () =>
+              document.getElementById('shoppingItemIsHiddenToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById('shoppingItemIsHiddenToggle');
               if (el) el.checked = String(v) === '1';
             },
           },
@@ -3771,6 +3845,12 @@ async function loadStoresPage() {
                 [lid],
               );
             } catch (_) {}
+            try {
+              db.run(
+                'DELETE FROM ingredient_variant_store_location WHERE store_location_id = ?;',
+                [lid],
+              );
+            } catch (_) {}
           });
 
           db.run('DELETE FROM store_locations WHERE store_id = ?;', [storeId]);
@@ -3968,11 +4048,15 @@ function loadStoreEditorPage() {
     let aisleRows = [];
     /** @type {Map<number, string[]>} */
     let aisleItemsByAisle = new Map();
+    /** @type {Map<number, Array<any>>} */
+    let aisleItemSpecsByAisle = new Map();
     /** @type {Set<number>} */
     let deletedAisleIds = new Set();
     let nextTempAisleId = -1;
     let draftSnapshot = null;
     let refreshDirty = () => {};
+    let ingredientCatalog = { byName: new Map(), hasVariantAisleTable: false };
+    let activeVariantPicker = null;
 
     const normItemKey = (s) => String(s || '').trim().toLowerCase();
 
@@ -3990,10 +4074,152 @@ function loadStoreEditorPage() {
       return out;
     };
 
+    const normVariantKey = (s) => String(s || '').trim().toLowerCase();
+    const splitLineIntoBaseAndParen = (line) => {
+      const t = String(line || '').trim();
+      if (!t) return null;
+      const m = t.match(/^(.*?)\s*\((.*)\)\s*$/);
+      if (!m) return { baseName: t, inside: '', hasParen: false };
+      return {
+        baseName: String(m[1] || '').trim(),
+        inside: String(m[2] || ''),
+        hasParen: true,
+      };
+    };
+    const isSupportedVariantName = (s) => {
+      const t = String(s || '').trim();
+      if (!t) return false;
+      if (/[()]/.test(t)) return false;
+      return /[a-z0-9]/i.test(t);
+    };
+    const parseVariantNames = (insideRaw) => {
+      const inside = String(insideRaw || '').trim();
+      if (!inside) return [];
+      const out = [];
+      const seen = new Set();
+      const tokens = inside.split(',').map((s) => String(s || '').trim());
+      for (const tok of tokens) {
+        if (!isSupportedVariantName(tok)) continue;
+        const k = normVariantKey(tok);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(tok);
+      }
+      return out;
+    };
+    const collapseVariantSummary = (baseName, selectedNames) => {
+      const base = String(baseName || '').trim();
+      const names = Array.isArray(selectedNames)
+        ? selectedNames.map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      if (!names.length) return base;
+      if (names.length <= 3) return `${base} (${names.join(', ')})`;
+      const shown = names.slice(0, 3).join(', ');
+      const rem = names.length - 3;
+      return `${base} (${shown}, + ${rem} other${rem === 1 ? '' : 's'})`;
+    };
+    const cloneSpecs = (specs) =>
+      (Array.isArray(specs) ? specs : []).map((s) => ({
+        baseName: s.baseName || '',
+        baseKey: s.baseKey || '',
+        ingredientId: Number.isFinite(Number(s.ingredientId))
+          ? Number(s.ingredientId)
+          : null,
+        selectedVariants: Array.isArray(s.selectedVariants)
+          ? [...s.selectedVariants]
+          : [],
+        knownVariants: Array.isArray(s.knownVariants)
+          ? s.knownVariants.map((v) => ({
+              id: Number.isFinite(Number(v?.id)) ? Number(v.id) : null,
+              name: String(v?.name || ''),
+            }))
+          : [],
+      }));
+    const specsToDisplayLines = (specs, opts = {}) => {
+      const pickerKey = String(opts.pickerBaseKey || '').trim().toLowerCase();
+      return (Array.isArray(specs) ? specs : []).map((spec) => {
+        if (pickerKey && spec.baseKey === pickerKey) return spec.baseName || '';
+        return collapseVariantSummary(spec.baseName || '', spec.selectedVariants);
+      });
+    };
+    const syncDisplayLinesFromSpecs = (aid, opts = {}) => {
+      const specs = cloneSpecs(aisleItemSpecsByAisle.get(aid) || []);
+      aisleItemSpecsByAisle.set(aid, specs);
+      aisleItemsByAisle.set(aid, specsToDisplayLines(specs, opts));
+    };
+    const parseSpecsFromRaw = (raw, prevSpecs, catalog) => {
+      const prevByKey = new Map();
+      (Array.isArray(prevSpecs) ? prevSpecs : []).forEach((s) => {
+        if (s?.baseKey) prevByKey.set(s.baseKey, s);
+      });
+      const out = [];
+      const seenBase = new Set();
+      for (const line of String(raw || '').split('\n')) {
+        const parsed = splitLineIntoBaseAndParen(line);
+        if (!parsed) continue;
+        const baseName = String(parsed.baseName || '').trim();
+        if (!baseName) continue;
+        const baseKey = normItemKey(baseName);
+        if (!baseKey || seenBase.has(baseKey)) continue;
+        seenBase.add(baseKey);
+        const known = catalog?.byName?.get?.(baseKey) || null;
+        const prev = prevByKey.get(baseKey) || null;
+        let selected = [];
+        const inside = String(parsed.inside || '');
+        const looksCollapsed = /\+\s*\d+\s+others?/i.test(inside);
+        if (parsed.hasParen) {
+          if (looksCollapsed && prev && Array.isArray(prev.selectedVariants)) {
+            selected = [...prev.selectedVariants];
+          } else {
+            selected = parseVariantNames(inside);
+          }
+        }
+        if (known && Array.isArray(known.variants)) {
+          // Keep DB order first, then append any valid ad-hoc variants the user typed.
+          const dbOrdered = known.variants.map((v) => String(v?.name || '').trim());
+          const dbKeys = new Set(dbOrdered.map((v) => normVariantKey(v)));
+          const extras = selected.filter((v) => !dbKeys.has(normVariantKey(v)));
+          selected = [];
+          const wanted = new Set(
+            (parsed.hasParen ? parseVariantNames(inside) : []).map((v) =>
+              normVariantKey(v),
+            ),
+          );
+          dbOrdered.forEach((name) => {
+            if (wanted.has(normVariantKey(name))) selected.push(name);
+          });
+          extras.forEach((name) => {
+            if (!selected.some((v) => normVariantKey(v) === normVariantKey(name))) {
+              selected.push(name);
+            }
+          });
+        } else {
+          selected = selected.filter(isSupportedVariantName);
+        }
+        out.push({
+          baseName,
+          baseKey,
+          ingredientId:
+            known && Number.isFinite(Number(known.ingredientId))
+              ? Number(known.ingredientId)
+              : null,
+          selectedVariants: selected,
+          knownVariants:
+            known && Array.isArray(known.variants)
+              ? known.variants.map((v) => ({ id: Number(v.id), name: v.name }))
+              : [],
+        });
+      }
+      return out;
+    };
+
     const cloneDraftSnapshot = () => ({
       aisleRows: aisleRows.map((r) => ({ id: r.id, name: r.name })),
       items: Object.fromEntries(
         [...aisleItemsByAisle.entries()].map(([k, v]) => [String(k), [...v]]),
+      ),
+      specs: Object.fromEntries(
+        [...aisleItemSpecsByAisle.entries()].map(([k, v]) => [String(k), cloneSpecs(v)]),
       ),
       deletedIds: [...deletedAisleIds],
     });
@@ -4005,6 +4231,11 @@ function loadStoreEditorPage() {
         const n = Number(ks);
         aisleItemsByAisle.set(Number.isFinite(n) ? n : ks, [...v]);
       }
+      aisleItemSpecsByAisle = new Map();
+      for (const [ks, v] of Object.entries(snap.specs || {})) {
+        const n = Number(ks);
+        aisleItemSpecsByAisle.set(Number.isFinite(n) ? n : ks, cloneSpecs(v));
+      }
       deletedAisleIds = new Set(snap.deletedIds || []);
     };
     const itemsListEqual = (a, b) => {
@@ -4013,6 +4244,26 @@ function loadStoreEditorPage() {
       if (pa.length !== pb.length) return false;
       for (let i = 0; i < pa.length; i++) {
         if (normItemKey(pa[i]) !== normItemKey(pb[i])) return false;
+      }
+      return true;
+    };
+    const specsEqual = (a, b) => {
+      const aa = Array.isArray(a) ? a : [];
+      const bb = Array.isArray(b) ? b : [];
+      if (aa.length !== bb.length) return false;
+      for (let i = 0; i < aa.length; i++) {
+        const sa = aa[i] || {};
+        const sb = bb[i] || {};
+        if (normItemKey(sa.baseName) !== normItemKey(sb.baseName)) return false;
+        if ((sa.selectedVariants || []).length !== (sb.selectedVariants || []).length)
+          return false;
+        for (let j = 0; j < (sa.selectedVariants || []).length; j++) {
+          if (
+            normVariantKey(sa.selectedVariants[j]) !==
+            normVariantKey((sb.selectedVariants || [])[j])
+          )
+            return false;
+        }
       }
       return true;
     };
@@ -4034,6 +4285,9 @@ function loadStoreEditorPage() {
         const cur = aisleItemsByAisle.get(r.id) || [];
         const snapItems = draftSnapshot.items[String(r.id)] || [];
         if (!itemsListEqual(cur, snapItems)) return true;
+        const curSpecs = aisleItemSpecsByAisle.get(r.id) || [];
+        const snapSpecs = draftSnapshot.specs?.[String(r.id)] || [];
+        if (!specsEqual(curSpecs, snapSpecs)) return true;
       }
       for (const id of snapRows.keys()) {
         if (!aisleRows.some((row) => row.id === id)) return true;
@@ -4071,6 +4325,76 @@ function loadStoreEditorPage() {
       }
     };
 
+    const tableExistsLocal = (db, name) => {
+      try {
+        const q = db.exec(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+          [name],
+        );
+        return !!(q.length && q[0].values && q[0].values.length);
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const loadIngredientCatalog = (db) => {
+      const byName = new Map();
+      const byId = new Map();
+      const hasVariantTable = tableExistsLocal(db, 'ingredient_variants');
+      const hasVariantAisleTable = tableExistsLocal(
+        db,
+        'ingredient_variant_store_location',
+      );
+      try {
+        const q = db.exec(
+          `SELECT ID, name
+             FROM ingredients
+            WHERE name IS NOT NULL
+              AND trim(name) != ''
+              AND COALESCE(is_deprecated, 0) = 0
+              AND COALESCE(hide_from_shopping_list, 0) = 0
+            ORDER BY name COLLATE NOCASE, ID ASC;`,
+        );
+        const rows = q.length ? q[0].values : [];
+        rows.forEach(([id, name]) => {
+          const clean = String(name || '').trim();
+          const key = normItemKey(clean);
+          if (!key || byName.has(key)) return;
+          const rec = {
+            ingredientId: Number(id),
+            name: clean,
+            variants: [],
+          };
+          byName.set(key, rec);
+          byId.set(Number(id), rec);
+        });
+      } catch (_) {}
+      if (hasVariantTable) {
+        try {
+          const vq = db.exec(
+            `SELECT ingredient_id, id, variant
+               FROM ingredient_variants
+              WHERE variant IS NOT NULL
+                AND trim(variant) != ''
+              ORDER BY ingredient_id ASC, COALESCE(sort_order, 999999) ASC, id ASC;`,
+          );
+          const rows = vq.length ? vq[0].values : [];
+          rows.forEach(([ingredientId, variantId, variant]) => {
+            const vv = String(variant || '').trim();
+            if (!isSupportedVariantName(vv)) return;
+            const item = byId.get(Number(ingredientId));
+            if (!item) return;
+            if (
+              item.variants.some((v) => normVariantKey(v.name) === normVariantKey(vv))
+            )
+              return;
+            item.variants.push({ id: Number(variantId), name: vv });
+          });
+        } catch (_) {}
+      }
+      return { byName, hasVariantAisleTable };
+    };
+
     if (hasPersistedStore) {
       try {
         const db = await openStoreEditorDb();
@@ -4093,12 +4417,16 @@ function loadStoreEditorPage() {
             name: String(name || ''),
           }));
         }
-        aisleRows.forEach((r) => aisleItemsByAisle.set(r.id, []));
+        ingredientCatalog = loadIngredientCatalog(db);
+        aisleRows.forEach((r) => {
+          aisleItemsByAisle.set(r.id, []);
+          aisleItemSpecsByAisle.set(r.id, []);
+        });
         if (aisleRows.length) {
           const ids = aisleRows.map((r) => r.id);
           const ph = ids.map(() => '?').join(',');
-          const stmt = db.prepare(`
-            SELECT isl.store_location_id, i.name
+          const baseStmt = db.prepare(`
+            SELECT isl.store_location_id, i.ID, i.name
             FROM ingredient_store_location isl
             JOIN ingredients i ON i.ID = isl.ingredient_id
             WHERE isl.store_location_id IN (${ph})
@@ -4106,18 +4434,77 @@ function loadStoreEditorPage() {
               AND COALESCE(i.hide_from_shopping_list, 0) = 0
             ORDER BY isl.ID ASC
           `);
-          stmt.bind(ids);
-          while (stmt.step()) {
-            const row = stmt.get();
+          baseStmt.bind(ids);
+          while (baseStmt.step()) {
+            const row = baseStmt.get();
             const aid = Number(row[0]);
-            const name = String(row[1] || '');
-            const list = aisleItemsByAisle.get(aid);
-            if (!list) continue;
-            const k = normItemKey(name);
-            if (list.some((n) => normItemKey(n) === k)) continue;
-            list.push(name);
+            const ingredientId = Number(row[1]);
+            const name = String(row[2] || '').trim();
+            const specs = aisleItemSpecsByAisle.get(aid);
+            if (!Array.isArray(specs) || !name) continue;
+            const key = normItemKey(name);
+            if (specs.some((s) => s.baseKey === key)) continue;
+            const known = ingredientCatalog.byName.get(key) || null;
+            specs.push({
+              baseName: name,
+              baseKey: key,
+              ingredientId: Number.isFinite(ingredientId) ? ingredientId : null,
+              selectedVariants: [],
+              knownVariants:
+                known && Array.isArray(known.variants)
+                  ? known.variants.map((v) => ({ id: Number(v.id), name: v.name }))
+                  : [],
+            });
           }
-          stmt.free();
+          baseStmt.free();
+          if (ingredientCatalog.hasVariantAisleTable) {
+            const variantStmt = db.prepare(`
+              SELECT ivsl.store_location_id, i.ID, i.name, v.id, v.variant
+              FROM ingredient_variant_store_location ivsl
+              JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
+              JOIN ingredients i ON i.ID = v.ingredient_id
+              WHERE ivsl.store_location_id IN (${ph})
+                AND COALESCE(i.is_deprecated, 0) = 0
+                AND COALESCE(i.hide_from_shopping_list, 0) = 0
+              ORDER BY ivsl.id ASC, COALESCE(v.sort_order, 999999) ASC, v.id ASC
+            `);
+            variantStmt.bind(ids);
+            while (variantStmt.step()) {
+              const row = variantStmt.get();
+              const aid = Number(row[0]);
+              const ingredientId = Number(row[1]);
+              const name = String(row[2] || '').trim();
+              const variantName = String(row[4] || '').trim();
+              if (!name || !isSupportedVariantName(variantName)) continue;
+              const specs = aisleItemSpecsByAisle.get(aid);
+              if (!Array.isArray(specs)) continue;
+              const key = normItemKey(name);
+              let spec = specs.find((s) => s.baseKey === key);
+              if (!spec) {
+                const known = ingredientCatalog.byName.get(key) || null;
+                spec = {
+                  baseName: name,
+                  baseKey: key,
+                  ingredientId: Number.isFinite(ingredientId) ? ingredientId : null,
+                  selectedVariants: [],
+                  knownVariants:
+                    known && Array.isArray(known.variants)
+                      ? known.variants.map((v) => ({ id: Number(v.id), name: v.name }))
+                      : [],
+                };
+                specs.push(spec);
+              }
+              if (
+                !spec.selectedVariants.some(
+                  (v) => normVariantKey(v) === normVariantKey(variantName),
+                )
+              ) {
+                spec.selectedVariants.push(variantName);
+              }
+            }
+            variantStmt.free();
+          }
+          aisleRows.forEach((r) => syncDisplayLinesFromSpecs(r.id));
         }
       } catch (err) {
         console.warn('Store editor: failed to load store/aisles', err);
@@ -4247,10 +4634,166 @@ function loadStoreEditorPage() {
       }, ADD_AISLE_HINT_ACTIVATION_DELAY_MS);
     };
 
+    const closeActiveVariantPicker = ({ commit = true } = {}) => {
+      if (!activeVariantPicker) return;
+      const {
+        aid,
+        baseKey,
+        textarea,
+        panel,
+        outsideClickHandler,
+        onEsc,
+        focusBaselineValue,
+      } = activeVariantPicker;
+      try {
+        document.removeEventListener('mousedown', outsideClickHandler, true);
+      } catch (_) {}
+      try {
+        textarea?.removeEventListener('keydown', onEsc, true);
+      } catch (_) {}
+      try {
+        panel?.remove();
+      } catch (_) {}
+      try {
+        textarea?.classList?.remove('store-variant-picker-hidden-input');
+      } catch (_) {}
+      activeVariantPicker = null;
+      const specs = cloneSpecs(aisleItemSpecsByAisle.get(aid) || []);
+      if (!commit && typeof focusBaselineValue === 'string') {
+        const restored = parseSpecsFromRaw(
+          focusBaselineValue,
+          specs,
+          ingredientCatalog,
+        );
+        aisleItemSpecsByAisle.set(aid, restored);
+      }
+      syncDisplayLinesFromSpecs(aid);
+      if (textarea && typeof textarea.value === 'string') {
+        textarea.value = (aisleItemsByAisle.get(aid) || []).join('\n');
+        try {
+          textarea.__feAutoGrowResize?.();
+        } catch (_) {}
+      }
+      if (baseKey) refreshDirty();
+    };
+
+    const maybeOpenVariantPickerFromCaret = (textarea, aid) => {
+      if (!(textarea instanceof HTMLTextAreaElement)) return;
+      const originalTextareaValue = String(textarea.value || '');
+      const v = String(textarea.value || '');
+      const pos = Number(textarea.selectionStart ?? 0);
+      const prevNl = v.lastIndexOf('\n', Math.max(0, pos - 1));
+      const lineStart = prevNl === -1 ? 0 : prevNl + 1;
+      const nextNl = v.indexOf('\n', pos);
+      const lineEnd = nextNl === -1 ? v.length : nextNl;
+      const lineText = String(v.slice(lineStart, lineEnd) || '');
+      const col = Math.max(0, pos - lineStart);
+      const openIdx = lineText.indexOf('(');
+      const closeIdx = lineText.lastIndexOf(')');
+      if (openIdx < 0 || closeIdx < 0 || closeIdx <= openIdx) return;
+      if (col < openIdx || col > closeIdx + 1) return;
+      const specs = parseSpecsFromRaw(
+        textarea.value,
+        aisleItemSpecsByAisle.get(aid) || [],
+        ingredientCatalog,
+      );
+      aisleItemSpecsByAisle.set(aid, specs);
+      const parsed = splitLineIntoBaseAndParen(lineText);
+      const baseKey = normItemKey(parsed?.baseName || '');
+      if (!baseKey) return;
+      const spec = specs.find((s) => s.baseKey === baseKey);
+      if (!spec || !Number.isFinite(Number(spec.ingredientId))) return;
+      closeActiveVariantPicker({ commit: true });
+      const card = textarea.closest('.store-aisle-card');
+      const itemsField = textarea.closest('.store-aisle-items-field');
+      if (!card || !itemsField) return;
+      const selected = new Set(
+        (spec.selectedVariants || []).map((x) => normVariantKey(x)),
+      );
+      const knownVariants = Array.isArray(spec.knownVariants)
+        ? spec.knownVariants.filter((x) => String(x?.name || '').trim())
+        : [];
+      const panel = document.createElement('div');
+      panel.className = 'store-variant-picker store-variant-picker--inline';
+      const inlineLine = document.createElement('div');
+      inlineLine.className = 'store-variant-picker-inline-line';
+      const baseLabel = document.createElement('span');
+      baseLabel.className = 'store-variant-picker-inline-name';
+      baseLabel.textContent = spec.baseName || '';
+      inlineLine.appendChild(baseLabel);
+      const pillsWrap = document.createElement('div');
+      pillsWrap.className = 'store-variant-picker-pills store-variant-picker-pills--inline';
+      knownVariants.forEach((variant) => {
+        const vn = String(variant?.name || '').trim();
+        const key = normVariantKey(vn);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ui-unknown-items-suggestion-pill store-variant-picker-pill';
+        const syncBtnState = () => {
+          const on = selected.has(key);
+          btn.classList.toggle('is-on', on);
+          btn.classList.toggle('is-off', !on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        };
+        btn.textContent = vn;
+        syncBtnState();
+        btn.addEventListener('click', () => {
+          if (selected.has(key)) selected.delete(key);
+          else selected.add(key);
+          syncBtnState();
+          const nextList = knownVariants
+            .map((v2) => String(v2?.name || '').trim())
+            .filter((name) => selected.has(normVariantKey(name)));
+          spec.selectedVariants = nextList;
+          syncDisplayLinesFromSpecs(aid, { pickerBaseKey: spec.baseKey });
+          textarea.value = (aisleItemsByAisle.get(aid) || []).join('\n');
+          try {
+            textarea.__feAutoGrowResize?.();
+          } catch (_) {}
+          refreshDirty();
+        });
+        pillsWrap.appendChild(btn);
+      });
+      inlineLine.appendChild(pillsWrap);
+      panel.appendChild(inlineLine);
+      itemsField.appendChild(panel);
+      textarea.classList.add('store-variant-picker-hidden-input');
+      syncDisplayLinesFromSpecs(aid, { pickerBaseKey: spec.baseKey });
+      textarea.value = (aisleItemsByAisle.get(aid) || []).join('\n');
+      try {
+        textarea.__feAutoGrowResize?.();
+      } catch (_) {}
+
+      const outsideClickHandler = (evt) => {
+        const t = evt?.target;
+        if (!(t instanceof HTMLElement)) return;
+        if (panel.contains(t)) return;
+        if (t === textarea) return;
+        closeActiveVariantPicker({ commit: true });
+      };
+      const onEsc = (evt) => {
+        if (evt.key !== 'Escape') return;
+        evt.preventDefault();
+        closeActiveVariantPicker({ commit: false });
+      };
+      document.addEventListener('mousedown', outsideClickHandler, true);
+      textarea.addEventListener('keydown', onEsc, true);
+      activeVariantPicker = {
+        aid,
+        baseKey: spec.baseKey,
+        textarea,
+        panel,
+        outsideClickHandler,
+        onEsc,
+        focusBaselineValue: originalTextareaValue,
+      };
+    };
+
     const renderAisleCards = () => {
       const list = document.getElementById('storeAislesList');
       if (!list) return;
 
+      closeActiveVariantPicker({ commit: true });
       parkAddAisleCta();
       list.innerHTML = '';
       aisleRows.forEach((a) => {
@@ -4281,6 +4824,7 @@ function loadStoreEditorPage() {
         const aisleTargetIsNameOrList = (target) =>
           target.closest('.store-aisle-name') ||
           target.closest('textarea') ||
+          target.closest('.store-variant-picker') ||
           target.closest('.store-aisle-move-controls');
 
         const moveAisleByDelta = (delta) => {
@@ -4307,11 +4851,13 @@ function loadStoreEditorPage() {
           if (idx < 0) return;
           const snapshot = { id: a.id, name: a.name };
           const itemsSnap = [...(aisleItemsByAisle.get(a.id) || [])];
+          const specsSnap = cloneSpecs(aisleItemSpecsByAisle.get(a.id) || []);
           const wasPersisted = a.id > 0;
 
           if (wasPersisted) deletedAisleIds.add(a.id);
           aisleRows = aisleRows.filter((r) => r.id !== a.id);
           aisleItemsByAisle.delete(a.id);
+          aisleItemSpecsByAisle.delete(a.id);
           renderAisleCards();
           refreshDirty();
 
@@ -4327,6 +4873,7 @@ function loadStoreEditorPage() {
                 name: snapshot.name,
               });
               aisleItemsByAisle.set(snapshot.id, [...itemsSnap]);
+              aisleItemSpecsByAisle.set(snapshot.id, cloneSpecs(specsSnap));
             } catch (_) {}
             renderAisleCards();
             refreshDirty();
@@ -4455,13 +5002,19 @@ function loadStoreEditorPage() {
 
         card.appendChild(nameEl);
 
-        const items = aisleItemsByAisle.get(a.id) || [];
+        let specs = cloneSpecs(aisleItemSpecsByAisle.get(a.id) || []);
+        if (!specs.length) {
+          const items = aisleItemsByAisle.get(a.id) || [];
+          specs = parseSpecsFromRaw(items.join('\n'), [], ingredientCatalog);
+          aisleItemSpecsByAisle.set(a.id, specs);
+          syncDisplayLinesFromSpecs(a.id);
+        }
         const itemsField = document.createElement('div');
         itemsField.className = 'shopping-item-field store-aisle-items-field';
 
         const ta = document.createElement('textarea');
         ta.className = 'shopping-item-textarea';
-        ta.value = items.join('\n');
+        ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
         ta.placeholder = 'Add an item.';
         ta.setAttribute('aria-label', 'Aisle items');
         ta.wrap = 'off';
@@ -4536,27 +5089,93 @@ function loadStoreEditorPage() {
           }
         } catch (_) {}
 
-        let escBaseline = [...items];
+        let escBaseline = parseUniqueItemLines(ta.value);
+        let escBaselineText = ta.value;
 
         ta.addEventListener('focus', () => {
+          closeActiveVariantPicker({ commit: true });
+          const nextSpecs = parseSpecsFromRaw(
+            ta.value,
+            aisleItemSpecsByAisle.get(a.id) || [],
+            ingredientCatalog,
+          );
+          aisleItemSpecsByAisle.set(a.id, nextSpecs);
+          syncDisplayLinesFromSpecs(a.id);
+          ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
           escBaseline = parseUniqueItemLines(ta.value);
+          escBaselineText = ta.value;
         });
 
         ta.addEventListener('input', () => {
+          const nextSpecs = parseSpecsFromRaw(
+            ta.value,
+            aisleItemSpecsByAisle.get(a.id) || [],
+            ingredientCatalog,
+          );
+          aisleItemSpecsByAisle.set(a.id, nextSpecs);
           aisleItemsByAisle.set(a.id, parseUniqueItemLines(ta.value));
           refreshDirty();
+        });
+
+        ta.addEventListener('click', () => {
+          window.setTimeout(() => {
+            maybeOpenVariantPickerFromCaret(ta, a.id);
+          }, 0);
         });
 
         ta.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             e.preventDefault();
-            ta.value = escBaseline.join('\n');
-            aisleItemsByAisle.set(a.id, [...escBaseline]);
+            closeActiveVariantPicker({ commit: false });
+            ta.value = escBaselineText || escBaseline.join('\n');
+            const nextSpecs = parseSpecsFromRaw(
+              ta.value,
+              aisleItemSpecsByAisle.get(a.id) || [],
+              ingredientCatalog,
+            );
+            aisleItemSpecsByAisle.set(a.id, nextSpecs);
+            syncDisplayLinesFromSpecs(a.id);
+            ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
             try {
               ta.__feAutoGrowResize();
             } catch (_) {}
             refreshDirty();
+            return;
           }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            window.setTimeout(() => {
+              const nextSpecs = parseSpecsFromRaw(
+                ta.value,
+                aisleItemSpecsByAisle.get(a.id) || [],
+                ingredientCatalog,
+              );
+              aisleItemSpecsByAisle.set(a.id, nextSpecs);
+              syncDisplayLinesFromSpecs(a.id);
+              ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
+              try {
+                ta.__feAutoGrowResize?.();
+              } catch (_) {}
+              refreshDirty();
+            }, 0);
+          }
+        });
+
+        ta.addEventListener('blur', () => {
+          window.setTimeout(() => {
+            if (activeVariantPicker && activeVariantPicker.textarea === ta) return;
+            const nextSpecs = parseSpecsFromRaw(
+              ta.value,
+              aisleItemSpecsByAisle.get(a.id) || [],
+              ingredientCatalog,
+            );
+            aisleItemSpecsByAisle.set(a.id, nextSpecs);
+            syncDisplayLinesFromSpecs(a.id);
+            ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
+            try {
+              ta.__feAutoGrowResize?.();
+            } catch (_) {}
+            refreshDirty();
+          }, 0);
         });
 
         itemsField.appendChild(ta);
@@ -4608,6 +5227,7 @@ function loadStoreEditorPage() {
         const tid = nextTempAisleId--;
         aisleRows.push({ id: tid, name });
         aisleItemsByAisle.set(tid, []);
+        aisleItemSpecsByAisle.set(tid, []);
         renderAisleCards();
         refreshDirty();
       };
@@ -4624,21 +5244,42 @@ function loadStoreEditorPage() {
     const flushStoreAislesDraft = async (db, sid) => {
       const { getVisibleCanonicalId, anyIngredientNamed } =
         createIngredientLookupHelpers(db);
+      ingredientCatalog = loadIngredientCatalog(db);
+      const hasVariantTable = tableExistsLocal(db, 'ingredient_variants');
+      const hasVariantAisleTable = tableExistsLocal(
+        db,
+        'ingredient_variant_store_location',
+      );
+
+      const normalizeAllAisleSpecs = () => {
+        for (const r of aisleRows) {
+          const specs = parseSpecsFromRaw(
+            (aisleItemsByAisle.get(r.id) || []).join('\n'),
+            aisleItemSpecsByAisle.get(r.id) || [],
+            ingredientCatalog,
+          );
+          aisleItemSpecsByAisle.set(r.id, specs);
+          syncDisplayLinesFromSpecs(r.id);
+        }
+      };
+      normalizeAllAisleSpecs();
 
       const blockedKeys = new Set();
       const unknownUnique = [];
       const uk = new Set();
       for (const r of aisleRows) {
-        const lines = [...(aisleItemsByAisle.get(r.id) || [])];
-        for (const name of lines) {
-          const vid = getVisibleCanonicalId(name);
+        const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []);
+        for (const spec of specs) {
+          const base = String(spec.baseName || '').trim();
+          if (!base) continue;
+          const vid = getVisibleCanonicalId(base);
           if (vid) continue;
-          if (anyIngredientNamed(name)) blockedKeys.add(normItemKey(name));
+          if (anyIngredientNamed(base)) blockedKeys.add(normItemKey(base));
           else {
-            const k = normItemKey(name);
+            const k = normItemKey(base);
             if (!uk.has(k)) {
               uk.add(k);
-              unknownUnique.push(name);
+              unknownUnique.push(base);
             }
           }
         }
@@ -4647,9 +5288,9 @@ function loadStoreEditorPage() {
       if (blockedKeys.size) {
         const sample = [];
         outer: for (const r of aisleRows) {
-          for (const n of aisleItemsByAisle.get(r.id) || []) {
-            if (blockedKeys.has(normItemKey(n))) {
-              sample.push(n);
+          for (const spec of aisleItemSpecsByAisle.get(r.id) || []) {
+            if (blockedKeys.has(normItemKey(spec.baseName))) {
+              sample.push(spec.baseName);
               if (sample.length >= 5) break outer;
             }
           }
@@ -4678,12 +5319,16 @@ function loadStoreEditorPage() {
 
         const replacementMap = resolved.map;
         for (const r of aisleRows) {
-          const lines = [...(aisleItemsByAisle.get(r.id) || [])];
-          const replaced = lines.map((n) => {
-            const key = normItemKey(n);
-            return replacementMap.get(key) || n;
+          const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []);
+          specs.forEach((spec) => {
+            const key = normItemKey(spec.baseName);
+            const repl = replacementMap.get(key);
+            if (!repl) return;
+            spec.baseName = repl;
+            spec.baseKey = normItemKey(repl);
           });
-          aisleItemsByAisle.set(r.id, parseUniqueItemLines(replaced.join('\n')));
+          aisleItemSpecsByAisle.set(r.id, specs);
+          syncDisplayLinesFromSpecs(r.id);
         }
 
         const createQueue = [];
@@ -4708,9 +5353,16 @@ function loadStoreEditorPage() {
         try {
           window.favoriteEatsTypeahead?.invalidate?.();
         } catch (_) {}
+        ingredientCatalog = loadIngredientCatalog(db);
       }
 
       for (const aid of [...deletedAisleIds]) {
+        if (hasVariantAisleTable) {
+          db.run(
+            'DELETE FROM ingredient_variant_store_location WHERE store_location_id = ?;',
+            [aid],
+          );
+        }
         db.run(
           'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
           [aid],
@@ -4740,8 +5392,11 @@ function loadStoreEditorPage() {
         const newId = Number(idQ[0].values[0][0]);
         const oldId = r.id;
         const items = aisleItemsByAisle.get(oldId) || [];
+        const specs = cloneSpecs(aisleItemSpecsByAisle.get(oldId) || []);
         aisleItemsByAisle.delete(oldId);
         aisleItemsByAisle.set(newId, [...items]);
+        aisleItemSpecsByAisle.delete(oldId);
+        aisleItemSpecsByAisle.set(newId, specs);
         r.id = newId;
       }
 
@@ -4754,37 +5409,88 @@ function loadStoreEditorPage() {
       }
 
       for (const r of aisleRows) {
-        const lines = [...(aisleItemsByAisle.get(r.id) || [])].filter(
-          (ln) => !blockedKeys.has(normItemKey(ln)),
+        const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []).filter(
+          (spec) => !blockedKeys.has(normItemKey(spec.baseName)),
         );
-        const resolvedIds = [];
-        const seenId = new Set();
-        for (const name of lines) {
-          const iid = getVisibleCanonicalId(name);
-          if (!Number.isFinite(iid)) continue;
-          if (seenId.has(iid)) continue;
-          seenId.add(iid);
-          resolvedIds.push(iid);
-        }
+        const resolvedGenericIds = [];
+        const seenGenericId = new Set();
+        const ensureVariantId = (ingredientId, variantName) => {
+          const iid = Number(ingredientId);
+          const vv = String(variantName || '').trim();
+          if (!Number.isFinite(iid) || !isSupportedVariantName(vv)) return null;
+          const q = db.exec(
+            `SELECT id
+               FROM ingredient_variants
+              WHERE ingredient_id = ?
+                AND lower(trim(variant)) = lower(trim(?))
+              ORDER BY COALESCE(sort_order, 999999), id
+              LIMIT 1;`,
+            [iid, vv],
+          );
+          if (q.length && q[0].values.length) return Number(q[0].values[0][0]);
+          const maxQ = db.exec(
+            `SELECT COALESCE(MAX(sort_order), 0) FROM ingredient_variants WHERE ingredient_id = ?;`,
+            [iid],
+          );
+          const nextSort =
+            maxQ.length && maxQ[0].values.length
+              ? Number(maxQ[0].values[0][0]) + 1
+              : 1;
+          db.run(
+            `INSERT INTO ingredient_variants (ingredient_id, variant, sort_order)
+             VALUES (?, ?, ?);`,
+            [iid, vv, nextSort],
+          );
+          const idQ = db.exec('SELECT last_insert_rowid();');
+          if (idQ.length && idQ[0].values.length) return Number(idQ[0].values[0][0]);
+          return null;
+        };
         db.run(
           'DELETE FROM ingredient_store_location WHERE store_location_id = ?;',
           [r.id],
         );
-        for (const iid of resolvedIds) {
+        if (hasVariantAisleTable) {
+          db.run(
+            'DELETE FROM ingredient_variant_store_location WHERE store_location_id = ?;',
+            [r.id],
+          );
+        }
+        for (const spec of specs) {
+          const iid = getVisibleCanonicalId(spec.baseName);
+          if (!Number.isFinite(iid)) continue;
+          const selected = (spec.selectedVariants || []).filter(isSupportedVariantName);
+          if (!selected.length || !hasVariantTable || !hasVariantAisleTable) {
+            if (seenGenericId.has(iid)) continue;
+            seenGenericId.add(iid);
+            resolvedGenericIds.push(iid);
+            continue;
+          }
+          const seenVariantKey = new Set();
+          for (const vn of selected) {
+            const vk = normVariantKey(vn);
+            if (!vk || seenVariantKey.has(vk)) continue;
+            seenVariantKey.add(vk);
+            const variantId = ensureVariantId(iid, vn);
+            if (!Number.isFinite(variantId)) continue;
+            db.run(
+              'DELETE FROM ingredient_variant_store_location WHERE ingredient_variant_id = ?;',
+              [variantId],
+            );
+            db.run(
+              `INSERT INTO ingredient_variant_store_location (ingredient_variant_id, store_location_id)
+               VALUES (?, ?);`,
+              [variantId, r.id],
+            );
+          }
+        }
+        for (const iid of resolvedGenericIds) {
           db.run(
             'INSERT INTO ingredient_store_location (ingredient_id, store_location_id) VALUES (?, ?);',
             [iid, r.id],
           );
         }
-        const displayOrder = [];
-        const sk = new Set();
-        for (const name of lines) {
-          const k = normItemKey(name);
-          if (sk.has(k)) continue;
-          sk.add(k);
-          displayOrder.push(name);
-        }
-        aisleItemsByAisle.set(r.id, displayOrder);
+        aisleItemSpecsByAisle.set(r.id, specs);
+        syncDisplayLinesFromSpecs(r.id);
       }
     };
 
@@ -4845,7 +5551,13 @@ function loadStoreEditorPage() {
               }
               const ta = card.querySelector('textarea');
               if (ta) {
-                aisleItemsByAisle.set(aid, parseUniqueItemLines(ta.value));
+                const nextSpecs = parseSpecsFromRaw(
+                  ta.value,
+                  aisleItemSpecsByAisle.get(aid) || [],
+                  ingredientCatalog,
+                );
+                aisleItemSpecsByAisle.set(aid, nextSpecs);
+                syncDisplayLinesFromSpecs(aid);
               }
             }
             await flushStoreAislesDraft(db, id);
