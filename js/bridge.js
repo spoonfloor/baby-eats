@@ -139,6 +139,36 @@ function ensureRecipeIngredientMapParentheticalNoteSchema(activeDb) {
   return true;
 }
 
+function ensureRecipeIngredientMapQuantityRangeSchema(activeDb) {
+  if (!activeDb) return false;
+  const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+
+  if (!rimCols.includes('quantity_min')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN quantity_min REAL;'
+      );
+    } catch (_) {}
+  }
+  if (!rimCols.includes('quantity_max')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN quantity_max REAL;'
+      );
+    } catch (_) {}
+  }
+  if (!rimCols.includes('quantity_is_approx')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN quantity_is_approx INTEGER NOT NULL DEFAULT 0;'
+      );
+    } catch (_) {}
+  }
+  return true;
+}
+
 // --- Unit suggestions (soft-add) ---
 function ensureUnitSuggestionsSchema(activeDb) {
   if (!activeDb) return false;
@@ -268,6 +298,7 @@ window.bridge = {
   ensureRecipeIngredientMapSortOrderSchema,
   ensureRecipeIngredientHeadingsSchema,
   ensureRecipeIngredientMapParentheticalNoteSchema,
+  ensureRecipeIngredientMapQuantityRangeSchema,
   writeIngredientSortOrderFromModel,
 };
 
@@ -306,6 +337,9 @@ function loadRecipeFromDB(db, recipeId) {
   const hasSectionId = rimHas('section_id');
   const hasSortOrder = rimHas('sort_order');
   const hasRimParen = rimHas('parenthetical_note');
+  const hasQtyMin = rimHas('quantity_min');
+  const hasQtyMax = rimHas('quantity_max');
+  const hasQtyApprox = rimHas('quantity_is_approx');
 
   const ingCols = getTableColumns(db, 'ingredients');
   const ingHas = (col) => ingCols.map((c) => String(c).toLowerCase()).includes(col);
@@ -327,6 +361,9 @@ function loadRecipeFromDB(db, recipeId) {
     hasSectionId ? 'rim.section_id' : 'NULL AS section_id',
     hasSortOrder ? 'rim.sort_order' : 'NULL AS sort_order',
     'rim.quantity',
+    hasQtyMin ? 'rim.quantity_min' : 'NULL AS quantity_min',
+    hasQtyMax ? 'rim.quantity_max' : 'NULL AS quantity_max',
+    hasQtyApprox ? 'COALESCE(rim.quantity_is_approx, 0) AS quantity_is_approx' : '0 AS quantity_is_approx',
     'rim.unit',
     'i.name',
     'i.variant',
@@ -374,6 +411,9 @@ function loadRecipeFromDB(db, recipeId) {
           sectionId,
           sortOrder,
           qty,
+          qtyMin,
+          qtyMax,
+          qtyApprox,
           unit,
           name,
           variant,
@@ -393,7 +433,15 @@ function loadRecipeFromDB(db, recipeId) {
           clientId: rimId != null ? `i-${rimId}` : null,
           sectionId: sectionId == null ? null : Number(sectionId),
           sortOrder: sortOrder == null ? null : Number(sortOrder),
-          quantity: isNaN(parseFloat(qty)) ? qty : parseFloat(qty),
+          quantity:
+            typeof qty === 'number'
+              ? qty
+              : typeof qty === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(qty)
+              ? parseFloat(qty)
+              : qty,
+          quantityMin: Number.isFinite(Number(qtyMin)) ? Number(qtyMin) : null,
+          quantityMax: Number.isFinite(Number(qtyMax)) ? Number(qtyMax) : null,
+          quantityIsApprox: !!qtyApprox,
           unit: unit || '',
           name:
             typeof name === 'string' && name.trim() === 'Add an ingredient.'
@@ -640,6 +688,8 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   ensureRecipeIngredientHeadingsSchema(activeDb);
   // Ensure schema supports recipe-level parenthetical notes.
   ensureRecipeIngredientMapParentheticalNoteSchema(activeDb);
+  // Ensure schema supports structured quantity range fields.
+  ensureRecipeIngredientMapQuantityRangeSchema(activeDb);
 
   const ingredientsCols = getTableColumns(activeDb, 'ingredients');
   const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
@@ -792,6 +842,9 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
 
   const rimHasSection = rimHas('section_id');
   const rimHasSortOrder = rimHas('sort_order');
+  const rimHasQtyMin = rimHas('quantity_min');
+  const rimHasQtyMax = rimHas('quantity_max');
+  const rimHasQtyApprox = rimHas('quantity_is_approx');
 
   const rihCols = getTableColumns(activeDb, 'recipe_ingredient_headings');
   const rihHas = (col) =>
@@ -887,6 +940,28 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       if (rimHas('quantity')) {
         cols.push('quantity');
         vals.push(ing.quantity ?? '');
+      }
+      if (rimHasQtyMin) {
+        cols.push('quantity_min');
+        const minVal = Number.isFinite(Number(ing.quantityMin))
+          ? Number(ing.quantityMin)
+          : Number.isFinite(Number(ing.quantity))
+          ? Number(ing.quantity)
+          : null;
+        vals.push(minVal);
+      }
+      if (rimHasQtyMax) {
+        cols.push('quantity_max');
+        const maxVal = Number.isFinite(Number(ing.quantityMax))
+          ? Number(ing.quantityMax)
+          : Number.isFinite(Number(ing.quantity))
+          ? Number(ing.quantity)
+          : null;
+        vals.push(maxVal);
+      }
+      if (rimHasQtyApprox) {
+        cols.push('quantity_is_approx');
+        vals.push(ing.quantityIsApprox ? 1 : 0);
       }
       if (rimHas('unit')) {
         cols.push('unit');

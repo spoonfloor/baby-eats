@@ -453,10 +453,30 @@ function renderIngredient(line) {
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
 
-  // Show quantity as fraction if numeric
-  let qtyDisplay = line.quantity;
-  if (!isNaN(parseFloat(line.quantity))) {
-    qtyDisplay = decimalToFractionDisplay(parseFloat(line.quantity));
+  const hasFiniteNumber = (v) => Number.isFinite(Number(v));
+  const formatNumericDisplay = (v) => decimalToFractionDisplay(Number(v));
+
+  const qMin = hasFiniteNumber(line.quantityMin) ? Number(line.quantityMin) : null;
+  const qMax = hasFiniteNumber(line.quantityMax) ? Number(line.quantityMax) : null;
+  const qApprox = !!line.quantityIsApprox;
+
+  // Prefer raw quantity text when present; otherwise derive a display string
+  // from structured min/max fields.
+  let quantityForDisplay = '';
+  if (line.quantity != null && String(line.quantity).trim() !== '') {
+    quantityForDisplay = String(line.quantity).trim();
+  } else if (qMin != null && qMax != null) {
+    quantityForDisplay =
+      Math.abs(qMin - qMax) < 1e-9
+        ? formatNumericDisplay(qMin)
+        : `${formatNumericDisplay(qMin)} to ${formatNumericDisplay(qMax)}`;
+    if (qApprox) quantityForDisplay = `about ${quantityForDisplay}`;
+  }
+
+  // Show quantity as fraction if numeric-ish and singular.
+  let qtyDisplay = quantityForDisplay;
+  if (!isNaN(parseFloat(quantityForDisplay)) && /^[\d.]+$/.test(quantityForDisplay)) {
+    qtyDisplay = formatNumericDisplay(parseFloat(quantityForDisplay));
   }
 
   // --- Build base name (variant + name) ---
@@ -471,20 +491,21 @@ function renderIngredient(line) {
       : line.name;
 
   // --- Decide if quantity is numeric or free-text ---
-  const isNumericQty = !isNaN(parseFloat(line.quantity));
+  const isNumericQty =
+    quantityForDisplay !== '' &&
+    !isNaN(parseFloat(quantityForDisplay)) &&
+    /^[\d.]+$/.test(quantityForDisplay);
 
   let mainText;
-  if (isNumericQty && line.quantity !== '') {
-    const numericVal = parseFloat(line.quantity);
+  if (isNumericQty && quantityForDisplay !== '') {
+    const numericVal = parseFloat(quantityForDisplay);
     const unitText = getUnitDisplay(line.unit || '', numericVal);
     mainText = [qtyDisplay, unitText, baseName].filter(Boolean).join(' ');
-  } else if (line.quantity) {
-    // Free-text quantity like "to taste" or "as needed"
-    mainText = [line.prepNotes, baseName, line.quantity]
+  } else if (quantityForDisplay) {
+    // Free-text quantities and ranges should still read naturally.
+    mainText = [quantityForDisplay, line.unit || '', baseName]
       .filter(Boolean)
       .join(' ');
-    // Clear prepNotes so we don’t repeat it later
-    line.prepNotes = '';
   } else {
     mainText = [line.unit, baseName].filter(Boolean).join(' ');
   }
@@ -845,24 +866,24 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Container for pill + input
-  const makeCell = (labelText) => {
+  const makeCell = ({ key, label, isBoolean = false }) => {
     const cell = document.createElement('div');
     cell.className = 'ingredient-edit-cell';
-    cell.classList.add(`ingredient-edit-cell--${labelText}`);
+    cell.classList.add(`ingredient-edit-cell--${key}`);
 
     const input = document.createElement('input');
     input.className = 'ingredient-edit-input';
-    input.classList.add(`ingredient-edit-input--${labelText}`);
-    input.dataset.field = labelText;
+    input.classList.add(`ingredient-edit-input--${key}`);
+    input.dataset.field = key;
 
-    // OPT is a boolean: render as a checkbox toggle (not a text field).
+    // Boolean fields are rendered as checkbox toggles.
     // Wrap pill + checkbox in a <label> so clicking the pill toggles with trusted events.
-    if (labelText === 'opt') {
+    if (isBoolean) {
       input.type = 'checkbox';
       const wrap = document.createElement('label');
       wrap.className = 'ingredient-edit-toggle';
 
-      const pill = makePill(labelText);
+      const pill = makePill(label);
       wrap.appendChild(pill);
       wrap.appendChild(input);
       cell.appendChild(wrap);
@@ -871,7 +892,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
 
     // Default: pill + text input
     input.type = 'text';
-    const pill = makePill(labelText);
+    const pill = makePill(label);
     cell.appendChild(pill);
 
     if (typeof wireLabelToInput === 'function') {
@@ -886,9 +907,20 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Location is edited elsewhere; suppress it here.
-  // Field order: qty, unit, name, var, size, prep, notes, opt
-  const labels = ['qty', 'unit', 'name', 'var', 'size', 'prep', 'notes', 'opt'];
-  labels.forEach((lab) => row.appendChild(makeCell(lab)));
+  // Field order: QtyMin, QtyMax, IsAprx, Unit, Name, Var, Size, Prep, Notes, IsOpt
+  const fieldsConfig = [
+    { key: 'qtymin', label: 'QtyMin' },
+    { key: 'qtymax', label: 'QtyMax' },
+    { key: 'isaprx', label: 'IsAprx', isBoolean: true },
+    { key: 'unit', label: 'Unit' },
+    { key: 'name', label: 'Name' },
+    { key: 'var', label: 'Var' },
+    { key: 'size', label: 'Size' },
+    { key: 'prep', label: 'Prep' },
+    { key: 'notes', label: 'Notes' },
+    { key: 'isopt', label: 'IsOpt', isBoolean: true },
+  ];
+  fieldsConfig.forEach((cfg) => row.appendChild(makeCell(cfg)));
 
   // Any keystroke in any ingredient field should immediately enable Cancel/Save.
   row.addEventListener('input', (e) => {
@@ -901,7 +933,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     }
   });
 
-  // Checkbox toggles (opt) often fire `change` (not consistently `input`), but they
+  // Checkbox toggles often fire `change` (not consistently `input`), but they
   // should still enable Cancel/Save immediately.
   row.addEventListener('change', (e) => {
     if (e && e.isTrusted === false) return;
@@ -934,14 +966,40 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
       } catch (_) {}
     };
 
-    set('qty', modelRef.quantity ?? '');
+    // Prefer structured quantity fields; fall back to parsing legacy quantity text.
+    let prefillQtyMin = modelRef.quantityMin;
+    let prefillQtyMax = modelRef.quantityMax;
+    let prefillIsAprx = !!modelRef.quantityIsApprox;
+    if (
+      (!Number.isFinite(Number(prefillQtyMin)) || !Number.isFinite(Number(prefillQtyMax))) &&
+      modelRef.quantity != null &&
+      String(modelRef.quantity).trim() !== '' &&
+      typeof window.parseIngredientQuantityDescriptor === 'function'
+    ) {
+      try {
+        const parsed = window.parseIngredientQuantityDescriptor(modelRef.quantity);
+        if (parsed) {
+          if (Number.isFinite(Number(parsed.quantityMin))) {
+            prefillQtyMin = Number(parsed.quantityMin);
+          }
+          if (Number.isFinite(Number(parsed.quantityMax))) {
+            prefillQtyMax = Number(parsed.quantityMax);
+          }
+          prefillIsAprx = !!parsed.quantityIsApprox;
+        }
+      } catch (_) {}
+    }
+
+    set('qtymin', prefillQtyMin ?? '');
+    set('qtymax', prefillQtyMax ?? '');
+    set('isaprx', prefillIsAprx ? '1' : '');
     set('unit', modelRef.unit ?? '');
     set('name', modelRef.name ?? '');
     set('size', modelRef.size ?? '');
     set('var', modelRef.variant ?? '');
     set('prep', modelRef.prepNotes ?? '');
     set('notes', modelRef.parentheticalNote ?? '');
-    set('opt', modelRef.isOptional ? '1' : '');
+    set('isopt', modelRef.isOptional ? '1' : '');
 
     // Force autosize to run after all values are set (in case events didn't fire)
     requestAnimationFrame(() => {
@@ -1053,10 +1111,58 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
 
     const nameTrimmed = (fields.name || '').trim();
 
-    const qtyRaw = fields.qty || '';
-    let quantity = qtyRaw;
-    const qtyNum = parseFloat(qtyRaw);
-    if (qtyRaw && !Number.isNaN(qtyNum)) quantity = qtyNum;
+    const parseQtyScalar = (raw) => {
+      const t = String(raw || '').trim();
+      if (!t) return null;
+      try {
+        if (typeof window.parseIngredientQuantityDescriptor === 'function') {
+          const p = window.parseIngredientQuantityDescriptor(t);
+          const mn = Number.isFinite(Number(p?.quantityMin))
+            ? Number(p.quantityMin)
+            : null;
+          const mx = Number.isFinite(Number(p?.quantityMax))
+            ? Number(p.quantityMax)
+            : null;
+          if (mn != null && mx != null && Math.abs(mn - mx) < 1e-9) return mn;
+        }
+      } catch (_) {}
+      if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+      return null;
+    };
+
+    let quantityMin = parseQtyScalar(fields.qtymin);
+    let quantityMax = parseQtyScalar(fields.qtymax);
+    let quantityIsApprox = !!(fields.isaprx && String(fields.isaprx).trim());
+
+    // Treat single-ended input as exact value.
+    if (quantityMin != null && quantityMax == null) quantityMax = quantityMin;
+    if (quantityMax != null && quantityMin == null) quantityMin = quantityMax;
+    if (quantityMin != null && quantityMax != null && quantityMin > quantityMax) {
+      const tmp = quantityMin;
+      quantityMin = quantityMax;
+      quantityMax = tmp;
+    }
+    if (quantityMin == null && quantityMax == null) {
+      quantityIsApprox = false;
+    }
+
+    const buildQuantityText = () => {
+      if (quantityMin == null && quantityMax == null) return '';
+      if (
+        quantityMin != null &&
+        quantityMax != null &&
+        Math.abs(quantityMin - quantityMax) < 1e-9
+      ) {
+        const base = String(Number(quantityMin));
+        return quantityIsApprox ? `about ${base}` : base;
+      }
+      const minTxt = quantityMin != null ? String(Number(quantityMin)) : '';
+      const maxTxt = quantityMax != null ? String(Number(quantityMax)) : '';
+      const core = [minTxt, 'to', maxTxt].filter(Boolean).join(' ').trim();
+      return quantityIsApprox ? `about ${core}` : core;
+    };
+
+    const quantity = buildQuantityText();
 
     if (isInsert) {
       // If user cleared the name, treat it as "no-op" insert.
@@ -1067,13 +1173,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
 
       const ingredient = {
         quantity,
+        quantityMin,
+        quantityMax,
+        quantityIsApprox,
         unit: fields.unit || '',
         name: nameTrimmed,
         size: fields.size || '',
         variant: fields.var || '',
         prepNotes: fields.prep || '',
         parentheticalNote: fields.notes || '',
-        isOptional: !!(fields.opt && fields.opt.trim()),
+        isOptional: !!(fields.isopt && fields.isopt.trim()),
         substitutes: [],
         locationAtHome: '',
         subRecipeId: null,
@@ -1191,13 +1300,16 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
 
       // Update the model reference (the thing Save will persist).
       modelRef.quantity = quantity;
+      modelRef.quantityMin = quantityMin;
+      modelRef.quantityMax = quantityMax;
+      modelRef.quantityIsApprox = quantityIsApprox;
       modelRef.unit = fields.unit || '';
       modelRef.name = nameTrimmed;
       modelRef.size = fields.size || '';
       modelRef.variant = fields.var || '';
       modelRef.prepNotes = fields.prep || '';
       modelRef.parentheticalNote = fields.notes || '';
-      modelRef.isOptional = !!(fields.opt && fields.opt.trim());
+      modelRef.isOptional = !!(fields.isopt && fields.isopt.trim());
       if (!modelRef.clientId) {
         modelRef.clientId =
           modelRef.rimId != null
@@ -1245,6 +1357,9 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
       // logic that still holds that reference won't drift.
       if (seedLine && seedLine !== modelRef) {
         seedLine.quantity = modelRef.quantity;
+        seedLine.quantityMin = modelRef.quantityMin;
+        seedLine.quantityMax = modelRef.quantityMax;
+        seedLine.quantityIsApprox = modelRef.quantityIsApprox;
         seedLine.unit = modelRef.unit;
         seedLine.name = modelRef.name;
         seedLine.size = modelRef.size;
@@ -1354,11 +1469,11 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     console.warn('⚠️ setupIngredientTypeaheadRow failed:', err);
   }
 
-  // Focus qty by default, with caret at the beginning.
+  // Focus QtyMin by default, with caret at the beginning.
   // IMPORTANT: defer by one tick so the click/pointer event that opened the tray
   // finishes first; otherwise focusout can immediately cancel an empty insert row.
   const qtyInput = row.querySelector(
-    '.ingredient-edit-input[data-field="qty"]'
+    '.ingredient-edit-input[data-field="qtymin"]'
   );
   if (qtyInput) {
     setTimeout(() => {
@@ -1433,6 +1548,9 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
     if (typeof attachEditorTextareaAutoGrow === 'function') {
       attachEditorTextareaAutoGrow(textarea, { maxLines: 12 });
     }
+    if (typeof attachEditorNewlineListPaste === 'function') {
+      attachEditorNewlineListPaste(textarea);
+    }
   } catch (_) {}
 
   let hasPendingEdit = false;
@@ -1452,10 +1570,62 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
     }
   });
 
-  const getCommittedHeadingText = () => {
+  const getParsedIngredientRows = () => {
     const raw = String(textarea.value || '');
-    const firstLine = raw.split(/\r?\n/, 1)[0] || '';
-    return normalizeIngredientHeadingText(firstLine);
+    const parseMany =
+      typeof window.parseIngredientLines === 'function'
+        ? window.parseIngredientLines
+        : null;
+    let parsed = [];
+    try {
+      parsed = parseMany
+        ? parseMany(raw)
+        : raw
+            .split(/\r?\n/)
+            .map((line) => String(line || '').trim())
+            .filter(Boolean)
+            .map((name) => ({ name }));
+    } catch (_) {
+      parsed = raw
+        .split(/\r?\n/)
+        .map((line) => String(line || '').trim())
+        .filter(Boolean)
+        .map((name) => ({ name }));
+    }
+
+    return (Array.isArray(parsed) ? parsed : [])
+      .map((row, idx) => {
+        if (!row || !String(row.name || '').trim()) return null;
+        return {
+          quantity: row.quantity != null ? row.quantity : '',
+          quantityMin: Number.isFinite(Number(row.quantityMin))
+            ? Number(row.quantityMin)
+            : null,
+          quantityMax: Number.isFinite(Number(row.quantityMax))
+            ? Number(row.quantityMax)
+            : null,
+          quantityIsApprox: !!row.quantityIsApprox,
+          unit: row.unit || '',
+          name: String(row.name || '').trim(),
+          size: row.size || '',
+          variant: row.variant || '',
+          prepNotes: row.prepNotes || '',
+          parentheticalNote: row.parentheticalNote || '',
+          isOptional: !!row.isOptional,
+          substitutes: Array.isArray(row.substitutes) ? row.substitutes : [],
+          locationAtHome: row.locationAtHome || '',
+          subRecipeId: row.subRecipeId || null,
+          clientId: `tmp-ing-${Date.now()}-${idx}-${Math.random()
+            .toString(16)
+            .slice(2)}`,
+          lemma: '',
+          pluralByDefault: false,
+          isMassNoun: false,
+          pluralOverride: '',
+          isDeprecated: false,
+        };
+      })
+      .filter(Boolean);
   };
 
   let _didFinalizeSwap = false;
@@ -1500,11 +1670,11 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
 
   const restoreOriginal = () => finalizeSwap(replaceEl);
 
-  const isEmpty = () => !getCommittedHeadingText();
+  const isEmpty = () => getParsedIngredientRows().length === 0;
 
   const commit = async () => {
-    const headingText = getCommittedHeadingText();
-    if (!headingText) {
+    const nextRows = getParsedIngredientRows();
+    if (!nextRows.length) {
       restoreOriginal();
       return;
     }
@@ -1518,16 +1688,7 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
         const raw = Number(insertAt);
         const idx = Number.isFinite(raw) ? raw : sectionRef.ingredients.length;
         const safeIdx = Math.max(0, Math.min(idx, sectionRef.ingredients.length));
-        const heading = {
-          rowType: 'heading',
-          headingId: null,
-          headingClientId: `tmp-h-${Date.now()}-${Math.floor(
-            Math.random() * 100000
-          )}`,
-          sortOrder: null,
-          text: headingText,
-        };
-        sectionRef.ingredients.splice(safeIdx, 0, heading);
+        sectionRef.ingredients.splice(safeIdx, 0, ...nextRows);
       } else {
         restoreOriginal();
         return;
@@ -1545,10 +1706,12 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
 
     // Keep immediate in-place visual replacement; full rerender restores slot rails.
     const readOnlyLine = document.createElement('div');
-    readOnlyLine.className = 'ingredient-subsection-heading-line';
+    readOnlyLine.className = 'ingredient-line';
     const text = document.createElement('span');
-    text.className = 'ingredient-subsection-heading-text';
-    text.textContent = headingText;
+    text.className = 'ingredient-text';
+    text.textContent = `Imported ${nextRows.length} ingredient${
+      nextRows.length === 1 ? '' : 's'
+    }.`;
     readOnlyLine.appendChild(text);
     finalizeSwap(readOnlyLine);
 
@@ -1673,8 +1836,19 @@ function renderIngredientEditRowScaffold() {
   };
 
   // Scaffold helper (currently unused): keep in sync with openIngredientEditRow.
-  // qty | unit | name | var | size | prep | notes | opt
-  const labels = ['qty', 'unit', 'name', 'var', 'size', 'prep', 'notes', 'opt'];
+  // qtymin | qtymax | isaprx | unit | name | var | size | prep | notes | isopt
+  const labels = [
+    'qtymin',
+    'qtymax',
+    'isaprx',
+    'unit',
+    'name',
+    'var',
+    'size',
+    'prep',
+    'notes',
+    'isopt',
+  ];
 
   labels.forEach((lab) => {
     row.appendChild(makeCell(lab));

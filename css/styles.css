@@ -1584,6 +1584,8 @@ h1.nav-text {
 
 /* Treat each pill+field pair like a "word" in a text editor: intrinsic width, no reserved columns. */
 .ingredient-edit-cell--qty,
+.ingredient-edit-cell--qtymin,
+.ingredient-edit-cell--qtymax,
 .ingredient-edit-cell--unit,
 .ingredient-edit-cell--name,
 .ingredient-edit-cell--size,
@@ -1591,6 +1593,8 @@ h1.nav-text {
 .ingredient-edit-cell--prep,
 .ingredient-edit-cell--notes,
 .ingredient-edit-cell--opt,
+.ingredient-edit-cell--isaprx,
+.ingredient-edit-cell--isopt,
 .ingredient-edit-cell--loc {
   flex: 0 0 auto;
 }
