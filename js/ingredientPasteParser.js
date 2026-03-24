@@ -4,19 +4,30 @@
 
   const OPTIONAL_PATTERNS = [
     /\boptional\b/i,
-    /\bto taste\b/i,
-    /\bas needed\b/i,
     /\bif desired\b/i,
   ];
+  const QUALITATIVE_AMOUNT_PATTERNS = [/\bto taste\b/i, /\bas needed\b/i];
 
   const UNIT_ALIASES = {
+    t: 'tsp',
     teaspoon: 'tsp',
     teaspoons: 'tsp',
     tsp: 'tsp',
+    'tsp.': 'tsp',
+    tb: 'tbsp',
+    tbl: 'tbsp',
+    tbspn: 'tbsp',
     tablespoon: 'tbsp',
     tablespoons: 'tbsp',
     tbs: 'tbsp',
     tbsp: 'tbsp',
+    'tbsp.': 'tbsp',
+    floz: 'fl oz',
+    'fl.oz': 'fl oz',
+    'fl oz': 'fl oz',
+    fluidounce: 'fl oz',
+    fluidounces: 'fl oz',
+    c: 'cup',
     ounce: 'oz',
     ounces: 'oz',
     oz: 'oz',
@@ -24,6 +35,18 @@
     pounds: 'lb',
     lb: 'lb',
     lbs: 'lb',
+    pt: 'pt',
+    pint: 'pt',
+    pints: 'pt',
+    qt: 'qt',
+    quart: 'qt',
+    quarts: 'qt',
+    g: 'g',
+    gram: 'g',
+    grams: 'g',
+    kg: 'kg',
+    kilogram: 'kg',
+    kilograms: 'kg',
     cup: 'cup',
     cups: 'cup',
     clove: 'clove',
@@ -51,9 +74,62 @@
       .trim();
   }
 
+  function toFractionAscii(ch) {
+    const val = UNICODE_FRACTIONS[ch];
+    if (val == null) return null;
+    const map = {
+      0.25: '1/4',
+      0.5: '1/2',
+      0.75: '3/4',
+      0.3333333333333333: '1/3',
+      0.6666666666666666: '2/3',
+      0.125: '1/8',
+      0.375: '3/8',
+      0.625: '5/8',
+      0.875: '7/8',
+    };
+    return map[val] || null;
+  }
+
+  function normalizeUnicodeFractionsInText(text) {
+    let out = String(text || '');
+    out = out.replace(
+      /(\d)\s*([¼½¾⅓⅔⅛⅜⅝⅞])/g,
+      (_, whole, frac) => `${whole} ${toFractionAscii(frac) || frac}`
+    );
+    out = out.replace(/([¼½¾⅓⅔⅛⅜⅝⅞])/g, (m) => toFractionAscii(m) || m);
+    return out;
+  }
+
   function detectOptional(rawLine) {
     const line = String(rawLine || '');
     return OPTIONAL_PATTERNS.some((rx) => rx.test(line));
+  }
+
+  function extractQualitativeAmountPhrases(text) {
+    let src = normalizeWhitespace(text);
+    const phrases = [];
+    if (!src) return { text: '', phrases: [] };
+
+    const addPhrase = (value) => {
+      const next = normalizeWhitespace(value || '').toLowerCase();
+      if (!next) return;
+      if (!phrases.includes(next)) phrases.push(next);
+    };
+
+    const leading = src.match(/^(as needed|to taste)\s*,?\s+(.+)$/i);
+    if (leading) {
+      addPhrase(leading[1]);
+      src = normalizeWhitespace(leading[2]);
+    }
+
+    const trailing = src.match(/^(.+?)\s+(to taste|as needed)$/i);
+    if (trailing) {
+      src = normalizeWhitespace(trailing[1]);
+      addPhrase(trailing[2]);
+    }
+
+    return { text: src, phrases };
   }
 
   function stripOptionalLanguage(text) {
@@ -67,7 +143,7 @@
   }
 
   function parseFractionText(token) {
-    const t = String(token || '').trim();
+    const t = normalizeUnicodeFractionsInText(String(token || '')).trim();
     if (!t) return null;
 
     if (UNICODE_FRACTIONS[t] != null) return UNICODE_FRACTIONS[t];
@@ -94,7 +170,7 @@
   }
 
   function parseLeadingQuantity(text) {
-    const src = String(text || '').trim();
+    const src = normalizeUnicodeFractionsInText(String(text || '').trim());
     if (!src) return { quantity: '', rest: '' };
 
     const qtyMatch = src.match(
@@ -110,7 +186,11 @@
   }
 
   function parseQuantityDescriptor(text) {
-    const src = String(text || '').trim();
+    const src = normalizeUnicodeFractionsInText(
+      String(text || '')
+        .replace(/[–—]/g, '-')
+        .trim()
+    );
     if (!src) {
       return {
         quantity: '',
@@ -121,7 +201,7 @@
       };
     }
 
-    const approxRegex = /^(about|approx(?:\.|imately)?|around|~)\s+/i;
+    const approxRegex = /^(about|approx(?:\.|imately)?|around|roughly|~)\s+/i;
     let rest = src;
     let isApprox = false;
     const approxMatch = rest.match(approxRegex);
@@ -131,6 +211,25 @@
     }
 
     const numToken = '(\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])';
+    const plusRx = new RegExp(`^${numToken}\\s*\\+\\s*${numToken}\\b\\s*(.*)$`, 'i');
+    const plusMatch = rest.match(plusRx);
+    if (plusMatch) {
+      const left = parseFractionText(plusMatch[1]);
+      const right = parseFractionText(plusMatch[2]);
+      const sum =
+        Number.isFinite(left) && Number.isFinite(right)
+          ? Number(left) + Number(right)
+          : null;
+      const tail = String(plusMatch[3] || '').trim();
+      return {
+        quantity: `${isApprox ? 'about ' : ''}${plusMatch[1]} + ${plusMatch[2]}`.trim(),
+        quantityMin: Number.isFinite(sum) ? sum : null,
+        quantityMax: Number.isFinite(sum) ? sum : null,
+        quantityIsApprox: isApprox,
+        rest: tail,
+      };
+    }
+
     const rangeRx = new RegExp(`^${numToken}\\s*(?:to|-)\\s*${numToken}\\b\\s*(.*)$`, 'i');
     const rangeMatch = rest.match(rangeRx);
     if (rangeMatch) {
@@ -178,16 +277,30 @@
     const src = String(text || '').trim();
     if (!src) return { unit: '', rest: '' };
 
-    const m = src.match(/^([A-Za-z]+\.?)(?:\s+|$)(.*)$/);
-    if (!m) return { unit: '', rest: src };
+    const m2 = src.match(/^([A-Za-z]+\.?)\s+([A-Za-z]+\.?)(?:\s+|$)(.*)$/);
+    if (m2) {
+      const twoWordRaw = `${m2[1]} ${m2[2]}`
+        .toLowerCase()
+        .replace(/\./g, '')
+        .trim();
+      const twoWordMapped = UNIT_ALIASES[twoWordRaw];
+      if (twoWordMapped) {
+        return {
+          unit: twoWordMapped,
+          rest: String(m2[3] || '').trim(),
+        };
+      }
+    }
 
-    const rawUnit = m[1].replace(/\.$/, '').toLowerCase();
-    const mapped = UNIT_ALIASES[rawUnit];
+    const m1 = src.match(/^([A-Za-z]+\.?)(?:\s+|$)(.*)$/);
+    if (!m1) return { unit: '', rest: src };
+    const rawUnit = m1[1].toLowerCase().replace(/\.$/, '');
+    const mapped = UNIT_ALIASES[rawUnit] || UNIT_ALIASES[`${rawUnit}.`];
     if (!mapped) return { unit: '', rest: src };
 
     return {
       unit: mapped,
-      rest: String(m[2] || '').trim(),
+      rest: String(m1[2] || '').trim(),
     };
   }
 
@@ -202,29 +315,154 @@
     return { head, prepNotes: prep };
   }
 
+  function extractParenthetical(text) {
+    const src = String(text || '');
+    const m = src.match(/\(([^)]*)\)/);
+    if (!m) return { text: src, parenthetical: '' };
+    const inner = normalizeWhitespace(m[1]);
+    const next = normalizeWhitespace(src.replace(m[0], ' '));
+    return {
+      text: next,
+      parenthetical: inner,
+    };
+  }
+
+  function extractHeapingQualifier(text) {
+    const src = String(text || '').trim();
+    const m = src.match(/^heaping\s+(.*)$/i);
+    if (!m) return { text: src, heaping: '' };
+    return {
+      text: String(m[1] || '').trim(),
+      heaping: 'heaping',
+    };
+  }
+
+  function parseContainerMultiplier(quantityParsed) {
+    if (!quantityParsed || quantityParsed.quantityMin == null) return null;
+    const src = String(quantityParsed.rest || '').trim();
+    if (!src) return null;
+
+    const m = src.match(
+      /^(?:x|×)\s+(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?)\s+([A-Za-z]+\.?)\s+(cans?|bottles?|jars?|boxes?|packages?|pkgs?)\b\s*(.*)$/i
+    );
+    if (!m) return null;
+
+    const packQtyRaw = String(m[1] || '').trim();
+    const packUnitRaw = String(m[2] || '')
+      .toLowerCase()
+      .replace(/\.$/, '');
+    const containerRaw = String(m[3] || '')
+      .toLowerCase()
+      .replace(/\.$/, '');
+    const tail = String(m[4] || '').trim();
+    const packUnit = UNIT_ALIASES[packUnitRaw] || packUnitRaw;
+    const containerUnit = UNIT_ALIASES[containerRaw] || containerRaw;
+    const size = normalizeWhitespace(`${packQtyRaw} ${packUnit}`);
+
+    return {
+      quantityText: String(quantityParsed.quantity || '').trim(),
+      quantityMin: quantityParsed.quantityMin,
+      quantityMax: quantityParsed.quantityMax,
+      quantityIsApprox: !!quantityParsed.quantityIsApprox,
+      unit: containerUnit,
+      size,
+      rest: tail,
+    };
+  }
+
+  function parseSingleSizedContainer(quantityParsed) {
+    if (!quantityParsed || quantityParsed.quantityMin == null) return null;
+    const src = String(quantityParsed.rest || '').trim();
+    if (!src) return null;
+
+    const m = src.match(
+      /^([A-Za-z]+\.?)\s+(cans?|bottles?|jars?|boxes?|packages?|pkgs?)\b\s*(.*)$/i
+    );
+    if (!m) return null;
+
+    const sizeUnitRaw = String(m[1] || '')
+      .toLowerCase()
+      .replace(/\.$/, '');
+    const containerRaw = String(m[2] || '')
+      .toLowerCase()
+      .replace(/\.$/, '');
+    const tail = String(m[3] || '').trim();
+
+    const sizeUnit = UNIT_ALIASES[sizeUnitRaw] || sizeUnitRaw;
+    const containerUnit = UNIT_ALIASES[containerRaw] || containerRaw;
+    const sizeAmount = String(quantityParsed.quantity || '').trim();
+    const size = normalizeWhitespace(`${sizeAmount} ${sizeUnit}`);
+
+    return {
+      quantityText: '1',
+      quantityMin: 1,
+      quantityMax: 1,
+      quantityIsApprox: false,
+      unit: containerUnit,
+      size,
+      rest: tail,
+    };
+  }
+
   function parseIngredientLine(line) {
     const raw = normalizeWhitespace(line);
     if (!raw) return null;
 
     const optional = detectOptional(raw);
-    const split = splitPrepNotes(raw);
-    const qtyParsed = parseQuantityDescriptor(split.head);
-    const unitParsed = parseLeadingUnit(qtyParsed.rest);
+    const qualitative = extractQualitativeAmountPhrases(raw);
+    const split = splitPrepNotes(qualitative.text || raw);
+    const parentheticalSplit = extractParenthetical(split.head);
+    const heapingSplit = extractHeapingQualifier(parentheticalSplit.text);
+    const qtyParsed = parseQuantityDescriptor(heapingSplit.text);
+    const multiplierParsed = parseContainerMultiplier(qtyParsed);
+    const sizedContainerParsed = multiplierParsed
+      ? null
+      : parseSingleSizedContainer(qtyParsed);
+    const unitParsed = multiplierParsed || sizedContainerParsed
+      ? {
+          unit: (multiplierParsed || sizedContainerParsed).unit,
+          rest: (multiplierParsed || sizedContainerParsed).rest,
+        }
+      : parseLeadingUnit(qtyParsed.rest);
+    const combinedPrep = normalizeWhitespace(
+      [split.prepNotes, heapingSplit.heaping].filter(Boolean).join(', ')
+    );
 
-    const name = stripOptionalLanguage(unitParsed.rest || qtyParsed.rest || split.head);
-    const prep = stripOptionalLanguage(split.prepNotes || '');
+    const name = stripOptionalLanguage(
+      unitParsed.rest || (multiplierParsed && multiplierParsed.rest) || qtyParsed.rest || split.head
+    );
+    const prep = stripOptionalLanguage(combinedPrep || '');
 
     return {
-      quantity: qtyParsed.quantity,
-      quantityMin: qtyParsed.quantityMin,
-      quantityMax: qtyParsed.quantityMax,
-      quantityIsApprox: !!qtyParsed.quantityIsApprox,
+      quantity: multiplierParsed || sizedContainerParsed
+        ? (multiplierParsed || sizedContainerParsed).quantityText
+        : qtyParsed.quantity,
+      quantityMin: multiplierParsed || sizedContainerParsed
+        ? (multiplierParsed || sizedContainerParsed).quantityMin
+        : qtyParsed.quantityMin,
+      quantityMax: multiplierParsed || sizedContainerParsed
+        ? (multiplierParsed || sizedContainerParsed).quantityMax
+        : qtyParsed.quantityMax,
+      quantityIsApprox: multiplierParsed || sizedContainerParsed
+        ? !!(multiplierParsed || sizedContainerParsed).quantityIsApprox
+        : !!qtyParsed.quantityIsApprox,
       unit: unitParsed.unit || '',
       name: name || raw,
       variant: '',
-      size: '',
+      size: multiplierParsed || sizedContainerParsed
+        ? (multiplierParsed || sizedContainerParsed).size
+        : '',
       prepNotes: prep,
-      parentheticalNote: '',
+      parentheticalNote: normalizeWhitespace(
+        [
+          stripOptionalLanguage(parentheticalSplit.parenthetical || ''),
+          ...qualitative.phrases.filter(
+            (phrase) => !QUALITATIVE_AMOUNT_PATTERNS.every((rx) => !rx.test(phrase))
+          ),
+        ]
+          .filter(Boolean)
+          .join(', ')
+      ),
       isOptional: !!optional,
       substitutes: [],
       locationAtHome: '',

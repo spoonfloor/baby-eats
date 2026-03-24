@@ -1,0 +1,191 @@
+[
+  {
+    "line": "1 cup sugar",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "quantityIsApprox": false,
+      "unit": "cup",
+      "name": "sugar"
+    }
+  },
+  {
+    "line": "1 1/2 cups flour",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "flour"
+    }
+  },
+  {
+    "line": "1½ cups flour",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "flour"
+    }
+  },
+  {
+    "line": "1-2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 to 2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1–2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 + 1/2 cups broth",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "broth"
+    }
+  },
+  {
+    "line": "about 2 cups milk",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "quantityIsApprox": true,
+      "unit": "cup",
+      "name": "milk"
+    }
+  },
+  {
+    "line": "roughly 2 cups milk",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "quantityIsApprox": true,
+      "unit": "cup",
+      "name": "milk"
+    }
+  },
+  {
+    "line": "heaping 1 tbsp brown sugar",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "quantityIsApprox": false,
+      "unit": "tbsp",
+      "name": "brown sugar",
+      "prepNotesContains": "heaping"
+    }
+  },
+  {
+    "line": "2 tb olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "2 tbl olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 t salt",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tsp",
+      "name": "salt"
+    }
+  },
+  {
+    "line": "8 fl oz water",
+    "expect": {
+      "quantityMin": 8,
+      "quantityMax": 8,
+      "unit": "fl oz",
+      "name": "water"
+    }
+  },
+  {
+    "line": "2 x 14 oz cans crushed tomatoes",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "can",
+      "nameContains": "crushed tomatoes",
+      "sizeContains": "14 oz"
+    }
+  },
+  {
+    "line": "2 cloves garlic (minced)",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "clove",
+      "name": "garlic",
+      "parentheticalNote": "minced"
+    }
+  },
+  {
+    "line": "salt to taste",
+    "expect": {
+      "name": "salt",
+      "isOptional": false,
+      "parentheticalNote": "to taste",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "as needed, water",
+    "expect": {
+      "name": "water",
+      "isOptional": false,
+      "parentheticalNote": "as needed",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "SOMETHING WEIRD ###",
+    "expect": {
+      "name": "SOMETHING WEIRD ###",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "28 oz can crushed tomatoes",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "can",
+      "sizeContains": "28 oz",
+      "nameContains": "crushed tomatoes"
+    }
+  }
+]

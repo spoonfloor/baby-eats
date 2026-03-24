@@ -1511,16 +1511,24 @@ function getIngredientNounDisplay(line) {
   const base = lemma || name;
   if (!base) return '';
 
-  const pluralByDefault = !!(
-    line.pluralByDefault ??
-    line.plural_by_default ??
-    0
-  );
+  const hasPluralByDefault =
+    line.pluralByDefault != null || line.plural_by_default != null;
+  const hasIsMassNoun =
+    line.isMassNoun != null || line.is_mass_noun != null;
+  const pluralByDefault = !!(line.pluralByDefault ?? line.plural_by_default ?? 0);
   const isMassNoun = !!(line.isMassNoun ?? line.is_mass_noun ?? 0);
   const pluralOverride =
     line.pluralOverride ?? line.plural_override ?? '';
+  const hasGrammarMetadata =
+    !!lemma ||
+    !!String(pluralOverride || '').trim() ||
+    hasPluralByDefault ||
+    hasIsMassNoun;
 
   if (isMassNoun) return base;
+  // Unknown/free-text ingredients should stay exactly as typed to avoid
+  // over-pluralization (e.g., "olive oils", "waters", "tomatoeses").
+  if (!hasGrammarMetadata) return name || base;
 
   const qtyIsNumeric = isNumericQuantity(line.quantity);
   if (qtyIsNumeric) {

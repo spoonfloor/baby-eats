@@ -110,6 +110,7 @@ function getUnitDisplay(unitText, numericVal) {
       'tsp',
       'tbsp',
       'cup',
+      'fl oz',
       'oz',
       'lb',
       'pt',
@@ -453,24 +454,33 @@ function renderIngredient(line) {
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
 
-  const hasFiniteNumber = (v) => Number.isFinite(Number(v));
+  const hasFiniteNumber = (v) => {
+    if (v == null) return false;
+    const raw = String(v).trim();
+    if (!raw) return false;
+    const n = Number(raw);
+    return Number.isFinite(n);
+  };
   const formatNumericDisplay = (v) => decimalToFractionDisplay(Number(v));
 
-  const qMin = hasFiniteNumber(line.quantityMin) ? Number(line.quantityMin) : null;
-  const qMax = hasFiniteNumber(line.quantityMax) ? Number(line.quantityMax) : null;
+  // Guard against null -> 0 coercion and never show zero quantities.
+  const qMinRaw = hasFiniteNumber(line.quantityMin) ? Number(line.quantityMin) : null;
+  const qMaxRaw = hasFiniteNumber(line.quantityMax) ? Number(line.quantityMax) : null;
+  const qMin = qMinRaw != null && qMinRaw > 0 ? qMinRaw : null;
+  const qMax = qMaxRaw != null && qMaxRaw > 0 ? qMaxRaw : null;
   const qApprox = !!line.quantityIsApprox;
 
-  // Prefer raw quantity text when present; otherwise derive a display string
-  // from structured min/max fields.
+  // Prefer structured quantity fields when present; fall back to raw quantity text.
+  // This keeps paste/import and edit flows consistent (single source of truth).
   let quantityForDisplay = '';
-  if (line.quantity != null && String(line.quantity).trim() !== '') {
-    quantityForDisplay = String(line.quantity).trim();
-  } else if (qMin != null && qMax != null) {
+  if (qMin != null && qMax != null) {
     quantityForDisplay =
       Math.abs(qMin - qMax) < 1e-9
         ? formatNumericDisplay(qMin)
         : `${formatNumericDisplay(qMin)} to ${formatNumericDisplay(qMax)}`;
     if (qApprox) quantityForDisplay = `about ${quantityForDisplay}`;
+  } else if (line.quantity != null && String(line.quantity).trim() !== '') {
+    quantityForDisplay = String(line.quantity).trim();
   }
 
   // Show quantity as fraction if numeric-ish and singular.
@@ -497,17 +507,30 @@ function renderIngredient(line) {
     /^[\d.]+$/.test(quantityForDisplay);
 
   let mainText;
+  const sizeValue = String(line.size || '').trim();
   if (isNumericQty && quantityForDisplay !== '') {
     const numericVal = parseFloat(quantityForDisplay);
     const unitText = getUnitDisplay(line.unit || '', numericVal);
-    mainText = [qtyDisplay, unitText, baseName].filter(Boolean).join(' ');
+    const amountUnitText =
+      sizeValue && unitText
+        ? `${sizeValue} ${unitText}`
+        : sizeValue || unitText;
+    mainText = [qtyDisplay, amountUnitText, baseName].filter(Boolean).join(' ');
   } else if (quantityForDisplay) {
     // Free-text quantities and ranges should still read naturally.
-    mainText = [quantityForDisplay, line.unit || '', baseName]
+    const amountUnitText =
+      sizeValue && line.unit
+        ? `${sizeValue} ${line.unit}`
+        : sizeValue || line.unit || '';
+    mainText = [quantityForDisplay, amountUnitText, baseName]
       .filter(Boolean)
       .join(' ');
   } else {
-    mainText = [line.unit, baseName].filter(Boolean).join(' ');
+    const amountUnitText =
+      sizeValue && line.unit
+        ? `${sizeValue} ${line.unit}`
+        : sizeValue || line.unit || '';
+    mainText = [amountUnitText, baseName].filter(Boolean).join(' ');
   }
 
   // --- Append prep notes (if still left) ---
@@ -922,6 +945,69 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   ];
   fieldsConfig.forEach((cfg) => row.appendChild(makeCell(cfg)));
 
+  const qtyMinInput = row.querySelector(
+    '.ingredient-edit-input[data-field="qtymin"]'
+  );
+  const qtyMaxInput = row.querySelector(
+    '.ingredient-edit-input[data-field="qtymax"]'
+  );
+  const qtyMirrorState = {
+    minTouched: false,
+    maxTouched: false,
+    locked: false,
+  };
+
+  const setQtyFieldValue = (inputEl, nextValue) => {
+    if (!inputEl) return;
+    const next = String(nextValue == null ? '' : nextValue);
+    if (inputEl.value === next) return;
+    inputEl.value = next;
+    // Keep autosize in sync without triggering dirty-state listeners.
+    try {
+      inputEl.dispatchEvent(new Event('input', { bubbles: false }));
+    } catch (_) {}
+  };
+
+  const maybeMirrorQuantityFields = (source) => {
+    if (qtyMirrorState.locked || !qtyMinInput || !qtyMaxInput) return;
+
+    const minVal = String(qtyMinInput.value || '').trim();
+    const maxVal = String(qtyMaxInput.value || '').trim();
+
+    if (source === 'min') {
+      if (!qtyMirrorState.maxTouched && maxVal === '' && minVal !== '') {
+        setQtyFieldValue(qtyMaxInput, minVal);
+      }
+      return;
+    }
+
+    if (source === 'max') {
+      if (!qtyMirrorState.minTouched && minVal === '' && maxVal !== '') {
+        setQtyFieldValue(qtyMinInput, maxVal);
+      }
+    }
+  };
+
+  const handleQtyInput = (source, e) => {
+    if (!e || e.isTrusted === false) return;
+    if (source === 'min') qtyMirrorState.minTouched = true;
+    if (source === 'max') qtyMirrorState.maxTouched = true;
+
+    maybeMirrorQuantityFields(source);
+
+    // After both fields have direct user intent, stop all auto-mirroring.
+    if (qtyMirrorState.minTouched && qtyMirrorState.maxTouched) {
+      qtyMirrorState.locked = true;
+    }
+  };
+
+  if (qtyMinInput) {
+    qtyMinInput.addEventListener('input', (e) => handleQtyInput('min', e));
+  }
+  if (qtyMaxInput) {
+    qtyMaxInput.addEventListener('input', (e) => handleQtyInput('max', e));
+  }
+
   // Any keystroke in any ingredient field should immediately enable Cancel/Save.
   row.addEventListener('input', (e) => {
     // Ignore synthetic/programmatic input events (e.g. our own prefill/autosize nudges).
@@ -1191,8 +1277,8 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
           .slice(2)}`,
         // Pluralization fields (populated from DB below)
         lemma: '',
-        pluralByDefault: false,
-        isMassNoun: false,
+        pluralByDefault: null,
+        isMassNoun: null,
         pluralOverride: '',
         isDeprecated: false,
       };
@@ -1593,17 +1679,21 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
         .map((name) => ({ name }));
     }
 
+    const toFiniteNumberOrNull = (value) => {
+      if (value == null) return null;
+      const raw = String(value).trim();
+      if (!raw) return null;
+      const numeric = Number(raw);
+      return Number.isFinite(numeric) ? numeric : null;
+    };
+
     return (Array.isArray(parsed) ? parsed : [])
       .map((row, idx) => {
         if (!row || !String(row.name || '').trim()) return null;
         return {
           quantity: row.quantity != null ? row.quantity : '',
-          quantityMin: Number.isFinite(Number(row.quantityMin))
-            ? Number(row.quantityMin)
-            : null,
-          quantityMax: Number.isFinite(Number(row.quantityMax))
-            ? Number(row.quantityMax)
-            : null,
+          quantityMin: toFiniteNumberOrNull(row.quantityMin),
+          quantityMax: toFiniteNumberOrNull(row.quantityMax),
           quantityIsApprox: !!row.quantityIsApprox,
           unit: row.unit || '',
           name: String(row.name || '').trim(),
@@ -1619,8 +1709,8 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
             .toString(16)
             .slice(2)}`,
           lemma: '',
-          pluralByDefault: false,
-          isMassNoun: false,
+          pluralByDefault: null,
+          isMassNoun: null,
           pluralOverride: '',
           isDeprecated: false,
         };
