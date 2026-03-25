@@ -138,13 +138,6 @@ CREATE TABLE IF NOT EXISTS "stores" (
 	"location_name"	TEXT NOT NULL,
 	PRIMARY KEY("ID" AUTOINCREMENT)
 );
-CREATE TABLE IF NOT EXISTS "unit_suggestions" (
-	"code"	TEXT,
-	"use_count"	INTEGER NOT NULL DEFAULT 0,
-	"last_used_at"	INTEGER,
-	"is_hidden"	INTEGER NOT NULL DEFAULT 0,
-	PRIMARY KEY("code")
-);
 CREATE TABLE IF NOT EXISTS "units" (
 	"code"	TEXT,
 	"name_singular"	TEXT NOT NULL,

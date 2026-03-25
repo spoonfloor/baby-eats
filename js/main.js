@@ -3152,28 +3152,6 @@ async function loadUnitsPage() {
     );
   }
 
-  // --- Load unit suggestions (soft-add pool) ---
-  let suggestionRows = [];
-  try {
-    const qs = db.exec(`
-      SELECT code, use_count, last_used_at
-      FROM unit_suggestions
-      WHERE COALESCE(is_hidden, 0) = 0
-      ORDER BY COALESCE(last_used_at, 0) DESC,
-               COALESCE(use_count, 0) DESC,
-               code COLLATE NOCASE;
-    `);
-    if (qs.length > 0) {
-      suggestionRows = qs[0].values.map(([code, useCount, lastUsedAt]) => ({
-        code,
-        useCount: useCount == null ? 0 : Number(useCount),
-        lastUsedAt: lastUsedAt == null ? null : Number(lastUsedAt),
-      }));
-    }
-  } catch (_) {
-    suggestionRows = [];
-  }
-
   const persistDb = () => {
     try {
       const binaryArray = db.export();
@@ -3191,11 +3169,10 @@ async function loadUnitsPage() {
     }
   };
 
-  function renderUnitsList({ units, suggestions }) {
+  function renderUnitsList({ units }) {
     list.innerHTML = '';
 
     const rows = Array.isArray(units) ? units : [];
-    const sugg = Array.isArray(suggestions) ? suggestions : [];
 
     rows.forEach((unit) => {
       const li = document.createElement('li');
@@ -3329,235 +3306,12 @@ async function loadUnitsPage() {
       list.appendChild(li);
     });
 
-    if (sugg.length > 0) {
-      const header = document.createElement('li');
-      header.textContent = 'Suggestions';
-      header.className = 'list-section-label';
-      header.tabIndex = -1;
-      list.appendChild(header);
-
-      const guessCategory = (code) => {
-        const c = (code || '').trim().toLowerCase();
-        if (!c) return 'misc';
-        const volume = new Set([
-          'tsp',
-          'tbsp',
-          'cup',
-          'pt',
-          'qt',
-          'gal',
-          'floz',
-          'ml',
-          'l',
-        ]);
-        const mass = new Set(['g', 'kg', 'oz', 'lb']);
-        const count = new Set([
-          'each',
-          'pkg',
-          'can',
-          'jar',
-          'bunch',
-          'clove',
-          'slice',
-          'bag',
-          'box',
-          'bottle',
-          'packet',
-        ]);
-        if (volume.has(c)) return 'volume';
-        if (mass.has(c)) return 'mass';
-        if (count.has(c)) return 'count';
-        return 'misc';
-      };
-
-      const guessPlural = (singular) => {
-        try {
-          if (typeof window.pluralizeEnglishNoun === 'function') {
-            return window.pluralizeEnglishNoun(singular, '');
-          }
-        } catch (_) {}
-        return (singular || '') + 's';
-      };
-
-      const removeSuggestion = async (code) => {
-        const c = (code || '').trim();
-        if (!c) return false;
-        const usedCount = countRecipesUsingUnit(c);
-
-        if (usedCount > 0) {
-          const ok = await uiConfirm({
-            title: 'Remove Unit Suggestion',
-            message: `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
-              usedCount === 1 ? '' : 's'
-            }.\n\nRemoving will hide it from suggestions (it will remain in recipes until replaced).`,
-            confirmText: 'Remove',
-            cancelText: 'Cancel',
-            danger: true,
-          });
-          if (!ok) return false;
-          try {
-            db.run(
-              'UPDATE unit_suggestions SET is_hidden = 1 WHERE code = ?;',
-              [c.toLowerCase()],
-            );
-          } catch (err) {
-            console.error('❌ Failed to hide unit suggestion:', err);
-            uiToast('Failed to remove suggestion. See console for details.');
-            return false;
-          }
-        } else {
-          const ok = await uiConfirm({
-            title: 'Delete Unit Suggestion',
-            message: `Remove '${c}' permanently?\n\nIt is used in 0 recipes. This will delete it from suggestions.`,
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            danger: true,
-          });
-          if (!ok) return false;
-          try {
-            db.run('DELETE FROM unit_suggestions WHERE code = ?;', [
-              c.toLowerCase(),
-            ]);
-          } catch (err) {
-            console.error('❌ Failed to delete unit suggestion:', err);
-            uiToast('Failed to delete suggestion. See console for details.');
-            return false;
-          }
-        }
-
-        persistDb();
-        return true;
-      };
-
-      const promoteSuggestion = async (code) => {
-        const c = (code || '').trim();
-        if (!c) return false;
-
-        const ok = await uiConfirm({
-          title: 'Add Unit',
-          message: `Add '${c}' to Units?`,
-          confirmText: 'Add',
-          cancelText: 'Cancel',
-          danger: false,
-        });
-        if (!ok) return false;
-
-        // Insert into units (best-effort defaults) and then open the unit editor.
-        try {
-          const codeLower = c.toLowerCase();
-
-          // If already an official unit, drop the suggestion and open the editor.
-          try {
-            const ex = db.exec(
-              'SELECT code, name_singular, name_plural, category FROM units WHERE lower(code) = lower(?) LIMIT 1;',
-              [codeLower],
-            );
-            if (ex.length && ex[0].values.length) {
-              try {
-                db.run('DELETE FROM unit_suggestions WHERE code = ?;', [
-                  codeLower,
-                ]);
-              } catch (_) {}
-              persistDb();
-
-              sessionStorage.setItem('selectedUnitCode', codeLower);
-              sessionStorage.setItem(
-                'selectedUnitNameSingular',
-                ex[0].values[0][1] || '',
-              );
-              sessionStorage.setItem(
-                'selectedUnitNamePlural',
-                ex[0].values[0][2] || '',
-              );
-              sessionStorage.setItem(
-                'selectedUnitCategory',
-                ex[0].values[0][3] || '',
-              );
-              sessionStorage.removeItem('selectedUnitIsNew');
-              window.location.href = 'unitEditor.html';
-              return true;
-            }
-          } catch (_) {}
-
-          const nameSingular = c;
-          const namePlural = guessPlural(nameSingular);
-          const category = guessCategory(codeLower);
-
-          // Compute next sort_order
-          let nextSort = 999999;
-          try {
-            const q = db.exec(
-              'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;',
-            );
-            if (q.length && q[0].values.length) {
-              const v = Number(q[0].values[0][0]);
-              if (Number.isFinite(v)) nextSort = v;
-            }
-          } catch (_) {}
-
-          db.run(
-            'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
-            [codeLower, nameSingular, namePlural, category, nextSort],
-          );
-
-          // Remove from suggestions list once promoted.
-          try {
-            db.run('DELETE FROM unit_suggestions WHERE code = ?;', [codeLower]);
-          } catch (_) {}
-        } catch (err) {
-          console.error('❌ Failed to promote unit suggestion:', err);
-          uiToast('Failed to add unit. See console for details.');
-          return false;
-        }
-
-        persistDb();
-
-        sessionStorage.setItem('selectedUnitCode', codeLower);
-        sessionStorage.setItem('selectedUnitNameSingular', c);
-        sessionStorage.setItem('selectedUnitNamePlural', '');
-        sessionStorage.setItem('selectedUnitCategory', '');
-        sessionStorage.removeItem('selectedUnitIsNew');
-        window.location.href = 'unitEditor.html';
-        return true;
-      };
-
-      sugg.forEach((s) => {
-        const li = document.createElement('li');
-        li.className = 'unit-suggestion-row';
-        li.textContent = s.code || '';
-
-        li.addEventListener('click', (event) => {
-          const wantsRemove = event.ctrlKey || event.metaKey;
-          if (wantsRemove) {
-            event.preventDefault();
-            event.stopPropagation();
-            void (async () => {
-              const ok = await removeSuggestion(s.code || '');
-              if (ok) window.location.reload();
-            })();
-            return;
-          }
-          void promoteSuggestion(s.code || '');
-        });
-
-        li.addEventListener('contextmenu', (event) => {
-          event.preventDefault();
-          void (async () => {
-            const ok = await removeSuggestion(s.code || '');
-            if (ok) window.location.reload();
-          })();
-        });
-
-        list.appendChild(li);
-      });
-    }
-
     // Keep selection valid after rerender (search/filter changes).
     listNav?.syncAfterRender?.();
   }
 
   // Initial render
-  renderUnitsList({ units: unitRows, suggestions: suggestionRows });
+  renderUnitsList({ units: unitRows });
 
   async function openCreateUnitDialog() {
     if (!window.ui) {
@@ -3671,7 +3425,7 @@ async function loadUnitsPage() {
       clearBtn.style.display = query ? 'inline' : 'none';
 
       if (!query) {
-        renderUnitsList({ units: unitRows, suggestions: suggestionRows });
+        renderUnitsList({ units: unitRows });
         return;
       }
 
@@ -3687,22 +3441,13 @@ async function loadUnitsPage() {
         return haystack.includes(query);
       });
 
-      const filteredSuggestions = suggestionRows.filter((s) =>
-        String(s.code || '')
-          .toLowerCase()
-          .includes(query),
-      );
-
-      renderUnitsList({
-        units: filteredUnits,
-        suggestions: filteredSuggestions,
-      });
+      renderUnitsList({ units: filteredUnits });
     });
 
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
       clearBtn.style.display = 'none';
-      renderUnitsList({ units: unitRows, suggestions: suggestionRows });
+      renderUnitsList({ units: unitRows });
       searchInput.focus();
     });
 

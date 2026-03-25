@@ -7,6 +7,118 @@
     /\bif desired\b/i,
   ];
   const QUALITATIVE_AMOUNT_PATTERNS = [/\bto taste\b/i, /\bas needed\b/i];
+  // Product-driven compounds that should stay as full ingredient names.
+  // These are lexicalized ingredients, not adjective+base variant pairs.
+  const PROTECTED_COMPOUND_NAMES = new Set(
+    [
+      'green onion',
+      'spring onion',
+      'bell pepper',
+      'chile pepper',
+      'jalapeno pepper',
+      'serrano pepper',
+      'sweet potato',
+      'green bean',
+      'snap pea',
+      'snow pea',
+      'bok choy',
+      'brussels sprout',
+      'baby spinach',
+      'garbanzo bean',
+      'black-eyed pea',
+      'soy sauce',
+      'fish sauce',
+      'worcestershire sauce',
+      'coconut milk',
+      'peanut butter',
+      'black pepper',
+      'white pepper',
+      'red pepper',
+      'corn syrup',
+      'baking soda',
+      'baking powder',
+      'vanilla extract',
+      'orange extract',
+    ].map((v) => String(v || '').toLowerCase())
+  );
+
+  function normalizeDash(text) {
+    return String(text || '')
+      .replace(/[‐‑–—]/g, '-')
+      .replace(/\s*-\s*/g, '-');
+  }
+
+  function singularizeSimpleNoun(noun) {
+    const n = String(noun || '').trim().toLowerCase();
+    if (!n) return '';
+    if (n === 'tomatoes') return 'tomato';
+    if (n.endsWith('ies') && n.length > 3) return `${n.slice(0, -3)}y`;
+    if (n.endsWith('es') && /(ches|shes|xes|zes|ses)$/.test(n)) {
+      return n.slice(0, -2);
+    }
+    if (n.endsWith('s') && !n.endsWith('ss')) return n.slice(0, -1);
+    return n;
+  }
+
+  function splitIngredientNameAndVariant(nameText) {
+    const raw = normalizeWhitespace(nameText);
+    if (!raw) return { name: '', variant: '' };
+    const lower = raw.toLowerCase();
+    if (PROTECTED_COMPOUND_NAMES.has(lower)) {
+      return { name: raw, variant: '' };
+    }
+
+    // Keep these as distinct ingredients, not "oil" variants.
+    if (lower === 'olive oil' || lower === 'sesame oil') {
+      return { name: lower, variant: '' };
+    }
+
+    // High-confidence targeted split: olive oil style variants.
+    const oliveMatch = normalizeDash(lower).match(
+      /^(extra-virgin|virgin|light)\s+olive oil$/
+    );
+    if (oliveMatch) {
+      return {
+        name: 'olive oil',
+        variant: oliveMatch[1],
+      };
+    }
+
+    // High-confidence targeted split: sesame oil style variants.
+    const sesameMatch = normalizeDash(lower).match(/^(toasted|dark|light)\s+sesame oil$/);
+    if (sesameMatch) {
+      return {
+        name: 'sesame oil',
+        variant: sesameMatch[1],
+      };
+    }
+
+    // Group generic oils under "oil", preserving source modifier as variant.
+    // e.g., "canola oil" -> { name: "oil", variant: "canola" }
+    const genericOilMatch = lower.match(/^([a-z][a-z-]*(?:\s+[a-z][a-z-]*)?)\s+oil$/);
+    if (genericOilMatch) {
+      const oilType = normalizeWhitespace(genericOilMatch[1] || '');
+      if (oilType && oilType !== 'olive' && oilType !== 'sesame') {
+        return {
+          name: 'oil',
+          variant: oilType,
+        };
+      }
+    }
+
+    // High-confidence tomato processing descriptors.
+    const tomatoMatch = normalizeDash(lower).match(
+      /^(crushed|diced|whole|peeled|stewed|fire-roasted|roasted|sun-dried)\s+tomatoes?$/
+    );
+    if (tomatoMatch) {
+      return {
+        name: 'tomato',
+        variant: tomatoMatch[1],
+      };
+    }
+
+    return { name: raw, variant: '' };
+  }
 
   const UNIT_ALIASES = {
     t: 'tsp',
@@ -53,6 +165,8 @@
     cloves: 'clove',
     can: 'can',
     cans: 'can',
+    bunch: 'bunch',
+    bunches: 'bunch',
   };
 
   const UNICODE_FRACTIONS = {
@@ -428,9 +542,10 @@
       [split.prepNotes, heapingSplit.heaping].filter(Boolean).join(', ')
     );
 
-    const name = stripOptionalLanguage(
+    const normalizedName = stripOptionalLanguage(
       unitParsed.rest || (multiplierParsed && multiplierParsed.rest) || qtyParsed.rest || split.head
     );
+    const nameVariant = splitIngredientNameAndVariant(normalizedName);
     const prep = stripOptionalLanguage(combinedPrep || '');
 
     return {
@@ -447,8 +562,8 @@
         ? !!(multiplierParsed || sizedContainerParsed).quantityIsApprox
         : !!qtyParsed.quantityIsApprox,
       unit: unitParsed.unit || '',
-      name: name || raw,
-      variant: '',
+      name: nameVariant.name || raw,
+      variant: nameVariant.variant || '',
       size: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).size
         : '',

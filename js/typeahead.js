@@ -215,6 +215,16 @@
     return matches.map((m) => m.item);
   }
 
+  function filterAndRankPreservePoolOrderOnEmpty(pool, query) {
+    const q = lower(query);
+    const items = (pool || []).map((v) => norm(v)).filter((v) => v.length > 0);
+    if (!q) {
+      // Keep pool order (caller controls canonical order).
+      return items;
+    }
+    return filterAndRank(items, q);
+  }
+
   // --- Dropdown UI (single active instance)
   class TypeaheadDropdown {
     constructor() {
@@ -619,37 +629,12 @@
       `SELECT DISTINCT code
        FROM units
        WHERE ${where}
-       ORDER BY code COLLATE NOCASE;`
+       ORDER BY COALESCE(sort_order, 999999) ASC,
+                code COLLATE NOCASE;`
     );
     const official = columnFromExec(q, 0) || [];
-
-    // Soft-add pool: unit_suggestions (if present). Suggestions come first.
-    let suggested = [];
-    try {
-      const qs = safeExec(
-        db,
-        `SELECT code
-         FROM unit_suggestions
-         WHERE code IS NOT NULL
-           AND trim(code) != ''
-           AND COALESCE(is_hidden, 0) = 0
-         ORDER BY COALESCE(last_used_at, 0) DESC,
-                  COALESCE(use_count, 0) DESC,
-                  code COLLATE NOCASE;`
-      );
-      suggested = columnFromExec(qs, 0) || [];
-    } catch (_) {
-      suggested = [];
-    }
-
-    const officialLower = new Set(official.map((v) => lower(v)));
-    const merged = [
-      ...suggested.filter((v) => !officialLower.has(lower(v))),
-      ...official,
-    ];
-
-    poolCache.unitAll = merged;
-    return merged;
+    poolCache.unitAll = official;
+    return official;
   }
 
   async function getSizePool() {
@@ -1076,6 +1061,7 @@
       attachTypeaheadToInput({
         inputEl: nameInput,
         getPool: async () => await getNamePool(),
+        openOnFocus: true,
       });
 
       nameInput.addEventListener('blur', async () => {
@@ -1094,6 +1080,8 @@
         inputEl: unitInput,
         getPool: async () => await getUnitPool(),
         openOnFocus: true,
+        getItems: (pool, query) =>
+          filterAndRankPreservePoolOrderOnEmpty(pool, query),
       });
 
       unitInput.addEventListener('blur', async () => {
@@ -1131,6 +1119,7 @@
           const n = getScopeName();
           return await getVariantPoolForName(n);
         },
+        openOnFocus: true,
       });
 
       varInput.addEventListener('blur', async () => {

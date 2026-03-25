@@ -136,7 +136,8 @@
       "quantityMin": 2,
       "quantityMax": 2,
       "unit": "can",
-      "nameContains": "crushed tomatoes",
+      "name": "tomato",
+      "variant": "crushed",
       "sizeContains": "14 oz"
     }
   },
@@ -185,7 +186,67 @@
       "quantityMax": 1,
       "unit": "can",
       "sizeContains": "28 oz",
-      "nameContains": "crushed tomatoes"
+      "name": "tomato",
+      "variant": "crushed"
+    }
+  },
+  {
+    "line": "2 tbsp extra-virgin olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil",
+      "variant": "extra-virgin"
+    }
+  },
+  {
+    "line": "1 tbsp toasted sesame oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tbsp",
+      "name": "sesame oil",
+      "variant": "toasted"
+    }
+  },
+  {
+    "line": "2 tbsp canola oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "oil",
+      "variant": "canola"
+    }
+  },
+  {
+    "line": "2 green onions",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "name": "green onions",
+      "variant": ""
+    }
+  },
+  {
+    "line": "1 tsp red pepper",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tsp",
+      "name": "red pepper",
+      "variant": ""
+    }
+  },
+  {
+    "line": "1 bunch spring onion",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "bunch",
+      "name": "spring onion",
+      "variant": ""
     }
   }
 ]
