@@ -488,12 +488,7 @@ async function loadRecipesPage() {
     rows.forEach(([id, title]) => {
       const li = document.createElement('li');
 
-      // Capitalize initial letter for top-level list display
-      const fixedTitle =
-        title && title.length > 0
-          ? title.charAt(0).toUpperCase() + title.slice(1)
-          : title;
-      li.textContent = fixedTitle;
+      li.textContent = title || '';
 
       li.addEventListener('click', (event) => {
         // Treat Ctrl-click / Cmd-click as "delete"
@@ -1413,12 +1408,7 @@ async function loadShoppingPage() {
     rows.forEach((item) => {
       const li = document.createElement('li');
 
-      // Capitalize initial letter for top-level shopping list display
-      const baseName =
-        item.name && item.name.length > 0
-          ? item.name.charAt(0).toUpperCase() + item.name.slice(1)
-          : item.name;
-      li.textContent = baseName || '';
+      li.textContent = item.name || '';
 
       li.addEventListener('click', (event) => {
         const wantsRemove = event.ctrlKey || event.metaKey;
@@ -2956,12 +2946,6 @@ function loadShoppingItemEditorPage() {
   }
 }
 
-function toSentenceCase(s) {
-  const t = (s || '').trim();
-  if (!t) return '';
-  return t[0].toUpperCase() + t.slice(1).toLowerCase();
-}
-
 function loadUnitEditorPage() {
   const view = document.getElementById('pageContent');
 
@@ -2970,11 +2954,7 @@ function loadUnitEditorPage() {
   const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
   const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
   const code = sessionStorage.getItem('selectedUnitCode') || '';
-  const titleDisplay = storedName
-    ? toSentenceCase(storedName)
-    : isNew
-      ? 'New unit'
-      : 'Unit';
+  const titleDisplay = storedName || (isNew ? 'New unit' : 'Unit');
   const initialTitle = storedName
     ? (storedName || '').trim().toLowerCase()
     : isNew
@@ -3000,7 +2980,6 @@ function loadUnitEditorPage() {
         initialTitle,
         backHref: 'units.html',
         normalizeTitle: (s) => (s || '').trim().toLowerCase(),
-        displayTitle: toSentenceCase,
         subtitleEl: document.getElementById('unitAbbreviation'),
         initialSubtitle: code,
         normalizeSubtitle: (s) => (s || '').trim().toLowerCase(),
@@ -5441,6 +5420,26 @@ function loadStoreEditorPage() {
 
         ta.addEventListener('keydown', (e) => {
           if (
+            e.key === 'Enter' &&
+            activeVariantPicker &&
+            activeVariantPicker.textarea === ta
+          ) {
+            // Picker-level Enter handler (capture phase) owns commit + focus restore.
+            return;
+          }
+          if (e.key === 'Enter' && e.shiftKey) {
+            // Chat-style newline override: Shift+Enter inserts a hard line break.
+            return;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            closeActiveVariantPicker({ commit: true });
+            try {
+              ta.blur();
+            } catch (_) {}
+            return;
+          }
+          if (
             e.key === 'Escape' &&
             activeVariantPicker &&
             activeVariantPicker.textarea === ta
@@ -5558,6 +5557,29 @@ function loadStoreEditorPage() {
         db,
         'ingredient_variant_store_location',
       );
+      const hasLegacySingleVariantConstraint = () => {
+        if (!hasVariantAisleTable) return false;
+        try {
+          const idxQ = db.exec(
+            `PRAGMA index_list('ingredient_variant_store_location');`,
+          );
+          const idxRows = idxQ.length ? idxQ[0].values : [];
+          for (const row of idxRows) {
+            const indexName = row && row.length > 1 ? String(row[1] || '') : '';
+            const isUnique = Boolean(row && row.length > 2 ? Number(row[2]) : 0);
+            if (!indexName || !isUnique) continue;
+            const infoQ = db.exec(`PRAGMA index_info('${indexName}');`);
+            const infoRows = infoQ.length ? infoQ[0].values : [];
+            const cols = infoRows
+              .map((r) => (r && r.length > 2 ? String(r[2] || '').trim() : ''))
+              .filter(Boolean);
+            if (cols.length === 1 && cols[0] === 'ingredient_variant_id') {
+              return true;
+            }
+          }
+        } catch (_) {}
+        return false;
+      };
 
       const normalizeAllAisleSpecs = () => {
         for (const r of aisleRows) {
@@ -5662,6 +5684,12 @@ function loadStoreEditorPage() {
           window.favoriteEatsTypeahead?.invalidate?.();
         } catch (_) {}
         ingredientCatalog = loadIngredientCatalog(db);
+      }
+
+      if (hasLegacySingleVariantConstraint()) {
+        uiToast(
+          'Variant-to-aisle assignments may be limited by this database schema. Remove any UNIQUE constraint on ingredient_variant_id alone.',
+        );
       }
 
       for (const aid of [...deletedAisleIds]) {
@@ -5781,11 +5809,7 @@ function loadStoreEditorPage() {
             const variantId = ensureVariantId(iid, vn);
             if (!Number.isFinite(variantId)) continue;
             db.run(
-              'DELETE FROM ingredient_variant_store_location WHERE ingredient_variant_id = ?;',
-              [variantId],
-            );
-            db.run(
-              `INSERT INTO ingredient_variant_store_location (ingredient_variant_id, store_location_id)
+              `INSERT OR IGNORE INTO ingredient_variant_store_location (ingredient_variant_id, store_location_id)
                VALUES (?, ?);`,
               [variantId, r.id],
             );

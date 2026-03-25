@@ -471,7 +471,7 @@ function rerenderYouWillNeedFromModel() {
 
     const subHeader = document.createElement('div');
     subHeader.className = 'subsection-header';
-    subHeader.textContent = loc ? capitalizeWords(loc) : 'Misc';
+    subHeader.textContent = loc || 'Misc';
     needWrapper.appendChild(subHeader);
 
     sortIngredients(items, NEED_LOCATION_ORDER).forEach((ing) => {
@@ -2143,11 +2143,6 @@ function attachTitleEditor(titleEl) {
     titleEl.addEventListener('input', onInput);
     titleEl.addEventListener('keydown', onKeyDown);
   });
-}
-
-// --- Helpers ---
-function capitalizeWords(str) {
-  return str.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // --- Measure formatting helper (DB-aware when available) ---

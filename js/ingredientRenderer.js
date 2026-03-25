@@ -930,11 +930,10 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
   };
 
   // Location is edited elsewhere; suppress it here.
-  // Field order: QtyMin, QtyMax, IsAprx, Unit, Name, Var, Size, Prep, Notes, IsOpt
+  // Field order: QtyMin, QtyMax, Unit, Name, Var, Size, Prep, Notes, IsOpt, QtyIsArpox
   const fieldsConfig = [
     { key: 'qtymin', label: 'QtyMin' },
     { key: 'qtymax', label: 'QtyMax' },
-    { key: 'isaprx', label: 'IsAprx', isBoolean: true },
     { key: 'unit', label: 'Unit' },
     { key: 'name', label: 'Name' },
     { key: 'var', label: 'Var' },
@@ -942,6 +941,7 @@ function openIngredientEditRow({ parent, replaceEl, mode, seedLine, insertAtInde
     { key: 'prep', label: 'Prep' },
     { key: 'notes', label: 'Notes' },
     { key: 'isopt', label: 'IsOpt', isBoolean: true },
+    { key: 'isaprx', label: 'QtyIsArpox', isBoolean: true },
   ];
   fieldsConfig.forEach((cfg) => row.appendChild(makeCell(cfg)));
 

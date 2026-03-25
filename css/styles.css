@@ -288,24 +288,6 @@ body.shopping-page #shoppingList li:not(.list-section-label) {
   font-size: 22px; /* stronger heading style */
 }
 
-/* Units editor: display-only initial cap, without changing the stored string. */
-body.unit-editor-page #childEditorTitle::first-letter {
-  text-transform: uppercase;
-}
-
-body.unit-editor-page #appBarTitle::first-letter {
-  text-transform: uppercase;
-}
-
-/* Shopping item editor: display-only initial cap, without changing stored string. */
-body.shopping-editor-page #childEditorTitle::first-letter {
-  text-transform: uppercase;
-}
-
-body.shopping-editor-page #appBarTitle::first-letter {
-  text-transform: uppercase;
-}
-
 /* Shopping item editor: single calm card */
 body.shopping-editor-page .shopping-item-editor-card {
   margin-top: 18px;
@@ -1862,7 +1844,6 @@ h1.nav-text {
   );
   font-size: var(--pill-font-size);
   line-height: var(--pill-line-height);
-  text-transform: capitalize;
 }
 
 /* Editable servings input — uses dedicated field vars */
