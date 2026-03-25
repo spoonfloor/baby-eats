@@ -114,6 +114,123 @@ function syncStepOrderFromDOM(containerRef) {
   });
 }
 
+function findAdjacentInstructionLine(lineEl, delta) {
+  if (!lineEl || !delta) return null;
+
+  let cursor = delta < 0 ? lineEl.previousElementSibling : lineEl.nextElementSibling;
+  while (cursor) {
+    if (
+      cursor.classList &&
+      cursor.classList.contains('instruction-line') &&
+      cursor.classList.contains('numbered')
+    ) {
+      return cursor;
+    }
+    cursor = delta < 0 ? cursor.previousElementSibling : cursor.nextElementSibling;
+  }
+
+  return null;
+}
+
+function setSelectionOffsetsInStep(textEl, offsets) {
+  if (!textEl) return;
+
+  try {
+    const sel = window.getSelection();
+    if (!sel) return;
+
+    const fullText = textEl.textContent || '';
+    const startRaw =
+      offsets && Number.isFinite(offsets.start) ? Number(offsets.start) : fullText.length;
+    const endRaw =
+      offsets && Number.isFinite(offsets.end) ? Number(offsets.end) : startRaw;
+    const start = Math.max(0, Math.min(fullText.length, startRaw));
+    const end = Math.max(start, Math.min(fullText.length, endRaw));
+
+    let firstTextNode = null;
+    let lastTextNode = null;
+    let startNode = null;
+    let endNode = null;
+    let startOffset = 0;
+    let endOffset = 0;
+    let remainingStart = start;
+    let remainingEnd = end;
+
+    const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      if (!firstTextNode) firstTextNode = node;
+      lastTextNode = node;
+
+      const len = node.textContent.length;
+      if (!startNode && remainingStart <= len) {
+        startNode = node;
+        startOffset = remainingStart;
+      }
+      if (!endNode && remainingEnd <= len) {
+        endNode = node;
+        endOffset = remainingEnd;
+      }
+
+      remainingStart -= len;
+      remainingEnd -= len;
+      node = walker.nextNode();
+    }
+
+    if (!firstTextNode) {
+      firstTextNode = document.createTextNode('');
+      textEl.appendChild(firstTextNode);
+      lastTextNode = firstTextNode;
+    }
+    if (!startNode) {
+      startNode = lastTextNode || firstTextNode;
+      startOffset = (startNode.textContent || '').length;
+    }
+    if (!endNode) {
+      endNode = lastTextNode || firstTextNode;
+      endOffset = (endNode.textContent || '').length;
+    }
+
+    const range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (_) {}
+}
+
+function moveStepLineByDelta({ lineEl, delta, selectionOffsets } = {}) {
+  const dir = Number(delta);
+  if (!(lineEl instanceof HTMLElement) || !Number.isFinite(dir) || !dir) return false;
+
+  const targetLine = findAdjacentInstructionLine(lineEl, dir);
+  if (!(targetLine instanceof HTMLElement)) return false;
+
+  const parent = lineEl.parentElement;
+  if (!(parent instanceof HTMLElement)) return false;
+
+  if (dir < 0) {
+    parent.insertBefore(lineEl, targetLine);
+  } else {
+    parent.insertBefore(lineEl, targetLine.nextSibling);
+  }
+
+  renumberSteps(parent);
+  syncStepOrderFromDOM(parent);
+
+  try {
+    if (typeof markDirty === 'function') markDirty();
+  } catch (_) {}
+
+  const textEl = lineEl.querySelector('.step-text');
+  if (textEl instanceof HTMLElement) {
+    textEl.focus();
+    setSelectionOffsetsInStep(textEl, selectionOffsets);
+  }
+
+  return true;
+}
+
 // --- Shared helpers for step editing (normalization + new step factory) ---
 
 function ensureStepTextNotEmpty(el) {
@@ -176,19 +293,155 @@ function createSiblingStepFromExisting(sourceStep, instructions) {
   };
 }
 
+async function confirmDeleteStep(stepLike, fallbackText, isHeadingLine) {
+  const truncateForDeleteModal = (value, maxLen = 80) => {
+    const text = String(value == null ? '' : value).trim();
+    if (!text) return '';
+    if (text.length <= maxLen) return text;
+    return `${text.slice(0, Math.max(0, maxLen - 3)).trimEnd()}...`;
+  };
+
+  const modelText =
+    stepLike && stepLike.instructions != null
+      ? String(stepLike.instructions)
+      : String(fallbackText || '');
+  const cleaned = normalizeStepText(modelText);
+  const displayRaw = cleaned || (isHeadingLine ? 'this section title' : 'this step');
+  const display = truncateForDeleteModal(displayRaw);
+  const title = isHeadingLine ? 'Remove this section title?' : 'Remove this step?';
+  const message = `"${display}" will be removed from this recipe only.`;
+
+  try {
+    if (window.ui && typeof window.ui.confirm === 'function') {
+      return !!(await window.ui.confirm({
+        title,
+        message,
+        confirmText: 'Remove',
+        cancelText: 'Cancel',
+        danger: true,
+      }));
+    }
+    return !!window.confirm(message);
+  } catch (_) {
+    return true;
+  }
+}
+
+function syncStepNodeDelete(stepId) {
+  if (!Array.isArray(window.stepNodes)) return;
+  const idStr = String(stepId);
+  const idx = window.stepNodes.findIndex((n) => String(n.id) === idStr);
+  if (idx === -1) return;
+  window.stepNodes.splice(idx, 1);
+  const stepNodeModelRef =
+    window.StepNodeModel && typeof window.StepNodeModel === 'object'
+      ? window.StepNodeModel
+      : null;
+  if (
+    stepNodeModelRef &&
+    typeof stepNodeModelRef.normalizeStepNodeOrder === 'function'
+  ) {
+    window.stepNodes = stepNodeModelRef.normalizeStepNodeOrder(window.stepNodes);
+  }
+}
+
+function syncStepNodeBlank(stepId) {
+  if (!Array.isArray(window.stepNodes)) return;
+  const idStr = String(stepId);
+  const idx = window.stepNodes.findIndex((n) => String(n.id) === idStr);
+  if (idx === -1) return;
+  window.stepNodes[idx].text = '';
+}
+
 // --- Inline step editing (contentEditable) ---
 
 function attachStepInlineEditor(textEl) {
   if (!textEl) return;
   const lineEl = textEl.closest('.instruction-line');
+  let consumedDeletePointerDown = false;
+
+  const deleteStepViaGesture = async () => {
+    const stepId = textEl.dataset.stepId;
+    if (!stepId || !lineEl) return;
+
+    const found = findStepInModel(stepId);
+    if (!found || !found.step || !Array.isArray(found.stepsArr)) return;
+
+    const isHeadingLine = (lineEl.dataset.stepType || 'step') === 'heading';
+    const ok = await confirmDeleteStep(
+      found.step,
+      textEl.textContent || '',
+      isHeadingLine
+    );
+    if (!ok) return;
+
+    const parent = lineEl.parentElement;
+    const allLines =
+      parent && parent.querySelectorAll
+        ? parent.querySelectorAll('.instruction-line.numbered')
+        : [];
+
+    if (allLines.length <= 1) {
+      // Keep one editable row in place; deleting the last row becomes blank placeholder.
+      found.step.instructions = '';
+      syncStepNodeBlank(stepId);
+
+      textEl.textContent = '';
+      textEl.classList.add('placeholder-prompt');
+      textEl.dataset.placeholder = isHeadingLine ? 'Section title' : 'Add a step.';
+      if (isHeadingLine) {
+        textEl.classList.add('placeholder-prompt--editblue');
+        lineEl.classList.remove('instruction-line--placeholder');
+      } else {
+        textEl.classList.remove('placeholder-prompt--editblue');
+        lineEl.classList.add('instruction-line--placeholder');
+      }
+      ensureStepTextNotEmpty(textEl);
+    } else {
+      found.stepsArr.splice(found.idx, 1);
+      syncStepNodeDelete(stepId);
+      if (parent && parent.contains(lineEl)) {
+        parent.removeChild(lineEl);
+      }
+    }
+
+    const stepsContainer = document.getElementById('stepsSection');
+    renumberSteps(stepsContainer);
+    if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
+    if (typeof markDirty === 'function') markDirty();
+  };
+
+  const maybeDeleteFromGestureEvent = (e) => {
+    if (!e) return false;
+    if (window.editingStepId) return false;
+    const wantsDelete = !!(e.ctrlKey || e.metaKey || e.type === 'contextmenu');
+    if (!wantsDelete) return false;
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+    } catch (_) {}
+    void deleteStepViaGesture();
+    return true;
+  };
 
   // Make the full row clickable (number gutter + text area), so clicking
   // anywhere on a step line enters inline edit mode.
   if (lineEl && !lineEl.dataset.rowClickProxyBound) {
     lineEl.dataset.rowClickProxyBound = '1';
+    lineEl.addEventListener('pointerdown', (e) => {
+      consumedDeletePointerDown = maybeDeleteFromGestureEvent(e);
+    });
+    lineEl.addEventListener('contextmenu', (e) => {
+      if (maybeDeleteFromGestureEvent(e) && e) e.preventDefault();
+    });
     lineEl.addEventListener('click', (e) => {
       if (window.editingStepId) return;
       if (textEl.isContentEditable || lineEl.classList.contains('editing')) return;
+      if (consumedDeletePointerDown) {
+        consumedDeletePointerDown = false;
+        return;
+      }
+      if (maybeDeleteFromGestureEvent(e)) return;
 
       // Text clicks are already handled by the text click listener below.
       if (e.target === textEl || textEl.contains(e.target)) return;
@@ -197,7 +450,12 @@ function attachStepInlineEditor(textEl) {
     });
   }
 
-  textEl.addEventListener('click', () => {
+  textEl.addEventListener('click', (e) => {
+    if (consumedDeletePointerDown) {
+      consumedDeletePointerDown = false;
+      return;
+    }
+    if (maybeDeleteFromGestureEvent(e)) return;
     if (window.editingStepId) return; // one at a time
     window.editingStepId = textEl.dataset.stepId;
 
@@ -1003,6 +1261,27 @@ function attachStepInlineEditor(textEl) {
     };
 
     const onKeyDown = (e) => {
+      const wantsReorder =
+        e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown');
+      if (wantsReorder) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
+
+        moveStepLineByDelta({
+          lineEl,
+          delta: e.key === 'ArrowUp' ? -1 : 1,
+          selectionOffsets: getSelectionOffsetsInStep(textEl),
+        });
+        return;
+      }
+
       // Safari-style placeholder behavior for the "Add a step." row.
       const isPlaceholderMode =
         startedFromPlaceholder ||

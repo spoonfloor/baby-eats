@@ -581,7 +581,9 @@
       isOptional: !!optional,
       substitutes: [],
       locationAtHome: '',
-      subRecipeId: null,
+      isRecipe: false,
+      linkedRecipeId: null,
+      recipeText: '',
       isDeprecated: false,
     };
   }

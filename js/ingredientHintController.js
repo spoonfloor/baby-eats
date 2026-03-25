@@ -2,13 +2,17 @@
  * Centralized hint controller for the Ingredients section.
  *
  * Manages a single "active hint" slot at any time, resolving priority:
- *   1. Hover > Edit-mode focus
+ *   1. Modifier-hover > Edit-mode focus
  *   2. Edit-mode focus > nothing
  *   3. Empty-state hint is always visible when list is empty
  *
  * The INGREDIENTS header participates as an entity only in non-empty
- * state: hovering it shows the top CTA and can steal from an entity in
- * edit mode. In empty state, that same CTA stays visible persistently.
+ * state: holding Option/Alt while hovering it shows the top CTA and can
+ * steal from an entity in edit mode. In empty state, that same CTA stays
+ * visible persistently.
+ *
+ * The "space below" a row also counts as hovering that row by mapping each
+ * `.ingredient-insert-zone` back to the nearest preceding slot/header.
  *
  * Usage: call `initIngredientHintController(ingredientsSection)` after
  * every rerender.  It is safe to call repeatedly — the previous instance
@@ -19,8 +23,7 @@
   'use strict';
 
   const ACTIVE_CLASS = 'ingredient-slot--hint-active';
-  const HOVER_HANDOFF_GRACE_MS = 120;
-  const HINT_ACTIVATION_DELAY_MS = 400;
+  const HOVER_REVEAL_MODIFIER_KEY = 'Alt';
 
   let _teardown = null;
 
@@ -36,11 +39,15 @@
     let hoverTarget = null;   // slot or header element currently hovered
     let focusTarget = null;   // slot that currently owns an active editor
     let hoverOverCta = false; // cursor is over the CTA itself (keep it alive)
+    let hoverModifierActive = false;
     let hoverClearTimer = null;
     let activationTimer = null;
     let pendingActivationTarget = null;
     let activeTarget = null;
     let requestedTarget = null; // one-shot target requested by insert flow
+    let pointerTarget = null;
+    let lastPointerClientX = null;
+    let lastPointerClientY = null;
 
     const slots = () => section.querySelectorAll('.ingredient-slot');
     const headerCta = () => section.querySelector('.ingredient-header-cta');
@@ -48,6 +55,7 @@
       const cta = headerCta();
       return !!(cta && !cta.classList.contains('ingredient-header-cta--persistent'));
     };
+    const hoverRevealArmed = () => hoverModifierActive;
 
     function slotHasActiveEditor(slot) {
       if (!slot || !slot.isConnected || !section.contains(slot)) return false;
@@ -96,6 +104,49 @@
       }
     }
 
+    function rememberPointerSnapshot(e) {
+      if (!e) return;
+      if (e.target) pointerTarget = e.target;
+      if (Number.isFinite(e.clientX)) lastPointerClientX = e.clientX;
+      if (Number.isFinite(e.clientY)) lastPointerClientY = e.clientY;
+    }
+
+    function getLivePointerTarget() {
+      // Prefer elementFromPoint over the stored pointer target.  The stored
+      // target can be a node whose *parent* has become display:none (e.g. the
+      // button inside the header CTA after the CTA loses its --persistent
+      // class).  isConnected is still true in that case, but the element is
+      // invisible and elementFromPoint will correctly return whatever is
+      // actually visible at those coordinates instead.
+      if (
+        Number.isFinite(lastPointerClientX) &&
+        Number.isFinite(lastPointerClientY) &&
+        typeof document.elementFromPoint === 'function'
+      ) {
+        const live = document.elementFromPoint(lastPointerClientX, lastPointerClientY);
+        if (live) return live;
+      }
+      if (pointerTarget && pointerTarget.isConnected) return pointerTarget;
+      return null;
+    }
+
+    function syncHoverTargetFromPointer() {
+      const liveTarget = getLivePointerTarget();
+      if (!liveTarget || !section.contains(liveTarget)) return false;
+
+      const cta = liveTarget.closest && liveTarget.closest('.ingredient-add-cta');
+      if (cta && section.contains(cta)) {
+        hoverOverCta = true;
+        return false;
+      }
+
+      hoverOverCta = false;
+      const entity = findEntity(liveTarget);
+      if (entity === hoverTarget) return false;
+      hoverTarget = entity;
+      return true;
+    }
+
     function cancelPendingHoverClear() {
       if (hoverClearTimer) {
         clearTimeout(hoverClearTimer);
@@ -110,12 +161,7 @@
     }
 
     function scheduleHoverClear() {
-      cancelPendingHoverClear();
-      hoverClearTimer = setTimeout(() => {
-        hoverClearTimer = null;
-        hoverTarget = null;
-        resolve();
-      }, HOVER_HANDOFF_GRACE_MS);
+      clearHoverNow();
     }
 
     function cancelPendingActivation() {
@@ -166,33 +212,41 @@
       // Priority: hover > edit-mode focus > requested one-shot target > nothing.
       // Hover always wins. When nothing is hovered, the focused entity
       // (edit tray open) keeps its hint.
-      return hoverTarget || focusTarget || requestedTarget || null;
+      const hoverWinner = hoverRevealArmed() ? hoverTarget : null;
+
+      // Empty-state fallback: if Option is held, pointer is inside the section,
+      // there are no ingredient slots yet, and the header CTA is available for
+      // hover-activation — show the header hint regardless of the exact element
+      // under the cursor.  This covers hovering the insert card, the insert
+      // zone, or any other non-entity area while the first insert tray is open.
+      if (!hoverWinner && hoverRevealArmed() && headerCanHoverActivate() && slots().length === 0) {
+        const liveTarget = getLivePointerTarget();
+        if (liveTarget && section.contains(liveTarget)) {
+          const h = section.querySelector('.section-header');
+          if (h && section.contains(h)) return h;
+        }
+      }
+
+      return hoverWinner || focusTarget || requestedTarget || null;
     }
 
     function scheduleActivation(winner) {
       if (!winner) return;
       if (activeTarget === winner) return;
-      if (pendingActivationTarget === winner) return;
-
-      cancelPendingActivation();
-      pendingActivationTarget = winner;
-      activationTimer = setTimeout(() => {
-        activationTimer = null;
-        pendingActivationTarget = null;
-        normalizeTargets();
-        consumePendingRequestedTarget();
-        const desired = getDesiredWinner();
-        if (desired !== winner) {
-          resolve();
-          return;
-        }
-        applyWinnerNow(winner);
-      }, HINT_ACTIVATION_DELAY_MS);
+      normalizeTargets();
+      consumePendingRequestedTarget();
+      const desired = getDesiredWinner();
+      if (desired !== winner) {
+        resolve();
+        return;
+      }
+      applyWinnerNow(winner);
     }
 
     // --- Resolve: who gets the hint? ---
     function resolve() {
       normalizeTargets();
+      syncHoverTargetFromPointer();
       consumePendingRequestedTarget();
 
       // Any direct user intent cancels a stale one-shot post-add target.
@@ -213,6 +267,20 @@
     // We use mouseover/mouseout on the container (they bubble) and
     // resolve the slot from the event target.
 
+    function findInsertZoneOwner(insertZone) {
+      if (!insertZone || !insertZone.parentElement) return null;
+
+      let el = insertZone.previousElementSibling;
+      while (el) {
+        if (el.classList.contains('ingredient-slot')) return el;
+        if (el.classList.contains('section-header') && headerCanHoverActivate()) {
+          return el;
+        }
+        el = el.previousElementSibling;
+      }
+      return null;
+    }
+
     function findEntity(target) {
       if (!target || !target.closest) return null;
       const cta = target.closest('.ingredient-add-cta');
@@ -220,14 +288,20 @@
       const slot = target.closest('.ingredient-slot');
       if (slot && section.contains(slot)) return slot;
       const insertZone = target.closest('.ingredient-insert-zone');
-      if (insertZone) return null; // insert zones are not entities
+      if (insertZone && section.contains(insertZone)) {
+        return findInsertZoneOwner(insertZone);
+      }
       const h = target.closest('.section-header');
       if (h && section.contains(h) && headerCanHoverActivate()) return h;
       return null;
     }
 
     function onMouseOver(e) {
+      rememberPointerSnapshot(e);
       cancelPendingHoverClear();
+      if (!!e.altKey !== hoverModifierActive) {
+        hoverModifierActive = !!e.altKey;
+      }
 
       // If cursor moved onto a CTA, flag it so we don't hide on mouseout.
       const cta = e.target.closest && e.target.closest('.ingredient-add-cta');
@@ -245,6 +319,7 @@
     }
 
     function onMouseOut(e) {
+      rememberPointerSnapshot(e);
       const cta = e.target.closest && e.target.closest('.ingredient-add-cta');
       if (cta) {
         const related = e.relatedTarget;
@@ -302,6 +377,23 @@
       cancelPendingHoverClear();
       hoverTarget = null;
       hoverOverCta = false;
+      pointerTarget = null;
+      lastPointerClientX = null;
+      lastPointerClientY = null;
+      resolve();
+    }
+
+    function syncHoverModifier(e) {
+      const next = !!(e && e.altKey);
+      if (next === hoverModifierActive) return;
+      hoverModifierActive = next;
+      syncHoverTargetFromPointer();
+      resolve();
+    }
+
+    function clearHoverModifier() {
+      if (!hoverModifierActive) return;
+      hoverModifierActive = false;
       resolve();
     }
 
@@ -338,8 +430,12 @@
     section.addEventListener('mouseover', onMouseOver);
     section.addEventListener('mouseout', onMouseOut);
     section.addEventListener('mouseleave', onMouseLeave);
+    section.addEventListener('mousemove', rememberPointerSnapshot);
     section.addEventListener('focusin', onFocusIn);
     section.addEventListener('focusout', onFocusOut);
+    document.addEventListener('keydown', syncHoverModifier, true);
+    document.addEventListener('keyup', syncHoverModifier, true);
+    window.addEventListener('blur', clearHoverModifier);
 
     // Listen for edit-mode changes on body so we can re-resolve.
     const observer = new MutationObserver(() => resolve());
@@ -356,16 +452,24 @@
       section.removeEventListener('mouseover', onMouseOver);
       section.removeEventListener('mouseout', onMouseOut);
       section.removeEventListener('mouseleave', onMouseLeave);
+      section.removeEventListener('mousemove', rememberPointerSnapshot);
       section.removeEventListener('focusin', onFocusIn);
       section.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('keydown', syncHoverModifier, true);
+      document.removeEventListener('keyup', syncHoverModifier, true);
+      window.removeEventListener('blur', clearHoverModifier);
       observer.disconnect();
       cancelPendingHoverClear();
       cancelPendingActivation();
       hoverTarget = null;
       focusTarget = null;
       hoverOverCta = false;
+      hoverModifierActive = false;
       activeTarget = null;
       requestedTarget = null;
+      pointerTarget = null;
+      lastPointerClientX = null;
+      lastPointerClientY = null;
     };
   }
 

@@ -47,6 +47,10 @@ function formatRecipe(db, recipeId) {
   const rimHasSortOrder = rimCols.includes('sort_order');
   const rimHasSectionId = rimCols.includes('section_id');
   const rimHasParen = rimCols.includes('parenthetical_note');
+  const rimHasIsRecipe = rimCols.includes('is_recipe');
+  const rimHasLinkedRecipeId = rimCols.includes('linked_recipe_id');
+  const rimHasRecipeText = rimCols.includes('recipe_text');
+  const rimHasLegacySubrecipeId = rimCols.includes('subrecipe_id');
 
   const ingCols = (() => {
     try {
@@ -121,7 +125,20 @@ function formatRecipe(db, recipeId) {
                  ? "COALESCE(i.parenthetical_note, '')"
                  : "''"
              },
-             i.location_at_home
+             i.location_at_home,
+             ${
+               rimHasIsRecipe
+                 ? 'COALESCE(rim.is_recipe, 0)'
+                 : '0'
+             },
+             ${
+               rimHasLinkedRecipeId
+                 ? 'rim.linked_recipe_id'
+                 : rimHasLegacySubrecipeId
+                 ? 'rim.subrecipe_id'
+                 : 'NULL'
+             },
+             ${rimHasRecipeText ? "COALESCE(rim.recipe_text, '')" : "''"}
       FROM recipe_ingredient_map rim
       JOIN ingredients i ON rim.ingredient_id = i.ID
       WHERE rim.recipe_id=${recipeId} AND ${whereClause}
@@ -150,6 +167,9 @@ function formatRecipe(db, recipeId) {
         isOptional,
         parentheticalNote,
         locationAtHome,
+        isRecipe,
+        linkedRecipeId,
+        recipeText,
       ]) => {
         // Fetch substitutes for this ingredient
         const subsQ = db.exec(
@@ -170,17 +190,15 @@ function formatRecipe(db, recipeId) {
               variant: sVariant || '',
             }))
           : [];
-
-        // 🔍 Try to find a matching recipe title
-        const searchTerm = [variant, name].filter(Boolean).join(' ');
-        const subRecipeQ = db.exec(
-          `SELECT ID FROM recipes 
-   WHERE LOWER(title) LIKE LOWER('%${searchTerm.replace(/'/g, "''")}%') 
-   LIMIT 1;`
-        );
-        const subRecipeId = subRecipeQ.length
-          ? subRecipeQ[0].values[0][0]
-          : null;
+        const linkedRecipeIdRaw = Number(linkedRecipeId);
+        const normalizedLinkedRecipeId =
+          Number.isFinite(linkedRecipeIdRaw) && linkedRecipeIdRaw > 0
+            ? linkedRecipeIdRaw
+            : null;
+        const normalizedRecipeText =
+          recipeText == null ? '' : String(recipeText).trim();
+        const normalizedIsRecipe =
+          Number(isRecipe) === 1 && normalizedLinkedRecipeId != null;
 
         return {
           rowType: 'ingredient',
@@ -199,7 +217,9 @@ function formatRecipe(db, recipeId) {
           isOptional: !!isOptional,
           substitutes,
           locationAtHome: locationAtHome ? locationAtHome.toLowerCase() : '',
-          subRecipeId, // add the field (can be null)
+          isRecipe: normalizedIsRecipe,
+          linkedRecipeId: normalizedLinkedRecipeId,
+          recipeText: normalizedRecipeText,
           rimId,
           sortOrder: sortOrder == null ? null : Number(sortOrder),
         };

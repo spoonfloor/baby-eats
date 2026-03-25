@@ -238,6 +238,10 @@ function loadRecipeFromDB(db, recipeId) {
   const hasQtyMin = rimHas('quantity_min');
   const hasQtyMax = rimHas('quantity_max');
   const hasQtyApprox = rimHas('quantity_is_approx');
+  const hasIsRecipe = rimHas('is_recipe');
+  const hasLinkedRecipeId = rimHas('linked_recipe_id');
+  const hasRecipeText = rimHas('recipe_text');
+  const hasLegacySubrecipeId = rimHas('subrecipe_id');
 
   const ingCols = getTableColumns(db, 'ingredients');
   const ingHas = (col) => ingCols.map((c) => String(c).toLowerCase()).includes(col);
@@ -280,6 +284,15 @@ function loadRecipeFromDB(db, recipeId) {
       ? "COALESCE(i.parenthetical_note, '') AS parenthetical_note"
       : "'' AS parenthetical_note",
     'i.location_at_home',
+    hasIsRecipe ? 'COALESCE(rim.is_recipe, 0) AS is_recipe' : '0 AS is_recipe',
+    hasLinkedRecipeId
+      ? 'rim.linked_recipe_id AS linked_recipe_id'
+      : hasLegacySubrecipeId
+      ? 'rim.subrecipe_id AS linked_recipe_id'
+      : 'NULL AS linked_recipe_id',
+    hasRecipeText
+      ? "COALESCE(rim.recipe_text, '') AS recipe_text"
+      : "'' AS recipe_text",
     ingredientDeprecatedSql,
   ];
 
@@ -324,6 +337,9 @@ function loadRecipeFromDB(db, recipeId) {
           isOptional,
           parentheticalNote,
           locationAtHome,
+          isRecipe,
+          linkedRecipeId,
+          recipeText,
           ingredientDeprecated,
         ]) => ({
           rowType: 'ingredient',
@@ -337,8 +353,14 @@ function loadRecipeFromDB(db, recipeId) {
               : typeof qty === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(qty)
               ? parseFloat(qty)
               : qty,
-          quantityMin: Number.isFinite(Number(qtyMin)) ? Number(qtyMin) : null,
-          quantityMax: Number.isFinite(Number(qtyMax)) ? Number(qtyMax) : null,
+          quantityMin:
+            Number.isFinite(Number(qtyMin)) && Number(qtyMin) > 0
+              ? Number(qtyMin)
+              : null,
+          quantityMax:
+            Number.isFinite(Number(qtyMax)) && Number(qtyMax) > 0
+              ? Number(qtyMax)
+              : null,
           quantityIsApprox: !!qtyApprox,
           unit: unit || '',
           name:
@@ -355,6 +377,15 @@ function loadRecipeFromDB(db, recipeId) {
           isOptional: !!isOptional,
           parentheticalNote: parentheticalNote || '',
           locationAtHome: locationAtHome ? locationAtHome.toLowerCase() : '',
+          isRecipe: (() => {
+            const lid = Number(linkedRecipeId);
+            return Number(isRecipe) === 1 && Number.isFinite(lid) && lid > 0;
+          })(),
+          linkedRecipeId: (() => {
+            const lid = Number(linkedRecipeId);
+            return Number.isFinite(lid) && lid > 0 ? lid : null;
+          })(),
+          recipeText: recipeText == null ? '' : String(recipeText).trim(),
           isDeprecated: !!ingredientDeprecated,
         })
       )
@@ -743,11 +774,63 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   const rimHasQtyMin = rimHas('quantity_min');
   const rimHasQtyMax = rimHas('quantity_max');
   const rimHasQtyApprox = rimHas('quantity_is_approx');
+  const rimHasIsRecipe = rimHas('is_recipe');
+  const rimHasLinkedRecipeId = rimHas('linked_recipe_id');
+  const rimHasRecipeText = rimHas('recipe_text');
 
   const rihCols = getTableColumns(activeDb, 'recipe_ingredient_headings');
   const rihHas = (col) =>
     rihCols.map((c) => String(c).toLowerCase()).includes(col);
   const rihHasSection = rihHas('section_id');
+  const rihHasSortOrder = rihHas('sort_order');
+
+  const normalizeSortOrder = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.floor(n);
+  };
+
+  const readSectionMaxSortOrder = (sectionId) => {
+    const maxes = [];
+    try {
+      if (rimHasSortOrder) {
+        const rimSql = rimHasSection
+          ? 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM recipe_ingredient_map WHERE recipe_id = ? AND section_id IS ?;'
+          : 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM recipe_ingredient_map WHERE recipe_id = ?;';
+        const rimStmt = activeDb.prepare(rimSql);
+        try {
+          rimStmt.bind(rimHasSection ? [rid, sectionId ?? null] : [rid]);
+          if (rimStmt.step()) {
+            const row = rimStmt.getAsObject();
+            const v = Number(row?.m);
+            if (Number.isFinite(v)) maxes.push(v);
+          }
+        } finally {
+          rimStmt.free();
+        }
+      }
+    } catch (_) {}
+    try {
+      if (rihHasSortOrder) {
+        const rihSql = rihHasSection
+          ? 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM recipe_ingredient_headings WHERE recipe_id = ? AND section_id IS ?;'
+          : 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM recipe_ingredient_headings WHERE recipe_id = ?;';
+        const rihStmt = activeDb.prepare(rihSql);
+        try {
+          rihStmt.bind(rihHasSection ? [rid, sectionId ?? null] : [rid]);
+          if (rihStmt.step()) {
+            const row = rihStmt.getAsObject();
+            const v = Number(row?.m);
+            if (Number.isFinite(v)) maxes.push(v);
+          }
+        } finally {
+          rihStmt.free();
+        }
+      }
+    } catch (_) {}
+    if (!maxes.length) return 1;
+    return Math.max(...maxes) + 1;
+  };
 
   // Upsert mappings in current model order (per section)
   let inserted = 0;
@@ -768,42 +851,73 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       return (row.name || '').trim() !== '';
     });
 
-    let sortN = 1;
+    let nextSort = readSectionMaxSortOrder(sectionId);
     realRows.forEach((row) => {
-      // Shared ordering namespace across headings + ingredients.
-      const assignedSort = sortN;
-      sortN += 1;
-
       if (isHeadingRow(row)) {
         const text = (row.text != null ? String(row.text) : '').trim();
         const headingId =
           row.headingId != null ? Number(row.headingId) : null;
+        const isExisting = headingId != null && existingHeadingIds.has(headingId);
+        let assignedSort = normalizeSortOrder(row.sortOrder);
+        if (assignedSort == null && !isExisting) {
+          assignedSort = nextSort++;
+        } else if (assignedSort != null && assignedSort >= nextSort) {
+          nextSort = assignedSort + 1;
+        }
 
         try {
-          if (headingId != null && existingHeadingIds.has(headingId)) {
+          if (isExisting) {
             if (rihHasSection) {
-              activeDb.run(
-                'UPDATE recipe_ingredient_headings SET section_id = ?, sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
-                [sectionId ?? null, assignedSort, text, rid, headingId]
-              );
+              if (assignedSort != null) {
+                activeDb.run(
+                  'UPDATE recipe_ingredient_headings SET section_id = ?, sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
+                  [sectionId ?? null, assignedSort, text, rid, headingId]
+                );
+              } else {
+                activeDb.run(
+                  'UPDATE recipe_ingredient_headings SET section_id = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
+                  [sectionId ?? null, text, rid, headingId]
+                );
+              }
             } else {
-              activeDb.run(
-                'UPDATE recipe_ingredient_headings SET sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
-                [assignedSort, text, rid, headingId]
-              );
+              if (assignedSort != null) {
+                activeDb.run(
+                  'UPDATE recipe_ingredient_headings SET sort_order = ?, text = ? WHERE recipe_id = ? AND ID = ?;',
+                  [assignedSort, text, rid, headingId]
+                );
+              } else {
+                activeDb.run(
+                  'UPDATE recipe_ingredient_headings SET text = ? WHERE recipe_id = ? AND ID = ?;',
+                  [text, rid, headingId]
+                );
+              }
             }
             keptHeadingIds.add(headingId);
           } else {
             if (rihHasSection) {
-              activeDb.run(
-                'INSERT INTO recipe_ingredient_headings (recipe_id, section_id, sort_order, text) VALUES (?, ?, ?, ?);',
-                [rid, sectionId ?? null, assignedSort, text]
-              );
+              if (assignedSort != null) {
+                activeDb.run(
+                  'INSERT INTO recipe_ingredient_headings (recipe_id, section_id, sort_order, text) VALUES (?, ?, ?, ?);',
+                  [rid, sectionId ?? null, assignedSort, text]
+                );
+              } else {
+                activeDb.run(
+                  'INSERT INTO recipe_ingredient_headings (recipe_id, section_id, text) VALUES (?, ?, ?);',
+                  [rid, sectionId ?? null, text]
+                );
+              }
             } else {
-              activeDb.run(
-                'INSERT INTO recipe_ingredient_headings (recipe_id, sort_order, text) VALUES (?, ?, ?);',
-                [rid, assignedSort, text]
-              );
+              if (assignedSort != null) {
+                activeDb.run(
+                  'INSERT INTO recipe_ingredient_headings (recipe_id, sort_order, text) VALUES (?, ?, ?);',
+                  [rid, assignedSort, text]
+                );
+              } else {
+                activeDb.run(
+                  'INSERT INTO recipe_ingredient_headings (recipe_id, text) VALUES (?, ?);',
+                  [rid, text]
+                );
+              }
             }
             const idQ = activeDb.exec('SELECT last_insert_rowid();');
             const newId =
@@ -818,14 +932,21 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
           }
         } catch (_) {}
 
-        row.sortOrder = assignedSort;
+        if (assignedSort != null) row.sortOrder = assignedSort;
         return;
       }
 
       const ing = row;
       const ingredientId = findOrCreateIngredientId(ing);
       const rimId = ing.rimId != null ? Number(ing.rimId) : null;
-      ing.sortOrder = assignedSort;
+      const isExisting = rimId != null && existingIds.has(rimId);
+      let assignedSort = normalizeSortOrder(ing.sortOrder);
+      if (assignedSort == null && !isExisting) {
+        assignedSort = nextSort++;
+      } else if (assignedSort != null && assignedSort >= nextSort) {
+        nextSort = assignedSort + 1;
+      }
+      if (assignedSort != null) ing.sortOrder = assignedSort;
 
       // Build common column sets
       const cols = ['recipe_id', 'ingredient_id'];
@@ -836,14 +957,22 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         vals.push(sectionId ?? null);
       }
       if (rimHas('quantity')) {
+        const quantityRaw = ing.quantity;
+        let normalizedQuantity = quantityRaw ?? '';
+        const quantityNum = Number(quantityRaw);
+        if (Number.isFinite(quantityNum) && quantityNum <= 0) {
+          normalizedQuantity = '';
+        }
         cols.push('quantity');
-        vals.push(ing.quantity ?? '');
+        vals.push(normalizedQuantity);
       }
       if (rimHasQtyMin) {
         cols.push('quantity_min');
         const minVal = Number.isFinite(Number(ing.quantityMin))
-          ? Number(ing.quantityMin)
-          : Number.isFinite(Number(ing.quantity))
+          ? Number(ing.quantityMin) > 0
+            ? Number(ing.quantityMin)
+            : null
+          : Number.isFinite(Number(ing.quantity)) && Number(ing.quantity) > 0
           ? Number(ing.quantity)
           : null;
         vals.push(minVal);
@@ -851,8 +980,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       if (rimHasQtyMax) {
         cols.push('quantity_max');
         const maxVal = Number.isFinite(Number(ing.quantityMax))
-          ? Number(ing.quantityMax)
-          : Number.isFinite(Number(ing.quantity))
+          ? Number(ing.quantityMax) > 0
+            ? Number(ing.quantityMax)
+            : null
+          : Number.isFinite(Number(ing.quantity)) && Number(ing.quantity) > 0
           ? Number(ing.quantity)
           : null;
         vals.push(maxVal);
@@ -877,13 +1008,31 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         cols.push('is_optional');
         vals.push(ing.isOptional ? 1 : 0);
       }
-      if (rimHasSortOrder) {
+      const linkedRecipeIdRaw = Number(ing.linkedRecipeId);
+      const normalizedLinkedRecipeId =
+        Number.isFinite(linkedRecipeIdRaw) && linkedRecipeIdRaw > 0
+          ? linkedRecipeIdRaw
+          : null;
+      const normalizedIsRecipe = !!(ing.isRecipe && normalizedLinkedRecipeId != null);
+      if (rimHasIsRecipe) {
+        cols.push('is_recipe');
+        vals.push(normalizedIsRecipe ? 1 : 0);
+      }
+      if (rimHasLinkedRecipeId) {
+        cols.push('linked_recipe_id');
+        vals.push(normalizedIsRecipe ? normalizedLinkedRecipeId : null);
+      }
+      if (rimHasRecipeText) {
+        cols.push('recipe_text');
+        vals.push(normalizedIsRecipe ? (ing.recipeText || '').trim() : '');
+      }
+      if (rimHasSortOrder && assignedSort != null) {
         cols.push('sort_order');
         vals.push(assignedSort);
       }
 
       // Update existing row if we have a valid rimId still present in DB.
-      if (rimId != null && existingIds.has(rimId)) {
+      if (isExisting) {
         // Convert insert-shape into update-shape (skip recipe_id)
         const setCols = cols
           .filter((c) => c !== 'recipe_id')
@@ -980,20 +1129,21 @@ function writeIngredientSortOrderFromModel(activeDb, recipeId, recipe) {
       (ing) => ing && !ing.isPlaceholder && ing.rimId != null
     );
 
-    let n = 1;
     real.forEach((ing) => {
       const rimId = Number(ing.rimId);
+      const sortOrder = Number(ing.sortOrder);
       if (!Number.isFinite(rimId)) return;
+      if (!Number.isFinite(sortOrder) || sortOrder <= 0) return;
       try {
         if (rimHasSection) {
           activeDb.run(
             'UPDATE recipe_ingredient_map SET sort_order = ? WHERE recipe_id = ? AND section_id IS ? AND ID = ?;',
-            [n++, rid, sid ?? null, rimId]
+            [Math.floor(sortOrder), rid, sid ?? null, rimId]
           );
         } else {
           activeDb.run(
             'UPDATE recipe_ingredient_map SET sort_order = ? WHERE recipe_id = ? AND ID = ?;',
-            [n++, rid, rimId]
+            [Math.floor(sortOrder), rid, rimId]
           );
         }
       } catch (_) {

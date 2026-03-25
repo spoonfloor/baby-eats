@@ -1652,6 +1652,16 @@ function setupInlineRowEditing(options) {
     if (!getIsEditing()) return;
     if (_isFinalizing) return;
 
+    // Preserve native hard line breaks in multiline editors (e.g. ingredient paste row).
+    if (
+      e.key === 'Enter' &&
+      e.shiftKey &&
+      e.target &&
+      e.target.tagName === 'TEXTAREA'
+    ) {
+      return;
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault();
 

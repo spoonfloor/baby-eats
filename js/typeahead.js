@@ -997,11 +997,15 @@
     const getNextField = (currentField, dir) => {
       const idx = order.indexOf(currentField);
       if (idx === -1) return null;
-      const nextIdx =
-        dir > 0
-          ? (idx + 1) % order.length
-          : (idx - 1 + order.length) % order.length;
-      return order[nextIdx];
+      for (let step = 1; step <= order.length; step += 1) {
+        const nextIdx =
+          dir > 0
+            ? (idx + step) % order.length
+            : (idx - step + order.length * 2) % order.length;
+        const candidate = order[nextIdx];
+        if (candidate && byField.has(candidate)) return candidate;
+      }
+      return null;
     };
 
     inputs.forEach((inp) => {
@@ -1033,14 +1037,18 @@
 
     // Tab order follows visual order in the row.
     setupIngredientRowTabOrder(rowEl, [
+      'qtymin',
+      'qtymax',
       'name',
-      'qty',
+      'isrecipe',
+      'recipe',
       'unit',
       'size',
       'var',
       'prep',
       'notes',
-      'opt',
+      'isopt',
+      'isaprx',
     ]);
 
     const nameInput = rowEl.querySelector(

@@ -579,13 +579,12 @@ body.store-editor-page .store-variant-picker-pill--add-all:disabled {
 body.store-editor-page .store-aisle-move-controls {
   position: absolute;
   top: 10px;
-  right: 12px;
+  right: 9px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease;
 }
 
 body.store-editor-page .store-aisle-card:hover .store-aisle-move-controls,
@@ -598,9 +597,21 @@ body.store-editor-page .store-aisle-card:focus .store-aisle-move-controls {
 body.store-editor-page .store-aisle-move-btn {
   border: 0;
   background: transparent;
+  color: rgba(0, 0, 0, 0.55);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
-  padding: 2px;
+  padding: 0;
   cursor: pointer;
+}
+
+body.store-editor-page .store-aisle-move-icon {
+  font-size: 18px;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
 
 body.store-editor-page .store-aisle-move-btn:disabled,
@@ -712,9 +723,36 @@ body.shopping-editor-page .shopping-item-help {
   margin: 0; /* spacing is handled via downstream-only margin-top rules below */
 }
 
+body.recipe-editor-page .ingredient-row-move-btn {
+  border: 0;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.55);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+body.recipe-editor-page .ingredient-row-move-icon {
+  font-size: 18px;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+}
+
+body.recipe-editor-page .ingredient-row-move-btn:disabled,
+body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* Read-only recipe list: deprecated master ingredient (not used in edit tray) */
 #ingredientsSection .ingredient-line.ingredient-line--deprecated .ingredient-text,
-#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link {
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link,
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link:visited {
   color: var(--ingredient-deprecated-fg);
 }
 
@@ -823,6 +861,8 @@ body.ingredient-insert-blank-active
 /* Per-line CTA: hidden by default, revealed by JS hint controller */
 .ingredient-slot > .ingredient-add-cta {
   display: none;
+  position: relative;
+  z-index: 1;
 }
 
 .ingredient-slot.ingredient-slot--hint-active > .ingredient-add-cta {
@@ -834,6 +874,8 @@ body.ingredient-insert-blank-active
    - hover-activated in non-empty state */
 .ingredient-header-cta {
   display: none;
+  position: relative;
+  z-index: 1;
 }
 
 .ingredient-header-cta.ingredient-header-cta--persistent,
@@ -864,11 +906,11 @@ body.ingredient-insert-blank-active
 }
 
 /* When the empty-state CTA is present, suppress between-row insertion icons and interactions */
-#ingredientsSection:has(.ingredient-add-cta) .ingredient-insert-zone::before {
+#ingredientsSection:has(.ingredient-header-cta--persistent) .ingredient-insert-zone::before {
   opacity: 0 !important;
 }
 
-#ingredientsSection:has(.ingredient-add-cta) .ingredient-insert-zone {
+#ingredientsSection:has(.ingredient-header-cta--persistent) .ingredient-insert-zone {
   pointer-events: none;
   cursor: default;
 }
@@ -962,14 +1004,15 @@ body.ingredient-insert-blank-active
   pointer-events: none;
 }
 
-/* Hover insertion caret between ingredient rows (for subsection heading insertion) */
+/* Hover target between ingredient rows. The zone itself stays visually empty;
+   JS can treat it like "space below the preceding entity." */
 .ingredient-insert-zone {
   position: relative;
   height: 0;
   margin: 0; /* rails must never affect layout */
   cursor: default;
-  pointer-events: none; /* Hard-off: disable rail insertion interactions */
-  /* Keep insert zones behind real rows so they never steal hover/click. */
+  pointer-events: auto;
+  /* Keep insert zones behind real rows so they never steal events from them. */
   z-index: 0;
 
   /* Click target: give the element a real hit area without changing layout.
@@ -990,58 +1033,9 @@ body.ingredient-insert-blank-active
   height: calc(2 * var(--insert-hit-overhang-v));
 }
 
-/* Ingredient insert affordance icons (read mode only; hover-only) */
+/* No visual affordance here; the current text hint is shown by JS instead. */
 .ingredient-insert-zone::before {
-  content: '';
-  position: absolute;
-  width: var(--ing-insert-icon-size);
-  height: var(--ing-insert-icon-size);
-  left: var(--ing-insert-icon-x);
-  top: calc(50% + var(--ing-insert-icon-y));
-  transform: translateY(-50%);
-
-  background-color: var(--theme-primary);
-  opacity: 0;
-  pointer-events: none;
-
-  /* Default icon = add ingredient */
-  -webkit-mask-image: url('../assets/add_ingredient.svg');
-  mask-image: url('../assets/add_ingredient.svg');
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-position: center;
-  mask-position: center;
-}
-
-/* Hover shows the ingredient (+) icon */
-body:not(.ingredient-editing):not(.step-editing)
-  #ingredientsSection
-  .ingredient-insert-zone:hover::before {
-  opacity: 0.4;
-}
-
-/* In insert-subhead mode (Option held), swap to subhead icon */
-body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
-  #ingredientsSection
-  .ingredient-insert-zone:hover::before {
-  -webkit-mask-image: url('../assets/add_subhead.svg');
-  mask-image: url('../assets/add_subhead.svg');
-}
-
-/* When adjacent to a heading, subhead insertion is disallowed: hide the subhead icon */
-body.subhead-insert-mode
-  #ingredientsSection
-  .ingredient-insert-zone.ingredient-insert-zone--disabled:hover::before {
-  opacity: 0;
-}
-
-/* Cursor hint in read mode */
-body:not(.ingredient-editing):not(.step-editing)
-  #ingredientsSection
-  .ingredient-insert-zone:hover {
-  cursor: pointer;
+  content: none;
 }
 
 /* Disable insert interactions while editing (read-mode-only affordance) */
@@ -1655,6 +1649,20 @@ h1.nav-text {
   gap: var(--ingredient-edit-field-gap);
 }
 
+.ingredient-edit-row.editing.ingredient-edit-row--reorderable {
+  padding-right: 42px;
+}
+
+.ingredient-edit-row.editing .ingredient-row-move-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  z-index: 2;
+}
+
 .inline-edit-blur-target {
   position: absolute;
   width: 1px;
@@ -1693,6 +1701,8 @@ h1.nav-text {
 .ingredient-edit-cell--qtymax,
 .ingredient-edit-cell--unit,
 .ingredient-edit-cell--name,
+.ingredient-edit-cell--isrecipe,
+.ingredient-edit-cell--recipe,
 .ingredient-edit-cell--size,
 .ingredient-edit-cell--var,
 .ingredient-edit-cell--prep,
@@ -1815,6 +1825,21 @@ h1.nav-text {
 .ingredient-edit-input--name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ingredient-edit-cell--disabled {
+  opacity: 0.55;
+}
+
+#ingredientsSection .sub-recipe-link,
+#ingredientsSection .sub-recipe-link:visited {
+  color: var(--edit-mode-color);
+  text-decoration: none;
+}
+
+#ingredientsSection .sub-recipe-link:hover,
+#ingredientsSection .sub-recipe-link:focus-visible {
+  text-decoration: underline;
 }
 
 /* Deprecated master ingredient: name stays red in the tray until that field is focused (blue). */

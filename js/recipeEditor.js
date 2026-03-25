@@ -699,10 +699,20 @@ async function handleCtaAction(ingredientsSection, cta, btn) {
             '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
           );
       if (!liveCta) return;
+      const anchor = document.createElement('div');
+      const keepHeaderHintLive =
+        liveCta.classList.contains('ingredient-header-cta') &&
+        liveCta.classList.contains('ingredient-header-cta--persistent');
+      if (keepHeaderHintLive) {
+        liveCta.classList.remove('ingredient-header-cta--persistent');
+        anchor._ingredientHeaderHintSourceEl = liveCta;
+        anchor._ingredientHeaderHintRestorePersistent = true;
+        liveCta.before(anchor);
+      }
       if (typeof window.openIngredientPasteRow === 'function') {
         window.openIngredientPasteRow({
           parent: ingredientsSection,
-          replaceEl: liveCta,
+          replaceEl: keepHeaderHintLive ? anchor : liveCta,
           insertAtIndex: liveIdx,
         });
       }
@@ -742,10 +752,20 @@ async function handleCtaAction(ingredientsSection, cta, btn) {
             '.ingredient-add-cta:not(.ingredient-add-cta--per-line)'
           );
       if (!liveCta) return;
+      const anchor = document.createElement('div');
+      const keepHeaderHintLive =
+        liveCta.classList.contains('ingredient-header-cta') &&
+        liveCta.classList.contains('ingredient-header-cta--persistent');
+      if (keepHeaderHintLive) {
+        liveCta.classList.remove('ingredient-header-cta--persistent');
+        anchor._ingredientHeaderHintSourceEl = liveCta;
+        anchor._ingredientHeaderHintRestorePersistent = true;
+        liveCta.before(anchor);
+      }
       if (typeof window.openIngredientEditRow === 'function') {
         window.openIngredientEditRow({
           parent: ingredientsSection,
-          replaceEl: liveCta,
+          replaceEl: keepHeaderHintLive ? anchor : liveCta,
           mode: 'insert',
           seedLine: null,
           insertAtIndex: liveIdx,
@@ -806,6 +826,252 @@ function deleteIngredientHeadingRowFromSection(sectionRef, rowRef) {
   const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
   return { idx, removed };
 }
+
+function isIngredientRenderableRow(row) {
+  return !!(row && !row.isPlaceholder);
+}
+
+function isIngredientHeadingRow(row) {
+  if (!row) return false;
+  if (row.rowType === 'heading') return true;
+  if (row.headingId != null) return true;
+  if (row.headingClientId && row.text != null && row.name == null) return true;
+  return false;
+}
+
+function ingredientRowsMatch(candidate, rowRef) {
+  if (!candidate || !rowRef) return false;
+  if (candidate === rowRef) return true;
+
+  if (isIngredientHeadingRow(rowRef) || isIngredientHeadingRow(candidate)) {
+    const candidateHeadingId =
+      candidate.headingId != null ? String(candidate.headingId) : '';
+    const rowHeadingId = rowRef.headingId != null ? String(rowRef.headingId) : '';
+    if (candidateHeadingId && rowHeadingId && candidateHeadingId === rowHeadingId) {
+      return true;
+    }
+
+    const candidateHeadingClientId = candidate.headingClientId
+      ? String(candidate.headingClientId)
+      : '';
+    const rowHeadingClientId = rowRef.headingClientId
+      ? String(rowRef.headingClientId)
+      : '';
+    if (
+      candidateHeadingClientId &&
+      rowHeadingClientId &&
+      candidateHeadingClientId === rowHeadingClientId
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  const candidateRimId = candidate.rimId != null ? String(candidate.rimId) : '';
+  const rowRimId = rowRef.rimId != null ? String(rowRef.rimId) : '';
+  if (candidateRimId && rowRimId && candidateRimId === rowRimId) return true;
+
+  const candidateClientId = candidate.clientId ? String(candidate.clientId) : '';
+  const rowClientId = rowRef.clientId ? String(rowRef.clientId) : '';
+  if (candidateClientId && rowClientId && candidateClientId === rowClientId) {
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeIngredientSortOrder(sectionRef) {
+  if (!sectionRef || !Array.isArray(sectionRef.ingredients)) return;
+
+  let nextSortOrder = 1;
+  sectionRef.ingredients.forEach((row) => {
+    if (!isIngredientRenderableRow(row)) return;
+    row.sortOrder = nextSortOrder++;
+  });
+}
+
+function findIngredientRowContext(rowRef) {
+  if (!rowRef) return null;
+  const recipe = window.recipeData;
+  const sections = Array.isArray(recipe?.sections) ? recipe.sections : [];
+
+  for (const sec of sections) {
+    const arr = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+    const idx = arr.findIndex((row) => ingredientRowsMatch(row, rowRef));
+    if (idx !== -1) {
+      return { sectionRef: sec, list: arr, index: idx, rowRef: arr[idx] };
+    }
+  }
+  return null;
+}
+
+function findIngredientTargetIndexWithinList(list, fromIndex, delta) {
+  if (!Array.isArray(list) || !Number.isFinite(fromIndex) || !delta) return -1;
+
+  if (delta < 0) {
+    for (let i = fromIndex - 1; i >= 0; i--) {
+      const row = list[i];
+      if (!isIngredientRenderableRow(row)) continue;
+      return i;
+    }
+    return -1;
+  }
+
+  for (let i = fromIndex + 1; i < list.length; i++) {
+    const row = list[i];
+    if (!isIngredientRenderableRow(row)) continue;
+    return i;
+  }
+  return -1;
+}
+
+window.recipeEditorGetIngredientMoveAvailability = ({ rowRef } = {}) => {
+  const ctx = findIngredientRowContext(rowRef);
+  if (!ctx) return { canMoveUp: false, canMoveDown: false };
+  const { list, index } = ctx;
+  const upIdx = findIngredientTargetIndexWithinList(list, index, -1);
+  const downIdx = findIngredientTargetIndexWithinList(list, index, 1);
+  return { canMoveUp: upIdx !== -1, canMoveDown: downIdx !== -1 };
+};
+
+window.recipeEditorMoveIngredientRowByDelta = ({
+  rowRef,
+  delta,
+  reopenEditor = false,
+  reopenHeadingEditor = false,
+  initialFocusField,
+  initialCaretIndex,
+} = {}) => {
+  const dir = Number(delta);
+  if (!rowRef || !Number.isFinite(dir) || !dir) return false;
+
+  const ctx = findIngredientRowContext(rowRef);
+  if (!ctx) return false;
+
+  const { sectionRef, list, index } = ctx;
+  const targetIndex = findIngredientTargetIndexWithinList(list, index, dir);
+  if (targetIndex === -1 || targetIndex === index) return false;
+
+  const [moved] = list.splice(index, 1);
+  const insertionIndex = targetIndex;
+  list.splice(insertionIndex, 0, moved);
+  normalizeIngredientSortOrder(sectionRef);
+
+  try {
+    if (typeof markDirty === 'function') markDirty();
+  } catch (_) {}
+
+  rerenderIngredientsSectionFromModel();
+
+  // Restore interaction on the moved row after rerender.
+  const setContentEditableCaretOffset = (el, offset) => {
+    if (!(el instanceof HTMLElement)) return;
+    try {
+      const sel = window.getSelection();
+      if (!sel) return;
+
+      let firstTextNode = null;
+      let lastTextNode = null;
+      let remaining = Math.max(0, Number(offset) || 0);
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        if (!firstTextNode) firstTextNode = node;
+        lastTextNode = node;
+        const len = node.textContent.length;
+        if (remaining <= len) {
+          const range = document.createRange();
+          range.setStart(node, Math.max(0, remaining));
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          return;
+        }
+        remaining -= len;
+        node = walker.nextNode();
+      }
+
+      if (!firstTextNode) {
+        firstTextNode = document.createTextNode('');
+        el.appendChild(firstTextNode);
+        lastTextNode = firstTextNode;
+      }
+      const range = document.createRange();
+      range.setStart(lastTextNode || firstTextNode, (lastTextNode || firstTextNode).textContent.length);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {}
+  };
+
+  try {
+    const rid = moved && moved.rimId != null ? String(moved.rimId) : '';
+    const cid = moved && moved.clientId ? String(moved.clientId) : '';
+    const headingClientId =
+      moved && moved.headingClientId ? String(moved.headingClientId) : '';
+    const headingSelector = headingClientId
+      ? `.ingredient-subsection-heading-line[data-heading-client-id="${headingClientId}"]`
+      : '';
+    const selector = rid
+      ? `.ingredient-line[data-rim-id="${rid}"]`
+      : cid
+      ? `.ingredient-line[data-client-id="${cid}"]`
+      : headingSelector;
+    const moveDir = dir < 0 ? 'up' : 'down';
+    setTimeout(() => {
+      try {
+        const sectionEl = document.getElementById('ingredientsSection');
+        if (!sectionEl) return;
+        if (!selector) return;
+        const lineEl = sectionEl.querySelector(selector);
+        if (!(lineEl instanceof HTMLElement)) return;
+        if (reopenHeadingEditor) {
+          if (typeof lineEl.click === 'function') lineEl.click();
+          setTimeout(() => {
+            try {
+              const textEl = lineEl.querySelector(
+                '.ingredient-subsection-heading-text'
+              );
+              if (!(textEl instanceof HTMLElement)) return;
+              textEl.focus();
+              const nextOffset = Number.isFinite(Number(initialCaretIndex))
+                ? Math.max(0, Number(initialCaretIndex))
+                : (textEl.textContent || '').length;
+              setContentEditableCaretOffset(textEl, nextOffset);
+            } catch (_) {}
+          }, 0);
+          return;
+        }
+        if (
+          reopenEditor &&
+          typeof window.openIngredientEditRow === 'function' &&
+          lineEl.parentNode
+        ) {
+          window.openIngredientEditRow({
+            parent: lineEl.parentNode,
+            replaceEl: lineEl,
+            mode: 'update',
+            seedLine: moved,
+            initialFocusField,
+            initialCaretIndex,
+          });
+          return;
+        }
+        if (headingSelector && lineEl.matches(headingSelector)) {
+          lineEl.focus();
+          return;
+        }
+        const btn = lineEl.querySelector(
+          `.ingredient-row-move-btn[data-move-dir="${moveDir}"]`
+        );
+        if (btn instanceof HTMLElement) btn.focus();
+      } catch (_) {}
+    }, 0);
+  } catch (_) {}
+
+  return true;
+};
 
 window.recipeEditorDeleteIngredientRow = async ({
   sectionRef,
@@ -1976,21 +2242,12 @@ function renderServingsRow(recipe, container) {
   updateServingsVisibility(recipe);
 }
 
-// --- Title normalization helper (Title Case + fallback to "Untitled") ---
+// --- Title normalization helper (preserve casing + fallback to "Untitled") ---
 function normalizeRecipeTitle(raw) {
   if (raw == null) return 'Untitled';
   const trimmed = String(raw).trim();
   if (!trimmed) return 'Untitled';
-
-  // Reuse global helper if it exists (from main.js), for consistency
-  if (typeof window.toTitleCase === 'function') {
-    return window.toTitleCase(trimmed);
-  }
-
-  // Local fallback: simple Title Case
-  return trimmed
-    .toLowerCase()
-    .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
+  return trimmed;
 }
 
 // --- Inline editable title (global helper) ---

@@ -520,12 +520,6 @@ async function loadRecipesPage() {
 
   const recipesActionBtn = document.getElementById('appBarAddBtn');
 
-  function toTitleCase(str) {
-    return str
-      .toLowerCase()
-      .replace(/\b\w+/g, (word) => word[0].toUpperCase() + word.slice(1));
-  }
-
   async function openCreateRecipeDialog(db) {
     if (!db || !window.ui) return;
     const vals = await window.ui.form({
@@ -536,7 +530,7 @@ async function loadRecipesPage() {
           label: 'Title',
           value: '',
           required: true,
-          normalize: (v) => toTitleCase((v || '').trim()),
+          normalize: (v) => (v || '').trim(),
         },
       ],
       confirmText: 'Create',
@@ -4319,12 +4313,9 @@ function loadStoreEditorPage() {
     ${aislesBlock}
   `;
 
-    const ADD_AISLE_HINT_ACTIVATION_DELAY_MS = 400;
-    let hoveredAisleCard = null;
-    let hoverLeaveTid = null;
-    let addAisleActivateTid = null;
-    let pendingAisleCard = null;
+    let hoveredAisleAnchor = null;
     let pointerOverAddAisleCta = false;
+    let hoverModifierActive = false;
     const desktopHoverEnabled = (() => {
       try {
         return Boolean(
@@ -4342,40 +4333,29 @@ function loadStoreEditorPage() {
       if (list && cta && list.contains(cta)) list.after(cta);
     };
 
-    const cancelAddAisleActivation = () => {
-      if (addAisleActivateTid) {
-        window.clearTimeout(addAisleActivateTid);
-        addAisleActivateTid = null;
-      }
-      pendingAisleCard = null;
-    };
-
-    const getFocusedAisleCard = () =>
-      document.activeElement?.closest?.('.store-aisle-card') || null;
+    const hoverRevealArmed = () =>
+      hoverModifierActive || pointerOverAddAisleCta;
 
     const syncAddAisleCtaByInteraction = () => {
       const list = document.getElementById('storeAislesList');
       const cta = document.getElementById('storeAddAisleCta');
       if (!list || !cta) return;
       if (aisleRows.length === 0) {
-        cancelAddAisleActivation();
-        hoveredAisleCard = null;
+        hoveredAisleAnchor = null;
         list.after(cta);
         cta.hidden = false;
         return;
       }
-      if (hoveredAisleCard && !hoveredAisleCard.isConnected) {
-        hoveredAisleCard = null;
+      if (hoveredAisleAnchor && !hoveredAisleAnchor.isConnected) {
+        hoveredAisleAnchor = null;
       }
-      const focusCard = getFocusedAisleCard();
-      const targetCard =
-        desktopHoverEnabled && hoveredAisleCard ? hoveredAisleCard : focusCard;
-      if (targetCard) {
-        targetCard.after(cta);
+      const targetAnchor =
+        desktopHoverEnabled && hoverRevealArmed() ? hoveredAisleAnchor : null;
+      if (targetAnchor) {
+        targetAnchor.after(cta);
         cta.hidden = false;
         return;
       }
-      cancelAddAisleActivation();
       list.after(cta);
       cta.hidden = true;
     };
@@ -4390,26 +4370,63 @@ function loadStoreEditorPage() {
       if (!cta) return;
       cta.addEventListener('mouseenter', () => {
         pointerOverAddAisleCta = true;
-        window.clearTimeout(hoverLeaveTid);
+        syncAddAisleCtaByInteraction();
       });
       cta.addEventListener('mouseleave', () => {
         pointerOverAddAisleCta = false;
-        if (hoveredAisleCard) hoveredAisleCard = null;
+        if (hoveredAisleAnchor) hoveredAisleAnchor = null;
+        syncAddAisleCtaByInteraction();
+      });
+    };
+    const wireAislesSectionLabelHover = () => {
+      if (!desktopHoverEnabled) return;
+      const label = document.getElementById('storeAislesSectionLabel');
+      if (!label) return;
+      label.addEventListener('mouseenter', (e) => {
+        hoverModifierActive = !!e.altKey;
+        hoveredAisleAnchor = label;
+        syncAddAisleCtaByInteraction();
+      });
+      label.addEventListener('mouseleave', (e) => {
+        const cta = document.getElementById('storeAddAisleCta');
+        if (cta && cta.contains(e.relatedTarget)) return;
+        if (hoveredAisleAnchor === label) hoveredAisleAnchor = null;
         syncAddAisleCtaByInteraction();
       });
     };
 
-    const scheduleAddAisleCtaActivation = (card) => {
-      if (!card || aisleRows.length < 1) return;
-      pendingAisleCard = card;
-      if (addAisleActivateTid) window.clearTimeout(addAisleActivateTid);
-      addAisleActivateTid = window.setTimeout(() => {
-        addAisleActivateTid = null;
-        const stillPending = pendingAisleCard === card;
-        const stillConnected = !!(card && card.isConnected);
-        if (!stillPending || !stillConnected) return;
-        syncAddAisleCtaByInteraction();
-      }, ADD_AISLE_HINT_ACTIVATION_DELAY_MS);
+
+    const syncAddAisleHoverModifier = (e) => {
+      const next = !!(e && e.altKey);
+      if (next === hoverModifierActive) return;
+      hoverModifierActive = next;
+      syncAddAisleCtaByInteraction();
+    };
+
+    const clearAddAisleHoverModifier = () => {
+      if (!hoverModifierActive) return;
+      hoverModifierActive = false;
+      syncAddAisleCtaByInteraction();
+    };
+
+    try {
+      if (typeof window._storeAddAisleHoverModifierTeardown === 'function') {
+        window._storeAddAisleHoverModifierTeardown();
+      }
+    } catch (_) {}
+    document.addEventListener('keydown', syncAddAisleHoverModifier, true);
+    document.addEventListener('keyup', syncAddAisleHoverModifier, true);
+    window.addEventListener('blur', clearAddAisleHoverModifier);
+    window._storeAddAisleHoverModifierTeardown = () => {
+      try {
+        document.removeEventListener('keydown', syncAddAisleHoverModifier, true);
+      } catch (_) {}
+      try {
+        document.removeEventListener('keyup', syncAddAisleHoverModifier, true);
+      } catch (_) {}
+      try {
+        window.removeEventListener('blur', clearAddAisleHoverModifier);
+      } catch (_) {}
     };
 
     const closeActiveVariantPicker = ({ commit = true } = {}) => {
@@ -4747,21 +4764,16 @@ function loadStoreEditorPage() {
         card.dataset.aisleId = String(a.id);
         card.tabIndex = 0;
         if (desktopHoverEnabled) {
-          card.addEventListener('mouseenter', () => {
-            window.clearTimeout(hoverLeaveTid);
-            hoveredAisleCard = card;
-            scheduleAddAisleCtaActivation(card);
+          card.addEventListener('mouseenter', (e) => {
+            hoverModifierActive = !!e.altKey;
+            hoveredAisleAnchor = card;
+            syncAddAisleCtaByInteraction();
           });
           card.addEventListener('mouseleave', (e) => {
             const cta = document.getElementById('storeAddAisleCta');
             if (cta && cta.contains(e.relatedTarget)) return;
-            cancelAddAisleActivation();
-            window.clearTimeout(hoverLeaveTid);
-            hoverLeaveTid = window.setTimeout(() => {
-              if (pointerOverAddAisleCta) return;
-              if (hoveredAisleCard === card) hoveredAisleCard = null;
-              syncAddAisleCtaByInteraction();
-            }, 120);
+            if (hoveredAisleAnchor === card) hoveredAisleAnchor = null;
+            syncAddAisleCtaByInteraction();
           });
         }
 
@@ -4863,7 +4875,11 @@ function loadStoreEditorPage() {
         const moveUpBtn = document.createElement('button');
         moveUpBtn.className = 'store-aisle-move-btn';
         moveUpBtn.type = 'button';
-        moveUpBtn.textContent = '⬆️';
+        const moveUpIcon = document.createElement('span');
+        moveUpIcon.className = 'material-symbols-outlined store-aisle-move-icon';
+        moveUpIcon.setAttribute('aria-hidden', 'true');
+        moveUpIcon.textContent = 'arrow_upward_alt';
+        moveUpBtn.appendChild(moveUpIcon);
         moveUpBtn.setAttribute('aria-label', 'Move aisle up');
         if (aisleIndex <= 0) {
           moveUpBtn.disabled = true;
@@ -4878,7 +4894,11 @@ function loadStoreEditorPage() {
         const moveDownBtn = document.createElement('button');
         moveDownBtn.className = 'store-aisle-move-btn';
         moveDownBtn.type = 'button';
-        moveDownBtn.textContent = '⬇️';
+        const moveDownIcon = document.createElement('span');
+        moveDownIcon.className = 'material-symbols-outlined store-aisle-move-icon';
+        moveDownIcon.setAttribute('aria-hidden', 'true');
+        moveDownIcon.textContent = 'arrow_downward_alt';
+        moveDownBtn.appendChild(moveDownIcon);
         moveDownBtn.setAttribute('aria-label', 'Move aisle down');
         if (aisleIndex >= aisleRows.length - 1) {
           moveDownBtn.disabled = true;
@@ -5250,8 +5270,7 @@ function loadStoreEditorPage() {
       };
       view.addEventListener('focusin', (e) => {
         if (aisleRows.length < 1) return;
-        const card = e.target?.closest?.('.store-aisle-card');
-        if (card) scheduleAddAisleCtaActivation(card);
+        syncAddAisleCtaByInteraction();
       });
       view.addEventListener('focusout', onFocusOut);
     };
@@ -5575,6 +5594,7 @@ function loadStoreEditorPage() {
       renderAisleCards();
       wireAddAisleCtaFocus();
       wireAddAisleCtaHover();
+      wireAislesSectionLabelHover();
       wireAddAisle();
       return;
     }
@@ -5677,6 +5697,7 @@ function loadStoreEditorPage() {
     renderAisleCards();
     wireAddAisleCtaFocus();
     wireAddAisleCtaHover();
+      wireAislesSectionLabelHover();
     wireAddAisle();
   })();
 }
@@ -6124,7 +6145,7 @@ async function loadRecipeEditorPage() {
         revertChanges();
       }
     },
-    onSave: async () => {
+    onSave: (window.recipeEditorSave = async () => {
       // Recipe editor SoT: the live model (`window.recipeData.title`).
       // The app-bar title is a view; it may lag if the user edited the in-page title.
       const modelTitle = (window.recipeData?.title || '').trim();
@@ -6242,7 +6263,7 @@ async function loadRecipeEditorPage() {
         uiToast('Save failed — check console for details.');
         throw err;
       }
-    },
+    }),
   });
 
   renderRecipe(recipe);
@@ -6259,6 +6280,34 @@ async function loadRecipeEditorPage() {
     window.scrollTo(0, 0);
   }
 }
+
+window.openRecipe = function openRecipe(recipeId) {
+  const rid = Number(recipeId);
+  if (!Number.isFinite(rid) || rid <= 0) return;
+  void (async () => {
+    const dirty =
+      typeof window.recipeEditorGetIsDirty === 'function'
+        ? window.recipeEditorGetIsDirty()
+        : false;
+    if (dirty) {
+      const choice = await window.ui.dialogThreeChoice({
+        title: 'Unsaved changes',
+        message: 'What would you like to do with your unsaved changes?',
+        fixText: 'Cancel',
+        discardText: 'Discard',
+        createText: 'Save',
+      });
+      if (choice === 'fix') return;
+      if (choice === 'create') {
+        if (typeof window.recipeEditorSave === 'function') {
+          await window.recipeEditorSave();
+        }
+      }
+    }
+    sessionStorage.setItem('selectedRecipeId', String(rid));
+    window.location.href = 'recipeEditor.html';
+  })();
+};
 
 document.addEventListener('DOMContentLoaded', () => {
   // (intentionally empty) legacy DOMContentLoaded wiring removed
