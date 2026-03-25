@@ -4086,6 +4086,19 @@ function loadStoreEditorPage() {
         hasParen: true,
       };
     };
+    const splitLineIntoBaseAndParenLoose = (line) => {
+      const strict = splitLineIntoBaseAndParen(line);
+      if (strict && strict.hasParen) return strict;
+      const t = String(line || '').trim();
+      if (!t) return null;
+      const openIdx = t.indexOf('(');
+      if (openIdx < 0) return strict;
+      const baseName = String(t.slice(0, openIdx) || '').trim();
+      if (!baseName) return strict;
+      let inside = String(t.slice(openIdx + 1) || '').trim();
+      if (inside.endsWith(')')) inside = inside.slice(0, -1).trim();
+      return { baseName, inside, hasParen: true };
+    };
     const isSupportedVariantName = (s) => {
       const t = String(s || '').trim();
       if (!t) return false;
@@ -4113,10 +4126,43 @@ function loadStoreEditorPage() {
         ? selectedNames.map((v) => String(v || '').trim()).filter(Boolean)
         : [];
       if (!names.length) return base;
-      if (names.length <= 3) return `${base} (${names.join(', ')})`;
-      const shown = names.slice(0, 3).join(', ');
-      const rem = names.length - 3;
-      return `${base} (${shown}, + ${rem} other${rem === 1 ? '' : 's'})`;
+      const maxInsideChars = 45;
+      const ellipsize = (s, max) => {
+        const t = String(s || '');
+        if (t.length <= max) return t;
+        if (max <= 1) return '…';
+        return `${t.slice(0, max - 1)}…`;
+      };
+      const fullInside = names.join(', ');
+      if (fullInside.length <= maxInsideChars) return `${base} (${fullInside})`;
+
+      const parts = [];
+      for (let i = 0; i < names.length; i++) {
+        const remaining = names.length - (i + 1);
+        const suffix =
+          remaining > 0
+            ? `, + ${remaining} other${remaining === 1 ? '' : 's'}`
+            : '';
+        const candidateParts = [...parts, names[i]];
+        const candidateInside = `${candidateParts.join(', ')}${suffix}`;
+        if (candidateInside.length <= maxInsideChars) {
+          parts.push(names[i]);
+          continue;
+        }
+        if (!parts.length) {
+          // Ensure at least one variant token is visible before the suffix.
+          const roomForFirst = Math.max(1, maxInsideChars - suffix.length);
+          parts.push(ellipsize(names[i], roomForFirst));
+        }
+        break;
+      }
+      const remaining = Math.max(0, names.length - parts.length);
+      const suffix =
+        remaining > 0
+          ? `, + ${remaining} other${remaining === 1 ? '' : 's'}`
+          : '';
+      const inside = `${parts.join(', ')}${suffix}`;
+      return `${base} (${inside})`;
     };
     const cloneSpecs = (specs) =>
       (Array.isArray(specs) ? specs : []).map((s) => ({
@@ -4137,14 +4183,23 @@ function loadStoreEditorPage() {
       }));
     const specsToDisplayLines = (specs, opts = {}) => {
       const pickerKey = String(opts.pickerBaseKey || '').trim().toLowerCase();
+      const expandAll = opts.expandAll === true;
       return (Array.isArray(specs) ? specs : []).map((spec) => {
         if (pickerKey && spec.baseKey === pickerKey) return spec.baseName || '';
+        if (expandAll) {
+          const base = String(spec.baseName || '').trim();
+          const variants = Array.isArray(spec.selectedVariants)
+            ? spec.selectedVariants.map((v) => String(v || '').trim()).filter(Boolean)
+            : [];
+          return variants.length ? `${base} (${variants.join(', ')})` : base;
+        }
         return collapseVariantSummary(spec.baseName || '', spec.selectedVariants);
       });
     };
     const syncDisplayLinesFromSpecs = (aid, opts = {}) => {
-      const specs = cloneSpecs(aisleItemSpecsByAisle.get(aid) || []);
-      aisleItemSpecsByAisle.set(aid, specs);
+      const specs = Array.isArray(aisleItemSpecsByAisle.get(aid))
+        ? aisleItemSpecsByAisle.get(aid)
+        : [];
       aisleItemsByAisle.set(aid, specsToDisplayLines(specs, opts));
     };
     const parseSpecsFromRaw = (raw, prevSpecs, catalog) => {
@@ -4155,7 +4210,7 @@ function loadStoreEditorPage() {
       const out = [];
       const seenBase = new Set();
       for (const line of String(raw || '').split('\n')) {
-        const parsed = splitLineIntoBaseAndParen(line);
+        const parsed = splitLineIntoBaseAndParenLoose(line);
         if (!parsed) continue;
         const baseName = String(parsed.baseName || '').trim();
         if (!baseName) continue;
@@ -4178,12 +4233,11 @@ function loadStoreEditorPage() {
           // Keep DB order first, then append any valid ad-hoc variants the user typed.
           const dbOrdered = known.variants.map((v) => String(v?.name || '').trim());
           const dbKeys = new Set(dbOrdered.map((v) => normVariantKey(v)));
+          const selectedBeforeNormalize = [...selected];
           const extras = selected.filter((v) => !dbKeys.has(normVariantKey(v)));
           selected = [];
           const wanted = new Set(
-            (parsed.hasParen ? parseVariantNames(inside) : []).map((v) =>
-              normVariantKey(v),
-            ),
+            selectedBeforeNormalize.map((v) => normVariantKey(v)),
           );
           dbOrdered.forEach((name) => {
             if (wanted.has(normVariantKey(name))) selected.push(name);
@@ -4643,6 +4697,8 @@ function loadStoreEditorPage() {
         panel,
         outsideClickHandler,
         onEsc,
+        onPanelKeyDown,
+        onDocumentKeyDown,
         focusBaselineValue,
       } = activeVariantPicker;
       try {
@@ -4650,6 +4706,12 @@ function loadStoreEditorPage() {
       } catch (_) {}
       try {
         textarea?.removeEventListener('keydown', onEsc, true);
+      } catch (_) {}
+      try {
+        panel?.removeEventListener('keydown', onPanelKeyDown, true);
+      } catch (_) {}
+      try {
+        document.removeEventListener('keydown', onDocumentKeyDown, true);
       } catch (_) {}
       try {
         panel?.remove();
@@ -4681,24 +4743,43 @@ function loadStoreEditorPage() {
       if (!(textarea instanceof HTMLTextAreaElement)) return;
       const originalTextareaValue = String(textarea.value || '');
       const v = String(textarea.value || '');
-      const pos = Number(textarea.selectionStart ?? 0);
+      const selStart = Number(textarea.selectionStart ?? 0);
+      const selEnd = Number(textarea.selectionEnd ?? selStart);
+      const pos = Math.max(selStart, selEnd);
       const prevNl = v.lastIndexOf('\n', Math.max(0, pos - 1));
       const lineStart = prevNl === -1 ? 0 : prevNl + 1;
       const nextNl = v.indexOf('\n', pos);
       const lineEnd = nextNl === -1 ? v.length : nextNl;
       const lineText = String(v.slice(lineStart, lineEnd) || '');
       const col = Math.max(0, pos - lineStart);
+      const selColStart = Math.max(0, Math.min(selStart, selEnd) - lineStart);
+      const selColEnd = Math.max(0, Math.max(selStart, selEnd) - lineStart);
+      const hasSelection = selColEnd > selColStart;
       const openIdx = lineText.indexOf('(');
       const closeIdx = lineText.lastIndexOf(')');
-      if (openIdx < 0 || closeIdx < 0 || closeIdx <= openIdx) return;
-      if (col < openIdx || col > closeIdx + 1) return;
+      if (openIdx < 0) return;
+      const hasClosingParen = closeIdx > openIdx;
+      if (hasClosingParen) {
+        const inParenByCaret = col >= openIdx && col <= closeIdx + 1;
+        const inParenBySelection =
+          hasSelection && selColEnd >= openIdx && selColStart <= closeIdx + 1;
+        if (!inParenByCaret && !inParenBySelection) return;
+      } else if (col < openIdx) {
+        const inParenBySelection = hasSelection && selColEnd >= openIdx;
+        if (inParenBySelection) {
+          // Selection reaches into the open-paren segment (e.g. triple-click line select).
+        } else {
+        // Support in-progress variant text (e.g. "apple (Fuji") before closing ")".
+        return;
+        }
+      }
       const specs = parseSpecsFromRaw(
         textarea.value,
         aisleItemSpecsByAisle.get(aid) || [],
         ingredientCatalog,
       );
       aisleItemSpecsByAisle.set(aid, specs);
-      const parsed = splitLineIntoBaseAndParen(lineText);
+      const parsed = splitLineIntoBaseAndParenLoose(lineText);
       const baseKey = normItemKey(parsed?.baseName || '');
       if (!baseKey) return;
       const spec = specs.find((s) => s.baseKey === baseKey);
@@ -4713,38 +4794,101 @@ function loadStoreEditorPage() {
       const knownVariants = Array.isArray(spec.knownVariants)
         ? spec.knownVariants.filter((x) => String(x?.name || '').trim())
         : [];
+      // Build picker options optimistically: saved DB variants first, then any
+      // valid ad-hoc variants the user already typed in this line.
+      const pickerVariants = [];
+      const seenPickerVariantKeys = new Set();
+      knownVariants.forEach((variant) => {
+        const vn = String(variant?.name || '').trim();
+        const key = normVariantKey(vn);
+        if (!key || seenPickerVariantKeys.has(key)) return;
+        seenPickerVariantKeys.add(key);
+        pickerVariants.push({
+          id: Number.isFinite(Number(variant?.id)) ? Number(variant.id) : null,
+          name: vn,
+        });
+      });
+      (spec.selectedVariants || []).forEach((variantName) => {
+        const vn = String(variantName || '').trim();
+        const key = normVariantKey(vn);
+        if (!key || seenPickerVariantKeys.has(key)) return;
+        if (!isSupportedVariantName(vn)) return;
+        seenPickerVariantKeys.add(key);
+        pickerVariants.push({ id: null, name: vn });
+      });
       const panel = document.createElement('div');
       panel.className = 'store-variant-picker store-variant-picker--inline';
       const inlineLine = document.createElement('div');
       inlineLine.className = 'store-variant-picker-inline-line';
       const baseLabel = document.createElement('span');
-      baseLabel.className = 'store-variant-picker-inline-name';
+      baseLabel.className =
+        'store-variant-picker-inline-name store-variant-picker-inline-name-pill';
       baseLabel.textContent = spec.baseName || '';
       inlineLine.appendChild(baseLabel);
       const pillsWrap = document.createElement('div');
       pillsWrap.className = 'store-variant-picker-pills store-variant-picker-pills--inline';
-      knownVariants.forEach((variant) => {
+      const pillButtons = [];
+      let addAllBtn = null;
+      const syncAllPillStates = () => {
+        pillButtons.forEach(({ btn, key }) => {
+          const on = selected.has(key);
+          btn.classList.toggle('is-on', on);
+          btn.classList.toggle('is-off', !on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        if (addAllBtn) {
+          const allSelected =
+            pickerVariants.length > 0 &&
+            pickerVariants.every((v) =>
+              selected.has(normVariantKey(String(v?.name || '').trim())),
+            );
+          addAllBtn.disabled = allSelected;
+          addAllBtn.classList.toggle('is-unavailable', allSelected);
+          addAllBtn.setAttribute('aria-disabled', allSelected ? 'true' : 'false');
+        }
+      };
+      if (knownVariants.length >= 5) {
+        addAllBtn = document.createElement('button');
+        addAllBtn.type = 'button';
+        addAllBtn.className =
+          'ui-unknown-items-suggestion-pill store-variant-picker-pill store-variant-picker-pill--add-all';
+        addAllBtn.textContent = 'Add all';
+        addAllBtn.addEventListener('click', () => {
+          pickerVariants.forEach((variant) => {
+            const vn = String(variant?.name || '').trim();
+            const key = normVariantKey(vn);
+            if (key) selected.add(key);
+          });
+          const nextList = pickerVariants
+            .map((v2) => String(v2?.name || '').trim())
+            .filter((name) => selected.has(normVariantKey(name)));
+          spec.selectedVariants = nextList;
+          syncAllPillStates();
+          syncDisplayLinesFromSpecs(aid, { pickerBaseKey: spec.baseKey });
+          textarea.value = (aisleItemsByAisle.get(aid) || []).join('\n');
+          try {
+            textarea.__feAutoGrowResize?.();
+          } catch (_) {}
+          refreshDirty();
+        });
+        pillsWrap.appendChild(addAllBtn);
+      }
+      pickerVariants.forEach((variant) => {
         const vn = String(variant?.name || '').trim();
         const key = normVariantKey(vn);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ui-unknown-items-suggestion-pill store-variant-picker-pill';
-        const syncBtnState = () => {
-          const on = selected.has(key);
-          btn.classList.toggle('is-on', on);
-          btn.classList.toggle('is-off', !on);
-          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        };
         btn.textContent = vn;
-        syncBtnState();
+        pillButtons.push({ btn, key });
         btn.addEventListener('click', () => {
           if (selected.has(key)) selected.delete(key);
           else selected.add(key);
-          syncBtnState();
-          const nextList = knownVariants
+          const nextList = pickerVariants
             .map((v2) => String(v2?.name || '').trim())
             .filter((name) => selected.has(normVariantKey(name)));
           spec.selectedVariants = nextList;
+          syncAllPillStates();
           syncDisplayLinesFromSpecs(aid, { pickerBaseKey: spec.baseKey });
           textarea.value = (aisleItemsByAisle.get(aid) || []).join('\n');
           try {
@@ -4754,6 +4898,7 @@ function loadStoreEditorPage() {
         });
         pillsWrap.appendChild(btn);
       });
+      syncAllPillStates();
       inlineLine.appendChild(pillsWrap);
       panel.appendChild(inlineLine);
       itemsField.appendChild(panel);
@@ -4772,12 +4917,85 @@ function loadStoreEditorPage() {
         closeActiveVariantPicker({ commit: true });
       };
       const onEsc = (evt) => {
-        if (evt.key !== 'Escape') return;
+        const key = String(evt?.key || '');
+        if (key === 'Enter') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          const caretPos = Number(textarea?.selectionStart ?? 0);
+          closeActiveVariantPicker({ commit: true });
+          try {
+            const nextPos = Math.max(
+              0,
+              Math.min(caretPos, Number(textarea?.value?.length ?? 0)),
+            );
+            textarea.focus();
+            textarea.setSelectionRange(nextPos, nextPos);
+          } catch (_) {}
+          return;
+        }
+        if (key !== 'Escape') return;
         evt.preventDefault();
+        evt.stopPropagation();
         closeActiveVariantPicker({ commit: false });
+        try {
+          textarea.blur();
+        } catch (_) {}
+      };
+      const onPanelKeyDown = (evt) => {
+        const key = String(evt?.key || '');
+        if (key === 'Enter') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          const caretPos = Number(textarea?.selectionStart ?? 0);
+          closeActiveVariantPicker({ commit: true });
+          try {
+            const nextPos = Math.max(
+              0,
+              Math.min(caretPos, Number(textarea?.value?.length ?? 0)),
+            );
+            textarea.focus();
+            textarea.setSelectionRange(nextPos, nextPos);
+          } catch (_) {}
+          return;
+        }
+        if (key === 'Escape') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          closeActiveVariantPicker({ commit: false });
+          try {
+            textarea.blur();
+          } catch (_) {}
+        }
+      };
+      const onDocumentKeyDown = (evt) => {
+        const key = String(evt?.key || '');
+        if (key === 'Enter') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          const caretPos = Number(textarea?.selectionStart ?? 0);
+          closeActiveVariantPicker({ commit: true });
+          try {
+            const nextPos = Math.max(
+              0,
+              Math.min(caretPos, Number(textarea?.value?.length ?? 0)),
+            );
+            textarea.focus();
+            textarea.setSelectionRange(nextPos, nextPos);
+          } catch (_) {}
+          return;
+        }
+        if (key !== 'Escape') return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        closeActiveVariantPicker({ commit: false });
+        try {
+          textarea.blur();
+        } catch (_) {}
       };
       document.addEventListener('mousedown', outsideClickHandler, true);
       textarea.addEventListener('keydown', onEsc, true);
+      panel.addEventListener('keydown', onPanelKeyDown, true);
+      document.addEventListener('keydown', onDocumentKeyDown, true);
       activeVariantPicker = {
         aid,
         baseKey: spec.baseKey,
@@ -4785,6 +5003,8 @@ function loadStoreEditorPage() {
         panel,
         outsideClickHandler,
         onEsc,
+        onPanelKeyDown,
+        onDocumentKeyDown,
         focusBaselineValue: originalTextareaValue,
       };
     };
@@ -5017,7 +5237,7 @@ function loadStoreEditorPage() {
         ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
         ta.placeholder = 'Add an item.';
         ta.setAttribute('aria-label', 'Aisle items');
-        ta.wrap = 'off';
+        ta.wrap = 'soft';
         attachEditorTextareaAutoGrow(ta, { maxLines: 10 });
         attachEditorNewlineListPaste(ta);
 
@@ -5054,25 +5274,118 @@ function loadStoreEditorPage() {
 
             // Small local helper (keeps code below readable).
             const vSlice = (s, a, b) => String(s || '').slice(a, b);
+            const getVariantPoolForBaseName = (baseName) => {
+              const key = normItemKey(baseName);
+              if (!key) return [];
+              const known = ingredientCatalog?.byName?.get?.(key) || null;
+              if (!known || !Array.isArray(known.variants)) return [];
+              const out = [];
+              const seen = new Set();
+              known.variants.forEach((v) => {
+                const clean = String(v?.name || '').trim();
+                if (!clean) return;
+                const k = normVariantKey(clean);
+                if (!k || seen.has(k)) return;
+                seen.add(k);
+                out.push(clean);
+              });
+              return out;
+            };
+            const getLineTypeaheadContext = (textarea) => {
+              const caretPos = textarea.selectionStart ?? 0;
+              const { lineStart, lineEnd } = getCaretLineBounds(
+                textarea,
+                caretPos,
+              );
+              const lineText = vSlice(textarea.value, lineStart, lineEnd);
+              const caretInLine = Math.max(
+                0,
+                Math.min(lineText.length, caretPos - lineStart),
+              );
+              const beforeCaret = vSlice(lineText, 0, caretInLine);
+              const openParenIdx = beforeCaret.lastIndexOf('(');
+              const closeParenIdx = beforeCaret.lastIndexOf(')');
+              const inVariantContext =
+                openParenIdx >= 0 && closeParenIdx < openParenIdx;
+              if (!inVariantContext) {
+                return {
+                  mode: 'name',
+                  query: String(lineText || '').trim(),
+                  lineStart,
+                  lineEnd,
+                };
+              }
+
+              const baseName = String(vSlice(lineText, 0, openParenIdx) || '').trim();
+              if (!baseName) {
+                return {
+                  mode: 'name',
+                  query: String(lineText || '').trim(),
+                  lineStart,
+                  lineEnd,
+                };
+              }
+
+              const tokenAnchor = beforeCaret.lastIndexOf(',');
+              const tokenStartInLine = tokenAnchor >= openParenIdx ? tokenAnchor + 1 : openParenIdx + 1;
+
+              const afterCaret = vSlice(lineText, caretInLine, lineText.length);
+              const tokenEndRel = afterCaret.search(/[,\)]/);
+              const tokenEndInLine =
+                tokenEndRel === -1 ? lineText.length : caretInLine + tokenEndRel;
+
+              let tokenTextStartInLine = tokenStartInLine;
+              while (
+                tokenTextStartInLine < tokenEndInLine &&
+                /\s/.test(lineText[tokenTextStartInLine] || '')
+              ) {
+                tokenTextStartInLine += 1;
+              }
+
+              return {
+                mode: 'variant',
+                baseName,
+                query: String(
+                  vSlice(lineText, tokenTextStartInLine, caretInLine),
+                ).trim(),
+                lineStart,
+                lineEnd,
+                tokenTextStartAbs: lineStart + tokenTextStartInLine,
+                tokenEndAbs: lineStart + tokenEndInLine,
+              };
+            };
 
             taTypeahead.attach({
               inputEl: ta,
-              getPool: async () => await taTypeahead.getNamePool(),
-              // Query is the current line, trimmed (so suggestions open only after 1+ non-space char).
-              getQuery: (textarea) =>
-                String(getCurrentLineText(textarea) || '').trim(),
-              // Replace the entire current line with the canonical ingredient name.
+              getPool: async (textarea) => {
+                const ctx = getLineTypeaheadContext(textarea);
+                if (ctx.mode === 'variant') {
+                  return getVariantPoolForBaseName(ctx.baseName);
+                }
+                return await taTypeahead.getNamePool();
+              },
+              // Query is context-aware:
+              // - name mode: current line text
+              // - variant mode: current token inside parentheses
+              getQuery: (textarea) => String(getLineTypeaheadContext(textarea).query || ''),
+              // Replace either:
+              // - full line (name mode), or
+              // - active variant token only (variant mode)
               setValue: (picked, textarea) => {
                 const canonical = String(picked || '').trim();
-                const caretPos = textarea.selectionStart ?? 0;
-                const { lineStart, lineEnd } = getCaretLineBounds(
-                  textarea,
-                  caretPos,
-                );
-                const before = vSlice(textarea.value, 0, lineStart);
-                const after = vSlice(textarea.value, lineEnd, textarea.value.length);
+                const ctx = getLineTypeaheadContext(textarea);
+                if (ctx.mode === 'variant') {
+                  const start = Number(ctx.tokenTextStartAbs);
+                  const end = Number(ctx.tokenEndAbs);
+                  const before = vSlice(textarea.value, 0, start);
+                  const after = vSlice(textarea.value, end, textarea.value.length);
+                  textarea.value = before + canonical + after;
+                  return { caretPos: start + canonical.length };
+                }
+                const before = vSlice(textarea.value, 0, ctx.lineStart);
+                const after = vSlice(textarea.value, ctx.lineEnd, textarea.value.length);
                 textarea.value = before + canonical + after;
-                return { caretPos: lineStart + canonical.length };
+                return { caretPos: ctx.lineStart + canonical.length };
               },
               closeOnEmptyQuery: true,
               openOnlyWhenQueryNonEmpty: true,
@@ -5100,7 +5413,7 @@ function loadStoreEditorPage() {
             ingredientCatalog,
           );
           aisleItemSpecsByAisle.set(a.id, nextSpecs);
-          syncDisplayLinesFromSpecs(a.id);
+          syncDisplayLinesFromSpecs(a.id, { expandAll: true });
           ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
           escBaseline = parseUniqueItemLines(ta.value);
           escBaselineText = ta.value;
@@ -5117,13 +5430,24 @@ function loadStoreEditorPage() {
           refreshDirty();
         });
 
-        ta.addEventListener('click', () => {
+        ta.addEventListener('click', (e) => {
+          if (Number(e?.detail || 0) < 3) return;
+          if (activeVariantPicker && activeVariantPicker.textarea === ta) return;
+          // Let native selection/caret settle first, then inspect caret context.
           window.setTimeout(() => {
             maybeOpenVariantPickerFromCaret(ta, a.id);
           }, 0);
         });
 
         ta.addEventListener('keydown', (e) => {
+          if (
+            e.key === 'Escape' &&
+            activeVariantPicker &&
+            activeVariantPicker.textarea === ta
+          ) {
+            // Picker-level Esc handler (capture phase) owns close + blur.
+            return;
+          }
           if (e.key === 'Escape') {
             e.preventDefault();
             closeActiveVariantPicker({ commit: false });
@@ -5141,22 +5465,6 @@ function loadStoreEditorPage() {
             } catch (_) {}
             refreshDirty();
             return;
-          }
-          if (e.key === 'Enter' && !e.shiftKey) {
-            window.setTimeout(() => {
-              const nextSpecs = parseSpecsFromRaw(
-                ta.value,
-                aisleItemSpecsByAisle.get(a.id) || [],
-                ingredientCatalog,
-              );
-              aisleItemSpecsByAisle.set(a.id, nextSpecs);
-              syncDisplayLinesFromSpecs(a.id);
-              ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
-              try {
-                ta.__feAutoGrowResize?.();
-              } catch (_) {}
-              refreshDirty();
-            }, 0);
           }
         });
 

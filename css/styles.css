@@ -366,13 +366,20 @@ body.store-editor-page .shopping-item-textarea {
   width: 100%;
   box-sizing: border-box;
 
-  /* newline-only list: never wrap, so line breaks are unambiguous */
+  /* default: newline-only list, no wrap */
   white-space: pre;
   overflow-x: auto;
   /* Auto-grow JS clamps height (~8 lines); after that we need vertical scroll. */
   overflow-y: auto;
   overscroll-behavior: contain;
   resize: none;
+}
+
+/* Store aisle editor: wrap long lines instead of horizontal scrolling. */
+body.store-editor-page .shopping-item-textarea {
+  min-height: 144px;
+  white-space: pre-wrap;
+  overflow-x: hidden;
 }
 
 body.shopping-editor-page .shopping-item-textarea:focus,
@@ -493,7 +500,7 @@ body.store-editor-page .store-variant-picker--inline {
 body.store-editor-page .store-variant-picker-inline-line {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -501,6 +508,17 @@ body.store-editor-page .store-variant-picker-inline-name {
   font-size: var(--ingredient-editor-control-font-size);
   font-family: var(--main-font);
   color: var(--edit-mode-color);
+}
+
+body.store-editor-page .store-variant-picker-inline-name-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  /* Match chip metrics so label baseline aligns with pills. */
+  padding: 4px 10px;
+  font-size: 13px;
+  border: 1px solid rgba(109, 73, 255, 0);
+  background: transparent;
 }
 
 body.store-editor-page .store-variant-picker-name {
@@ -516,30 +534,64 @@ body.store-editor-page .store-variant-picker-pills {
 }
 
 body.store-editor-page .store-variant-picker-pills--inline {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 body.store-editor-page .store-variant-picker-pill {
+  border: 1px solid rgba(109, 73, 255, 0.24);
+  background: #fff;
+  color: var(--theme-primary);
   transition:
     opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
     filter 120ms ease,
     transform 120ms ease;
 }
 
 body.store-editor-page .store-variant-picker-pill.is-on {
   opacity: 1;
+  background: var(--theme-primary);
+  color: #fff;
+  border-color: var(--theme-primary);
 }
 
 body.store-editor-page .store-variant-picker-pill.is-off {
-  opacity: 0.5;
+  opacity: 0.92;
 }
 
 body.store-editor-page .store-variant-picker-pill.is-on:hover {
-  filter: brightness(0.98);
+  filter: brightness(1.04);
 }
 
 body.store-editor-page .store-variant-picker-pill.is-off:hover {
-  opacity: 0.66;
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(109, 73, 255, 0.42);
+  color: var(--theme-primary);
+}
+
+body.store-editor-page .store-variant-picker-pill--add-all {
+  background: rgba(109, 73, 255, 0.1);
+  color: var(--theme-primary);
+  border-color: rgba(109, 73, 255, 0.55);
+  font-weight: 600;
+}
+
+body.store-editor-page .store-variant-picker-pill--add-all:hover {
+  background: rgba(109, 73, 255, 0.16);
+  border-color: rgba(109, 73, 255, 0.72);
+}
+
+body.store-editor-page .store-variant-picker-pill--add-all.is-unavailable,
+body.store-editor-page .store-variant-picker-pill--add-all:disabled {
+  opacity: 0.62;
+  cursor: default;
+  background: rgba(109, 73, 255, 0.09);
+  border-color: rgba(109, 73, 255, 0.38);
+  color: rgba(109, 73, 255, 0.84);
 }
 
 body.store-editor-page .store-aisle-move-controls {

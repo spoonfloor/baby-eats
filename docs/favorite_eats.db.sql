@@ -19,6 +19,15 @@ CREATE TABLE IF NOT EXISTS "ingredient_store_location" (
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID"),
 	FOREIGN KEY("store_location_id") REFERENCES "store_locations"("ID")
 );
+CREATE TABLE IF NOT EXISTS "ingredient_variant_store_location" (
+	"id"	INTEGER,
+	"ingredient_variant_id"	INTEGER NOT NULL,
+	"store_location_id"	INTEGER NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("ingredient_variant_id","store_location_id"),
+	FOREIGN KEY("ingredient_variant_id") REFERENCES "ingredient_variants"("id") ON DELETE CASCADE,
+	FOREIGN KEY("store_location_id") REFERENCES "store_locations"("ID") ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS "ingredient_variants" (
 	"id"	INTEGER,
 	"ingredient_id"	INTEGER NOT NULL,
