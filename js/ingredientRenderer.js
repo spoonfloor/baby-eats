@@ -540,6 +540,7 @@ function renderIngredientHeading(row) {
           locationAtHome: '',
           isRecipe: false,
           linkedRecipeId: null,
+          linkedRecipeTitle: '',
           recipeText: '',
           sortOrder:
             row && Number.isFinite(Number(row.sortOrder))
@@ -630,6 +631,9 @@ function renderIngredient(line) {
   div.dataset.name = line.name;
   if (line && line.isDeprecated) {
     div.classList.add('ingredient-line--deprecated');
+  }
+  if (line && line.isAlt) {
+    div.classList.add('ingredient-line--is-alt');
   }
 
   const textSpan = document.createElement('span');
@@ -815,6 +819,12 @@ function renderIngredient(line) {
   // Save raw quantity separately for editing
   textSpan.dataset.rawQuantity = line.quantity || '';
 
+  if (line && line.isAlt) {
+    const orPrefix = document.createElement('span');
+    orPrefix.className = 'ingredient-alt-prefix';
+    orPrefix.textContent = 'OR\u00A0';
+    div.appendChild(orPrefix);
+  }
   div.appendChild(textSpan);
 
   // Existing ingredient rows: click → open multi-field editor (update mode)
@@ -1237,31 +1247,62 @@ function openIngredientEditRow({
   };
 
   // Location is edited elsewhere; suppress it here.
-  // Field order: QtyMin, QtyMax, Unit, Name, Var, Size, Prep, Notes, IsOpt, QtyIsArpox
+  // Field order: QtyMin, QtyMax, Unit, Name, Var, LinkedRecipe, Size, Prep, Notes, QtyIsApprox, IsAlt, IsOpt
   const fieldsConfig = [
     { key: 'qtymin', label: 'QtyMin' },
     { key: 'qtymax', label: 'QtyMax' },
     { key: 'unit', label: 'Unit' },
     { key: 'name', label: 'Name' },
-    { key: 'isrecipe', label: 'IsRecipe', isBoolean: true },
-    { key: 'recipe', label: 'Recipe' },
     { key: 'var', label: 'Var' },
+    { key: 'recipe', label: 'LinkedRecipe' },
     { key: 'size', label: 'Size' },
     { key: 'prep', label: 'Prep' },
     { key: 'notes', label: 'Notes' },
-    { key: 'isopt', label: 'IsOpt', isBoolean: true },
     { key: 'isaprx', label: 'QtyIsArpox', isBoolean: true },
+    { key: 'isalt', label: 'IsAlt', isBoolean: true },
+    { key: 'isopt', label: 'IsOpt', isBoolean: true },
   ];
   fieldsConfig.forEach((cfg) => row.appendChild(makeCell(cfg)));
+
+  // Disable IsAlt if there is no ingredient row directly above this row.
+  // "Directly above" means the nearest renderable row, skipping placeholders.
+  // A heading row above also disqualifies (can't be an alt of a heading).
+  (() => {
+    const isAltInput = row.querySelector('.ingredient-edit-input[data-field="isalt"]');
+    if (!isAltInput) return;
+
+    const sec = sectionRef || (window.recipeData?.sections?.[0] ?? null);
+    const list = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+
+    let thisIdx = -1;
+    if (isInsert) {
+      const raw = Number(insertAt);
+      thisIdx = Number.isFinite(raw) ? raw : list.length;
+    } else if (modelRef) {
+      thisIdx = list.indexOf(modelRef);
+    }
+
+    let ingredientAbove = false;
+    for (let i = thisIdx - 1; i >= 0; i--) {
+      const r = list[i];
+      if (!r || r.isPlaceholder) continue;
+      ingredientAbove = r.rowType !== 'heading';
+      break;
+    }
+
+    if (!ingredientAbove) {
+      isAltInput.disabled = true;
+      isAltInput.checked = false;
+      const cell = isAltInput.closest('.ingredient-edit-cell');
+      if (cell) cell.classList.add('ingredient-edit-cell--disabled');
+    }
+  })();
 
   const qtyMinInput = row.querySelector(
     '.ingredient-edit-input[data-field="qtymin"]'
   );
   const qtyMaxInput = row.querySelector(
     '.ingredient-edit-input[data-field="qtymax"]'
-  );
-  const recipeToggleInput = row.querySelector(
-    '.ingredient-edit-input[data-field="isrecipe"]'
   );
   const recipeInput = row.querySelector(
     '.ingredient-edit-input[data-field="recipe"]'
@@ -1330,21 +1371,6 @@ function openIngredientEditRow({
     } catch (_) {}
   };
 
-  const syncRecipeFieldEnabledState = ({ clearWhenDisabled = false } = {}) => {
-    if (!recipeInput || !recipeToggleInput) return;
-    const enabled = !!recipeToggleInput.checked;
-    recipeInput.disabled = !enabled;
-    recipeInput.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    const recipeCell = recipeInput.closest('.ingredient-edit-cell');
-    if (recipeCell) {
-      recipeCell.classList.toggle('ingredient-edit-cell--disabled', !enabled);
-    }
-    if (!enabled && clearWhenDisabled && recipeInput.value) {
-      recipeInput.value = '';
-      dispatchSyntheticInput(recipeInput);
-    }
-  };
-
   const lookupRecipeByTitle = (rawTitle) => {
     const title = String(rawTitle || '').trim();
     if (!title) return null;
@@ -1379,43 +1405,64 @@ function openIngredientEditRow({
   };
 
   const applyRecipeValidationToInputs = () => {
-    if (!recipeInput || !recipeToggleInput) {
-      return { isRecipe: false, linkedRecipeId: null, recipeText: '' };
+    if (!recipeInput) {
+      return {
+        isRecipe: false,
+        linkedRecipeId: null,
+        linkedRecipeTitle: '',
+        recipeText: '',
+      };
     }
-    if (!recipeToggleInput.checked) {
-      syncRecipeFieldEnabledState({ clearWhenDisabled: true });
-      return { isRecipe: false, linkedRecipeId: null, recipeText: '' };
+    if (!String(recipeInput.value || '').trim()) {
+      return {
+        isRecipe: false,
+        linkedRecipeId: null,
+        linkedRecipeTitle: '',
+        recipeText: '',
+      };
     }
 
     const match = lookupRecipeByTitle(recipeInput.value);
+    const currentRecipeIdRaw =
+      window.recipeData && window.recipeData.id != null
+        ? Number(window.recipeData.id)
+        : null;
+    const currentRecipeId =
+      Number.isFinite(currentRecipeIdRaw) && currentRecipeIdRaw > 0
+        ? currentRecipeIdRaw
+        : null;
     if (!match) {
       recipeInput.value = '';
-      recipeToggleInput.checked = false;
-      syncRecipeFieldEnabledState({ clearWhenDisabled: false });
       dispatchSyntheticInput(recipeInput);
-      return { isRecipe: false, linkedRecipeId: null, recipeText: '' };
+      return {
+        isRecipe: false,
+        linkedRecipeId: null,
+        linkedRecipeTitle: '',
+        recipeText: '',
+      };
+    }
+    if (currentRecipeId != null && Number(match.id) === currentRecipeId) {
+      recipeInput.value = '';
+      dispatchSyntheticInput(recipeInput);
+      return {
+        isRecipe: false,
+        linkedRecipeId: null,
+        linkedRecipeTitle: '',
+        recipeText: '',
+      };
     }
 
     recipeInput.value = match.title;
-    recipeToggleInput.checked = true;
-    syncRecipeFieldEnabledState({ clearWhenDisabled: false });
     dispatchSyntheticInput(recipeInput);
-    return { isRecipe: true, linkedRecipeId: match.id, recipeText: match.title };
+    return {
+      isRecipe: true,
+      linkedRecipeId: match.id,
+      linkedRecipeTitle: match.title,
+      recipeText: match.title,
+    };
   };
 
-  if (recipeToggleInput && recipeInput) {
-    syncRecipeFieldEnabledState({ clearWhenDisabled: false });
-    recipeToggleInput.addEventListener('change', () => {
-      const enabled = !!recipeToggleInput.checked;
-      if (!enabled) {
-        syncRecipeFieldEnabledState({ clearWhenDisabled: true });
-        return;
-      }
-      syncRecipeFieldEnabledState({ clearWhenDisabled: false });
-      try {
-        recipeInput.focus();
-      } catch (_) {}
-    });
+  if (recipeInput) {
     const maybePopulateNameFromRecipe = (recipeTitle) => {
       if (!recipeTitle) return;
       const nameInp = row.querySelector('.ingredient-edit-input[data-field="name"]');
@@ -1530,17 +1577,17 @@ function openIngredientEditRow({
     set('isaprx', prefillIsAprx ? '1' : '');
     set('unit', modelRef.unit ?? '');
     set('name', modelRef.name ?? '');
-    set('isrecipe', modelRef.isRecipe ? '1' : '');
     set(
       'recipe',
-      modelRef.recipeText || (modelRef.isRecipe ? modelRef.name || '' : '')
+      modelRef.linkedRecipeTitle ||
+        (modelRef.isRecipe ? modelRef.recipeText || modelRef.name || '' : '')
     );
     set('size', modelRef.size ?? '');
     set('var', modelRef.variant ?? '');
     set('prep', modelRef.prepNotes ?? '');
     set('notes', modelRef.parentheticalNote ?? '');
     set('isopt', modelRef.isOptional ? '1' : '');
-    syncRecipeFieldEnabledState({ clearWhenDisabled: false });
+    set('isalt', modelRef.isAlt ? '1' : '');
 
     // Force autosize to run after all values are set (in case events didn't fire)
     requestAnimationFrame(() => {
@@ -1769,11 +1816,12 @@ function openIngredientEditRow({
       isOptional: !!row?.isOptional,
       isRecipe: !!row?.isRecipe,
       linkedRecipeId: row?.linkedRecipeId ?? null,
+      linkedRecipeTitle: row?.linkedRecipeTitle ?? '',
       recipeText: row?.recipeText ?? '',
+      isAlt: !!row?.isAlt,
     });
     const recipeLinkState = applyRecipeValidationToInputs();
-    fields.isrecipe = recipeLinkState.isRecipe ? '1' : '';
-    fields.recipe = recipeLinkState.recipeText || '';
+    fields.recipe = recipeLinkState.linkedRecipeTitle || '';
     const hasData = Object.values(fields).some((v) => v && v.trim() !== '');
 
     if (!hasData) {
@@ -1904,9 +1952,11 @@ function openIngredientEditRow({
         prepNotes: fields.prep || '',
         parentheticalNote: fields.notes || '',
         isOptional: !!(fields.isopt && fields.isopt.trim()),
+        isAlt: !!(fields.isalt && fields.isalt.trim()),
         isRecipe: recipeLinkState.isRecipe,
         linkedRecipeId: recipeLinkState.linkedRecipeId,
-        recipeText: recipeLinkState.recipeText,
+        linkedRecipeTitle: recipeLinkState.linkedRecipeTitle || '',
+        recipeText: recipeLinkState.isRecipe ? nameTrimmed : '',
         substitutes: [],
         locationAtHome: '',
         clientId: `tmp-ing-${Date.now()}-${Math.random()
@@ -2023,6 +2073,7 @@ function openIngredientEditRow({
       }
 
       const beforeCommit = snapshotComparableFields(modelRef);
+      const wasAltBeforeCommit = !!modelRef.isAlt;
 
       // Update the model reference (the thing Save will persist).
       modelRef.quantity = quantity;
@@ -2036,9 +2087,11 @@ function openIngredientEditRow({
       modelRef.prepNotes = fields.prep || '';
       modelRef.parentheticalNote = fields.notes || '';
       modelRef.isOptional = !!(fields.isopt && fields.isopt.trim());
+      modelRef.isAlt = !!(fields.isalt && fields.isalt.trim());
       modelRef.isRecipe = recipeLinkState.isRecipe;
       modelRef.linkedRecipeId = recipeLinkState.linkedRecipeId;
-      modelRef.recipeText = recipeLinkState.recipeText;
+      modelRef.linkedRecipeTitle = recipeLinkState.linkedRecipeTitle || '';
+      modelRef.recipeText = recipeLinkState.isRecipe ? nameTrimmed : '';
       if (!modelRef.clientId) {
         modelRef.clientId =
           modelRef.rimId != null
@@ -2048,6 +2101,20 @@ function openIngredientEditRow({
       didMutateModel =
         JSON.stringify(beforeCommit) !==
         JSON.stringify(snapshotComparableFields(modelRef));
+
+      if (
+        sectionRef &&
+        wasAltBeforeCommit &&
+        !modelRef.isAlt &&
+        typeof window.recipeEditorPromoteTrailingAltRowsAbovePrimary === 'function'
+      ) {
+        try {
+          window.recipeEditorPromoteTrailingAltRowsAbovePrimary({
+            sectionRef,
+            rowRef: modelRef,
+          });
+        } catch (_) {}
+      }
 
       // Update grammar/pluralization fields from DB if name or variant changed
       try {
@@ -2099,8 +2166,10 @@ function openIngredientEditRow({
         seedLine.prepNotes = modelRef.prepNotes;
         seedLine.parentheticalNote = modelRef.parentheticalNote;
         seedLine.isOptional = modelRef.isOptional;
+        seedLine.isAlt = modelRef.isAlt;
         seedLine.isRecipe = modelRef.isRecipe;
         seedLine.linkedRecipeId = modelRef.linkedRecipeId;
+        seedLine.linkedRecipeTitle = modelRef.linkedRecipeTitle;
         seedLine.recipeText = modelRef.recipeText;
         seedLine.lemma = modelRef.lemma;
         seedLine.pluralByDefault = modelRef.pluralByDefault;
@@ -2413,6 +2482,7 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
           locationAtHome: row.locationAtHome || '',
           isRecipe: !!row.isRecipe,
           linkedRecipeId: row.linkedRecipeId || null,
+          linkedRecipeTitle: row.linkedRecipeTitle || '',
           recipeText: row.recipeText || '',
           clientId: `tmp-ing-${Date.now()}-${idx}-${Math.random()
             .toString(16)
@@ -2642,13 +2712,12 @@ function renderIngredientEditRowScaffold() {
   };
 
   // Scaffold helper (currently unused): keep in sync with openIngredientEditRow.
-  // qtymin | qtymax | unit | name | isrecipe | recipe | var | size | prep | notes | isopt | isaprx
+  // qtymin | qtymax | unit | name | recipe | var | size | prep | notes | isopt | isaprx
   const labels = [
     'qtymin',
     'qtymax',
     'unit',
     'name',
-    'isrecipe',
     'recipe',
     'var',
     'size',

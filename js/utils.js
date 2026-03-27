@@ -418,6 +418,7 @@ if (typeof window !== 'undefined') {
   const dialog = ({
     title = '',
     message = '',
+    messageNode = null, // Optional extra body content (e.g. links list)
     fields = null, // [{ key, label, type, value, placeholder, required, autocapitalize }]
     confirmText = 'OK',
     cancelText = 'Cancel',
@@ -473,6 +474,13 @@ if (typeof window !== 'undefined') {
           .trim();
         bodyEl.textContent = normalized;
         panel.appendChild(bodyEl);
+      }
+
+      if (messageNode && messageNode instanceof Node) {
+        const extraEl = document.createElement('div');
+        extraEl.className = 'ui-dialog-extra';
+        extraEl.appendChild(messageNode);
+        panel.appendChild(extraEl);
       }
 
       const errorEl = document.createElement('div');
@@ -664,6 +672,7 @@ if (typeof window !== 'undefined') {
     discardText = 'Discard',
     fixText = 'Fix input',
     createText = 'Create',
+    discardDanger = false,
   } = {}) =>
     new Promise((resolve) => {
       const host = ensureDialogHost();
@@ -701,7 +710,9 @@ if (typeof window !== 'undefined') {
 
       const discardBtn = document.createElement('button');
       discardBtn.type = 'button';
-      discardBtn.className = 'button button--secondary';
+      discardBtn.className = discardDanger
+        ? 'button button--danger'
+        : 'button button--secondary';
       discardBtn.textContent = discardText || 'Cancel';
 
       const fixBtn = document.createElement('button');
@@ -1508,8 +1519,13 @@ function getIngredientNounDisplay(line) {
   if (!line) return '';
   const name = (line.name || '').trim();
   const lemma = (line.lemma || '').trim();
-  const base = lemma || name;
-  if (!base) return '';
+  // Both display and pluralization use name-first so user-entered casing is
+  // always preserved (e.g. 'Coke Zero' → 'Coke Zeros', 'ATV' → 'ATVs').
+  // lemma is a lowercase grammar root — useful only as a fallback when name
+  // is absent. pluralizeEnglishNoun lowercases internally for its own matching.
+  const displayBase = name || lemma;
+  const base = name || lemma;
+  if (!displayBase) return '';
 
   const hasPluralByDefault =
     line.pluralByDefault != null || line.plural_by_default != null;
@@ -1525,23 +1541,23 @@ function getIngredientNounDisplay(line) {
     hasPluralByDefault ||
     hasIsMassNoun;
 
-  if (isMassNoun) return base;
+  if (isMassNoun) return displayBase;
   // Unknown/free-text ingredients should stay exactly as typed to avoid
   // over-pluralization (e.g., "olive oils", "waters", "tomatoeses").
-  if (!hasGrammarMetadata) return name || base;
+  if (!hasGrammarMetadata) return displayBase;
 
   const qtyIsNumeric = isNumericQuantity(line.quantity);
   if (qtyIsNumeric) {
     const n = typeof line.quantity === 'number'
       ? line.quantity
       : parseFloat(String(line.quantity));
-    if (Number.isFinite(n) && n === 1) return base;
+    if (Number.isFinite(n) && n === 1) return displayBase;
     return pluralizeEnglishNoun(base, pluralOverride);
   }
 
   // No numeric quantity (including empty or free-text)
   if (pluralByDefault) return pluralizeEnglishNoun(base, pluralOverride);
-  return base;
+  return displayBase;
 }
 
 function getIngredientDisplayName(line) {
@@ -1723,6 +1739,12 @@ function setupInlineRowEditing(options) {
       if (t.closest('.ingredient-edit-toggle')) return;
     }
 
+    // Clicking a disabled button (or a child element inside one) must be a
+    // no-op: do not redirect focus, which would cause handleFocusOut to fire
+    // with relatedTarget outside the row and exit edit mode.
+    const nearestBtn = t.closest && t.closest('button');
+    if (nearestBtn && nearestBtn.disabled) return;
+
     // If the click is already on a focusable control, let it behave normally.
     const tag = (t.tagName || '').toLowerCase();
     const isFocusable =
@@ -1882,4 +1904,124 @@ function attachEditorNewlineListPaste(el) {
       } catch (_) {}
     } catch (_) {}
   });
+}
+
+/**
+ * Shared chip renderer used by multiple list pages.
+ * Renders a simple pill-chip set with active/disabled states.
+ *
+ * @param {{
+ *   mountEl: HTMLElement,
+ *   chips: Array<{ id: string, label: string, disabled?: boolean }>,
+ *   activeChipIds?: Set<string>|string[],
+ *   onToggle?: (chipId: string) => void,
+ *   chipClassName?: string
+ * }} opts
+ */
+function mountTopFilterChipRail(opts = {}) {
+  const anchorEl = opts?.anchorEl;
+  if (!(anchorEl instanceof HTMLElement)) return null;
+
+  const dockId = String(opts?.dockId || 'topFilterChipDock').trim();
+  const removeOnDestroy = opts?.removeOnDestroy !== false;
+  const gapFromAnchorPx = Number.isFinite(opts?.gapFromAnchorPx)
+    ? Number(opts.gapFromAnchorPx)
+    : 8;
+  const gapFromAppBarPx = Number.isFinite(opts?.gapFromAppBarPx)
+    ? Number(opts.gapFromAppBarPx)
+    : 8;
+
+  let dock = dockId ? document.getElementById(dockId) : null;
+  if (!dock) {
+    dock = document.createElement('div');
+    if (dockId) dock.id = dockId;
+    dock.className = 'list-filter-chip-dock';
+    document.body.appendChild(dock);
+  } else if (!dock.classList.contains('list-filter-chip-dock')) {
+    dock.classList.add('list-filter-chip-dock');
+  }
+
+  let viewport = dock.querySelector('.list-filter-chip-viewport');
+  if (!(viewport instanceof HTMLElement)) {
+    viewport = document.createElement('div');
+    viewport.className = 'list-filter-chip-viewport';
+    dock.appendChild(viewport);
+  }
+
+  let track = dock.querySelector('.list-filter-chip-track');
+  if (!(track instanceof HTMLElement)) {
+    track = document.createElement('div');
+    track.className = 'list-filter-chip-track';
+    viewport.appendChild(track);
+  }
+
+  const sync = () => {
+    if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
+    const rect = anchorEl.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+    const appBarBottom = document
+      .querySelector('.app-bar-wrapper')
+      ?.getBoundingClientRect?.().bottom;
+    const safeTop = Number.isFinite(appBarBottom)
+      ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
+      : rect.bottom + gapFromAnchorPx;
+    dock.style.left = `${Math.round(rect.left)}px`;
+    dock.style.width = `${Math.round(rect.width)}px`;
+    dock.style.top = `${Math.round(safeTop)}px`;
+  };
+
+  const onViewportShift = () => sync();
+  window.addEventListener('resize', onViewportShift);
+  window.addEventListener('scroll', onViewportShift, { passive: true });
+  requestAnimationFrame(sync);
+
+  return {
+    dockEl: dock,
+    viewportEl: viewport,
+    trackEl: track,
+    sync,
+    destroy() {
+      window.removeEventListener('resize', onViewportShift);
+      window.removeEventListener('scroll', onViewportShift);
+      if (removeOnDestroy && dock?.parentNode) {
+        dock.parentNode.removeChild(dock);
+      }
+    },
+  };
+}
+
+function renderFilterChipList(opts = {}) {
+  const mountEl = opts?.mountEl;
+  if (!(mountEl instanceof HTMLElement)) return;
+
+  const chips = Array.isArray(opts?.chips) ? opts.chips : [];
+  const activeSrc = opts?.activeChipIds;
+  const active = activeSrc instanceof Set ? activeSrc : new Set(activeSrc || []);
+  const onToggle = typeof opts?.onToggle === 'function' ? opts.onToggle : null;
+  const chipClassName = String(opts?.chipClassName || 'app-filter-chip').trim();
+
+  mountEl.innerHTML = '';
+  chips.forEach((chipDef) => {
+    const id = String(chipDef?.id || '').trim().toLowerCase();
+    if (!id) return;
+    const label = String(chipDef?.label || id);
+    const disabled = !!chipDef?.disabled;
+
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = chipClassName;
+    chip.textContent = label;
+    chip.disabled = disabled;
+    if (disabled) chip.classList.add('is-disabled');
+    if (active.has(id)) chip.classList.add('is-active');
+    if (onToggle) {
+      chip.addEventListener('click', () => onToggle(id));
+    }
+    mountEl.appendChild(chip);
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.mountTopFilterChipRail = mountTopFilterChipRail;
+  window.renderFilterChipList = renderFilterChipList;
 }

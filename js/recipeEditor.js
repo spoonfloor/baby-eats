@@ -89,6 +89,33 @@ function formatNeedLine(ing) {
   return text.trim();
 }
 
+function normalizeYwnIngredientRows(rawRows) {
+  const out = [];
+  let activeAltAnchorLocation = '';
+
+  (Array.isArray(rawRows) ? rawRows : []).forEach((row) => {
+    if (!row) return;
+    if (row.rowType === 'heading') {
+      // Headings break OR chains in the editor model.
+      activeAltAnchorLocation = '';
+      return;
+    }
+
+    const next = { ...row };
+    const ownLocation = String(row.locationAtHome || '').toLowerCase().trim();
+    if (row.isAlt) {
+      // YWN-only rule: alternatives always inherit the anchor location.
+      next.locationAtHome = activeAltAnchorLocation;
+    } else {
+      activeAltAnchorLocation = ownLocation;
+      next.locationAtHome = ownLocation;
+    }
+    out.push(next);
+  });
+
+  return out;
+}
+
 function sortIngredients(list, locationOrder = INGREDIENTS_LOCATION_ORDER) {
   return [...list].sort((a, b) => {
     const aLoc = a.locationAtHome || '';
@@ -130,6 +157,8 @@ function mergeByIngredient(list) {
       }
       existing.isOptional = existing.isOptional || ing.isOptional;
       existing.isDeprecated = !!(existing.isDeprecated || ing.isDeprecated);
+      // Preserve primary status when a primary + alt collapse into one merged row.
+      existing.isAlt = !!(existing.isAlt && ing.isAlt);
     }
   });
 
@@ -251,6 +280,13 @@ function stripIngredientPlaceholders(section) {
   section.ingredients = section.ingredients.filter((r) => !isPlaceholderish(r));
 }
 
+function setManageButtonHiddenState(button, hidden) {
+  if (!button) return;
+  const isHidden = !!hidden;
+  button.classList.toggle('manage-btn--hidden', isHidden);
+  button.hidden = isHidden;
+}
+
 function rerenderIngredientsSectionFromModel() {
   const container = getPageContentContainer();
   if (!container) return;
@@ -261,8 +297,19 @@ function rerenderIngredientsSectionFromModel() {
   if (!recipe) return;
 
   ingredientsSection.innerHTML = '';
+  ingredientsSection.classList.add('ingredients-section-has-manage');
 
   wireIngredientCtaDelegation(ingredientsSection);
+
+  const manageBtn = document.createElement('a');
+  manageBtn.className = 'ingredients-manage-btn';
+  manageBtn.href = 'shopping.html';
+  manageBtn.textContent = 'Manage';
+  manageBtn.addEventListener('click', (e) => {
+    // Keep explicit navigation for consistency with other page transitions.
+    window.location.href = 'shopping.html';
+  });
+  ingredientsSection.appendChild(manageBtn);
 
   const ingredientsHeader = document.createElement('h2');
   ingredientsHeader.className = 'section-header';
@@ -277,6 +324,8 @@ function rerenderIngredientsSectionFromModel() {
   const rows = Array.isArray(firstSection?.ingredients)
     ? firstSection.ingredients
     : [];
+  const hasIngredientItems = rows.some((row) => row && row.rowType !== 'heading');
+  setManageButtonHiddenState(manageBtn, !hasIngredientItems);
 
   const isHeading = (row) => row && row.rowType === 'heading';
 
@@ -435,13 +484,11 @@ function rerenderYouWillNeedFromModel() {
   needHeader.textContent = 'You will need';
   needWrapper.appendChild(needHeader);
 
-  const allIngredientsRaw = Array.isArray(recipe.sections)
+  const allRows = Array.isArray(recipe.sections)
     ? recipe.sections.flatMap((s) => s.ingredients || [])
     : [];
 
-  const allIngredients = allIngredientsRaw.filter(
-    (row) => row && row.rowType !== 'heading'
-  );
+  const allIngredients = normalizeYwnIngredientRows(allRows);
 
   if (allIngredients.length === 0) {
     const line = document.createElement('div');
@@ -474,11 +521,12 @@ function rerenderYouWillNeedFromModel() {
     subHeader.textContent = loc || 'Misc';
     needWrapper.appendChild(subHeader);
 
-    sortIngredients(items, NEED_LOCATION_ORDER).forEach((ing) => {
+    // Keep source order so OR chains stay visually grouped together.
+    items.forEach((ing) => {
       const line = document.createElement('div');
       line.className = 'ingredient-line';
       const span = document.createElement('span');
-      span.textContent = formatNeedLine(ing);
+      span.textContent = `${ing.isAlt ? 'OR ' : ''}${formatNeedLine(ing)}`;
       line.appendChild(span);
       needWrapper.appendChild(line);
     });
@@ -814,6 +862,19 @@ function deleteIngredientRowFromSection(sectionRef, rowRef) {
   const idx = sectionRef.ingredients.indexOf(rowRef);
   if (idx < 0) return null;
   const removed = sectionRef.ingredients.splice(idx, 1)[0] || null;
+
+  // If the deleted row was a primary (non-alt ingredient), the first OR row
+  // now sitting at idx has lost its anchor — promote it to primary.
+  if (removed && !removed.isAlt && removed.rowType !== 'heading') {
+    for (let i = idx; i < sectionRef.ingredients.length; i++) {
+      const r = sectionRef.ingredients[i];
+      if (!r || r.isPlaceholder) continue;
+      if (r.rowType === 'heading') break;
+      if (r.isAlt) r.isAlt = false;
+      break;
+    }
+  }
+
   return { idx, removed };
 }
 
@@ -906,6 +967,33 @@ function findIngredientRowContext(rowRef) {
   return null;
 }
 
+function promoteTrailingAltRowsAbovePrimary(sectionRef, rowRef) {
+  if (!sectionRef || !Array.isArray(sectionRef.ingredients) || !rowRef) return false;
+  const list = sectionRef.ingredients;
+  const idx = list.findIndex((row) => ingredientRowsMatch(row, rowRef));
+  if (idx === -1) return false;
+  const pivot = list[idx];
+  if (!isIngredientRenderableRow(pivot) || isIngredientHeadingRow(pivot)) return false;
+  if (pivot.isAlt) return false;
+
+  const toMove = [];
+  let scan = idx + 1;
+  while (scan < list.length) {
+    const row = list[scan];
+    if (!isIngredientRenderableRow(row)) break;
+    if (isIngredientHeadingRow(row)) break;
+    if (!row.isAlt) break;
+    toMove.push(row);
+    scan += 1;
+  }
+  if (!toMove.length) return false;
+
+  list.splice(idx + 1, toMove.length);
+  list.splice(idx, 0, ...toMove);
+  normalizeIngredientSortOrder(sectionRef);
+  return true;
+}
+
 function findIngredientTargetIndexWithinList(list, fromIndex, delta) {
   if (!Array.isArray(list) || !Number.isFinite(fromIndex) || !delta) return -1;
 
@@ -926,12 +1014,49 @@ function findIngredientTargetIndexWithinList(list, fromIndex, delta) {
   return -1;
 }
 
+// Returns the array indices of all rows in the same OR-group as the row at `index`.
+// A group = nearest non-alt renderable anchor + all consecutive isAlt rows after it.
+// Headings break groups. Any member of the group resolves to the full group.
+function getIngredientOrGroupIndices(list, index) {
+  const row = list[index];
+  if (!isIngredientRenderableRow(row)) return [index];
+
+  // Find the anchor (first non-alt row of this group) by walking backward.
+  let anchorIdx = index;
+  if (row.isAlt && row.rowType !== 'heading') {
+    for (let i = index - 1; i >= 0; i--) {
+      if (!isIngredientRenderableRow(list[i])) continue;
+      if (isIngredientHeadingRow(list[i])) break;
+      anchorIdx = i;
+      if (!list[i].isAlt) break;
+    }
+  }
+
+  // Collect anchor + all consecutive isAlt rows that follow it.
+  const indices = [anchorIdx];
+  for (let i = anchorIdx + 1; i < list.length; i++) {
+    if (!isIngredientRenderableRow(list[i])) continue;
+    if (isIngredientHeadingRow(list[i])) break;
+    if (list[i].isAlt) {
+      indices.push(i);
+    } else {
+      break;
+    }
+  }
+  return indices;
+}
+
 window.recipeEditorGetIngredientMoveAvailability = ({ rowRef } = {}) => {
   const ctx = findIngredientRowContext(rowRef);
   if (!ctx) return { canMoveUp: false, canMoveDown: false };
   const { list, index } = ctx;
-  const upIdx = findIngredientTargetIndexWithinList(list, index, -1);
-  const downIdx = findIngredientTargetIndexWithinList(list, index, 1);
+
+  const groupIndices = getIngredientOrGroupIndices(list, index);
+  const firstIdx = groupIndices[0];
+  const lastIdx = groupIndices[groupIndices.length - 1];
+
+  const upIdx = findIngredientTargetIndexWithinList(list, firstIdx, -1);
+  const downIdx = findIngredientTargetIndexWithinList(list, lastIdx, 1);
   return { canMoveUp: upIdx !== -1, canMoveDown: downIdx !== -1 };
 };
 
@@ -950,12 +1075,29 @@ window.recipeEditorMoveIngredientRowByDelta = ({
   if (!ctx) return false;
 
   const { sectionRef, list, index } = ctx;
-  const targetIndex = findIngredientTargetIndexWithinList(list, index, dir);
-  if (targetIndex === -1 || targetIndex === index) return false;
+  const groupIndices = getIngredientOrGroupIndices(list, index);
+  const firstGroupIdx = groupIndices[0];
+  const lastGroupIdx = groupIndices[groupIndices.length - 1];
+  const groupSize = lastGroupIdx - firstGroupIdx + 1;
 
-  const [moved] = list.splice(index, 1);
-  const insertionIndex = targetIndex;
-  list.splice(insertionIndex, 0, moved);
+  let moved;
+  if (dir < 0) {
+    // Moving up: find the renderable row just above the group's first member.
+    const targetIndex = findIngredientTargetIndexWithinList(list, firstGroupIdx, -1);
+    if (targetIndex === -1) return false;
+    const groupRows = list.splice(firstGroupIdx, groupSize);
+    list.splice(targetIndex, 0, ...groupRows);
+    moved = list[targetIndex + groupIndices.indexOf(index)];
+  } else {
+    // Moving down: find the renderable row just below the group's last member.
+    const targetIndex = findIngredientTargetIndexWithinList(list, lastGroupIdx, 1);
+    if (targetIndex === -1) return false;
+    const groupRows = list.splice(firstGroupIdx, groupSize);
+    // After removing groupSize items, the target has shifted left by groupSize.
+    const adjustedTarget = targetIndex - groupSize;
+    list.splice(adjustedTarget + 1, 0, ...groupRows);
+    moved = list[adjustedTarget + 1 + groupIndices.indexOf(index)];
+  }
   normalizeIngredientSortOrder(sectionRef);
 
   try {
@@ -1295,6 +1437,13 @@ window.recipeEditorAfterIngredientEditCommit = (sectionRef) => {
   rerenderIngredientsSectionFromModel();
 };
 
+window.recipeEditorPromoteTrailingAltRowsAbovePrimary = ({
+  sectionRef,
+  rowRef,
+} = {}) => {
+  return promoteTrailingAltRowsAbovePrimary(sectionRef, rowRef);
+};
+
 window.recipeEditorSortIngredientsOnLoad = (recipe) => {
   if (!recipe || !Array.isArray(recipe.sections)) return false;
   let changed = false;
@@ -1469,6 +1618,7 @@ function renderRecipe(recipe) {
     <div id="stepsSection">
       <h2 class="section-header">Instructions</h2>
     </div>
+    <div id="tagsSection"></div>
   `;
 
   const stepsSection = container.querySelector('#stepsSection');
@@ -1801,6 +1951,8 @@ function renderRecipe(recipe) {
     noSteps.textContent = 'No instructions found.';
     stepsSection.appendChild(noSteps);
   }
+
+  renderRecipeTagsSection(recipe, container);
 }
 
 // --- Servings helpers (rest-mode text + basic edit-mode structure) ---
@@ -2242,6 +2394,354 @@ function renderServingsRow(recipe, container) {
   updateServingsVisibility(recipe);
 }
 
+function normalizeRecipeTagsArray(rawTags) {
+  const source = Array.isArray(rawTags)
+    ? rawTags
+    : String(rawTags || '')
+        .split(/[\n,]/)
+        .map((v) => v.trim());
+  const seen = new Set();
+  const out = [];
+  source
+    .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+    .filter(Boolean)
+    .forEach((tag) => {
+      const clipped = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
+      if (!clipped) return;
+      const key = clipped.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(clipped);
+    });
+  return out;
+}
+
+function formatRecipeTagsSubtitle(tags) {
+  const arr = normalizeRecipeTagsArray(tags);
+  return arr.join('\n');
+}
+
+function getVisibleRecipeTagNamePool() {
+  const db = window.dbInstance;
+  if (!db) return [];
+  try {
+    const q = db.exec(`
+      SELECT DISTINCT name
+      FROM tags
+      WHERE name IS NOT NULL
+        AND trim(name) != ''
+        AND COALESCE(is_hidden, 0) = 0
+      ORDER BY name COLLATE NOCASE;
+    `);
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    return q[0].values
+      .map((row) => (Array.isArray(row) ? row[0] : null))
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+function renderRecipeTagsSection(recipe, container) {
+  const section =
+    (container && container.querySelector('#tagsSection')) ||
+    document.getElementById('tagsSection');
+  if (!section) return;
+  const recipeModel = window.recipeData || recipe;
+  if (!recipeModel) return;
+
+  const normalized = normalizeRecipeTagsArray(recipeModel.tags || []);
+  recipeModel.tags = normalized;
+
+  const previousEditorState = window._recipeTagsEditorState || {};
+  const previousDraftTags = normalizeRecipeTagsArray(
+    Array.isArray(previousEditorState.draftTags)
+      ? previousEditorState.draftTags
+      : previousEditorState.draft
+  );
+  const previousInputDraft =
+    typeof previousEditorState.inputDraft === 'string'
+      ? previousEditorState.inputDraft
+      : '';
+  const isEditing = !!previousEditorState.isEditing;
+  const originalTags = Array.isArray(previousEditorState.originalTags)
+    ? previousEditorState.originalTags
+    : normalized.slice();
+
+  section.className = 'recipe-tags-section';
+  section.innerHTML = '';
+
+  const header = document.createElement('h2');
+  header.className = 'section-header';
+  header.textContent = 'Tags';
+  section.appendChild(header);
+
+  const manage = document.createElement('button');
+  manage.type = 'button';
+  manage.className = 'recipe-tags-manage-btn';
+  manage.textContent = 'Manage';
+  manage.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    sessionStorage.setItem('selectedRecipeId', String(recipeModel.id || window.recipeId || ''));
+    window.location.href = 'tags.html';
+  });
+  section.appendChild(manage);
+  setManageButtonHiddenState(manage, normalized.length === 0);
+
+  const content = document.createElement('div');
+  content.className = 'recipe-tags-content';
+  section.appendChild(content);
+
+  const updateModelFromDraft = (draftTags) => {
+    const prevTags = normalizeRecipeTagsArray(originalTags);
+    const nextTags = normalizeRecipeTagsArray(draftTags);
+    const prevKey = JSON.stringify(prevTags.map((t) => t.toLowerCase()));
+    const nextKey = JSON.stringify(nextTags.map((t) => t.toLowerCase()));
+    recipeModel.tags = nextTags;
+    if (prevKey !== nextKey && typeof markDirty === 'function') markDirty();
+  };
+
+  if (!isEditing) {
+    content.classList.add('recipe-tags-content--view');
+    content.addEventListener('click', () => {
+      window._recipeTagsEditorState = {
+        isEditing: true,
+        draftTags: normalizeRecipeTagsArray(recipeModel.tags),
+        inputDraft: '',
+        originalTags: normalizeRecipeTagsArray(recipeModel.tags),
+      };
+      renderRecipeTagsSection(recipeModel, container);
+    });
+
+    if (!normalized.length) {
+      const empty = document.createElement('div');
+      empty.className = 'recipe-tags-empty placeholder-prompt';
+      empty.textContent = 'Add a tag.';
+      content.appendChild(empty);
+      return;
+    }
+
+    const pills = document.createElement('div');
+    pills.className = 'recipe-tags-wrap';
+    normalized.forEach((tag) => {
+      const pill = document.createElement('span');
+      pill.className = 'recipe-tag-pill';
+      pill.textContent = tag;
+      pills.appendChild(pill);
+    });
+    content.appendChild(pills);
+    return;
+  }
+
+  content.classList.add('recipe-tags-content--edit');
+  let draftTags = normalizeRecipeTagsArray(
+    previousDraftTags.length ? previousDraftTags : normalized
+  );
+
+  const shell = document.createElement('div');
+  shell.className = 'recipe-tags-editor-shell';
+  content.appendChild(shell);
+
+  const chips = document.createElement('div');
+  chips.className = 'recipe-tags-wrap recipe-tags-wrap--editor';
+  shell.appendChild(chips);
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'recipe-tags-editor-input';
+  input.placeholder = draftTags.length
+    ? 'Type to add another tag'
+    : 'Type a tag';
+  input.value = previousInputDraft || '';
+  shell.appendChild(input);
+
+  const hint = document.createElement('div');
+  hint.className = 'recipe-tags-editor-hint';
+  hint.textContent = 'Enter/comma adds. Ctrl-click a chip to remove.';
+  shell.appendChild(hint);
+
+  const persistEditingState = () => {
+    window._recipeTagsEditorState = {
+      isEditing: true,
+      draftTags: draftTags.slice(),
+      inputDraft: String(input.value || ''),
+      originalTags,
+    };
+  };
+
+  const addTagsToDraft = (candidateTags) => {
+    const next = normalizeRecipeTagsArray((candidateTags || []).join('\n'));
+    if (!next.length) return false;
+    const merged = normalizeRecipeTagsArray([...(draftTags || []), ...next]);
+    const changed =
+      JSON.stringify(merged.map((v) => v.toLowerCase())) !==
+      JSON.stringify((draftTags || []).map((v) => v.toLowerCase()));
+    if (!changed) return false;
+    draftTags = merged;
+    return true;
+  };
+
+  const addInputDraftToTags = () => {
+    const raw = String(input.value || '').trim();
+    if (!raw) return false;
+    const added = addTagsToDraft(raw.split(/[\n,]/));
+    input.value = '';
+    return added;
+  };
+
+  const removeTagByLabel = (tagLabel) => {
+    const key = String(tagLabel || '').trim().toLowerCase();
+    if (!key) return false;
+    const before = draftTags.length;
+    draftTags = draftTags.filter((tag) => String(tag || '').toLowerCase() !== key);
+    return draftTags.length !== before;
+  };
+
+  const renderDraftChips = () => {
+    chips.innerHTML = '';
+    if (!draftTags.length) {
+      const empty = document.createElement('div');
+      empty.className = 'recipe-tags-empty placeholder-prompt';
+      empty.textContent = 'No tags yet. Add one below.';
+      chips.appendChild(empty);
+      return;
+    }
+
+    draftTags.forEach((tag) => {
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'recipe-tag-pill recipe-tag-pill--editable';
+      pill.dataset.tag = tag;
+      pill.title = 'Ctrl-click to remove';
+      pill.textContent = tag;
+      chips.appendChild(pill);
+    });
+  };
+
+  const finishEdit = ({ shouldCommit }) => {
+    if (shouldCommit) {
+      addInputDraftToTags();
+      updateModelFromDraft(draftTags);
+    }
+    window._recipeTagsEditorState = {
+      isEditing: false,
+      draftTags: [],
+      inputDraft: '',
+      originalTags: [],
+    };
+    renderRecipeTagsSection(recipeModel, container);
+  };
+
+  const syncAndRender = () => {
+    input.placeholder = draftTags.length ? 'Type to add another tag' : 'Type a tag';
+    renderDraftChips();
+    persistEditingState();
+  };
+
+  renderDraftChips();
+
+  chips.addEventListener('click', (e) => {
+    const pill = e.target.closest('.recipe-tag-pill--editable');
+    if (!pill) return;
+    const label = pill.dataset.tag || pill.textContent || '';
+
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (removeTagByLabel(label)) syncAndRender();
+      return;
+    }
+
+    input.focus();
+  });
+
+  chips.addEventListener('contextmenu', (e) => {
+    const pill = e.target.closest('.recipe-tag-pill--editable');
+    if (!pill) return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const label = pill.dataset.tag || pill.textContent || '';
+    if (removeTagByLabel(label)) syncAndRender();
+  });
+
+  input.addEventListener('input', () => {
+    persistEditingState();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (addInputDraftToTags()) {
+        syncAndRender();
+      } else {
+        persistEditingState();
+      }
+      return;
+    }
+
+    if (e.key === 'Backspace' && !String(input.value || '').trim() && draftTags.length) {
+      e.preventDefault();
+      draftTags = draftTags.slice(0, draftTags.length - 1);
+      syncAndRender();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      finishEdit({ shouldCommit: false });
+    }
+  });
+
+  shell.addEventListener('pointerdown', (e) => {
+    if (e.target === shell || e.target === chips || e.target === hint) {
+      setTimeout(() => input.focus(), 0);
+    }
+  });
+
+  content.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (
+        document.activeElement &&
+        content.contains(document.activeElement)
+      ) {
+        return;
+      }
+      finishEdit({ shouldCommit: true });
+    }, 0);
+  });
+
+  if (
+    window.favoriteEatsTypeahead &&
+    typeof window.favoriteEatsTypeahead.attach === 'function'
+  ) {
+    window.favoriteEatsTypeahead.attach({
+      inputEl: input,
+      openOnFocus: true,
+      getPool: async () => {
+        const active = new Set(draftTags.map((v) => String(v || '').toLowerCase()));
+        return getVisibleRecipeTagNamePool().filter(
+          (name) => !active.has(String(name || '').toLowerCase())
+        );
+      },
+      onPick: (value) => {
+        if (!value) return;
+        const changed = addTagsToDraft([value]);
+        input.value = '';
+        if (changed) syncAndRender();
+        else persistEditingState();
+      },
+    });
+  }
+
+  setTimeout(() => {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, 0);
+}
+
 // --- Title normalization helper (preserve casing + fallback to "Untitled") ---
 function normalizeRecipeTitle(raw) {
   if (raw == null) return 'Untitled';
@@ -2521,10 +3021,26 @@ function computeMeasures(ingredients) {
     }
   }
 
+  const normalizeMeasureToken = (value) =>
+    String(value == null ? '' : value)
+      .replace(/^\s*OR\s*/i, '')
+      .trim();
+
+  const resolveQuantityForMeasures = (ing) => {
+    const min = Number(ing && ing.quantityMin);
+    const max = Number(ing && ing.quantityMax);
+    if (Number.isFinite(min) && min > 0) return min;
+    if (Number.isFinite(max) && max > 0) return max;
+    const fromQuantity = Number(normalizeMeasureToken(ing && ing.quantity));
+    if (Number.isFinite(fromQuantity) && fromQuantity > 0) return fromQuantity;
+    return null;
+  };
+
   ingredients.forEach((ing) => {
-    if (!ing.unit || !ing.quantity) return;
-    const qty = ing.quantity;
-    const unit = ing.unit.toLowerCase();
+    const qty = resolveQuantityForMeasures(ing);
+    if (qty == null) return;
+    const unit = normalizeMeasureToken(ing && ing.unit).toLowerCase();
+    if (!unit || unit === 'or') return;
     decompose(qty, unit);
   });
 

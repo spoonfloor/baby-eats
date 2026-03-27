@@ -3,6 +3,12 @@ CREATE TABLE IF NOT EXISTS "favorite_eats" (
 	"field1"	TEXT,
 	"field2"	TEXT
 );
+CREATE TABLE IF NOT EXISTS "ingredient_synonyms" (
+	"id"	INTEGER PRIMARY KEY AUTOINCREMENT,
+	"ingredient_id"	INTEGER NOT NULL REFERENCES "ingredients"("ID"),
+	"synonym"	TEXT NOT NULL COLLATE NOCASE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_ingredient_synonyms_synonym" ON "ingredient_synonyms"("synonym" COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS "ingredient_sizes" (
 	"id"	INTEGER,
 	"ingredient_id"	INTEGER NOT NULL,
@@ -76,6 +82,9 @@ CREATE TABLE IF NOT EXISTS "recipe_ingredient_map" (
 	"quantity_min"	REAL,
 	"quantity_max"	REAL,
 	"quantity_is_approx"	INTEGER NOT NULL DEFAULT 0,
+	"linked_recipe_id"	INTEGER,
+	"recipe_text"	TEXT,
+	"is_recipe"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("ID" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID"),
 	FOREIGN KEY("recipe_id") REFERENCES "recipes"("ID"),
@@ -94,6 +103,16 @@ CREATE TABLE IF NOT EXISTS "recipe_ingredient_substitutes" (
 	PRIMARY KEY("id" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("id"),
 	FOREIGN KEY("recipe_ingredient_id") REFERENCES "recipe_ingredient_map"("id") ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS "recipe_tag_map" (
+	"id"	INTEGER,
+	"recipe_id"	INTEGER NOT NULL,
+	"tag_id"	INTEGER NOT NULL,
+	"sort_order"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("recipe_id","tag_id"),
+	FOREIGN KEY("recipe_id") REFERENCES "recipes"("ID") ON DELETE CASCADE,
+	FOREIGN KEY("tag_id") REFERENCES "tags"("id") ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS "recipe_sections" (
 	"ID"	INTEGER,
@@ -118,6 +137,16 @@ CREATE TABLE IF NOT EXISTS "recipes" (
 	"servings_max"	INTEGER,
 	PRIMARY KEY("ID" AUTOINCREMENT)
 );
+CREATE TABLE IF NOT EXISTS "tags" (
+	"id"	INTEGER,
+	"name"	TEXT NOT NULL COLLATE NOCASE,
+	"is_hidden"	INTEGER NOT NULL DEFAULT 0,
+	"sort_order"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_tags_name_nocase" ON "tags"("name" COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS "idx_recipe_tag_map_recipe" ON "recipe_tag_map"("recipe_id","sort_order","id");
+CREATE INDEX IF NOT EXISTS "idx_recipe_tag_map_tag" ON "recipe_tag_map"("tag_id","recipe_id");
 CREATE TABLE IF NOT EXISTS "size_classes" (
 	"code"	TEXT,
 	"sort_order"	INTEGER NOT NULL,
@@ -137,6 +166,13 @@ CREATE TABLE IF NOT EXISTS "stores" (
 	"chain_name"	TEXT NOT NULL,
 	"location_name"	TEXT NOT NULL,
 	PRIMARY KEY("ID" AUTOINCREMENT)
+);
+CREATE TABLE IF NOT EXISTS "unit_suggestions" (
+	"code"	TEXT,
+	"use_count"	INTEGER NOT NULL DEFAULT 0,
+	"last_used_at"	INTEGER,
+	"is_hidden"	INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY("code")
 );
 CREATE TABLE IF NOT EXISTS "units" (
 	"code"	TEXT,

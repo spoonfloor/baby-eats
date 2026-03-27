@@ -142,34 +142,143 @@ async function saveRecipeToDB() {
     throw new Error('saveRecipeToDB: invalid recipe id');
   }
 
+  const normalizeRecipeTagsForStorage = (raw) => {
+    const source = Array.isArray(raw)
+      ? raw
+      : String(raw || '')
+          .split('\n')
+          .map((v) => v.trim());
+    const seen = new Set();
+    const out = [];
+    source
+      .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .forEach((tag) => {
+        const next = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
+        if (!next) return;
+        const key = next.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(next);
+      });
+    return out;
+  };
+
+  const persistRecipeTags = (activeDb, recipeId, tags) => {
+    if (!activeDb || !Number.isFinite(Number(recipeId))) return;
+    if (
+      window.bridge &&
+      typeof bridge.ensureRecipeTagsSchema === 'function'
+    ) {
+      bridge.ensureRecipeTagsSchema(activeDb);
+    }
+
+    const normalized = normalizeRecipeTagsForStorage(tags);
+    activeDb.run('DELETE FROM recipe_tag_map WHERE recipe_id = ?;', [recipeId]);
+    if (!normalized.length) return;
+
+    let nextTagSort = 1;
+    try {
+      const maxQ = activeDb.exec(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;'
+      );
+      if (maxQ.length && maxQ[0].values.length) {
+        const n = Number(maxQ[0].values[0][0]);
+        if (Number.isFinite(n) && n > 0) nextTagSort = n;
+      }
+    } catch (_) {}
+
+    const findTagStmt = activeDb.prepare(
+      `SELECT id FROM tags
+       WHERE lower(trim(name)) = lower(trim(?))
+       LIMIT 1;`
+    );
+    const insertTagStmt = activeDb.prepare(
+      'INSERT INTO tags (name, sort_order) VALUES (?, ?);'
+    );
+    const insertMapStmt = activeDb.prepare(
+      'INSERT INTO recipe_tag_map (recipe_id, tag_id, sort_order) VALUES (?, ?, ?);'
+    );
+    try {
+      normalized.forEach((name, idx) => {
+        let tagId = null;
+        try {
+          findTagStmt.bind([name]);
+          if (findTagStmt.step()) {
+            const row = findTagStmt.getAsObject();
+            const v = Number(row && row.id != null ? row.id : NaN);
+            if (Number.isFinite(v) && v > 0) tagId = v;
+          }
+        } finally {
+          findTagStmt.reset();
+        }
+        if (tagId == null) {
+          insertTagStmt.run([name, nextTagSort++]);
+          const idQ = activeDb.exec('SELECT last_insert_rowid();');
+          if (idQ.length && idQ[0].values.length) {
+            const v = Number(idQ[0].values[0][0]);
+            if (Number.isFinite(v) && v > 0) tagId = v;
+          }
+        }
+        if (tagId != null) {
+          insertMapStmt.run([recipeId, tagId, idx + 1]);
+        }
+      });
+    } finally {
+      findTagStmt.free();
+      insertTagStmt.free();
+      insertMapStmt.free();
+    }
+  };
+
+  const normalizeRecipeTagsForModel = (raw) => {
+    const source = Array.isArray(raw) ? raw : String(raw || '').split('\n');
+    const seen = new Set();
+    const out = [];
+    source
+      .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .forEach((tag) => {
+        const clipped = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
+        if (!clipped) return;
+        const key = clipped.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(clipped);
+      });
+    return out;
+  };
+
   // Transaction keeps steps + ingredients consistent.
   db.run('BEGIN;');
   try {
     // --- 1) Persist recipe metadata (title + servings) ---
-  const title = recipe.title || '';
+    const title = recipe.title || '';
+    recipe.tags = normalizeRecipeTagsForModel(recipe.tags);
 
-  const servingsDefault =
-    recipe.servingsDefault ??
-    (recipe.servings && recipe.servings.default != null
-      ? recipe.servings.default
-      : null);
+    const servingsDefault =
+      recipe.servingsDefault ??
+      (recipe.servings && recipe.servings.default != null
+        ? recipe.servings.default
+        : null);
 
-  const servingsMin =
+    const servingsMin =
       recipe.servings && recipe.servings.min != null
         ? recipe.servings.min
         : null;
 
-  const servingsMax =
+    const servingsMax =
       recipe.servings && recipe.servings.max != null
         ? recipe.servings.max
         : null;
 
-  db.run(
-    'UPDATE recipes SET title = ?, servings_default = ?, servings_min = ?, servings_max = ? WHERE ID = ?;',
-    [title, servingsDefault, servingsMin, servingsMax, rid]
-  );
+    db.run(
+      'UPDATE recipes SET title = ?, servings_default = ?, servings_min = ?, servings_max = ? WHERE ID = ?;',
+      [title, servingsDefault, servingsMin, servingsMax, rid]
+    );
+    persistRecipeTags(db, rid, recipe.tags);
 
-  // --- 2) Persist steps from the StepNode model ---
+    // --- 2) Persist steps from the StepNode model ---
     bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);
 
     // --- 3) Persist ingredients from the live model ---

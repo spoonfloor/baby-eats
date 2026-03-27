@@ -169,6 +169,21 @@ function ensureRecipeIngredientMapQuantityRangeSchema(activeDb) {
   return true;
 }
 
+function ensureRecipeIngredientMapIsAltSchema(activeDb) {
+  if (!activeDb) return false;
+  const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+  if (!rimCols.includes('is_alt')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN is_alt INTEGER NOT NULL DEFAULT 0;'
+      );
+    } catch (_) {}
+  }
+  return true;
+}
+
 // --- StepNode → DB save adapter (Option A: minimal) ---
 function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
   // Remove existing rows for this recipe
@@ -188,6 +203,107 @@ function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
   stmt.free();
 }
 
+function ensureRecipeIngredientMapDisplayNameSchema(activeDb) {
+  if (!activeDb) return false;
+  const cols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+  if (!cols.includes('display_name')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN display_name TEXT;'
+      );
+    } catch (_) {}
+  }
+  return true;
+}
+
+function ensureIngredientSynonymsSchema(activeDb) {
+  if (!activeDb) return false;
+  const exists = tableExists(activeDb, 'ingredient_synonyms');
+  if (!exists) {
+    try {
+      activeDb.run(`
+        CREATE TABLE IF NOT EXISTS ingredient_synonyms (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          ingredient_id INTEGER NOT NULL REFERENCES ingredients(ID),
+          synonym       TEXT NOT NULL COLLATE NOCASE
+        );
+      `);
+    } catch (_) {}
+  }
+  try {
+    activeDb.run(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_ingredient_synonyms_synonym ON ingredient_synonyms(synonym COLLATE NOCASE);'
+    );
+  } catch (_) {}
+  return true;
+}
+
+function ensureRecipeTagsSchema(activeDb) {
+  if (!activeDb) return false;
+  try {
+    activeDb.run('PRAGMA foreign_keys = ON;');
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL COLLATE NOCASE,
+        is_hidden INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER
+      );
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name_nocase
+      ON tags(name COLLATE NOCASE);
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE TABLE IF NOT EXISTS recipe_tag_map (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipe_id INTEGER NOT NULL REFERENCES recipes(ID) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        sort_order INTEGER,
+        UNIQUE(recipe_id, tag_id)
+      );
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE INDEX IF NOT EXISTS idx_recipe_tag_map_recipe
+      ON recipe_tag_map(recipe_id, sort_order, id);
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE INDEX IF NOT EXISTS idx_recipe_tag_map_tag
+      ON recipe_tag_map(tag_id, recipe_id);
+    `);
+  } catch (_) {}
+  return true;
+}
+
+function parseRecipeTags(rawTags) {
+  if (rawTags == null) return [];
+  const seen = new Set();
+  const out = [];
+  String(rawTags)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .forEach((tag) => {
+      const key = tag.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(tag);
+    });
+  return out;
+}
+
 window.bridge = {
   loadRecipeFromDB,
   saveRecipeToDB,
@@ -197,12 +313,16 @@ window.bridge = {
   ensureRecipeIngredientHeadingsSchema,
   ensureRecipeIngredientMapParentheticalNoteSchema,
   ensureRecipeIngredientMapQuantityRangeSchema,
+  ensureRecipeIngredientMapDisplayNameSchema,
+  ensureIngredientSynonymsSchema,
+  ensureRecipeTagsSchema,
   writeIngredientSortOrderFromModel,
 };
 
 // Load a recipe and all its pieces from the database into a full JS object.
 
 function loadRecipeFromDB(db, recipeId) {
+  ensureRecipeTagsSchema(db);
   const recipeRows = db.exec(`
     SELECT ID, title, servings_default, servings_min, servings_max
     FROM recipes WHERE ID = ${recipeId};
@@ -211,6 +331,24 @@ function loadRecipeFromDB(db, recipeId) {
 
   const [id, title, servingsDefault, servingsMin, servingsMax] =
     recipeRows[0].values[0];
+  let tags = [];
+  try {
+    const tagQ = db.exec(`
+      SELECT t.name
+      FROM recipe_tag_map m
+      JOIN tags t ON t.id = m.tag_id
+      WHERE m.recipe_id = ${id}
+        AND COALESCE(t.is_hidden, 0) = 0
+      ORDER BY COALESCE(m.sort_order, 999999), m.id, t.name COLLATE NOCASE;
+    `);
+    if (tagQ.length) {
+      tags = tagQ[0].values
+        .map((row) => String((Array.isArray(row) ? row[0] : '') || '').trim())
+        .filter(Boolean);
+    }
+  } catch (_) {
+    tags = [];
+  }
 
   // --- Load steps from new schema (no sections, type column present) ---
   const stepsQ = db.exec(`
@@ -242,6 +380,8 @@ function loadRecipeFromDB(db, recipeId) {
   const hasLinkedRecipeId = rimHas('linked_recipe_id');
   const hasRecipeText = rimHas('recipe_text');
   const hasLegacySubrecipeId = rimHas('subrecipe_id');
+  const hasIsAlt = rimHas('is_alt');
+  const hasDisplayName = rimHas('display_name');
 
   const ingCols = getTableColumns(db, 'ingredients');
   const ingHas = (col) => ingCols.map((c) => String(c).toLowerCase()).includes(col);
@@ -258,6 +398,31 @@ function loadRecipeFromDB(db, recipeId) {
       ? 'COALESCE(i.hide_from_shopping_list, 0) AS ingredient_deprecated'
       : '0 AS ingredient_deprecated';
 
+  const linkedRecipeJoinIdSql = hasLinkedRecipeId
+    ? hasLegacySubrecipeId
+      ? 'COALESCE(rim.linked_recipe_id, rim.subrecipe_id)'
+      : 'rim.linked_recipe_id'
+    : hasLegacySubrecipeId
+    ? 'rim.subrecipe_id'
+    : null;
+  const linkedRecipeTitleSql = linkedRecipeJoinIdSql ? 'lr.title' : 'NULL';
+  const nonRecipeNameSql = hasDisplayName
+    ? "COALESCE(NULLIF(TRIM(rim.display_name), ''), i.name)"
+    : 'i.name';
+  const recipeDisplayNameSql = hasIsRecipe
+    ? hasRecipeText
+      ? `CASE
+           WHEN COALESCE(rim.is_recipe, 0) = 1
+             THEN COALESCE(NULLIF(TRIM(rim.recipe_text), ''), ${linkedRecipeTitleSql}, i.name, '')
+           ELSE ${nonRecipeNameSql}
+         END AS name`
+      : `CASE
+           WHEN COALESCE(rim.is_recipe, 0) = 1
+             THEN COALESCE(${linkedRecipeTitleSql}, i.name, '')
+           ELSE ${nonRecipeNameSql}
+         END AS name`
+    : `${nonRecipeNameSql} AS name`;
+
   const selectParts = [
     'rim.ID',
     hasSectionId ? 'rim.section_id' : 'NULL AS section_id',
@@ -267,7 +432,7 @@ function loadRecipeFromDB(db, recipeId) {
     hasQtyMax ? 'rim.quantity_max' : 'NULL AS quantity_max',
     hasQtyApprox ? 'COALESCE(rim.quantity_is_approx, 0) AS quantity_is_approx' : '0 AS quantity_is_approx',
     'rim.unit',
-    'i.name',
+    recipeDisplayNameSql,
     'i.variant',
     'i.size',
     hasLemma ? 'i.lemma' : 'NULL AS lemma',
@@ -290,10 +455,12 @@ function loadRecipeFromDB(db, recipeId) {
       : hasLegacySubrecipeId
       ? 'rim.subrecipe_id AS linked_recipe_id'
       : 'NULL AS linked_recipe_id',
+    `${linkedRecipeTitleSql} AS linked_recipe_title`,
     hasRecipeText
       ? "COALESCE(rim.recipe_text, '') AS recipe_text"
       : "'' AS recipe_text",
     ingredientDeprecatedSql,
+    hasIsAlt ? 'COALESCE(rim.is_alt, 0) AS is_alt' : '0 AS is_alt',
   ];
 
   const orderParts = [];
@@ -310,7 +477,8 @@ function loadRecipeFromDB(db, recipeId) {
   const ingredientsQ = db.exec(`
     SELECT ${selectParts.join(', ')}
     FROM recipe_ingredient_map rim
-    JOIN ingredients i ON rim.ingredient_id = i.ID
+    LEFT JOIN ingredients i ON rim.ingredient_id = i.ID
+    ${linkedRecipeJoinIdSql ? `LEFT JOIN recipes lr ON lr.ID = ${linkedRecipeJoinIdSql}` : ''}
     WHERE rim.recipe_id = ${id}
     ORDER BY ${orderParts.join(', ')};
   `);
@@ -339,8 +507,10 @@ function loadRecipeFromDB(db, recipeId) {
           locationAtHome,
           isRecipe,
           linkedRecipeId,
+          linkedRecipeTitle,
           recipeText,
           ingredientDeprecated,
+          isAlt,
         ]) => ({
           rowType: 'ingredient',
           rimId,
@@ -385,8 +555,11 @@ function loadRecipeFromDB(db, recipeId) {
             const lid = Number(linkedRecipeId);
             return Number.isFinite(lid) && lid > 0 ? lid : null;
           })(),
+          linkedRecipeTitle:
+            linkedRecipeTitle == null ? '' : String(linkedRecipeTitle).trim(),
           recipeText: recipeText == null ? '' : String(recipeText).trim(),
           isDeprecated: !!ingredientDeprecated,
+          isAlt: !!isAlt,
         })
       )
     : [];
@@ -497,6 +670,7 @@ function loadRecipeFromDB(db, recipeId) {
       min: servingsMin,
       max: servingsMax,
     },
+    tags,
     sections,
   };
 }
@@ -619,6 +793,12 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   ensureRecipeIngredientMapParentheticalNoteSchema(activeDb);
   // Ensure schema supports structured quantity range fields.
   ensureRecipeIngredientMapQuantityRangeSchema(activeDb);
+  // Ensure display_name column exists for preserving typed ingredient names.
+  ensureRecipeIngredientMapDisplayNameSchema(activeDb);
+  // Ensure ingredient synonyms table exists.
+  ensureIngredientSynonymsSchema(activeDb);
+  // Ensure schema supports is_alt flag.
+  ensureRecipeIngredientMapIsAltSchema(activeDb);
 
   const ingredientsCols = getTableColumns(activeDb, 'ingredients');
   const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
@@ -733,6 +913,26 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
 
     if (foundId != null) return foundId;
 
+    // Check synonym table before creating a new ingredient.
+    try {
+      const synStmt = activeDb.prepare(
+        `SELECT ingredient_id FROM ingredient_synonyms
+         WHERE lower(trim(synonym)) = lower(trim(?))
+         LIMIT 1;`
+      );
+      try {
+        synStmt.bind([name]);
+        if (synStmt.step()) {
+          const row = synStmt.getAsObject();
+          const v = row && row.ingredient_id != null ? Number(row.ingredient_id) : NaN;
+          if (Number.isFinite(v)) foundId = v;
+        }
+      } finally {
+        synStmt.free();
+      }
+      if (foundId != null) return foundId;
+    } catch (_) {}
+
     // Insert new ingredient row (best-effort to include extra columns if present)
     const cols = ['name'];
     const vals = [name];
@@ -777,6 +977,8 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   const rimHasIsRecipe = rimHas('is_recipe');
   const rimHasLinkedRecipeId = rimHas('linked_recipe_id');
   const rimHasRecipeText = rimHas('recipe_text');
+  const rimHasIsAlt = rimHas('is_alt');
+  const rimHasDisplayName = rimHas('display_name');
 
   const rihCols = getTableColumns(activeDb, 'recipe_ingredient_headings');
   const rihHas = (col) =>
@@ -848,6 +1050,9 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         const t = row.text != null ? String(row.text).trim() : '';
         return t.length > 0;
       }
+      const linkedRecipeId = Number(row.linkedRecipeId);
+      const hasLinkedRecipe = Number.isFinite(linkedRecipeId) && linkedRecipeId > 0;
+      if (row.isRecipe && hasLinkedRecipe) return true;
       return (row.name || '').trim() !== '';
     });
 
@@ -937,7 +1142,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       }
 
       const ing = row;
-      const ingredientId = findOrCreateIngredientId(ing);
       const rimId = ing.rimId != null ? Number(ing.rimId) : null;
       const isExisting = rimId != null && existingIds.has(rimId);
       let assignedSort = normalizeSortOrder(ing.sortOrder);
@@ -947,6 +1151,16 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         nextSort = assignedSort + 1;
       }
       if (assignedSort != null) ing.sortOrder = assignedSort;
+
+      const linkedRecipeIdRaw = Number(ing.linkedRecipeId);
+      const normalizedLinkedRecipeId =
+        Number.isFinite(linkedRecipeIdRaw) &&
+        linkedRecipeIdRaw > 0 &&
+        linkedRecipeIdRaw !== rid
+          ? linkedRecipeIdRaw
+          : null;
+      const normalizedIsRecipe = !!(ing.isRecipe && normalizedLinkedRecipeId != null);
+      const ingredientId = normalizedIsRecipe ? null : findOrCreateIngredientId(ing);
 
       // Build common column sets
       const cols = ['recipe_id', 'ingredient_id'];
@@ -1008,12 +1222,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         cols.push('is_optional');
         vals.push(ing.isOptional ? 1 : 0);
       }
-      const linkedRecipeIdRaw = Number(ing.linkedRecipeId);
-      const normalizedLinkedRecipeId =
-        Number.isFinite(linkedRecipeIdRaw) && linkedRecipeIdRaw > 0
-          ? linkedRecipeIdRaw
-          : null;
-      const normalizedIsRecipe = !!(ing.isRecipe && normalizedLinkedRecipeId != null);
       if (rimHasIsRecipe) {
         cols.push('is_recipe');
         vals.push(normalizedIsRecipe ? 1 : 0);
@@ -1024,11 +1232,21 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       }
       if (rimHasRecipeText) {
         cols.push('recipe_text');
-        vals.push(normalizedIsRecipe ? (ing.recipeText || '').trim() : '');
+        vals.push(
+          normalizedIsRecipe ? (ing.name || ing.recipeText || '').trim() : ''
+        );
       }
       if (rimHasSortOrder && assignedSort != null) {
         cols.push('sort_order');
         vals.push(assignedSort);
+      }
+      if (rimHasIsAlt) {
+        cols.push('is_alt');
+        vals.push(ing.isAlt ? 1 : 0);
+      }
+      if (rimHasDisplayName && !normalizedIsRecipe) {
+        cols.push('display_name');
+        vals.push((ing.name || '').trim());
       }
 
       // Update existing row if we have a valid rimId still present in DB.

@@ -144,6 +144,10 @@
   white-space: pre-line;
 }
 
+.ui-dialog-extra {
+  margin: 0 0 14px 0;
+}
+
 .ui-dialog-fields {
   display: flex;
   flex-direction: column;
@@ -185,6 +189,30 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.shopping-remove-dialog-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shopping-remove-dialog-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shopping-remove-dialog-link {
+  color: var(--theme-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.shopping-remove-dialog-note {
+  font-size: var(--body-font-size);
+  line-height: 1.45;
+  color: var(--font-color-near-black);
 }
 
 .ui-dialog-panel--three-choice {

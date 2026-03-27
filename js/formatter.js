@@ -7,6 +7,7 @@ function formatRecipe(db, recipeId) {
   let servingsDefault = null;
   let servingsMin = null;
   let servingsMax = null;
+  let tags = [];
   if (recipeTitleQuery.length) {
     const row = recipeTitleQuery[0].values[0];
     title = row[0];
@@ -14,6 +15,20 @@ function formatRecipe(db, recipeId) {
     servingsMin = row[2];
     servingsMax = row[3];
   }
+  try {
+    const tagQ = db.exec(`
+      SELECT t.name
+      FROM recipe_tag_map m
+      JOIN tags t ON t.id = m.tag_id
+      WHERE m.recipe_id = ${recipeId}
+      ORDER BY COALESCE(m.sort_order, 999999), m.id, t.name COLLATE NOCASE;
+    `);
+    if (tagQ.length) {
+      tags = tagQ[0].values
+        .map((r) => String((Array.isArray(r) ? r[0] : '') || '').trim())
+        .filter(Boolean);
+    }
+  } catch (_) {}
 
   // Sections (may be empty)
   const sectionsQuery = db.exec(
@@ -51,6 +66,14 @@ function formatRecipe(db, recipeId) {
   const rimHasLinkedRecipeId = rimCols.includes('linked_recipe_id');
   const rimHasRecipeText = rimCols.includes('recipe_text');
   const rimHasLegacySubrecipeId = rimCols.includes('subrecipe_id');
+  const linkedRecipeJoinIdSql = rimHasLinkedRecipeId
+    ? rimHasLegacySubrecipeId
+      ? 'COALESCE(rim.linked_recipe_id, rim.subrecipe_id)'
+      : 'rim.linked_recipe_id'
+    : rimHasLegacySubrecipeId
+    ? 'rim.subrecipe_id'
+    : null;
+  const linkedRecipeTitleSql = linkedRecipeJoinIdSql ? 'lr.title' : 'NULL';
 
   const ingCols = (() => {
     try {
@@ -97,7 +120,21 @@ function formatRecipe(db, recipeId) {
              ${rimHasSortOrder ? 'rim.sort_order,' : 'NULL AS sort_order,'}
              rim.quantity,
              rim.unit,
-             i.name,
+             ${
+               rimHasIsRecipe
+                 ? rimHasRecipeText
+                   ? `CASE
+                        WHEN COALESCE(rim.is_recipe, 0) = 1
+                          THEN COALESCE(NULLIF(TRIM(rim.recipe_text), ''), ${linkedRecipeTitleSql}, i.name, '')
+                        ELSE i.name
+                      END AS name,`
+                   : `CASE
+                        WHEN COALESCE(rim.is_recipe, 0) = 1
+                          THEN COALESCE(${linkedRecipeTitleSql}, i.name, '')
+                        ELSE i.name
+                      END AS name,`
+                 : 'i.name,'
+             }
              i.variant,
              i.size,
              ${ingHasLemma ? 'i.lemma,' : 'NULL AS lemma,'}
@@ -138,9 +175,11 @@ function formatRecipe(db, recipeId) {
                  ? 'rim.subrecipe_id'
                  : 'NULL'
              },
+             ${linkedRecipeTitleSql},
              ${rimHasRecipeText ? "COALESCE(rim.recipe_text, '')" : "''"}
       FROM recipe_ingredient_map rim
-      JOIN ingredients i ON rim.ingredient_id = i.ID
+      LEFT JOIN ingredients i ON rim.ingredient_id = i.ID
+      ${linkedRecipeJoinIdSql ? `LEFT JOIN recipes lr ON lr.ID = ${linkedRecipeJoinIdSql}` : ''}
       WHERE rim.recipe_id=${recipeId} AND ${whereClause}
       ORDER BY ${
         rimHasSortOrder ? 'COALESCE(rim.sort_order, 999999), rim.ID' : 'rim.ID'
@@ -169,6 +208,7 @@ function formatRecipe(db, recipeId) {
         locationAtHome,
         isRecipe,
         linkedRecipeId,
+        linkedRecipeTitle,
         recipeText,
       ]) => {
         // Fetch substitutes for this ingredient
@@ -197,6 +237,8 @@ function formatRecipe(db, recipeId) {
             : null;
         const normalizedRecipeText =
           recipeText == null ? '' : String(recipeText).trim();
+        const normalizedLinkedRecipeTitle =
+          linkedRecipeTitle == null ? '' : String(linkedRecipeTitle).trim();
         const normalizedIsRecipe =
           Number(isRecipe) === 1 && normalizedLinkedRecipeId != null;
 
@@ -219,6 +261,7 @@ function formatRecipe(db, recipeId) {
           locationAtHome: locationAtHome ? locationAtHome.toLowerCase() : '',
           isRecipe: normalizedIsRecipe,
           linkedRecipeId: normalizedLinkedRecipeId,
+          linkedRecipeTitle: normalizedLinkedRecipeTitle,
           recipeText: normalizedRecipeText,
           rimId,
           sortOrder: sortOrder == null ? null : Number(sortOrder),
@@ -297,6 +340,7 @@ function formatRecipe(db, recipeId) {
       max: servingsMax,
     },
     servingsDefault, // ← ✅ add this line
+    tags,
     sections,
   };
 }
