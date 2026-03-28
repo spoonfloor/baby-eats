@@ -1,7 +1,7 @@
 // Ingredient editor
 
 /** Hidden shopping item (deprecated master row): prefer is_deprecated, else legacy hide_from_shopping_list. */
-function getIngredientDeprecatedFlagFromDb(db, whereClause) {
+function getIngredientDeprecatedFlagFromDb(db, whereClause, lookupName = '') {
   if (!db || !whereClause) return false;
   try {
     const info = db.exec('PRAGMA table_info(ingredients);');
@@ -14,6 +14,45 @@ function getIngredientDeprecatedFlagFromDb(db, whereClause) {
     else if (has('hide_from_shopping_list'))
       expr = 'COALESCE(hide_from_shopping_list, 0)';
     if (!expr) return false;
+
+    const visibilitySql = has('is_deprecated')
+      ? has('hide_from_shopping_list')
+        ? 'COALESCE(is_deprecated, 0) = 0 AND COALESCE(hide_from_shopping_list, 0) = 0'
+        : 'COALESCE(is_deprecated, 0) = 0'
+      : has('hide_from_shopping_list')
+      ? 'COALESCE(hide_from_shopping_list, 0) = 0'
+      : '1 = 1';
+
+    // Never style red when this string resolves to any visible ingredient,
+    // including synonym/AKA matches.
+    const name = String(lookupName || '').trim();
+    if (name) {
+      const visibleDirect = db.exec(
+        `
+        SELECT 1
+        FROM ingredients
+        WHERE lower(trim(name)) = lower(trim('${name.replace(/'/g, "''")}'))
+          AND ${visibilitySql}
+        LIMIT 1;
+        `
+      );
+      if (visibleDirect.length && visibleDirect[0].values.length) return false;
+
+      try {
+        const visibleSynonym = db.exec(
+          `
+          SELECT 1
+          FROM ingredient_synonyms s
+          JOIN ingredients i ON i.ID = s.ingredient_id
+          WHERE lower(trim(s.synonym)) = lower(trim('${name.replace(/'/g, "''")}'))
+            AND ${visibilitySql.replaceAll('COALESCE(', 'COALESCE(i.')}
+          LIMIT 1;
+          `
+        );
+        if (visibleSynonym.length && visibleSynonym[0].values.length) return false;
+      } catch (_) {}
+    }
+
     const q = db.exec(
       `SELECT ${expr} FROM ingredients WHERE ${whereClause} LIMIT 1;`
     );
@@ -2000,7 +2039,11 @@ function openIngredientEditRow({
             ingredient.isMassNoun = !!isMassNoun;
             ingredient.pluralOverride = pluralOverride || '';
           }
-          ingredient.isDeprecated = getIngredientDeprecatedFlagFromDb(db, whereClause);
+          ingredient.isDeprecated = getIngredientDeprecatedFlagFromDb(
+            db,
+            whereClause,
+            nameTrimmed,
+          );
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch ingredient grammar fields:', err);
@@ -2146,7 +2189,11 @@ function openIngredientEditRow({
             modelRef.isMassNoun = !!isMassNoun;
             modelRef.pluralOverride = pluralOverride || '';
           }
-          modelRef.isDeprecated = getIngredientDeprecatedFlagFromDb(db, whereClause);
+          modelRef.isDeprecated = getIngredientDeprecatedFlagFromDb(
+            db,
+            whereClause,
+            nameTrimmed,
+          );
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch ingredient grammar fields:', err);

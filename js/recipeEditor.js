@@ -2455,19 +2455,21 @@ function renderRecipeTagsSection(recipe, container) {
   recipeModel.tags = normalized;
 
   const previousEditorState = window._recipeTagsEditorState || {};
-  const previousDraftTags = normalizeRecipeTagsArray(
-    Array.isArray(previousEditorState.draftTags)
-      ? previousEditorState.draftTags
-      : previousEditorState.draft
-  );
-  const previousInputDraft =
-    typeof previousEditorState.inputDraft === 'string'
-      ? previousEditorState.inputDraft
+  const previousDraft =
+    typeof previousEditorState.draft === 'string'
+      ? previousEditorState.draft
+      : Array.isArray(previousEditorState.draftTags)
+      ? formatRecipeTagsSubtitle(previousEditorState.draftTags)
       : '';
   const isEditing = !!previousEditorState.isEditing;
   const originalTags = Array.isArray(previousEditorState.originalTags)
     ? previousEditorState.originalTags
     : normalized.slice();
+  const ensureVisibleOnOpen = !!previousEditorState.ensureVisibleOnOpen;
+
+  try {
+    document.body.classList.toggle('recipe-tags-editing', isEditing);
+  } catch (_) {}
 
   section.className = 'recipe-tags-section';
   section.innerHTML = '';
@@ -2508,9 +2510,9 @@ function renderRecipeTagsSection(recipe, container) {
     content.addEventListener('click', () => {
       window._recipeTagsEditorState = {
         isEditing: true,
-        draftTags: normalizeRecipeTagsArray(recipeModel.tags),
-        inputDraft: '',
+        draft: formatRecipeTagsSubtitle(recipeModel.tags),
         originalTags: normalizeRecipeTagsArray(recipeModel.tags),
+        ensureVisibleOnOpen: true,
       };
       renderRecipeTagsSection(recipeModel, container);
     });
@@ -2529,6 +2531,27 @@ function renderRecipeTagsSection(recipe, container) {
       const pill = document.createElement('span');
       pill.className = 'recipe-tag-pill';
       pill.textContent = tag;
+      pill.title = 'Ctrl-click to remove';
+      pill.addEventListener('click', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const next = normalized.filter(
+          (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
+        );
+        updateModelFromDraft(next);
+        renderRecipeTagsSection(recipeModel, container);
+      });
+      pill.addEventListener('contextmenu', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const next = normalized.filter(
+          (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
+        );
+        updateModelFromDraft(next);
+        renderRecipeTagsSection(recipeModel, container);
+      });
       pills.appendChild(pill);
     });
     content.appendChild(pills);
@@ -2536,168 +2559,53 @@ function renderRecipeTagsSection(recipe, container) {
   }
 
   content.classList.add('recipe-tags-content--edit');
-  let draftTags = normalizeRecipeTagsArray(
-    previousDraftTags.length ? previousDraftTags : normalized
-  );
+  const card = document.createElement('div');
+  card.className = 'shopping-item-editor-card recipe-tags-editor-card';
+  content.appendChild(card);
 
-  const shell = document.createElement('div');
-  shell.className = 'recipe-tags-editor-shell';
-  content.appendChild(shell);
+  const field = document.createElement('div');
+  field.className = 'shopping-item-field recipe-tags-editor-field';
+  card.appendChild(field);
 
-  const chips = document.createElement('div');
-  chips.className = 'recipe-tags-wrap recipe-tags-wrap--editor';
-  shell.appendChild(chips);
+  const textarea = document.createElement('textarea');
+  textarea.className = 'shopping-item-textarea recipe-tags-editor';
+  textarea.rows = 3;
+  textarea.placeholder = 'e.g., Mexican, Chinese, comfort food';
+  textarea.value = previousDraft || formatRecipeTagsSubtitle(normalized);
+  textarea.setAttribute('aria-label', 'Recipe tags');
+  textarea.wrap = 'soft';
+  field.appendChild(textarea);
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'recipe-tags-editor-input';
-  input.placeholder = draftTags.length
-    ? 'Type to add another tag'
-    : 'Type a tag';
-  input.value = previousInputDraft || '';
-  shell.appendChild(input);
-
-  const hint = document.createElement('div');
-  hint.className = 'recipe-tags-editor-hint';
-  hint.textContent = 'Enter/comma adds. Ctrl-click a chip to remove.';
-  shell.appendChild(hint);
+  try {
+    if (typeof attachEditorTextareaAutoGrow === 'function') {
+      attachEditorTextareaAutoGrow(textarea, { maxLines: 10 });
+    }
+  } catch (_) {}
 
   const persistEditingState = () => {
     window._recipeTagsEditorState = {
       isEditing: true,
-      draftTags: draftTags.slice(),
-      inputDraft: String(input.value || ''),
+      draft: textarea.value || '',
       originalTags,
+      ensureVisibleOnOpen: false,
     };
-  };
-
-  const addTagsToDraft = (candidateTags) => {
-    const next = normalizeRecipeTagsArray((candidateTags || []).join('\n'));
-    if (!next.length) return false;
-    const merged = normalizeRecipeTagsArray([...(draftTags || []), ...next]);
-    const changed =
-      JSON.stringify(merged.map((v) => v.toLowerCase())) !==
-      JSON.stringify((draftTags || []).map((v) => v.toLowerCase()));
-    if (!changed) return false;
-    draftTags = merged;
-    return true;
-  };
-
-  const addInputDraftToTags = () => {
-    const raw = String(input.value || '').trim();
-    if (!raw) return false;
-    const added = addTagsToDraft(raw.split(/[\n,]/));
-    input.value = '';
-    return added;
-  };
-
-  const removeTagByLabel = (tagLabel) => {
-    const key = String(tagLabel || '').trim().toLowerCase();
-    if (!key) return false;
-    const before = draftTags.length;
-    draftTags = draftTags.filter((tag) => String(tag || '').toLowerCase() !== key);
-    return draftTags.length !== before;
-  };
-
-  const renderDraftChips = () => {
-    chips.innerHTML = '';
-    if (!draftTags.length) {
-      const empty = document.createElement('div');
-      empty.className = 'recipe-tags-empty placeholder-prompt';
-      empty.textContent = 'No tags yet. Add one below.';
-      chips.appendChild(empty);
-      return;
-    }
-
-    draftTags.forEach((tag) => {
-      const pill = document.createElement('button');
-      pill.type = 'button';
-      pill.className = 'recipe-tag-pill recipe-tag-pill--editable';
-      pill.dataset.tag = tag;
-      pill.title = 'Ctrl-click to remove';
-      pill.textContent = tag;
-      chips.appendChild(pill);
-    });
   };
 
   const finishEdit = ({ shouldCommit }) => {
-    if (shouldCommit) {
-      addInputDraftToTags();
-      updateModelFromDraft(draftTags);
-    }
+    if (shouldCommit) updateModelFromDraft(textarea.value || '');
     window._recipeTagsEditorState = {
       isEditing: false,
-      draftTags: [],
-      inputDraft: '',
+      draft: '',
       originalTags: [],
+      ensureVisibleOnOpen: false,
     };
     renderRecipeTagsSection(recipeModel, container);
   };
-
-  const syncAndRender = () => {
-    input.placeholder = draftTags.length ? 'Type to add another tag' : 'Type a tag';
-    renderDraftChips();
-    persistEditingState();
-  };
-
-  renderDraftChips();
-
-  chips.addEventListener('click', (e) => {
-    const pill = e.target.closest('.recipe-tag-pill--editable');
-    if (!pill) return;
-    const label = pill.dataset.tag || pill.textContent || '';
-
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (removeTagByLabel(label)) syncAndRender();
-      return;
-    }
-
-    input.focus();
-  });
-
-  chips.addEventListener('contextmenu', (e) => {
-    const pill = e.target.closest('.recipe-tag-pill--editable');
-    if (!pill) return;
-    if (!(e.ctrlKey || e.metaKey)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const label = pill.dataset.tag || pill.textContent || '';
-    if (removeTagByLabel(label)) syncAndRender();
-  });
-
-  input.addEventListener('input', () => {
-    persistEditingState();
-  });
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      if (addInputDraftToTags()) {
-        syncAndRender();
-      } else {
-        persistEditingState();
-      }
-      return;
-    }
-
-    if (e.key === 'Backspace' && !String(input.value || '').trim() && draftTags.length) {
-      e.preventDefault();
-      draftTags = draftTags.slice(0, draftTags.length - 1);
-      syncAndRender();
-      return;
-    }
-
+  textarea.addEventListener('input', persistEditingState);
+  textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
       finishEdit({ shouldCommit: false });
-    }
-  });
-
-  shell.addEventListener('pointerdown', (e) => {
-    if (e.target === shell || e.target === chips || e.target === hint) {
-      setTimeout(() => input.focus(), 0);
     }
   });
 
@@ -2717,29 +2625,95 @@ function renderRecipeTagsSection(recipe, container) {
     window.favoriteEatsTypeahead &&
     typeof window.favoriteEatsTypeahead.attach === 'function'
   ) {
+    const getCaretLineBounds = (el, caretPos) => {
+      const v = String(el.value || '');
+      const pos =
+        caretPos != null && Number.isFinite(caretPos)
+          ? Number(caretPos)
+          : el.selectionStart ?? 0;
+      const prevNl = v.lastIndexOf('\n', pos - 1);
+      const lineStart = prevNl === -1 ? 0 : prevNl + 1;
+      const nextNl = v.indexOf('\n', pos);
+      const lineEnd = nextNl === -1 ? v.length : nextNl;
+      return { lineStart, lineEnd };
+    };
+    const vSlice = (s, a, b) => String(s || '').slice(a, b);
+    const getCurrentLineText = (el) => {
+      const caretPos = el.selectionStart ?? 0;
+      const { lineStart, lineEnd } = getCaretLineBounds(el, caretPos);
+      return vSlice(el.value, lineStart, lineEnd);
+    };
+
     window.favoriteEatsTypeahead.attach({
-      inputEl: input,
+      inputEl: textarea,
       openOnFocus: true,
-      getPool: async () => {
-        const active = new Set(draftTags.map((v) => String(v || '').toLowerCase()));
+      matchAnchorWidth: true,
+      placement: 'below',
+      dropdownGap: 4,
+      maxVisible: 6,
+      pickOnEnterWhenQueryEmpty: false,
+      getPool: async (el) => {
+        const active = new Set(
+          normalizeRecipeTagsArray(el && el.value ? el.value : '').map((v) =>
+            String(v || '').toLowerCase()
+          )
+        );
         return getVisibleRecipeTagNamePool().filter(
           (name) => !active.has(String(name || '').toLowerCase())
         );
       },
-      onPick: (value) => {
-        if (!value) return;
-        const changed = addTagsToDraft([value]);
-        input.value = '';
-        if (changed) syncAndRender();
-        else persistEditingState();
+      getQuery: (el) => String(getCurrentLineText(el) || '').trim(),
+      setValue: (picked, el) => {
+        const canonical = String(picked || '').trim();
+        const { lineStart, lineEnd } = getCaretLineBounds(el);
+        const before = vSlice(el.value, 0, lineStart);
+        const after = vSlice(el.value, lineEnd, String(el.value || '').length);
+        el.value = before + canonical + after;
+        return { caretPos: lineStart + canonical.length };
       },
+      closeOnEmptyQuery: false,
+      openOnlyWhenQueryNonEmpty: false,
     });
   }
 
-  setTimeout(() => {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  }, 0);
+  const ensureTagsEditorRunway = (targetEl, { minBelow = 240 } = {}) => {
+    if (!(targetEl instanceof HTMLElement)) return 0;
+    try {
+      const rect = targetEl.getBoundingClientRect();
+      const vh =
+        window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportMargin = 16;
+      const availBelow = vh - viewportMargin - rect.bottom;
+      const needed = Math.max(0, Math.ceil(minBelow - availBelow));
+      if (needed > 0) {
+        window.scrollBy({ top: needed, behavior: 'instant' });
+      }
+      return needed;
+    } catch (_) {
+      return 0;
+    }
+  };
+
+  const focusTextareaAtEnd = () => {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  };
+
+  if (ensureVisibleOnOpen) {
+    setTimeout(() => {
+      try {
+        section.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest',
+          behavior: 'instant',
+        });
+      } catch (_) {}
+      ensureTagsEditorRunway(textarea, { minBelow: 240 });
+      requestAnimationFrame(focusTextareaAtEnd);
+    }, 0);
+  } else {
+    setTimeout(focusTextareaAtEnd, 0);
+  }
 }
 
 // --- Title normalization helper (preserve casing + fallback to "Untitled") ---

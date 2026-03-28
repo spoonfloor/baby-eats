@@ -6427,9 +6427,11 @@ function loadStoreEditorPage() {
         const resolved = await resolveUnknownIngredientNames({
           db,
           names: unknownUnique,
-          title: `New items (${unknownUnique.length})`,
+          title: `New ingredients (${unknownUnique.length})`,
           message:
-            'These items are not in your database. Edit, match to existing items, or save as new ones.',
+            unknownUnique.length === 1
+              ? 'This ingredient is not in your database. Edit, match it to an existing ingredient, or save it as a new one.'
+              : 'These ingredients are not in your database. Edit, match them to existing ingredients, or save them as new ones.',
         });
         if (!resolved) {
           uiToast('Save cancelled.');
@@ -7068,10 +7070,12 @@ async function resolveUnknownIngredientNames({
   }
   const suggestionPool = getVisibleIngredientNamePool(db);
   const result = await ui.unknownItems({
-    title: title || `New items (${list.length})`,
+    title: title || `New ingredients (${list.length})`,
     message:
       message ||
-      'These items are not in your database. Edit, match to existing items, or save as new ones.',
+      (list.length === 1
+        ? 'This ingredient is not in your database. Edit, match it to an existing ingredient, or save it as a new one.'
+        : 'These ingredients are not in your database. Edit, match them to existing ingredients, or save them as new ones.'),
     items: list,
     suggestionPool,
     applyAllText: 'Apply all',
@@ -7110,7 +7114,9 @@ async function resolveUnknownTagNames({ db, tags, title = '', message = '' }) {
     title: title || `New tags (${list.length})`,
     message:
       message ||
-      'This tag is not in your database. Edit, match to existing tag, or save as a new one.',
+      (list.length === 1
+        ? 'This tag is not in your database. Edit, match it to an existing tag, or save it as a new one.'
+        : 'These tags are not in your database. Edit, match them to existing tags, or save them as new ones.'),
     items: list,
     suggestionPool,
     applyAllText: 'Apply all',
@@ -7408,9 +7414,11 @@ async function loadRecipeEditorPage() {
               const resolved = await resolveUnknownIngredientNames({
                 db,
                 names: unknownUnique,
-                title: `New items (${unknownUnique.length})`,
+                title: `New ingredients (${unknownUnique.length})`,
                 message:
-                  'These items are not in your database. Edit, match to existing items, or save as new ones.',
+                  unknownUnique.length === 1
+                    ? 'This ingredient is not in your database. Edit, match it to an existing ingredient, or save it as a new one.'
+                    : 'These ingredients are not in your database. Edit, match them to existing ingredients, or save them as new ones.',
               });
               if (!resolved) {
                 uiToast('Save cancelled.');
@@ -7449,8 +7457,8 @@ async function loadRecipeEditorPage() {
                 title: `New tags (${unknownTagUnique.length})`,
                 message:
                   unknownTagUnique.length === 1
-                    ? 'This tag is not in your database. Edit, match to existing tag, or save as a new one.'
-                    : 'These tags are not in your database. Edit, match to existing tags, or save as new ones.',
+                    ? 'This tag is not in your database. Edit, match it to an existing tag, or save it as a new one.'
+                    : 'These tags are not in your database. Edit, match them to existing tags, or save them as new ones.',
               });
               if (!resolvedTags) {
                 uiToast('Save cancelled.');

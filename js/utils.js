@@ -847,7 +847,11 @@ if (typeof window !== 'undefined') {
   } = {}) =>
     new Promise((resolve) => {
       const titleTemplate = String(title || '').trim();
-      const titleIsCountTemplate = /^new items \(\d+\)$/i.test(titleTemplate);
+      const titleCountPrefix = (() => {
+        const match = titleTemplate.match(/^(.+)\s\(\d+\)$/);
+        return match ? match[1] : '';
+      })();
+      const titleIsCountTemplate = !!titleCountPrefix;
       const host = ensureDialogHost();
       const prevFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -893,7 +897,7 @@ if (typeof window !== 'undefined') {
       panel.appendChild(titleEl);
 
       const defaultUnknownMessage =
-        'These items are not in your database. Edit, match to existing items, or save as new ones.';
+        'These items are not in your database. Edit, match them to existing items, or save them as new ones.';
       const allResolvedMessage =
         'All items are in your database. You may save changes without creating new items.';
 
@@ -1078,7 +1082,7 @@ if (typeof window !== 'undefined') {
         const unresolved = unresolvedCount();
         titleEl.textContent =
           !titleTemplate || titleIsCountTemplate
-            ? `New items (${unresolved})`
+            ? `${titleCountPrefix || 'New items'} (${unresolved})`
             : titleTemplate;
         subtitleEl.textContent = unresolved === 0 ? allResolvedMessage : message || defaultUnknownMessage;
       };

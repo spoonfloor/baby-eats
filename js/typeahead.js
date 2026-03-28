@@ -244,6 +244,9 @@
           const t = e && e.target ? e.target : null;
           if (t && this.el && (t === this.el || this.el.contains(t))) return;
         } catch (_) {}
+        // Ignore scroll events caused by layout reflow immediately after open
+        // (e.g. auto-grow textarea resizing during the same input event).
+        if (this._scrollMuteUntil && Date.now() < this._scrollMuteUntil) return;
         this.close();
       };
     }
@@ -293,6 +296,7 @@
       this.isOpen = true;
       this.fixedWidth = null; // assigned on first position
 
+      this._scrollMuteUntil = Date.now() + 80;
       window.addEventListener('scroll', this._onScroll, true);
 
       this.update();
@@ -376,7 +380,14 @@
       const isOnlyExact =
         qLower && ranked.length === 1 && lower(ranked[0]) === qLower;
 
+      const hideEmptyState = !!(this.config && this.config.hideEmptyState);
       if (ranked.length === 0 || isOnlyExact) {
+        if (hideEmptyState) {
+          this.items = [];
+          this.highlightIdx = 0;
+          this.close();
+          return;
+        }
         const empty = document.createElement('div');
         empty.className = 'typeahead-empty';
         empty.textContent = isOnlyExact ? 'No other matches' : 'No matches';
@@ -424,18 +435,27 @@
       const vh =
         window.innerHeight || document.documentElement.clientHeight || 0;
 
-      const GAP = 8;
+      const cfg = this.config || null;
+      const GAP = Number.isFinite(Number(cfg?.dropdownGap))
+        ? Math.max(0, Number(cfg.dropdownGap))
+        : 8;
       const MARGIN = 8;
-      const MIN_W = 240;
-      const MAX_W = 420;
+      const MIN_W = Number.isFinite(Number(cfg?.minWidth))
+        ? Math.max(0, Number(cfg.minWidth))
+        : 240;
+      const MAX_W = Number.isFinite(Number(cfg?.maxWidth))
+        ? Math.max(MIN_W, Number(cfg.maxWidth))
+        : 420;
 
-      const baseW = Math.max(rect.width, MIN_W);
-      const width = Math.min(Math.max(baseW, MIN_W), MAX_W);
+      const matchAnchorWidth = !!cfg?.matchAnchorWidth;
+      const width = matchAnchorWidth
+        ? Math.max(0, rect.width)
+        : Math.min(Math.max(Math.max(rect.width, MIN_W), MIN_W), MAX_W);
       if (this.fixedWidth == null) this.fixedWidth = width;
 
       // Default left aligned to input; scoot to avoid cutoff
       let left = rect.left;
-      const w = this.fixedWidth;
+      const w = Math.min(this.fixedWidth, Math.max(80, vw - MARGIN * 2));
       if (left + w > vw - MARGIN) left = vw - MARGIN - w;
       if (left < MARGIN) left = MARGIN;
 
@@ -445,8 +465,17 @@
       const availBelow = vh - MARGIN - belowTop;
       const availAbove = aboveBottom - MARGIN;
 
+      const placement =
+        cfg && typeof cfg.placement === 'string'
+          ? cfg.placement.toLowerCase()
+          : 'auto';
       const preferBelow = availBelow >= 160 || availBelow >= availAbove;
-      const placeBelow = preferBelow;
+      const placeBelow =
+        placement === 'below'
+          ? true
+          : placement === 'above'
+            ? false
+            : preferBelow;
 
       // Set maxHeight to available space and let list scroll internally.
       const maxH = Math.max(80, placeBelow ? availBelow : availAbove);
@@ -849,6 +878,13 @@
     closeOnEmptyQuery,
     openOnlyWhenQueryNonEmpty,
     ignoreInputTypes,
+    hideEmptyState,
+    dropdownGap,
+    matchAnchorWidth,
+    pickOnEnterWhenQueryEmpty,
+    minWidth,
+    maxWidth,
+    placement,
   }) {
     if (!inputEl) return;
     const cfg = {
@@ -861,6 +897,13 @@
       closeOnEmptyQuery,
       openOnlyWhenQueryNonEmpty,
       ignoreInputTypes,
+      hideEmptyState,
+      dropdownGap,
+      matchAnchorWidth,
+      pickOnEnterWhenQueryEmpty,
+      minWidth,
+      maxWidth,
+      placement,
     };
 
     // If Escape is used to cancel the row, suppress blur-time normalization/toasts.
@@ -974,6 +1017,18 @@
       if (e.key === 'Enter') {
         // Only intercept Enter if there is something to pick.
         if (dropdown.items && dropdown.items.length > 0) {
+          let canPick = true;
+          if (cfg && cfg.pickOnEnterWhenQueryEmpty === false) {
+            let q = '';
+            try {
+              q =
+                typeof cfg.getQuery === 'function'
+                  ? norm(cfg.getQuery(inputEl))
+                  : norm(inputEl.value);
+            } catch (_) {}
+            canPick = q.length > 0;
+          }
+          if (!canPick) return;
           e.preventDefault();
           e.stopPropagation();
           dropdown.pickHighlighted();

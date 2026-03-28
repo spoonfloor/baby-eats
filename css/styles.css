@@ -1429,6 +1429,12 @@ body.shopping-page .list-view.list-page {
   padding: 0 24px 80px 24px; /* Add bottom padding for scrolling last line into view */
 }
 
+/* While editing tags at the bottom of long recipes, provide temporary
+   runway so the editor card and typeahead can open below naturally. */
+body.recipe-editor-page.recipe-tags-editing .page-content {
+  padding-bottom: 320px;
+}
+
 /* Proper hanging indent for steps */
 .instruction-line {
   display: flex;
@@ -1615,6 +1621,11 @@ h1.nav-text {
   cursor: pointer;
 }
 
+.recipe-tags-content--edit {
+  margin-left: -12px;
+  margin-right: -12px;
+}
+
 .recipe-tags-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -1625,7 +1636,7 @@ h1.nav-text {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid var(--shopping-filter-chip-border);
+  border: none;
   background: var(--shopping-filter-chip-bg);
   color: var(--shopping-filter-chip-fg);
   height: var(--shopping-filter-chip-height);
@@ -1639,73 +1650,36 @@ h1.nav-text {
   font-size: var(--body-font-size);
 }
 
-.recipe-tags-editor-shell {
+body.recipe-editor-page .recipe-tags-editor-card {
+  margin-top: 0;
+  background: var(--field-bg);
+  border-radius: 14px;
+  padding: 18px 18px;
+}
+
+body.recipe-editor-page .recipe-tags-editor-field {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background-color: hsl(0, 0%, 98%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.recipe-tags-wrap--editor {
-  min-height: 30px;
-}
-
-.recipe-tag-pill--editable {
-  cursor: default;
-  user-select: none;
-}
-
-.recipe-tag-pill--editable:focus-visible {
-  outline: 2px solid rgba(109, 73, 255, 0.45);
-  outline-offset: 1px;
-}
-
-.recipe-tags-editor-input {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 6px 0;
-  background: transparent;
-  color: var(--field-fg);
-  font-family: var(--main-font);
-  font-size: var(--ingredient-editor-control-font-size);
-  box-sizing: border-box;
-}
-
-.recipe-tags-editor-input::placeholder {
-  color: var(--subtitle);
-}
-
-.recipe-tags-editor-input:focus {
-  outline: none;
-  border-bottom-color: #b5ceff;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-.recipe-tags-editor-hint {
-  font-size: 12px;
-  color: var(--subtitle);
+  gap: 6px;
+  padding: 0;
 }
 
 .recipe-tags-editor {
   width: 100%;
-  min-height: 120px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background-color: hsl(0, 0%, 98%);
   color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   font-family: var(--main-font);
   font-size: var(--ingredient-editor-control-font-size);
   box-sizing: border-box;
-  white-space: pre;
-  overflow-x: auto;
+  min-height: calc(3 * 24px);
+  white-space: pre-wrap;
+  overflow-x: hidden;
   overflow-y: auto;
-  resize: vertical;
+  overscroll-behavior: contain;
+  resize: none;
 }
 
 .recipe-tags-editor:focus {

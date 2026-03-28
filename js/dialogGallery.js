@@ -158,7 +158,7 @@ const renderUnknownItemsModal = () => {
   const suggestionsEl = document.getElementById('newItemsSuggestions');
   if (!titleEl || !suggestionsEl) return;
 
-  titleEl.textContent = `New items (${mockState.rows.length})`;
+  titleEl.textContent = `New ingredients (${mockState.rows.length})`;
 
   if (!mockState.rows.length) {
     suggestionsEl.innerHTML = '<div class="new-items-empty-state">No pending suggestions.</div>';
