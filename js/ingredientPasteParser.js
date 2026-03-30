@@ -41,6 +41,60 @@
       'orange extract',
     ].map((v) => String(v || '').toLowerCase())
   );
+  const SPICE_FORM_BASES = new Set(
+    [
+      'nutmeg',
+      'cumin',
+      'cumin seed',
+      'coriander',
+      'coriander seed',
+      'cardamom',
+      'clove',
+      'fennel seed',
+      'mustard seed',
+      'cinnamon',
+      'allspice',
+      'paprika',
+    ].map((v) => String(v || '').toLowerCase())
+  );
+  const HERB_FRESHNESS_BASES = new Set(
+    [
+      'basil',
+      'oregano',
+      'thyme',
+      'rosemary',
+      'parsley',
+      'dill',
+      'cilantro',
+      'sage',
+      'mint',
+    ].map((v) => String(v || '').toLowerCase())
+  );
+  const VINEGAR_TYPES = new Set(
+    [
+      'apple cider',
+      'rice',
+      'red wine',
+      'white wine',
+      'balsamic',
+      'malt',
+      'sherry',
+      'champagne',
+    ].map((v) => String(v || '').toLowerCase())
+  );
+  const SODIUM_QUALIFIED_BASES = new Set(
+    [
+      'soy sauce',
+      'broth',
+      'stock',
+      'chicken broth',
+      'beef broth',
+      'vegetable broth',
+      'chicken stock',
+      'beef stock',
+      'vegetable stock',
+    ].map((v) => String(v || '').toLowerCase())
+  );
 
   function normalizeDash(text) {
     return String(text || '')
@@ -52,6 +106,7 @@
     const n = String(noun || '').trim().toLowerCase();
     if (!n) return '';
     if (n === 'tomatoes') return 'tomato';
+    if (n === 'potatoes') return 'potato';
     if (n.endsWith('ies') && n.length > 3) return `${n.slice(0, -3)}y`;
     if (n.endsWith('es') && /(ches|shes|xes|zes|ses)$/.test(n)) {
       return n.slice(0, -2);
@@ -62,15 +117,16 @@
 
   function splitIngredientNameAndVariant(nameText) {
     const raw = normalizeWhitespace(nameText);
-    if (!raw) return { name: '', variant: '' };
+    if (!raw) return { name: '', variant: '', size: '' };
     const lower = raw.toLowerCase();
+    const normalizedLower = normalizeDash(lower);
     if (PROTECTED_COMPOUND_NAMES.has(lower)) {
-      return { name: raw, variant: '' };
+      return { name: raw, variant: '', size: '' };
     }
 
     // Keep these as distinct ingredients, not "oil" variants.
     if (lower === 'olive oil' || lower === 'sesame oil') {
-      return { name: lower, variant: '' };
+      return { name: lower, variant: '', size: '' };
     }
 
     // High-confidence targeted split: olive oil style variants.
@@ -81,6 +137,7 @@
       return {
         name: 'olive oil',
         variant: oliveMatch[1],
+        size: '',
       };
     }
 
@@ -90,6 +147,7 @@
       return {
         name: 'sesame oil',
         variant: sesameMatch[1],
+        size: '',
       };
     }
 
@@ -102,6 +160,7 @@
         return {
           name: 'oil',
           variant: oilType,
+          size: '',
         };
       }
     }
@@ -114,10 +173,116 @@
       return {
         name: 'tomato',
         variant: tomatoMatch[1],
+        size: '',
       };
     }
 
-    return { name: raw, variant: '' };
+    // High-confidence herb freshness descriptors.
+    const herbFreshnessMatch = normalizedLower.match(/^(fresh|dried)\s+(.+)$/);
+    if (herbFreshnessMatch) {
+      const herbBase = singularizeSimpleNoun(herbFreshnessMatch[2]);
+      if (HERB_FRESHNESS_BASES.has(herbBase)) {
+        return {
+          name: herbBase,
+          variant: herbFreshnessMatch[1],
+          size: '',
+        };
+      }
+    }
+
+    // High-confidence spice prep descriptors.
+    const spiceFormMatch = normalizedLower.match(/^(ground|whole|crushed)\s+(.+)$/);
+    if (spiceFormMatch) {
+      const spiceBase = singularizeSimpleNoun(spiceFormMatch[2]);
+      if (SPICE_FORM_BASES.has(spiceBase)) {
+        return {
+          name: spiceBase,
+          variant: spiceFormMatch[1],
+          size: '',
+        };
+      }
+    }
+
+    // High-confidence sodium qualifiers.
+    const sodiumMatch = normalizedLower.match(/^(low-sodium|reduced-sodium|no-salt-added)\s+(.+)$/);
+    if (sodiumMatch) {
+      const sodiumBase = normalizeWhitespace(sodiumMatch[2] || '');
+      if (SODIUM_QUALIFIED_BASES.has(sodiumBase)) {
+        return {
+          name: sodiumBase,
+          variant: sodiumMatch[1],
+          size: '',
+        };
+      }
+    }
+
+    // Common butter salt-level descriptor.
+    const butterMatch = normalizedLower.match(/^(unsalted|salted)\s+butter$/);
+    if (butterMatch) {
+      return {
+        name: 'butter',
+        variant: butterMatch[1],
+        size: '',
+      };
+    }
+
+    // Common brown sugar intensity descriptor.
+    const brownSugarMatch = normalizedLower.match(/^(light|dark)\s+brown sugar$/);
+    if (brownSugarMatch) {
+      return {
+        name: 'brown sugar',
+        variant: brownSugarMatch[1],
+        size: '',
+      };
+    }
+
+    // Egg size descriptors.
+    const eggMatch = normalizedLower.match(/^(small|medium|large|extra-large)\s+eggs?$/);
+    if (eggMatch) {
+      return {
+        name: singularizeSimpleNoun('eggs'),
+        variant: '',
+        size: eggMatch[1],
+      };
+    }
+
+    // Generic produce size descriptors.
+    const produceSizeMatch = normalizedLower.match(/^(small|medium|large|extra-large)\s+(.+)$/);
+    if (produceSizeMatch) {
+      return {
+        name: singularizeSimpleNoun(produceSizeMatch[2]),
+        variant: '',
+        size: produceSizeMatch[1],
+      };
+    }
+
+    // Normalize common vinegar source styles.
+    const vinegarMatch = normalizedLower.match(/^([a-z][a-z-]*(?:\s+[a-z][a-z-]*)?)\s+vinegar$/);
+    if (vinegarMatch) {
+      const vinegarType = normalizeWhitespace(vinegarMatch[1] || '');
+      if (VINEGAR_TYPES.has(vinegarType)) {
+        return {
+          name: 'vinegar',
+          variant: vinegarType,
+          size: '',
+        };
+      }
+    }
+
+    // Dietary qualifier as a prefix modifier.
+    const veganMatch = normalizedLower.match(/^vegan\s+(.+)$/);
+    if (veganMatch) {
+      const veganBase = normalizeWhitespace(veganMatch[1] || '');
+      if (veganBase && veganBase.split(' ').length >= 2) {
+        return {
+          name: veganBase,
+          variant: 'vegan',
+          size: '',
+        };
+      }
+    }
+
+    return { name: raw, variant: '', size: '' };
   }
 
   const UNIT_ALIASES = {
@@ -566,7 +731,7 @@
       variant: nameVariant.variant || '',
       size: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).size
-        : '',
+        : nameVariant.size || '',
       prepNotes: prep,
       parentheticalNote: normalizeWhitespace(
         [

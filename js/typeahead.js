@@ -671,9 +671,25 @@
     const db = getDb();
     if (!db) return [];
 
-    // Sizes show up in multiple places across schema revisions.
-    // We merge them into a single suggestion pool.
+    // Sizes are first-class when the `sizes` table exists.
+    // Keep legacy source merging as fallback/back-compat.
     const pools = [];
+
+    pools.push(
+      columnFromExec(
+        safeExec(
+          db,
+          `SELECT DISTINCT name
+           FROM sizes
+           WHERE name IS NOT NULL
+             AND trim(name) != ''
+             AND COALESCE(is_hidden, 0) = 0
+           ORDER BY COALESCE(sort_order, 999999) ASC,
+                    name COLLATE NOCASE;`
+        ),
+        0
+      )
+    );
 
     // Per-recipe ingredient sizes (primary use in the tray)
     pools.push(

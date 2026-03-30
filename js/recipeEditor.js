@@ -68,17 +68,108 @@ const INGREDIENTS_LOCATION_ORDER = [
 
 // --- You Will Need helpers ---
 function formatNeedLine(ing) {
+  const hasFinitePositive = (v) => {
+    if (v == null) return false;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) && n > 0;
+  };
+  const parseFractionToken = (token) => {
+    const t = String(token || '').trim();
+    if (!t) return null;
+    const mixed = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+      const whole = Number(mixed[1]);
+      const num = Number(mixed[2]);
+      const den = Number(mixed[3]);
+      if (Number.isFinite(whole) && Number.isFinite(num) && den) {
+        return whole + num / den;
+      }
+      return null;
+    }
+    const frac = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (frac) {
+      const num = Number(frac[1]);
+      const den = Number(frac[2]);
+      if (Number.isFinite(num) && den) return num / den;
+      return null;
+    }
+    if (/^\d+(\.\d+)?$/.test(t)) {
+      const n = Number(t);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+
   let qtyText = '';
-  if (typeof ing.quantity === 'number' && !isNaN(ing.quantity)) {
+  let qtyForUnit = null;
+
+  const hasRange =
+    hasFinitePositive(ing.quantityMin) && hasFinitePositive(ing.quantityMax);
+  if (hasRange) {
+    const qMin = Number(ing.quantityMin);
+    const qMax = Number(ing.quantityMax);
+    const same = Math.abs(qMin - qMax) < 1e-9;
+    qtyText = same
+      ? decimalToFractionDisplay(qMin)
+      : `${decimalToFractionDisplay(qMin)} to ${decimalToFractionDisplay(qMax)}`;
+    if (ing.quantityIsApprox) qtyText = `about ${qtyText}`;
+    if (same) qtyForUnit = qMin;
+  } else if (typeof ing.quantity === 'number' && !isNaN(ing.quantity) && ing.quantity > 0) {
     qtyText = decimalToFractionDisplay(ing.quantity);
+    qtyForUnit = ing.quantity;
   } else if (typeof ing.quantity === 'string' && ing.quantity.trim()) {
-    qtyText = ing.quantity;
+    const rawQty = ing.quantity.trim();
+    const approxMatch = rawQty.match(/^(about|approx(?:\.|imately)?|around|roughly|~)\s+/i);
+    const approxPrefix = approxMatch ? 'about ' : '';
+    const coreQty = approxMatch ? rawQty.slice(approxMatch[0].length).trim() : rawQty;
+    const rangeMatch = coreQty.match(/^(.+?)\s*(?:to|-)\s*(.+)$/i);
+    if (rangeMatch) {
+      const left = parseFractionToken(rangeMatch[1]);
+      const right = parseFractionToken(rangeMatch[2]);
+      if (Number.isFinite(left) && Number.isFinite(right) && left > 0 && right > 0) {
+        qtyText = `${approxPrefix}${decimalToFractionDisplay(
+          rangeMatch[1]
+        )} to ${decimalToFractionDisplay(rangeMatch[2])}`.trim();
+      } else {
+        qtyText = rawQty;
+      }
+    } else {
+      const parsed = parseFractionToken(coreQty);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        qtyText = `${approxPrefix}${decimalToFractionDisplay(coreQty)}`.trim();
+        qtyForUnit = parsed;
+      } else {
+        qtyText = rawQty;
+      }
+    }
   }
 
-  const unitText = ing.unit || '';
+  let unitText = ing.unit || '';
+  if (unitText && Number.isFinite(qtyForUnit) && typeof window.getUnitDisplay === 'function') {
+    unitText = window.getUnitDisplay(unitText, qtyForUnit);
+  }
   const qtyUnit = [qtyText, unitText].filter(Boolean).join(' ');
 
-  let text = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`;
+  const fallbackBaseName = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`.trim();
+  const baseName = (() => {
+    if (typeof window.getIngredientDisplayName !== 'function') return fallbackBaseName;
+    try {
+      const quantityForNoun = Number.isFinite(qtyForUnit)
+        ? qtyForUnit
+        : hasRange && hasFinitePositive(ing.quantityMax)
+          ? Number(ing.quantityMax)
+          : ing.quantity;
+      const computed = window.getIngredientDisplayName({
+        ...ing,
+        quantity: quantityForNoun,
+      });
+      return String(computed || '').trim() || fallbackBaseName;
+    } catch (_) {
+      return fallbackBaseName;
+    }
+  })();
+
+  let text = baseName;
   if (qtyUnit) text += ` (${qtyUnit})`;
 
   if (ing.isOptional) {
@@ -104,8 +195,8 @@ function normalizeYwnIngredientRows(rawRows) {
     const next = { ...row };
     const ownLocation = String(row.locationAtHome || '').toLowerCase().trim();
     if (row.isAlt) {
-      // YWN-only rule: alternatives always inherit the anchor location.
-      next.locationAtHome = activeAltAnchorLocation;
+      // Preserve explicit alt-row location; only inherit when alt location is blank.
+      next.locationAtHome = ownLocation || activeAltAnchorLocation;
     } else {
       activeAltAnchorLocation = ownLocation;
       next.locationAtHome = ownLocation;
@@ -306,8 +397,42 @@ function rerenderIngredientsSectionFromModel() {
   manageBtn.href = 'shopping.html';
   manageBtn.textContent = 'Manage';
   manageBtn.addEventListener('click', (e) => {
-    // Keep explicit navigation for consistency with other page transitions.
-    window.location.href = 'shopping.html';
+    e.preventDefault();
+    e.stopPropagation();
+    void (async () => {
+      const dirty =
+        typeof window.recipeEditorGetIsDirty === 'function'
+          ? window.recipeEditorGetIsDirty()
+          : false;
+      if (!dirty) { window.location.href = 'shopping.html'; return; }
+
+      if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
+        const choice = await window.ui.dialogThreeChoice({
+          title: 'Unsaved changes',
+          message: 'Save changes before leaving?',
+          fixText: 'Cancel',
+          discardText: 'Discard',
+          createText: 'Save',
+          discardDanger: true,
+        });
+        if (choice === 'fix') return;
+        if (choice === 'create') {
+          try {
+            if (typeof window.recipeEditorSave === 'function') {
+              await window.recipeEditorSave();
+            }
+          } catch (_) { return; }
+          const stillDirty =
+            typeof window.recipeEditorGetIsDirty === 'function'
+              ? window.recipeEditorGetIsDirty()
+              : false;
+          if (stillDirty) return;
+        } else if (choice !== 'discard') {
+          return;
+        }
+        window.location.href = 'shopping.html';
+      }
+    })();
   });
   ingredientsSection.appendChild(manageBtn);
 
@@ -521,8 +646,19 @@ function rerenderYouWillNeedFromModel() {
     subHeader.textContent = loc || 'Misc';
     needWrapper.appendChild(subHeader);
 
-    // Keep source order so OR chains stay visually grouped together.
-    items.forEach((ing) => {
+    const sortedItems = [...items].sort((a, b) => {
+      const nameA = String(a?.name || '').toLowerCase();
+      const nameB = String(b?.name || '').toLowerCase();
+      if (nameA !== nameB) return nameA.localeCompare(nameB);
+
+      const varA = String(a?.variant || '').toLowerCase();
+      const varB = String(b?.variant || '').toLowerCase();
+      if (varA !== varB) return varA.localeCompare(varB);
+
+      return String(a?.size || '').toLowerCase().localeCompare(String(b?.size || '').toLowerCase());
+    });
+
+    sortedItems.forEach((ing) => {
       const line = document.createElement('div');
       line.className = 'ingredient-line';
       const span = document.createElement('span');
@@ -1642,6 +1778,24 @@ function renderRecipe(recipe) {
     if (!Array.isArray(stepNodes) || stepNodes.length === 0 || !stepsSection) {
       return;
     }
+    const stepRecipeLinksRef =
+      window.StepRecipeLinks && typeof window.StepRecipeLinks === 'object'
+        ? window.StepRecipeLinks
+        : null;
+    const stepDisplayText = (raw) =>
+      stepRecipeLinksRef && typeof stepRecipeLinksRef.toDisplayText === 'function'
+        ? stepRecipeLinksRef.toDisplayText(raw)
+        : String(raw == null ? '' : raw);
+    const renderStepReadOnly = (el, raw) => {
+      if (
+        stepRecipeLinksRef &&
+        typeof stepRecipeLinksRef.renderReadOnly === 'function'
+      ) {
+        stepRecipeLinksRef.renderReadOnly(el, raw);
+      } else {
+        el.textContent = stepDisplayText(raw);
+      }
+    };
 
     // Ensure Ctrl-held insert-mode wiring is active (shared with Ingredients).
     try {
@@ -1757,7 +1911,8 @@ function renderRecipe(recipe) {
       text.dataset.stepId = String(node.id);
 
       const rawText = node.text ?? '';
-      const isPlaceholder = !rawText || rawText.trim() === 'Add a step.';
+      const displayText = stepDisplayText(rawText);
+      const isPlaceholder = !displayText || displayText.trim() === 'Add a step.';
 
       if (isPlaceholder) {
         text.textContent = '';
@@ -1775,7 +1930,7 @@ function renderRecipe(recipe) {
           line.classList.add('instruction-line--placeholder');
         }
       } else {
-        text.textContent = rawText;
+        renderStepReadOnly(text, rawText);
       }
 
       ensureStepTextNotEmpty(text);
@@ -1796,6 +1951,24 @@ function renderRecipe(recipe) {
   const hasSectionedSteps =
     Array.isArray(recipe.sections) &&
     recipe.sections.some((s) => Array.isArray(s.steps) && s.steps.length > 0);
+  const stepRecipeLinksRef =
+    window.StepRecipeLinks && typeof window.StepRecipeLinks === 'object'
+      ? window.StepRecipeLinks
+      : null;
+  const stepDisplayText = (raw) =>
+    stepRecipeLinksRef && typeof stepRecipeLinksRef.toDisplayText === 'function'
+      ? stepRecipeLinksRef.toDisplayText(raw)
+      : String(raw == null ? '' : raw);
+  const renderStepReadOnly = (el, raw) => {
+    if (
+      stepRecipeLinksRef &&
+      typeof stepRecipeLinksRef.renderReadOnly === 'function'
+    ) {
+      stepRecipeLinksRef.renderReadOnly(el, raw);
+    } else {
+      el.textContent = stepDisplayText(raw);
+    }
+  };
 
   if (hasStepNodes) {
     renderStepsFromStepNodes(window.stepNodes, stepsSection, recipe.id);
@@ -1847,8 +2020,9 @@ function renderRecipe(recipe) {
           text.dataset.sectionId = String(sectionId);
         }
         const rawText = step.instructions ?? '';
+        const displayText = stepDisplayText(rawText);
         const isPlaceholder =
-          !rawText || String(rawText).trim() === 'Add a step.';
+          !displayText || String(displayText).trim() === 'Add a step.';
 
         if (isPlaceholder) {
           text.textContent = '';
@@ -1856,7 +2030,7 @@ function renderRecipe(recipe) {
           text.classList.add('placeholder-prompt');
           line.classList.add('instruction-line--placeholder');
         } else {
-          text.textContent = rawText;
+          renderStepReadOnly(text, rawText);
         }
 
         // If StepNode model is present, mirror node.type → DOM.
@@ -1917,7 +2091,9 @@ function renderRecipe(recipe) {
       text.dataset.stepId = String(step.id);
 
       const rawText = step.instructions ?? '';
-      const isPlaceholder = !rawText || rawText.trim() === 'Add a step.';
+      const displayText = stepDisplayText(rawText);
+      const isPlaceholder =
+        !displayText || String(displayText).trim() === 'Add a step.';
 
       if (isPlaceholder) {
         text.textContent = '';
@@ -1934,7 +2110,7 @@ function renderRecipe(recipe) {
           line.classList.add('instruction-line--placeholder');
         }
       } else {
-        text.textContent = rawText;
+        renderStepReadOnly(text, rawText);
       }
 
       ensureStepTextNotEmpty(text);
@@ -2486,8 +2662,56 @@ function renderRecipeTagsSection(recipe, container) {
   manage.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    sessionStorage.setItem('selectedRecipeId', String(recipeModel.id || window.recipeId || ''));
-    window.location.href = 'tags.html';
+    void (async () => {
+      const db = window.dbInstance;
+      const navigate = () => {
+        sessionStorage.setItem('selectedRecipeId', String(recipeModel.id || window.recipeId || ''));
+        window.location.href = 'tags.html';
+      };
+
+      if (
+        db &&
+        typeof normalizeRecipeTagDraftList === 'function' &&
+        typeof createTagLookupHelpers === 'function' &&
+        typeof resolveUnknownTagNames === 'function'
+      ) {
+        const normalizedDraftTags = normalizeRecipeTagDraftList(recipeModel.tags);
+        const { anyVisibleTagNamed } = createTagLookupHelpers(db);
+        const unknownTags = [];
+        const seen = new Set();
+        normalizedDraftTags.forEach((tag) => {
+          const key = String(tag || '').trim().toLowerCase();
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          if (anyVisibleTagNamed(tag)) return;
+          unknownTags.push(tag);
+        });
+
+        if (unknownTags.length) {
+          const resolved = await resolveUnknownTagNames({ db, tags: unknownTags });
+          if (!resolved) return;
+          const replacementMap = resolved.map;
+          recipeModel.tags = normalizeRecipeTagDraftList(
+            normalizedDraftTags.map((tag) => {
+              const key = String(tag || '').trim().toLowerCase();
+              return replacementMap.get(key) || tag;
+            })
+          );
+          try {
+            if (typeof window.recipeEditorSave === 'function') {
+              await window.recipeEditorSave();
+            }
+          } catch (_) { return; }
+          const stillDirty =
+            typeof window.recipeEditorGetIsDirty === 'function'
+              ? window.recipeEditorGetIsDirty()
+              : false;
+          if (stillDirty) return;
+        }
+      }
+
+      navigate();
+    })();
   });
   section.appendChild(manage);
   setManageButtonHiddenState(manage, normalized.length === 0);
@@ -2503,6 +2727,25 @@ function renderRecipeTagsSection(recipe, container) {
     const nextKey = JSON.stringify(nextTags.map((t) => t.toLowerCase()));
     recipeModel.tags = nextTags;
     if (prevKey !== nextKey && typeof markDirty === 'function') markDirty();
+  };
+
+  const confirmTagRemoval = async (tagLabel) => {
+    const cleanTag = String(tagLabel || '').trim() || 'this tag';
+    try {
+      if (window.ui && typeof window.ui.confirm === 'function') {
+        const ok = await window.ui.confirm({
+          title: 'Remove tag?',
+          message: `Remove "${cleanTag}" from this recipe?`,
+          confirmText: 'Remove',
+          cancelText: 'Cancel',
+          danger: true,
+        });
+        return !!ok;
+      }
+      return window.confirm(`Remove "${cleanTag}" from this recipe?`);
+    } catch (_) {
+      return false;
+    }
   };
 
   if (!isEditing) {
@@ -2532,20 +2775,24 @@ function renderRecipeTagsSection(recipe, container) {
       pill.className = 'recipe-tag-pill';
       pill.textContent = tag;
       pill.title = 'Ctrl-click to remove';
-      pill.addEventListener('click', (e) => {
+      pill.addEventListener('click', async (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
         e.preventDefault();
         e.stopPropagation();
+        const ok = await confirmTagRemoval(tag);
+        if (!ok) return;
         const next = normalized.filter(
           (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
         );
         updateModelFromDraft(next);
         renderRecipeTagsSection(recipeModel, container);
       });
-      pill.addEventListener('contextmenu', (e) => {
+      pill.addEventListener('contextmenu', async (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
         e.preventDefault();
         e.stopPropagation();
+        const ok = await confirmTagRemoval(tag);
+        if (!ok) return;
         const next = normalized.filter(
           (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
         );
@@ -2590,6 +2837,8 @@ function renderRecipeTagsSection(recipe, container) {
       ensureVisibleOnOpen: false,
     };
   };
+  const draftBaseline = textarea.value || '';
+  let dirtyMarkedFromTyping = false;
 
   const finishEdit = ({ shouldCommit }) => {
     if (shouldCommit) updateModelFromDraft(textarea.value || '');
@@ -2601,7 +2850,13 @@ function renderRecipeTagsSection(recipe, container) {
     };
     renderRecipeTagsSection(recipeModel, container);
   };
-  textarea.addEventListener('input', persistEditingState);
+  textarea.addEventListener('input', () => {
+    persistEditingState();
+    if (!dirtyMarkedFromTyping && (textarea.value || '') !== draftBaseline) {
+      dirtyMarkedFromTyping = true;
+      if (typeof markDirty === 'function') markDirty();
+    }
+  });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();

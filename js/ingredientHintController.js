@@ -209,9 +209,9 @@
     }
 
     function getDesiredWinner() {
-      // Priority: hover > edit-mode focus > requested one-shot target > nothing.
-      // Hover always wins. When nothing is hovered, the focused entity
-      // (edit tray open) keeps its hint.
+      // Priority: hover > requested one-shot target > nothing.
+      // Hints are reveal-only on modifier-hover; edit focus alone does not
+      // activate a hint.
       const hoverWinner = hoverRevealArmed() ? hoverTarget : null;
 
       // Empty-state fallback: if Option is held, pointer is inside the section,
@@ -227,7 +227,7 @@
         }
       }
 
-      return hoverWinner || focusTarget || requestedTarget || null;
+      return hoverWinner || requestedTarget || null;
     }
 
     function scheduleActivation(winner) {

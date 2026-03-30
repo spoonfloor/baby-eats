@@ -248,5 +248,106 @@
       "name": "spring onion",
       "variant": ""
     }
+  },
+  {
+    "line": "ground nutmeg",
+    "expect": {
+      "name": "nutmeg",
+      "variant": "ground",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "apple cider vinegar",
+    "expect": {
+      "name": "vinegar",
+      "variant": "apple cider",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "rice vinegar",
+    "expect": {
+      "name": "vinegar",
+      "variant": "rice",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "vegan cream cheese",
+    "expect": {
+      "name": "cream cheese",
+      "variant": "vegan",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "fresh basil",
+    "expect": {
+      "name": "basil",
+      "variant": "fresh",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "dried oregano",
+    "expect": {
+      "name": "oregano",
+      "variant": "dried",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "low-sodium soy sauce",
+    "expect": {
+      "name": "soy sauce",
+      "variant": "low-sodium",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "unsalted butter",
+    "expect": {
+      "name": "butter",
+      "variant": "unsalted",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "dark brown sugar",
+    "expect": {
+      "name": "brown sugar",
+      "variant": "dark",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "2 large eggs",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "name": "egg",
+      "variant": "",
+      "size": "large"
+    }
+  },
+  {
+    "line": "5 medium potatoes",
+    "expect": {
+      "quantityMin": 5,
+      "quantityMax": 5,
+      "name": "potato",
+      "variant": "",
+      "size": "medium"
+    }
   }
 ]

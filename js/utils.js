@@ -228,26 +228,119 @@ function roundToFraction(value, denominator = 8) {
 /**
  * Convert a decimal to a fractional display string using Unicode glyphs
  * (e.g., 1.5 -> "1½", 0.25 -> "¼")
- * @param {number} value
- * @param {number} denominator
+ * Keeps thirds strict so 0.3 stays 3/10 while 0.33/0.333... can map to 1/3.
+ * @param {number|string} value
+ * @param {number[]} denominators
  * @returns {string}
  */
-function decimalToFractionDisplay(value, denominator = 8) {
-  const rounded = roundToFraction(value, denominator);
-  const whole = Math.floor(rounded);
-  const fraction = rounded - whole;
+function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
+  const raw = typeof value === 'string' ? String(value).trim() : '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  const formatDecimalFallback = () => {
+    if (/^-?\d+(?:\.\d+)?$/.test(raw)) {
+      return raw
+        .replace(/(\.\d*?[1-9])0+$/u, '$1')
+        .replace(/\.0+$/u, '');
+    }
+    return String(Number(n.toFixed(6)));
+  };
+  const isNegative = n < 0;
+  const abs = Math.abs(n);
+  const whole = Math.floor(abs);
+  const fraction = abs - whole;
+  const denomList = (Array.isArray(denominators) && denominators.length
+    ? denominators
+    : [2, 4, 8]
+  )
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d > 0 && d !== 3);
+
+  if (!denomList.length) return String(n);
+
+  const THIRD_EPS = 1e-6;
+  let forcedThirdNum = null;
+  const rawThirdPattern = raw.match(/^(\d+)\.3{2,}$/);
+  const rawTwoThirdPattern = raw.match(/^(\d+)\.6{2,}$/);
+  if (rawThirdPattern) {
+    forcedThirdNum = 1;
+  } else if (rawTwoThirdPattern) {
+    forcedThirdNum = 2;
+  } else if (Math.abs(fraction - 1 / 3) <= THIRD_EPS) {
+    forcedThirdNum = 1;
+  } else if (Math.abs(fraction - 2 / 3) <= THIRD_EPS) {
+    forcedThirdNum = 2;
+  }
+
+  let best = null;
+  if (forcedThirdNum != null) {
+    best = { num: forcedThirdNum, den: 3, err: 0 };
+  } else {
+    denomList.forEach((den) => {
+      const num = Math.round(fraction * den);
+      const err = Math.abs(fraction - num / den);
+      if (
+        best == null ||
+        err < best.err - 1e-12 ||
+        (Math.abs(err - best.err) <= 1e-12 && den < best.den)
+      ) {
+        best = { num, den, err };
+      }
+    });
+  }
+
+  if (!best) return String(n);
+  if (best.den !== 3 && best.err > 1e-6) {
+    return formatDecimalFallback();
+  }
+  let wholePart = whole + Math.floor(best.num / best.den);
+  let numPart = best.num % best.den;
+  let denPart = best.den;
+
+  const gcd = (a, b) => {
+    let x = Math.abs(a);
+    let y = Math.abs(b);
+    while (y !== 0) {
+      const t = x % y;
+      x = y;
+      y = t;
+    }
+    return x || 1;
+  };
+
+  if (numPart > 0) {
+    const g = gcd(numPart, denPart);
+    numPart /= g;
+    denPart /= g;
+  }
+
   const fractionMap = {
+    '1/2': '½',
+    '1/3': '⅓',
+    '2/3': '⅔',
+    '1/4': '¼',
+    '3/4': '¾',
     1: '⅛',
-    2: '¼',
     3: '⅜',
-    4: '½',
     5: '⅝',
-    6: '¾',
     7: '⅞',
   };
-  const fracGlyph = fractionMap[Math.round(fraction * denominator)] || '';
-  if (whole === 0 && fracGlyph) return fracGlyph;
-  return fracGlyph ? `${whole}${fracGlyph}` : `${whole}`;
+  const fracKey = `${numPart}/${denPart}`;
+  const fracGlyph =
+    fractionMap[fracKey] || (denPart === 8 ? fractionMap[numPart] || '' : '');
+
+  let rendered = '';
+  if (numPart === 0) {
+    rendered = `${wholePart}`;
+  } else if (wholePart === 0) {
+    rendered = fracGlyph || `${numPart}/${denPart}`;
+  } else {
+    rendered = fracGlyph
+      ? `${wholePart}${fracGlyph}`
+      : `${wholePart} ${numPart}/${denPart}`;
+  }
+
+  return isNegative && rendered !== '0' ? `-${rendered}` : rendered;
 }
 
 // --- Global Undo (single-slot, toast-based) ---
@@ -1518,17 +1611,31 @@ function isNumericQuantity(q) {
   return Number.isFinite(n);
 }
 
+function getIngredientGrammarBase(displayBase, lemma, pluralOverride) {
+  const display = String(displayBase || '').trim();
+  const root = String(lemma || '').trim();
+  if (!display) return root;
+  if (!root) return display;
+
+  const displayLower = display.toLowerCase();
+  const rootLower = root.toLowerCase();
+  if (displayLower === rootLower) return root;
+
+  const rootPlural = pluralizeEnglishNoun(root, pluralOverride).trim().toLowerCase();
+  if (displayLower === rootPlural) return root;
+
+  // If the typed/display label is not just the singular or plural form of the
+  // canonical lemma, preserve that label for grammar too (e.g. AKA "beer"
+  // should stay "beer"/"beers" instead of silently becoming "ale"/"ales").
+  return display;
+}
+
 function getIngredientNounDisplay(line) {
   // line can be a recipe ingredient row or a formatter ingredient row
   if (!line) return '';
   const name = (line.name || '').trim();
   const lemma = (line.lemma || '').trim();
-  // Both display and pluralization use name-first so user-entered casing is
-  // always preserved (e.g. 'Coke Zero' → 'Coke Zeros', 'ATV' → 'ATVs').
-  // lemma is a lowercase grammar root — useful only as a fallback when name
-  // is absent. pluralizeEnglishNoun lowercases internally for its own matching.
   const displayBase = name || lemma;
-  const base = name || lemma;
   if (!displayBase) return '';
 
   const hasPluralByDefault =
@@ -1549,19 +1656,22 @@ function getIngredientNounDisplay(line) {
   // Unknown/free-text ingredients should stay exactly as typed to avoid
   // over-pluralization (e.g., "olive oils", "waters", "tomatoeses").
   if (!hasGrammarMetadata) return displayBase;
+  const grammarBase = getIngredientGrammarBase(displayBase, lemma, pluralOverride);
 
   const qtyIsNumeric = isNumericQuantity(line.quantity);
   if (qtyIsNumeric) {
     const n = typeof line.quantity === 'number'
       ? line.quantity
       : parseFloat(String(line.quantity));
-    if (Number.isFinite(n) && n === 1) return displayBase;
-    return pluralizeEnglishNoun(base, pluralOverride);
+    if (Number.isFinite(n) && n === 1) return grammarBase || displayBase;
+    return pluralizeEnglishNoun(grammarBase || displayBase, pluralOverride);
   }
 
   // No numeric quantity (including empty or free-text)
-  if (pluralByDefault) return pluralizeEnglishNoun(base, pluralOverride);
-  return displayBase;
+  if (pluralByDefault) {
+    return pluralizeEnglishNoun(grammarBase || displayBase, pluralOverride);
+  }
+  return grammarBase || displayBase;
 }
 
 function getIngredientDisplayName(line) {

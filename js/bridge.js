@@ -32,6 +32,74 @@ function tableExists(activeDb, tableName) {
   }
 }
 
+function deriveIngredientLemma(rawTitle) {
+  const t = String(rawTitle || '').trim();
+  if (!t) return '';
+  // Small heuristic singularizer (good enough for simple plurals).
+  if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
+  if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
+  if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
+  if (/s$/i.test(t) && !/ss$/i.test(t) && t.length > 1) return t.slice(0, -1);
+  return t;
+}
+
+function regenerateAllIngredientLemmas(activeDb) {
+  if (!activeDb || !tableExists(activeDb, 'ingredients')) return 0;
+  const ingCols = getTableColumns(activeDb, 'ingredients');
+  const ingColsLower = ingCols.map((c) => String(c).toLowerCase());
+  if (!ingColsLower.includes('lemma')) return 0;
+  const ingIdCol = pickIdColumn(ingCols);
+  let changedCount = 0;
+  let txStarted = false;
+  let stmt = null;
+
+  try {
+    const rowsQ = activeDb.exec(
+      `SELECT ${ingIdCol}, COALESCE(name, ''), COALESCE(lemma, '') FROM ingredients;`
+    );
+    const rows = rowsQ.length && Array.isArray(rowsQ[0].values) ? rowsQ[0].values : [];
+    if (!rows.length) return 0;
+
+    try {
+      activeDb.run('BEGIN IMMEDIATE;');
+      txStarted = true;
+    } catch (_) {
+      activeDb.run('BEGIN;');
+      txStarted = true;
+    }
+
+    stmt = activeDb.prepare(`UPDATE ingredients SET lemma = ? WHERE ${ingIdCol} = ?;`);
+    rows.forEach((row) => {
+      const id = Array.isArray(row) ? row[0] : null;
+      const name = Array.isArray(row) ? row[1] : '';
+      const currentLemma = Array.isArray(row) ? row[2] : '';
+      const nextLemma = deriveIngredientLemma(name);
+      if (String(currentLemma || '') === String(nextLemma || '')) return;
+      stmt.run([nextLemma, id]);
+      changedCount += 1;
+    });
+
+    if (stmt) {
+      stmt.free();
+      stmt = null;
+    }
+    if (txStarted) activeDb.run('COMMIT;');
+    return changedCount;
+  } catch (err) {
+    if (stmt) {
+      try {
+        stmt.free();
+      } catch (_) {}
+    }
+    if (txStarted) {
+      try {
+        activeDb.run('ROLLBACK;');
+      } catch (_) {}
+    }
+    throw err;
+  }
+}
+
 function ensureRecipeIngredientMapSortOrderSchema(activeDb) {
   if (!activeDb) return false;
   const cols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
@@ -309,6 +377,8 @@ window.bridge = {
   saveRecipeToDB,
   saveRecipeStepsFromStepNodes,
   saveRecipeIngredientsFromModel,
+  deriveIngredientLemma,
+  regenerateAllIngredientLemmas,
   ensureRecipeIngredientMapSortOrderSchema,
   ensureRecipeIngredientHeadingsSchema,
   ensureRecipeIngredientMapParentheticalNoteSchema,
@@ -937,6 +1007,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
     const cols = ['name'];
     const vals = [name];
 
+    if (ingHas('lemma')) {
+      cols.push('lemma');
+      vals.push(deriveIngredientLemma(name));
+    }
     if (ingHas('variant')) {
       cols.push('variant');
       vals.push(variant);

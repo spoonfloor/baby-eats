@@ -1977,13 +1977,17 @@ body.recipe-editor-page .recipe-tags-editor-field {
 }
 
 #ingredientsSection .sub-recipe-link,
-#ingredientsSection .sub-recipe-link:visited {
+#ingredientsSection .sub-recipe-link:visited,
+#stepsSection .sub-recipe-link,
+#stepsSection .sub-recipe-link:visited {
   color: var(--edit-mode-color);
   text-decoration: none;
 }
 
 #ingredientsSection .sub-recipe-link:hover,
-#ingredientsSection .sub-recipe-link:focus-visible {
+#ingredientsSection .sub-recipe-link:focus-visible,
+#stepsSection .sub-recipe-link:hover,
+#stepsSection .sub-recipe-link:focus-visible {
   text-decoration: underline;
 }
 

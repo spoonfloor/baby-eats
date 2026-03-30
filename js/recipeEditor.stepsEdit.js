@@ -1,3 +1,347 @@
+// --- Step recipe-link helpers ---
+(function initStepRecipeLinks(global) {
+  if (!global || global.StepRecipeLinks) return;
+
+  const TOKEN_RE = /\[\[recipe:(\d+)\|([^\]]+)\]\]/g;
+  const PROTECTED_TEXT_TOKEN_PREFIX = '__FE_STEP_PRETTIFY__';
+
+  const replaceWithMap = (input, mapEntries) => {
+    let out = String(input || '');
+    mapEntries.forEach(([rx, repl]) => {
+      out = out.replace(rx, repl);
+    });
+    return out;
+  };
+
+  const prettifyFractionForms = (input) => {
+    // Keep larger denominators first to avoid partial replacement collisions.
+    const fractionMap = [
+      [/(^|[^\d/])7\s*\/\s*8(?=$|[^\d/])/g, '$1⅞'],
+      [/(^|[^\d/])5\s*\/\s*8(?=$|[^\d/])/g, '$1⅝'],
+      [/(^|[^\d/])3\s*\/\s*8(?=$|[^\d/])/g, '$1⅜'],
+      [/(^|[^\d/])1\s*\/\s*8(?=$|[^\d/])/g, '$1⅛'],
+      [/(^|[^\d/])3\s*\/\s*4(?=$|[^\d/])/g, '$1¾'],
+      [/(^|[^\d/])1\s*\/\s*4(?=$|[^\d/])/g, '$1¼'],
+      [/(^|[^\d/])2\s*\/\s*3(?=$|[^\d/])/g, '$1⅔'],
+      [/(^|[^\d/])1\s*\/\s*3(?=$|[^\d/])/g, '$1⅓'],
+      [/(^|[^\d/])1\s*\/\s*2(?=$|[^\d/])/g, '$1½'],
+      [/\bthree\s+quarters\b/gi, '¾'],
+      [/\b(one|a)\s+quarter\b/gi, '¼'],
+      [/\btwo\s+thirds\b/gi, '⅔'],
+      [/\bone\s+third\b/gi, '⅓'],
+      [/\b(one|a)\s+half\b/gi, '½'],
+      [/\bseven\s+eighths\b/gi, '⅞'],
+      [/\bfive\s+eighths\b/gi, '⅝'],
+      [/\bthree\s+eighths\b/gi, '⅜'],
+      [/\bone\s+eighth\b/gi, '⅛'],
+    ];
+
+    let out = replaceWithMap(input, fractionMap);
+    // Mixed numbers should render compactly: "1 1/2" -> "1½"
+    out = out.replace(/(\d+)\s+([¼½¾⅓⅔⅛⅜⅝⅞])/g, '$1$2');
+    return out;
+  };
+
+  const prettifyRangesAndEllipsis = (input) => {
+    let out = String(input || '');
+    // Numeric ranges: "10-12", "10 - 12" -> "10–12"
+    out = out.replace(/(\d)\s*-\s*(\d)/g, '$1–$2');
+    out = out.replace(/\.{3}/g, '…');
+    return out;
+  };
+
+  const protectMeasurementPrimes = (input) => {
+    const protectedChunks = [];
+    const protect = (rx, text) =>
+      text.replace(rx, (m) => {
+        const token = `${PROTECTED_TEXT_TOKEN_PREFIX}${protectedChunks.length}__`;
+        protectedChunks.push(m);
+        return token;
+      });
+
+    let out = String(input || '');
+    // Examples: 5'6", 12", 8'
+    out = protect(/\b\d+\s*'\s*\d+\s*"/g, out);
+    out = protect(/\b\d+\s*"/g, out);
+    out = protect(/\b\d+\s*'/g, out);
+
+    return { text: out, protectedChunks };
+  };
+
+  const restoreProtectedChunks = (input, protectedChunks) => {
+    let out = String(input || '');
+    protectedChunks.forEach((value, idx) => {
+      const token = `${PROTECTED_TEXT_TOKEN_PREFIX}${idx}__`;
+      out = out.split(token).join(value);
+    });
+    return out;
+  };
+
+  const prettifySmartQuotes = (input) => {
+    const protectedState = protectMeasurementPrimes(input);
+    let out = protectedState.text;
+
+    // Apostrophes in contractions/possessives first.
+    out = out.replace(/([A-Za-z0-9])'([A-Za-z0-9])/g, '$1’$2');
+
+    // First pass for obviously paired quote marks.
+    out = out.replace(/"([^"\n]+)"/g, '“$1”');
+    out = out.replace(/'([^'\n]+)'/g, '‘$1’');
+
+    // Heuristic fallbacks for unmatched opening/closing marks.
+    out = out.replace(/(^|[\s([{\u2014-])"(?=\S)/g, '$1“');
+    out = out.replace(/"(?=[$\s)\]}.,!?;:])/g, '”');
+    out = out.replace(/(^|[\s([{\u2014-])'(?=\S)/g, '$1‘');
+    out = out.replace(/'(?=[$\s)\]}.,!?;:])/g, '’');
+
+    return restoreProtectedChunks(out, protectedState.protectedChunks);
+  };
+
+  const prettifyStepDisplayText = (rawText) => {
+    let out = String(rawText || '');
+    if (!out) return out;
+    out = prettifyFractionForms(out);
+    out = prettifyRangesAndEllipsis(out);
+    out = prettifySmartQuotes(out);
+    return out;
+  };
+
+  const isMentionBoundaryBefore = (ch) => {
+    if (!ch) return true;
+    return /\s|\(|\[|\{/.test(ch);
+  };
+
+  const isTitleBoundaryAfter = (ch) => {
+    if (!ch) return true;
+    return /\s|[.,;:!?()[\]{}]/.test(ch);
+  };
+
+  const toToken = (id, title) => `[[recipe:${Number(id)}|${String(title || '').trim()}]]`;
+
+  const parseTokenSegments = (rawText) => {
+    const text = String(rawText || '');
+    const out = [];
+    let cursor = 0;
+    let match = null;
+    TOKEN_RE.lastIndex = 0;
+    while ((match = TOKEN_RE.exec(text))) {
+      const start = match.index;
+      const end = TOKEN_RE.lastIndex;
+      if (start > cursor) {
+        out.push({ kind: 'text', text: text.slice(cursor, start) });
+      }
+      const id = Number(match[1]);
+      const title = String(match[2] || '').trim();
+      if (Number.isFinite(id) && id > 0 && title) {
+        out.push({ kind: 'recipe', id, title });
+      } else {
+        out.push({ kind: 'text', text: text.slice(start, end) });
+      }
+      cursor = end;
+    }
+    if (cursor < text.length) {
+      out.push({ kind: 'text', text: text.slice(cursor) });
+    }
+    return out;
+  };
+
+  function renderReadOnly(textEl, rawText) {
+    if (!textEl) return;
+    const segments = parseTokenSegments(rawText);
+    textEl.innerHTML = '';
+
+    segments.forEach((seg) => {
+      if (seg.kind === 'text') {
+        textEl.appendChild(
+          document.createTextNode(prettifyStepDisplayText(seg.text))
+        );
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = '#';
+      link.className = 'sub-recipe-link step-recipe-link';
+      link.textContent = seg.title;
+      link.dataset.linkedRecipeId = String(seg.id);
+      link.addEventListener('click', (e) => {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+        if (typeof global.openRecipe === 'function') {
+          try {
+            global.openRecipe(seg.id);
+            return;
+          } catch (_) {}
+        }
+      });
+      textEl.appendChild(link);
+    });
+  }
+
+  const toDisplayText = (rawText) =>
+    prettifyStepDisplayText(
+      parseTokenSegments(rawText)
+        .map((seg) => (seg.kind === 'recipe' ? seg.title : seg.text))
+        .join('')
+    );
+
+  const toEditText = (rawText) =>
+    parseTokenSegments(rawText)
+      .map((seg) => (seg.kind === 'recipe' ? `@${seg.title}` : seg.text))
+      .join('');
+
+  function getRecipePool(currentRecipeId) {
+    const db = global.dbInstance;
+    if (!db) return [];
+    const rid = Number(currentRecipeId);
+    const excludeSql =
+      Number.isFinite(rid) && rid > 0 ? ` AND ID <> ${Math.trunc(rid)}` : '';
+    try {
+      const q = db.exec(
+        `SELECT ID, title
+         FROM recipes
+         WHERE title IS NOT NULL
+           AND TRIM(title) <> ''${excludeSql}
+         ORDER BY LOWER(title), ID;`
+      );
+      if (!q.length) return [];
+      return q[0].values
+        .map((row) => ({
+          id: Number(Array.isArray(row) ? row[0] : NaN),
+          title: String(Array.isArray(row) ? row[1] : '').trim(),
+        }))
+        .filter((r) => Number.isFinite(r.id) && r.id > 0 && r.title);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function searchRecipes(query, currentRecipeId) {
+    const pool = getRecipePool(currentRecipeId);
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return pool;
+    const prefix = [];
+    const contains = [];
+    pool.forEach((row) => {
+      const t = row.title.toLowerCase();
+      if (t.startsWith(q)) {
+        prefix.push(row);
+      } else if (t.includes(q)) {
+        contains.push(row);
+      }
+    });
+    return prefix.concat(contains);
+  }
+
+  function resolveBestRecipeForQuery(query, currentRecipeId) {
+    const ranked = searchRecipes(query, currentRecipeId);
+    return ranked.length ? ranked[0] : null;
+  }
+
+  function findLongestTitlePrefix(restText, currentRecipeId) {
+    const rest = String(restText || '');
+    if (!rest) return null;
+    const restLower = rest.toLowerCase();
+    const pool = getRecipePool(currentRecipeId);
+    let best = null;
+    pool.forEach((row) => {
+      const t = row.title.toLowerCase();
+      if (!restLower.startsWith(t)) return;
+      const boundaryChar = rest.charAt(t.length);
+      if (!isTitleBoundaryAfter(boundaryChar)) return;
+      if (!best || row.title.length > best.title.length) {
+        best = row;
+      }
+    });
+    return best;
+  }
+
+  function encodeFromDisplayText(displayText, opts = {}) {
+    const currentRecipeId = Number(opts.currentRecipeId);
+    const onAutoLink =
+      opts && typeof opts.onAutoLink === 'function' ? opts.onAutoLink : null;
+
+    const input = String(displayText || '');
+    let out = '';
+    let i = 0;
+
+    while (i < input.length) {
+      if (input.startsWith('[[recipe:', i)) {
+        const tokenEnd = input.indexOf(']]', i + 9);
+        if (tokenEnd !== -1) {
+          out += input.slice(i, tokenEnd + 2);
+          i = tokenEnd + 2;
+          continue;
+        }
+      }
+
+      const ch = input[i];
+      if (ch !== '@' || !isMentionBoundaryBefore(input[i - 1])) {
+        out += ch;
+        i += 1;
+        continue;
+      }
+
+      const rest = input.slice(i + 1);
+
+      if (rest.startsWith('{')) {
+        const endBrace = rest.indexOf('}');
+        if (endBrace > 1) {
+          const query = rest.slice(1, endBrace).trim();
+          const hit = resolveBestRecipeForQuery(query, currentRecipeId);
+          if (hit) {
+            out += toToken(hit.id, hit.title);
+            if (onAutoLink) onAutoLink(hit.title);
+          } else {
+            out += `@{${query}}`;
+          }
+          i += 1 + endBrace + 1;
+          continue;
+        }
+      }
+
+      const titlePrefixHit = findLongestTitlePrefix(rest, currentRecipeId);
+      if (titlePrefixHit) {
+        out += toToken(titlePrefixHit.id, titlePrefixHit.title);
+        if (onAutoLink) onAutoLink(titlePrefixHit.title);
+        i += 1 + titlePrefixHit.title.length;
+        continue;
+      }
+
+      let j = i + 1;
+      while (j < input.length && !/\s|[.,;:!?()[\]{}]/.test(input[j])) {
+        j += 1;
+      }
+      const rawQuery = input.slice(i + 1, j).trim();
+      if (!rawQuery) {
+        out += '@';
+        i += 1;
+        continue;
+      }
+
+      const hit = resolveBestRecipeForQuery(rawQuery, currentRecipeId);
+      if (hit) {
+        out += toToken(hit.id, hit.title);
+        if (onAutoLink) onAutoLink(hit.title);
+      } else {
+        out += `@${rawQuery}`;
+      }
+      i = j;
+    }
+
+    return out;
+  }
+
+  global.StepRecipeLinks = {
+    toDisplayText,
+    toEditText,
+    renderReadOnly,
+    searchRecipes,
+    resolveBestRecipeForQuery,
+    encodeFromDisplayText,
+  };
+})(window);
+
 // --- Step numbering helpers ---
 function renumberSteps(containerEl) {
   const container = containerEl || document.getElementById('stepsSection');
@@ -456,6 +800,22 @@ function attachStepInlineEditor(textEl) {
       return;
     }
     if (maybeDeleteFromGestureEvent(e)) return;
+    // Read-only recipe links inside step text should open, not enter edit mode.
+    try {
+      const linkTarget =
+        e && e.target && e.target.closest
+          ? e.target.closest('a.step-recipe-link')
+          : null;
+      if (linkTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rid = Number(linkTarget.dataset.linkedRecipeId);
+        if (Number.isFinite(rid) && rid > 0 && typeof window.openRecipe === 'function') {
+          window.openRecipe(rid);
+        }
+        return;
+      }
+    } catch (_) {}
     if (window.editingStepId) return; // one at a time
     window.editingStepId = textEl.dataset.stepId;
 
@@ -475,6 +835,180 @@ function attachStepInlineEditor(textEl) {
     } catch (_) {}
 
     const original = textEl.textContent || '';
+    const originalRawForLinks = (() => {
+      const found = findStepInModel(window.editingStepId);
+      if (!found || !found.step) return original;
+      return String(found.step.instructions || '');
+    })();
+    const stepRecipeLinks =
+      window.StepRecipeLinks && typeof window.StepRecipeLinks === 'object'
+        ? window.StepRecipeLinks
+        : null;
+    const currentRecipeId =
+      window.recipeData && window.recipeData.id != null
+        ? Number(window.recipeData.id)
+        : null;
+    let mentionDropdownEl = null;
+    let mentionResults = [];
+    let mentionActiveRange = null;
+
+    const closeMentionDropdown = () => {
+      mentionResults = [];
+      mentionActiveRange = null;
+      if (mentionDropdownEl && mentionDropdownEl.parentNode) {
+        mentionDropdownEl.parentNode.removeChild(mentionDropdownEl);
+      }
+      mentionDropdownEl = null;
+    };
+
+    const setCaretOffsetInsideStep = (offset) => {
+      try {
+        const fullText = textEl.textContent || '';
+        const target = Math.max(0, Math.min(fullText.length, Number(offset) || 0));
+        const sel = window.getSelection();
+        if (!sel) return;
+        const range = document.createRange();
+        const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        let remaining = target;
+        while (node) {
+          const len = node.textContent.length;
+          if (remaining <= len) {
+            range.setStart(node, remaining);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+          }
+          remaining -= len;
+          node = walker.nextNode();
+        }
+        range.selectNodeContents(textEl);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (_) {}
+    };
+
+    const getActiveMentionRange = () => {
+      const sel = getSelectionOffsetsInStep(textEl);
+      if (!sel || sel.start !== sel.end) return null;
+      const caret = sel.start;
+      const fullText = textEl.textContent || '';
+      if (caret < 0 || caret > fullText.length) return null;
+
+      const before = fullText.slice(0, caret);
+      const mentionStart = before.lastIndexOf('@');
+      if (mentionStart === -1) return null;
+      if (mentionStart > 0 && !/\s|\(|\[|\{/.test(fullText[mentionStart - 1])) {
+        return null;
+      }
+      const query = fullText.slice(mentionStart + 1, caret);
+      if (/[\n\r\t]/.test(query)) return null;
+      if (/[.,;:!?()[\]{}]/.test(query)) return null;
+      return {
+        start: mentionStart,
+        end: caret,
+        query: query.trim(),
+      };
+    };
+
+    const applyMentionPick = (pickedTitle) => {
+      if (!mentionActiveRange) return;
+      const full = textEl.textContent || '';
+      const nextToken = `@${String(pickedTitle || '').trim()}`;
+      const nextText = `${full.slice(0, mentionActiveRange.start)}${nextToken}${full.slice(
+        mentionActiveRange.end
+      )}`;
+      textEl.classList.remove('placeholder-prompt');
+      try {
+        if (lineEl && lineEl.classList) {
+          lineEl.classList.remove('instruction-line--placeholder');
+        }
+      } catch (_) {}
+      textEl.textContent = nextText;
+      setCaretOffsetInsideStep(mentionActiveRange.start + nextToken.length);
+      closeMentionDropdown();
+      if (!window._hasPendingEdit) {
+        window._hasPendingEdit = true;
+      }
+      if (typeof markDirty === 'function') {
+        markDirty();
+      }
+    };
+
+    const updateMentionDropdown = () => {
+      if (!stepRecipeLinks || typeof stepRecipeLinks.searchRecipes !== 'function') {
+        closeMentionDropdown();
+        return;
+      }
+      const range = getActiveMentionRange();
+      if (!range) {
+        closeMentionDropdown();
+        return;
+      }
+
+      const ranked = stepRecipeLinks
+        .searchRecipes(range.query, currentRecipeId)
+        .slice(0, 8);
+      if (!ranked.length) {
+        closeMentionDropdown();
+        return;
+      }
+
+      mentionActiveRange = range;
+      mentionResults = ranked.slice();
+
+      if (!mentionDropdownEl) {
+        mentionDropdownEl = document.createElement('div');
+        mentionDropdownEl.className = 'typeahead-dropdown';
+        mentionDropdownEl.addEventListener('mousedown', (evt) => {
+          try {
+            evt.preventDefault();
+            evt.stopPropagation();
+            textEl.focus();
+          } catch (_) {}
+        });
+        mentionDropdownEl.addEventListener('click', (evt) => {
+          const target =
+            evt && evt.target && evt.target.closest
+              ? evt.target.closest('.typeahead-item')
+              : null;
+          if (!target) return;
+          const picked = String(target.dataset.value || target.textContent || '').trim();
+          if (!picked) return;
+          applyMentionPick(picked);
+        });
+        document.body.appendChild(mentionDropdownEl);
+      }
+
+      const list = ranked
+        .map((row, idx) => {
+          const title = String(row && row.title != null ? row.title : '').trim();
+          const safe = title
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+          const id = Number(row && row.id != null ? row.id : NaN);
+          const activeClass = idx === 0 ? ' is-highlighted' : '';
+          return `<div class="typeahead-item${activeClass}" data-recipe-id="${id}" data-value="${safe}">${safe}</div>`;
+        })
+        .join('');
+      mentionDropdownEl.innerHTML = `<div class="typeahead-list">${list}</div>`;
+
+      try {
+        const rect = textEl.getBoundingClientRect();
+        mentionDropdownEl.style.display = 'block';
+        mentionDropdownEl.style.position = 'fixed';
+        mentionDropdownEl.style.left = `${Math.max(8, rect.left)}px`;
+        mentionDropdownEl.style.top = `${Math.max(8, rect.bottom + 6)}px`;
+        mentionDropdownEl.style.minWidth = `${Math.max(220, Math.round(rect.width))}px`;
+        mentionDropdownEl.style.maxWidth = '420px';
+      } catch (_) {
+        closeMentionDropdown();
+      }
+    };
 
     const placeholderText =
       (textEl.dataset && textEl.dataset.placeholder) || 'Add a step.';
@@ -489,10 +1023,18 @@ function attachStepInlineEditor(textEl) {
       textEl.classList.contains('placeholder-prompt') &&
       (original || '').trim() === 'Add a step.';
 
+    const editStartText =
+      stepRecipeLinks && typeof stepRecipeLinks.toEditText === 'function'
+        ? stepRecipeLinks.toEditText(originalRawForLinks)
+        : original;
+
     if (isPlaceholder) {
       textEl.classList.remove('placeholder-prompt');
       textEl.textContent = '';
       ensureStepTextNotEmpty(textEl);
+    } else {
+      // Read-only mode may render recipe links as anchors; convert to editable mention text.
+      textEl.textContent = editStartText;
     }
 
     textEl.contentEditable = 'true';
@@ -642,7 +1184,15 @@ function attachStepInlineEditor(textEl) {
 
         renumberSteps(document.getElementById('stepsSection'));
       } else {
-        textEl.textContent = normalizedVal;
+        if (
+          stepRecipeLinks &&
+          typeof stepRecipeLinks.renderReadOnly === 'function' &&
+          normalizedVal !== ''
+        ) {
+          stepRecipeLinks.renderReadOnly(textEl, normalizedVal);
+        } else {
+          textEl.textContent = normalizedVal;
+        }
 
         ensureStepTextNotEmpty(textEl);
       }
@@ -695,6 +1245,7 @@ function attachStepInlineEditor(textEl) {
         window._suppressStepCommit = false;
         return;
       }
+      closeMentionDropdown();
 
       const raw = textEl.textContent || '';
       const newVal = normalizeStepText(raw);
@@ -714,10 +1265,44 @@ function attachStepInlineEditor(textEl) {
           textEl.closest &&
           textEl.closest('.instruction-line')?.dataset?.stepType === 'heading');
 
-      commitWithValue(effectiveVal, { deleteIfEmpty: true });
+      let finalVal = effectiveVal;
+      const autoLinkedTitles = [];
+      if (
+        effectiveVal &&
+        !isHeadingLine &&
+        stepRecipeLinks &&
+        typeof stepRecipeLinks.encodeFromDisplayText === 'function'
+      ) {
+        try {
+          finalVal = stepRecipeLinks.encodeFromDisplayText(effectiveVal, {
+            priorRawText: originalRawForLinks,
+            currentRecipeId,
+            onAutoLink: (title) => {
+              if (!title) return;
+              autoLinkedTitles.push(String(title));
+            },
+          });
+        } catch (_) {}
+      }
+
+      commitWithValue(finalVal, { deleteIfEmpty: true });
+
+      if (autoLinkedTitles.length && typeof window.uiToast === 'function') {
+        const deduped = Array.from(new Set(autoLinkedTitles.map((v) => String(v).trim())))
+          .filter(Boolean)
+          .slice(0, 3);
+        const label =
+          deduped.length === 1
+            ? deduped[0]
+            : `${deduped[0]}${deduped.length > 1 ? ` +${deduped.length - 1}` : ''}`;
+        try {
+          window.uiToast(`Linked to ${label}.`);
+        } catch (_) {}
+      }
     };
 
     const handleEnterSplit = () => {
+      closeMentionDropdown();
       const fullText = textEl.textContent || '';
 
       // Compute selection offsets within this step
@@ -734,6 +1319,8 @@ function attachStepInlineEditor(textEl) {
       if (end < 0) end = 0;
       if (start > fullText.length) start = fullText.length;
       if (end > fullText.length) end = fullText.length;
+
+      const isCaretAtStart = start === 0 && end === 0;
 
       // Split into left / right halves
       const leftRaw = fullText.slice(0, start);
@@ -757,6 +1344,139 @@ function attachStepInlineEditor(textEl) {
       }
 
       const { stepsArr, idx, step } = found;
+
+      // Enter at index 0 should insert a new blank line above while preserving
+      // the current step text in place.
+      if (isCaretAtStart) {
+        const currentVal = normalizeStepText(fullText);
+
+        // Keep current step content as-is and end current inline edit session.
+        commitWithValue(currentVal, { deleteIfEmpty: false });
+
+        const newStep = createSiblingStepFromExisting(step, '');
+        stepsArr.splice(idx, 0, newStep);
+
+        // Phase 1 — mirror insertion into StepNode model (if present).
+        if (Array.isArray(window.stepNodes)) {
+          const nodes = window.stepNodes;
+          const parentIdStr = String(step.id ?? step.ID);
+          const parentIdx = nodes.findIndex((n) => String(n.id) === parentIdStr);
+
+          if (parentIdx !== -1) {
+            const baseNode = nodes[parentIdx];
+
+            const baseOrder =
+              typeof baseNode.order === 'number' && !Number.isNaN(baseNode.order)
+                ? baseNode.order
+                : parentIdx + 1;
+
+            const prevNode = nodes[parentIdx - 1] || null;
+            let newOrder = baseOrder - 1;
+
+            if (
+              prevNode &&
+              typeof prevNode.order === 'number' &&
+              !Number.isNaN(prevNode.order) &&
+              prevNode.order < baseOrder
+            ) {
+              newOrder = (prevNode.order + baseOrder) / 2;
+            }
+
+            const stepNodeModelRef =
+              window.StepNodeModel && typeof window.StepNodeModel === 'object'
+                ? window.StepNodeModel
+                : null;
+            const stepNodeTypeRef =
+              window.StepNodeType && typeof window.StepNodeType === 'object'
+                ? window.StepNodeType
+                : null;
+
+            const nodePayload = {
+              id: newStep.id ?? newStep.ID,
+              type:
+                baseNode.type ||
+                (stepNodeTypeRef && stepNodeTypeRef.STEP) ||
+                'step',
+              text: '',
+              order: newOrder,
+            };
+
+            const newNode =
+              stepNodeModelRef &&
+              typeof stepNodeModelRef.createStepNode === 'function'
+                ? stepNodeModelRef.createStepNode(nodePayload)
+                : nodePayload;
+
+            nodes.splice(parentIdx, 0, newNode);
+
+            if (
+              stepNodeModelRef &&
+              typeof stepNodeModelRef.normalizeStepNodeOrder === 'function'
+            ) {
+              window.stepNodes = stepNodeModelRef.normalizeStepNodeOrder(nodes);
+            }
+          }
+        }
+
+        const parent = lineEl.parentElement;
+        let newTextEl = null;
+
+        if (parent) {
+          const newLine = document.createElement('div');
+          newLine.className = 'instruction-line numbered';
+
+          const sectionId =
+            lineEl.dataset.sectionId || textEl.dataset.sectionId || '';
+          if (sectionId) {
+            newLine.dataset.sectionId = sectionId;
+          }
+
+          const numSpan = document.createElement('span');
+          numSpan.className = 'step-num';
+          numSpan.textContent = '';
+
+          const textSpan = document.createElement('span');
+          textSpan.className = 'step-text placeholder-prompt';
+          textSpan.dataset.stepId = String(newStep.id ?? newStep.ID);
+          textSpan.textContent = '';
+          textSpan.dataset.placeholder = 'Add a step.';
+
+          ensureStepTextNotEmpty(textSpan);
+
+          if (sectionId) {
+            textSpan.dataset.sectionId = sectionId;
+          }
+
+          try {
+            newLine.classList.add('instruction-line--placeholder');
+          } catch (_) {}
+
+          newLine.appendChild(numSpan);
+          newLine.appendChild(textSpan);
+
+          parent.insertBefore(newLine, lineEl);
+
+          attachStepInlineEditor(textSpan);
+          newTextEl = textSpan;
+        }
+
+        const stepsContainer = document.getElementById('stepsSection');
+        renumberSteps(stepsContainer);
+        if (stepsContainer) syncStepOrderFromDOM(stepsContainer);
+
+        if (typeof markDirty === 'function') {
+          markDirty();
+        }
+
+        if (newTextEl) {
+          newTextEl.dispatchEvent(
+            new MouseEvent('click', {
+              bubbles: true,
+            })
+          );
+        }
+        return;
+      }
 
       // 1) Commit the left half to the existing step, but NEVER delete it here
       commitWithValue(leftVal, { deleteIfEmpty: false });
@@ -1077,6 +1797,7 @@ function attachStepInlineEditor(textEl) {
     };
 
     const cancel = () => {
+      closeMentionDropdown();
       window._suppressStepCommit = true;
 
       // This inline edit is the ONLY dirty thing if:
@@ -1205,7 +1926,15 @@ function attachStepInlineEditor(textEl) {
 
       // Default cancel behavior (no split-heal, no new-empty-step case)
 
-      textEl.textContent = original;
+      if (
+        stepRecipeLinks &&
+        typeof stepRecipeLinks.renderReadOnly === 'function' &&
+        originalRawForLinks !== original
+      ) {
+        stepRecipeLinks.renderReadOnly(textEl, originalRawForLinks);
+      } else {
+        textEl.textContent = original;
+      }
 
       if (startedFromPlaceholder && !normalizeStepText(original)) {
         textEl.classList.add('placeholder-prompt');
@@ -1261,6 +1990,28 @@ function attachStepInlineEditor(textEl) {
     };
 
     const onKeyDown = (e) => {
+      if (e.key === 'Escape' && mentionDropdownEl) {
+        e.preventDefault();
+        closeMentionDropdown();
+        return;
+      }
+      if (
+        mentionDropdownEl &&
+        e.key === 'Enter' &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
+        const first = mentionResults[0];
+        const picked = first && first.title ? String(first.title).trim() : '';
+        if (picked) {
+          e.preventDefault();
+          applyMentionPick(picked);
+          return;
+        }
+      }
+
       const wantsReorder =
         e.metaKey &&
         !e.ctrlKey &&
@@ -1320,6 +2071,12 @@ function attachStepInlineEditor(textEl) {
             sel.addRange(range);
           } catch (err) {
             // ignore
+          }
+
+          if (e.key === '@') {
+            setTimeout(() => {
+              updateMentionDropdown();
+            }, 0);
           }
 
           return;
@@ -1494,21 +2251,8 @@ function attachStepInlineEditor(textEl) {
       }
 
       if (e.key === 'Enter') {
-        const sel = getSelectionOffsetsInStep(textEl);
-        const fullText = textEl.textContent || '';
-        const atStart = sel && sel.start === 0 && sel.end === 0;
-
         e.preventDefault();
-
-        // Special-case: caret at very beginning of line
-        if (atStart) {
-          // Do not create a blank predecessor row.
-          // Keep the caret anchored at the start of this step.
-          setCaretAtTextOffset(textEl, 0);
-          return;
-        }
-
-        // Default: mid-line / end-of-line / anything-not-caught-above
+        // Split/create a sibling step at caret position, including caret 0.
         handleEnterSplit();
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -1533,6 +2277,7 @@ function attachStepInlineEditor(textEl) {
     };
 
     const onBlur = () => {
+      closeMentionDropdown();
       commit();
     };
 
@@ -1646,6 +2391,8 @@ function attachStepInlineEditor(textEl) {
           }
         }
       }
+
+      updateMentionDropdown();
     };
 
     const setCaretAtTextOffset = (targetEl, targetOffset) => {

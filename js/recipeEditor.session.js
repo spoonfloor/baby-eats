@@ -231,6 +231,112 @@ async function saveRecipeToDB() {
     }
   };
 
+  const normalizeRecipeUnitCodesForStorage = (raw) => {
+    const source = Array.isArray(raw)
+      ? raw
+      : String(raw || '')
+          .split('\n')
+          .map((v) => v.trim());
+    const seen = new Set();
+    const out = [];
+    source
+      .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .forEach((code) => {
+        const key = code.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(code);
+      });
+    return out;
+  };
+
+  const collectRecipeUnitCodes = (model) => {
+    const sections = Array.isArray(model?.sections) ? model.sections : [];
+    const out = [];
+    sections.forEach((sec) => {
+      const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+      rows.forEach((row) => {
+        if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+        const unit = String(row.unit || '').trim();
+        if (!unit) return;
+        out.push(unit);
+      });
+    });
+    return normalizeRecipeUnitCodesForStorage(out);
+  };
+
+  const persistRecipeUnits = (activeDb, model) => {
+    if (!activeDb || !model) return;
+    const codes = collectRecipeUnitCodes(model);
+    if (!codes.length) return;
+
+    const unitsColsQ = activeDb.exec('PRAGMA table_info(units);');
+    const unitsCols = new Set(
+      Array.isArray(unitsColsQ) &&
+      unitsColsQ.length &&
+      Array.isArray(unitsColsQ[0].values)
+        ? unitsColsQ[0].values
+            .map((row) => (Array.isArray(row) ? String(row[1] || '').toLowerCase() : ''))
+            .filter(Boolean)
+        : []
+    );
+    if (!unitsCols.has('code')) return;
+    const has = (col) => unitsCols.has(String(col || '').toLowerCase());
+
+    let nextUnitSort = 1;
+    if (has('sort_order')) {
+      try {
+        const maxQ = activeDb.exec(
+          'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM units;'
+        );
+        if (maxQ.length && maxQ[0].values.length) {
+          const n = Number(maxQ[0].values[0][0]);
+          if (Number.isFinite(n) && n > 0) nextUnitSort = n;
+        }
+      } catch (_) {}
+    }
+
+    const findUnitStmt = activeDb.prepare(
+      `SELECT code FROM units
+       WHERE lower(trim(code)) = lower(trim(?))
+       LIMIT 1;`
+    );
+    const insertCols = ['code'];
+    if (has('name_singular')) insertCols.push('name_singular');
+    if (has('name_plural')) insertCols.push('name_plural');
+    if (has('category')) insertCols.push('category');
+    if (has('sort_order')) insertCols.push('sort_order');
+    if (has('is_hidden')) insertCols.push('is_hidden');
+    const insertPlaceholders = insertCols.map(() => '?').join(', ');
+    const insertUnitStmt = activeDb.prepare(
+      `INSERT INTO units (${insertCols.join(', ')}) VALUES (${insertPlaceholders});`
+    );
+    try {
+      codes.forEach((code) => {
+        let exists = false;
+        try {
+          findUnitStmt.bind([code]);
+          exists = findUnitStmt.step();
+        } finally {
+          findUnitStmt.reset();
+        }
+        if (exists) return;
+
+        const vals = [code];
+        if (has('name_singular')) vals.push(code);
+        if (has('name_plural')) vals.push('');
+        if (has('category')) vals.push('');
+        if (has('sort_order')) vals.push(nextUnitSort++);
+        if (has('is_hidden')) vals.push(0);
+        insertUnitStmt.run(vals);
+      });
+    } finally {
+      findUnitStmt.free();
+      insertUnitStmt.free();
+    }
+  };
+
   const normalizeRecipeTagsForModel = (raw) => {
     const source = Array.isArray(raw) ? raw : String(raw || '').split('\n');
     const seen = new Set();
@@ -277,6 +383,7 @@ async function saveRecipeToDB() {
       [title, servingsDefault, servingsMin, servingsMax, rid]
     );
     persistRecipeTags(db, rid, recipe.tags);
+    persistRecipeUnits(db, recipe);
 
     // --- 2) Persist steps from the StepNode model ---
     bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);

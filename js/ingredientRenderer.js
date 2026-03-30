@@ -685,7 +685,7 @@ function renderIngredient(line) {
     const n = Number(raw);
     return Number.isFinite(n);
   };
-  const formatNumericDisplay = (v) => decimalToFractionDisplay(Number(v));
+  const formatNumericDisplay = (v) => decimalToFractionDisplay(v);
 
   // Guard against null -> 0 coercion and never show zero quantities.
   const qMinRaw = hasFiniteNumber(line.quantityMin) ? Number(line.quantityMin) : null;
@@ -710,7 +710,7 @@ function renderIngredient(line) {
   // Show quantity as fraction if numeric-ish and singular.
   let qtyDisplay = quantityForDisplay;
   if (!isNaN(parseFloat(quantityForDisplay)) && /^[\d.]+$/.test(quantityForDisplay)) {
-    qtyDisplay = formatNumericDisplay(parseFloat(quantityForDisplay));
+    qtyDisplay = formatNumericDisplay(quantityForDisplay);
   }
 
   // --- Build base name (variant + name) ---
@@ -1297,7 +1297,7 @@ function openIngredientEditRow({
     { key: 'size', label: 'Size' },
     { key: 'prep', label: 'Prep' },
     { key: 'notes', label: 'Notes' },
-    { key: 'isaprx', label: 'QtyIsArpox', isBoolean: true },
+    { key: 'isaprx', label: 'QtyIsApprox', isBoolean: true },
     { key: 'isalt', label: 'IsAlt', isBoolean: true },
     { key: 'isopt', label: 'IsOpt', isBoolean: true },
   ];
@@ -1370,14 +1370,15 @@ function openIngredientEditRow({
     const maxVal = String(qtyMaxInput.value || '').trim();
 
     if (source === 'min') {
-      if (!qtyMirrorState.maxTouched && maxVal === '' && minVal !== '') {
+      // Keep syncing into untouched sibling field (don't stop on intermediate values like ".").
+      if (!qtyMirrorState.maxTouched && maxVal !== minVal) {
         setQtyFieldValue(qtyMaxInput, minVal);
       }
       return;
     }
 
     if (source === 'max') {
-      if (!qtyMirrorState.minTouched && minVal === '' && maxVal !== '') {
+      if (!qtyMirrorState.minTouched && minVal !== maxVal) {
         setQtyFieldValue(qtyMinInput, maxVal);
       }
     }
@@ -1603,14 +1604,17 @@ function openIngredientEditRow({
       }
     }
 
-    const prefillQtyMinDisplay =
-      Number.isFinite(Number(prefillQtyMin)) && Number(prefillQtyMin) > 0
-        ? Number(prefillQtyMin)
-        : '';
-    const prefillQtyMaxDisplay =
-      Number.isFinite(Number(prefillQtyMax)) && Number(prefillQtyMax) > 0
-        ? Number(prefillQtyMax)
-        : '';
+    const formatQtyEditorPrefill = (val) => {
+      const n = Number(val);
+      if (!Number.isFinite(n) || n <= 0) return '';
+      const frac = Math.abs(n - Math.floor(n));
+      if (Math.abs(frac - 1 / 3) <= 1e-6 || Math.abs(frac - 2 / 3) <= 1e-6) {
+        return n.toFixed(2);
+      }
+      return Number(n);
+    };
+    const prefillQtyMinDisplay = formatQtyEditorPrefill(prefillQtyMin);
+    const prefillQtyMaxDisplay = formatQtyEditorPrefill(prefillQtyMax);
     set('qtymin', prefillQtyMinDisplay);
     set('qtymax', prefillQtyMaxDisplay);
     set('isaprx', prefillIsAprx ? '1' : '');
@@ -1873,6 +1877,10 @@ function openIngredientEditRow({
     const parseQtyScalar = (raw) => {
       const t = String(raw || '').trim();
       if (!t) return null;
+      const thirdMatch = t.match(/^(\d+)\.3{2,}$/);
+      if (thirdMatch) {
+        return Number(thirdMatch[1]) + 1 / 3;
+      }
       try {
         if (typeof window.parseIngredientQuantityDescriptor === 'function') {
           const p = window.parseIngredientQuantityDescriptor(t);
