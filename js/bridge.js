@@ -572,8 +572,12 @@ function loadRecipeFromDB(db, recipeId) {
     hasQtyApprox ? 'COALESCE(rim.quantity_is_approx, 0) AS quantity_is_approx' : '0 AS quantity_is_approx',
     'rim.unit',
     recipeDisplayNameSql,
-    rimHas('variant') ? "COALESCE(NULLIF(TRIM(rim.variant), ''), i.variant, '') AS variant" : "COALESCE(i.variant, '') AS variant",
-    rimHas('size') ? "COALESCE(NULLIF(TRIM(rim.size), ''), i.size, '') AS size" : "COALESCE(i.size, '') AS size",
+    rimHas('variant')
+      ? "CASE WHEN rim.variant IS NULL THEN COALESCE(i.variant, '') ELSE COALESCE(rim.variant, '') END AS variant"
+      : "COALESCE(i.variant, '') AS variant",
+    rimHas('size')
+      ? "CASE WHEN rim.size IS NULL THEN COALESCE(i.size, '') ELSE COALESCE(rim.size, '') END AS size"
+      : "COALESCE(i.size, '') AS size",
     hasLemma ? 'i.lemma' : 'NULL AS lemma',
     hasPluralByDefault ? 'COALESCE(i.plural_by_default, 0) AS plural_by_default' : '0 AS plural_by_default',
     hasIsMassNoun ? 'COALESCE(i.is_mass_noun, 0) AS is_mass_noun' : '0 AS is_mass_noun',

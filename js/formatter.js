@@ -135,8 +135,8 @@ function formatRecipe(db, recipeId) {
                       END AS name,`
                  : 'i.name,'
              }
-             ${rimCols.includes('variant') ? "COALESCE(NULLIF(TRIM(rim.variant), ''), i.variant, '')" : "COALESCE(i.variant, '')"} AS variant,
-             ${rimCols.includes('size') ? "COALESCE(NULLIF(TRIM(rim.size), ''), i.size, '')" : "COALESCE(i.size, '')"} AS size,
+             ${rimCols.includes('variant') ? "CASE WHEN rim.variant IS NULL THEN COALESCE(i.variant, '') ELSE COALESCE(rim.variant, '') END" : "COALESCE(i.variant, '')"} AS variant,
+             ${rimCols.includes('size') ? "CASE WHEN rim.size IS NULL THEN COALESCE(i.size, '') ELSE COALESCE(rim.size, '') END" : "COALESCE(i.size, '')"} AS size,
              ${ingHasLemma ? 'i.lemma,' : 'NULL AS lemma,'}
              ${
                ingHasPluralByDefault
