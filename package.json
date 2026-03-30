@@ -5,7 +5,8 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
-    "test:ingredient-parser": "node tests/runIngredientPasteParserTests.js"
+    "test:ingredient-parser": "node tests/runIngredientPasteParserTests.js",
+    "test:unit-size-state": "node tests/runUnitSizeStateTests.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",

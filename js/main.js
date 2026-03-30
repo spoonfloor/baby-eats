@@ -108,6 +108,219 @@ function normalizeRecipeTagList(rawTags) {
   return out;
 }
 
+// --- Unit/size row state helpers (tests extract this block) ---
+function normalizeUnitSizeFlag(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n === 1 : value === true;
+}
+
+function getUnitSizeRowState(row) {
+  return {
+    isHidden: normalizeUnitSizeFlag(row?.isHidden ?? row?.is_hidden),
+    isRemoved: normalizeUnitSizeFlag(row?.isRemoved ?? row?.is_removed),
+  };
+}
+
+function isUnitSizeRowSelectable(row) {
+  const state = getUnitSizeRowState(row);
+  return state.isRemoved !== true;
+}
+
+function getUnitSizeRemovalAction(usedRecipeCount) {
+  const n = Number(usedRecipeCount);
+  if (Number.isFinite(n) && n > 0) return 'remove';
+  return 'delete';
+}
+
+function shouldShowUnitSizeRow(row, activeFilterChips) {
+  const state = getUnitSizeRowState(row);
+  const chipSet =
+    activeFilterChips && typeof activeFilterChips.has === 'function'
+      ? activeFilterChips
+      : new Set();
+  const showHidden = chipSet.has('hidden');
+  const showRemoved = chipSet.has('removed');
+  if (!showHidden && !showRemoved) return !state.isHidden && !state.isRemoved;
+  if (showHidden && showRemoved) return state.isHidden || state.isRemoved;
+  if (showHidden) return state.isHidden === true;
+  return state.isRemoved === true;
+}
+
+if (typeof window !== 'undefined') {
+  window.__unitSizeRowStateHelpers = {
+    normalizeUnitSizeFlag,
+    getUnitSizeRowState,
+    isUnitSizeRowSelectable,
+    getUnitSizeRemovalAction,
+    shouldShowUnitSizeRow,
+  };
+}
+// --- End unit/size row state helpers ---
+
+// --- Size sort helpers (tests extract this block) ---
+function normalizeSizeSortLabel(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_/]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function getNamedSizeRank(value) {
+  const label = normalizeSizeSortLabel(value).replace(/\s*-\s*/g, '-');
+  if (!label) return null;
+
+  const rankMap = new Map([
+    ['extra-small', 10],
+    ['x-small', 10],
+    ['xsmall', 10],
+    ['xs', 10],
+    ['small', 20],
+    ['sm', 20],
+    ['medium', 30],
+    ['med', 30],
+    ['regular', 30],
+    ['large', 40],
+    ['lg', 40],
+    ['extra-large', 50],
+    ['x-large', 50],
+    ['xlarge', 50],
+    ['xl', 50],
+    ['jumbo', 60],
+    ['family-size', 70],
+    ['family size', 70],
+  ]);
+  return rankMap.has(label) ? rankMap.get(label) : null;
+}
+
+function getNumericSizeSortMeta(value) {
+  const label = normalizeSizeSortLabel(value);
+  if (!label) return null;
+
+  const match = label.match(
+    /^(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|g|gram|grams|kg|kilogram|kilograms|lb|lbs|pound|pounds|ml|milliliter|milliliters|l|liter|liters)$/
+  );
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount)) return null;
+
+  const weightUnits = {
+    oz: 28.3495,
+    ounce: 28.3495,
+    ounces: 28.3495,
+    g: 1,
+    gram: 1,
+    grams: 1,
+    kg: 1000,
+    kilogram: 1000,
+    kilograms: 1000,
+    lb: 453.592,
+    lbs: 453.592,
+    pound: 453.592,
+    pounds: 453.592,
+  };
+  if (Object.prototype.hasOwnProperty.call(weightUnits, unit)) {
+    return { group: 1, rank: amount * weightUnits[unit], label };
+  }
+
+  const volumeUnits = {
+    ml: 1,
+    milliliter: 1,
+    milliliters: 1,
+    l: 1000,
+    liter: 1000,
+    liters: 1000,
+  };
+  if (Object.prototype.hasOwnProperty.call(volumeUnits, unit)) {
+    return { group: 2, rank: amount * volumeUnits[unit], label };
+  }
+
+  return null;
+}
+
+function getSizeSortMeta(value) {
+  const label = normalizeSizeSortLabel(
+    value && typeof value === 'object' ? value.name : value
+  );
+  const namedRank = getNamedSizeRank(label);
+  if (namedRank != null) return { group: 0, rank: namedRank, label };
+
+  const numericMeta = getNumericSizeSortMeta(label);
+  if (numericMeta) return numericMeta;
+
+  return { group: 3, rank: Number.POSITIVE_INFINITY, label };
+}
+
+function getSizeSortOrderValue(value) {
+  if (!value || typeof value !== 'object') return null;
+  const n = Number(value.sortOrder ?? value.sort_order);
+  return Number.isFinite(n) ? n : null;
+}
+
+function compareSizeDisplayValues(a, b) {
+  const metaA = getSizeSortMeta(a);
+  const metaB = getSizeSortMeta(b);
+  if (metaA.group !== metaB.group) return metaA.group - metaB.group;
+  if (metaA.rank !== metaB.rank) return metaA.rank - metaB.rank;
+
+  // For unclassified text sizes, preserve curated DB order when present.
+  if (metaA.group === 3) {
+    const sortA = getSizeSortOrderValue(a);
+    const sortB = getSizeSortOrderValue(b);
+    if (sortA != null && sortB != null && sortA !== sortB) return sortA - sortB;
+  }
+
+  const labelCompare = metaA.label.localeCompare(metaB.label, undefined, {
+    sensitivity: 'base',
+  });
+  if (labelCompare !== 0) return labelCompare;
+
+  const sortA = getSizeSortOrderValue(a);
+  const sortB = getSizeSortOrderValue(b);
+  if (sortA != null && sortB != null && sortA !== sortB) return sortA - sortB;
+
+  return 0;
+}
+
+function sortSizeNames(values) {
+  return (Array.isArray(values) ? values.slice() : []).sort(compareSizeDisplayValues);
+}
+
+function sortSizeRows(rows) {
+  return (Array.isArray(rows) ? rows.slice() : []).sort(compareSizeDisplayValues);
+}
+
+if (typeof window !== 'undefined') {
+  window.__sizeSortHelpers = {
+    normalizeSizeSortLabel,
+    getNamedSizeRank,
+    getNumericSizeSortMeta,
+    getSizeSortMeta,
+    compareSizeDisplayValues,
+    sortSizeNames,
+    sortSizeRows,
+  };
+}
+// --- End size sort helpers ---
+
+function tableHasColumnInMain(db, tableName, colName) {
+  if (!db || !tableName || !colName) return false;
+  try {
+    const q = db.exec(`PRAGMA table_info(${tableName});`);
+    const cols =
+      Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
+        ? q[0].values
+            .map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase())
+            .filter(Boolean)
+        : [];
+    return cols.includes(String(colName || '').toLowerCase());
+  } catch (_) {
+    return false;
+  }
+}
+
 function ensureRecipeTagsSchemaInMain(db) {
   if (!db) return false;
   try {
@@ -163,9 +376,20 @@ function ensureSizesSchemaInMain(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL COLLATE NOCASE,
         is_hidden INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER
+        sort_order INTEGER,
+        is_removed INTEGER NOT NULL DEFAULT 0
       );
     `);
+  } catch (_) {}
+  try {
+    if (!tableHasColumnInMain(db, 'sizes', 'is_hidden')) {
+      db.run('ALTER TABLE sizes ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;');
+    }
+  } catch (_) {}
+  try {
+    if (!tableHasColumnInMain(db, 'sizes', 'is_removed')) {
+      db.run('ALTER TABLE sizes ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;');
+    }
   } catch (_) {}
   try {
     db.run(`
@@ -177,6 +401,40 @@ function ensureSizesSchemaInMain(db) {
     db.run(`
       CREATE INDEX IF NOT EXISTS idx_sizes_sort
       ON sizes(sort_order, name COLLATE NOCASE);
+    `);
+  } catch (_) {}
+  return true;
+}
+
+function ensureUnitsSchemaInMain(db) {
+  if (!db) return false;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS units (
+        code TEXT PRIMARY KEY,
+        name_singular TEXT NOT NULL,
+        name_plural TEXT NOT NULL,
+        category TEXT NOT NULL,
+        sort_order INTEGER,
+        is_hidden INTEGER NOT NULL DEFAULT 0,
+        is_removed INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  } catch (_) {}
+  try {
+    if (!tableHasColumnInMain(db, 'units', 'is_hidden')) {
+      db.run('ALTER TABLE units ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;');
+    }
+  } catch (_) {}
+  try {
+    if (!tableHasColumnInMain(db, 'units', 'is_removed')) {
+      db.run('ALTER TABLE units ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;');
+    }
+  } catch (_) {}
+  try {
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_units_sort
+      ON units(sort_order, code COLLATE NOCASE);
     `);
   } catch (_) {}
   return true;
@@ -1632,7 +1890,7 @@ async function loadShoppingPage() {
 
     const usedCount = countRecipesUsingShoppingName(n);
 
-    if (usedCount > 0) {
+    if (getUnitSizeRemovalAction(usedCount) === 'remove') {
       const recipes = getRecipesUsingShoppingName(n);
       const usageLine =
         usedCount === 1
@@ -2008,27 +2266,36 @@ async function loadShoppingPage() {
 
     let newId = null;
     try {
-      let cols = [];
-      try {
-        const info = db.exec('PRAGMA table_info(ingredients);');
-        const rows = info.length ? info[0].values : [];
-        cols = rows.map((r) => String(r[1] || '').toLowerCase());
-      } catch (_) {
-        cols = [];
-      }
-      const has = (c) => cols.includes(String(c).toLowerCase());
-
-      if (has('lemma')) {
-        db.run('INSERT INTO ingredients (name, lemma) VALUES (?, ?);', [
-          name,
-          deriveIngredientLemmaInMain(name),
-        ]);
+      // Reuse existing ingredient if one with this name already exists.
+      const existQ = db.exec(
+        `SELECT ID FROM ingredients WHERE lower(name) = lower('${name.replace(/'/g, "''")}') LIMIT 1;`
+      );
+      if (existQ.length && existQ[0].values.length) {
+        newId = existQ[0].values[0][0];
       } else {
-        db.run('INSERT INTO ingredients (name) VALUES (?);', [name]);
-      }
-      const idQ = db.exec('SELECT last_insert_rowid();');
-      if (idQ.length && idQ[0].values.length) {
-        newId = idQ[0].values[0][0];
+        let cols = [];
+        try {
+          const info = db.exec('PRAGMA table_info(ingredients);');
+          const rows = info.length ? info[0].values : [];
+          cols = rows.map((r) => String(r[1] || '').toLowerCase());
+        } catch (_) {
+          cols = [];
+        }
+        const has = (c) => cols.includes(String(c).toLowerCase());
+
+        const insCols = ['name'];
+        const insVals = [name];
+        if (has('lemma')) {
+          insCols.push('lemma');
+          insVals.push(deriveIngredientLemmaInMain(name));
+        }
+
+        const ph = insCols.map(() => '?').join(', ');
+        db.run(`INSERT INTO ingredients (${insCols.join(', ')}) VALUES (${ph});`, insVals);
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        if (idQ.length && idQ[0].values.length) {
+          newId = idQ[0].values[0][0];
+        }
       }
     } catch (err) {
       console.error('❌ Failed to create shopping item:', err);
@@ -2094,6 +2361,7 @@ function wireChildEditorPage({
   subtitlePlaceholder: subtitlePlaceholderText,
   subtitleEmptyMeansHidden = false,
   subtitleRevealBtn = null,
+  hideSubtitleWhenMatchesTitle = false,
   extraDirtyState = null,
 }) {
   if (!appBarTitleEl || !bodyTitleEl) return;
@@ -2151,8 +2419,18 @@ function wireChildEditorPage({
 
   const syncSubtitleDomFromBaseline = () => {
     if (!hasSubtitle) return;
-    const subDisplay = (lastCommittedSubtitle || '').trim()
+    const subtitleRaw = (lastCommittedSubtitle || '').trim()
       ? lastCommittedSubtitle
+      : '';
+    const titleForSubtitleCompare = normalizeTitle(bodyTitleEl.textContent || '');
+    const subtitleMatchesTitle =
+      hideSubtitleWhenMatchesTitle &&
+      !!subtitleRaw &&
+      normalizeSubtitleFn(subtitleRaw) === titleForSubtitleCompare;
+    const subDisplay = subtitleRaw
+      ? subtitleMatchesTitle
+        ? ''
+        : subtitleRaw
       : subtitlePlaceholder;
     if (!subtitleEmptyMeansHidden) {
       subtitleEl.style.display = '';
@@ -2359,7 +2637,9 @@ function wireChildEditorPage({
     subtitleEl.addEventListener('click', () => {
       if (subtitleEl.isContentEditable) return;
       subtitlePointerKeepAlive = false;
-      const starting = subtitleEl.textContent || '';
+      const starting = (lastCommittedSubtitle || '').trim()
+        ? lastCommittedSubtitle
+        : subtitleEl.textContent || '';
       const isPlaceholder =
         starting.trim().toLowerCase() ===
         subtitlePlaceholder.trim().toLowerCase();
@@ -2877,8 +3157,9 @@ function loadShoppingItemEditorPage() {
       const sizes = parseList(sizesText);
       const synonyms = parseList(synonymsText);
 
-      // Keep legacy single-value columns best-effort for now:
-      // - variant/size columns become "representative" first entries
+      // Legacy single-value columns are only written when the list tables
+      // are unavailable. When `ingredient_variants`/`ingredient_sizes` exist,
+      // those tables are the source of truth.
       const variant0 = variants[0] || '';
       const size0 = sizes[0] || '';
 
@@ -2910,6 +3191,12 @@ function loadShoppingItemEditorPage() {
       const hasVariantTable = tableExists('ingredient_variants');
       const hasSizeTable = tableExists('ingredient_sizes');
       const hasSynonymsTable = tableExists('ingredient_synonyms');
+      const hasStoreLocationTable = tableExists('ingredient_store_location');
+      const hasVariantAisleTable = tableExists('ingredient_variant_store_location');
+      const hasRecipeIngredientMapTable = tableExists('recipe_ingredient_map');
+      const hasRecipeIngredientSubstitutesTable = tableExists(
+        'recipe_ingredient_substitutes',
+      );
       const useLegacySingleRowSave = (() => {
         try {
           return (
@@ -2936,6 +3223,87 @@ function loadShoppingItemEditorPage() {
         targetIdSeen.add(n);
         targetIds.push(n);
       };
+      const getIngredientIdsByName = (nameText) => {
+        const q = db.exec(
+          'SELECT ID FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) ORDER BY ID ASC;',
+          [nameText],
+        );
+        return q.length
+          ? q[0].values
+              .map((r) => (Array.isArray(r) ? Number(r[0]) : NaN))
+              .filter((v) => Number.isFinite(v))
+          : [];
+      };
+      const deleteIngredientChildren = (ingredientId) => {
+        if (!Number.isFinite(Number(ingredientId))) return;
+        if (hasVariantAisleTable) {
+          db.run(
+            `DELETE FROM ingredient_variant_store_location
+             WHERE ingredient_variant_id IN (
+               SELECT id FROM ingredient_variants WHERE ingredient_id = ?
+             );`,
+            [ingredientId],
+          );
+        }
+        if (hasVariantTable) {
+          db.run('DELETE FROM ingredient_variants WHERE ingredient_id = ?;', [
+            ingredientId,
+          ]);
+        }
+        if (hasSizeTable) {
+          db.run('DELETE FROM ingredient_sizes WHERE ingredient_id = ?;', [
+            ingredientId,
+          ]);
+        }
+        if (hasSynonymsTable) {
+          db.run('DELETE FROM ingredient_synonyms WHERE ingredient_id = ?;', [
+            ingredientId,
+          ]);
+        }
+        if (hasStoreLocationTable) {
+          db.run('DELETE FROM ingredient_store_location WHERE ingredient_id = ?;', [
+            ingredientId,
+          ]);
+        }
+      };
+      const mergeIngredientInto = (sourceId, targetId) => {
+        const fromId = Number(sourceId);
+        const toId = Number(targetId);
+        if (!Number.isFinite(fromId) || !Number.isFinite(toId) || fromId === toId) {
+          return;
+        }
+        if (hasStoreLocationTable) {
+          db.run(
+            `DELETE FROM ingredient_store_location
+             WHERE ingredient_id = ?
+               AND EXISTS (
+                 SELECT 1
+                 FROM ingredient_store_location isl2
+                 WHERE isl2.ingredient_id = ?
+                   AND isl2.store_location_id = ingredient_store_location.store_location_id
+               );`,
+            [fromId, toId],
+          );
+          db.run(
+            'UPDATE ingredient_store_location SET ingredient_id = ? WHERE ingredient_id = ?;',
+            [toId, fromId],
+          );
+        }
+        if (hasRecipeIngredientMapTable) {
+          db.run(
+            'UPDATE recipe_ingredient_map SET ingredient_id = ? WHERE ingredient_id = ?;',
+            [toId, fromId],
+          );
+        }
+        if (hasRecipeIngredientSubstitutesTable) {
+          db.run(
+            'UPDATE recipe_ingredient_substitutes SET ingredient_id = ? WHERE ingredient_id = ?;',
+            [toId, fromId],
+          );
+        }
+        deleteIngredientChildren(fromId);
+        db.run('DELETE FROM ingredients WHERE ID = ?;', [fromId]);
+      };
 
       if (useLegacySingleRowSave) {
         if (Number.isFinite(id)) pushTargetId(id);
@@ -2945,7 +3313,7 @@ function loadShoppingItemEditorPage() {
         if (baseName) {
           try {
             const idsQ = db.exec(
-              'SELECT ID FROM ingredients WHERE lower(name) = lower(?);',
+              'SELECT ID FROM ingredients WHERE lower(trim(name)) = lower(trim(?));',
               [baseName],
             );
             const ids = idsQ.length
@@ -2971,17 +3339,36 @@ function loadShoppingItemEditorPage() {
       }
 
       try {
-        // If the row already exists (created from the list-page Create flow),
-        // always UPDATE, even if it is flagged as "new".
-        if (targetIds.length > 0) {
+        // Collapse edits onto one canonical ingredient row. This lets
+        // rename-to-existing-name behave like a merge instead of tripping
+        // the DB's unique-name constraint.
+        const existingNextIds = getIngredientIdsByName(next).filter(
+          (iid) => !targetIdSeen.has(iid),
+        );
+        let primaryIngredientId =
+          existingNextIds.length > 0
+            ? existingNextIds[0]
+            : targetIds.length > 0
+              ? targetIds[0]
+              : null;
+        const mergedSourceIds =
+          targetIds.length > 1
+            ? targetIds.filter((iid) => iid !== primaryIngredientId)
+            : [];
+
+        mergedSourceIds.forEach((iid) => {
+          mergeIngredientInto(iid, primaryIngredientId);
+        });
+
+        if (primaryIngredientId != null) {
           const sets = ['name = ?'];
           const valsNoId = [next];
 
-          if (has('variant')) {
+          if (!hasVariantTable && has('variant')) {
             sets.push('variant = ?');
             valsNoId.push(variant0);
           }
-          if (has('size')) {
+          if (!hasSizeTable && has('size')) {
             sets.push('size = ?');
             valsNoId.push(size0);
           }
@@ -3021,22 +3408,19 @@ function loadShoppingItemEditorPage() {
             valsNoId.push(isHidden);
           }
 
-          targetIds.forEach((iid) => {
-            db.run(`UPDATE ingredients SET ${sets.join(', ')} WHERE ID = ?;`, [
-              ...valsNoId,
-              iid,
-            ]);
-          });
-          if (currentId == null && targetIds.length > 0)
-            currentId = targetIds[0];
+          db.run(`UPDATE ingredients SET ${sets.join(', ')} WHERE ID = ?;`, [
+            ...valsNoId,
+            primaryIngredientId,
+          ]);
+          currentId = Number(primaryIngredientId);
         } else {
           const insertCols = ['name'];
           const insertVals = [next];
-          if (has('variant')) {
+          if (!hasVariantTable && has('variant')) {
             insertCols.push('variant');
             insertVals.push(variant0);
           }
-          if (has('size')) {
+          if (!hasSizeTable && has('size')) {
             insertCols.push('size');
             insertVals.push(size0);
           }
@@ -3093,9 +3477,7 @@ function loadShoppingItemEditorPage() {
 
         // Persist variants/sizes lists to their own tables (newline-only, order preserved).
         const variantSizeTargetIds =
-          targetIds.length > 0
-            ? targetIds
-            : currentId != null && Number.isFinite(Number(currentId))
+          currentId != null && Number.isFinite(Number(currentId))
               ? [Number(currentId)]
               : [];
         if (variantSizeTargetIds.length > 0) {
@@ -3148,11 +3530,13 @@ function loadShoppingItemEditorPage() {
           }
         }
 
+        if (currentId != null && Number.isFinite(Number(currentId))) {
+          sessionStorage.setItem('selectedShoppingItemId', String(currentId));
+        }
+
         // Verify writes before COMMIT so any mismatch can rollback atomically.
         const verifyIds =
-          targetIds.length > 0
-            ? targetIds
-            : currentId != null && Number.isFinite(Number(currentId))
+          currentId != null && Number.isFinite(Number(currentId))
               ? [Number(currentId)]
               : [];
         const normalizedNext = String(next || '')
@@ -3711,6 +4095,8 @@ function loadUnitEditorPage() {
   const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
   const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
   const code = sessionStorage.getItem('selectedUnitCode') || '';
+  const initialHidden = sessionStorage.getItem('selectedUnitIsHidden') === '1';
+  const initialRemoved = sessionStorage.getItem('selectedUnitIsRemoved') === '1';
   const titleDisplay = storedName || (isNew ? 'New unit' : 'Unit');
   const initialTitle = storedName
     ? (storedName || '').trim().toLowerCase()
@@ -3724,6 +4110,20 @@ function loadUnitEditorPage() {
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
     <div id="unitAbbreviation" class="unit-abbreviation-line">${abbreviationDisplay}</div>
+    <div class="shopping-item-status" style="margin-top: 20px;">
+      <div class="shopping-item-status-row">
+        <label class="shopping-item-toggle">
+          <input id="unitIsHiddenToggle" type="checkbox" ${initialHidden ? 'checked' : ''} />
+          <span>Hidden</span>
+        </label>
+      </div>
+      <div class="shopping-item-status-row">
+        <label class="shopping-item-toggle">
+          <input id="unitIsRemovedToggle" type="checkbox" ${initialRemoved ? 'checked' : ''} />
+          <span>Removed</span>
+        </label>
+      </div>
+    </div>
   `;
 
   if (typeof waitForAppBarReady === 'function') {
@@ -3740,6 +4140,7 @@ function loadUnitEditorPage() {
         subtitleEl: document.getElementById('unitAbbreviation'),
         initialSubtitle: code,
         normalizeSubtitle: (s) => (s || '').trim().toLowerCase(),
+        hideSubtitleWhenMatchesTitle: true,
         onSave: async ({ title: next, subtitle: nextCode }) => {
           const oldCode = (sessionStorage.getItem('selectedUnitCode') || '')
             .trim()
@@ -3764,8 +4165,11 @@ function loadUnitEditorPage() {
 
           window.dbInstance = db;
           await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+          ensureUnitsSchemaInMain(db);
 
           const newCode = (nextCode ?? '').trim().toLowerCase();
+          const isHidden = document.getElementById('unitIsHiddenToggle')?.checked ? 1 : 0;
+          const isRemoved = document.getElementById('unitIsRemovedToggle')?.checked ? 1 : 0;
 
           if (oldCode && newCode !== oldCode) {
             const safe = (x) => String(x || '').replace(/'/g, "''");
@@ -3789,15 +4193,15 @@ function loadUnitEditorPage() {
               );
             } catch (_) {}
             db.run(
-              'UPDATE units SET code = ?, name_singular = ? WHERE code = ?;',
-              [newCode, next || '', oldCode],
+              'UPDATE units SET code = ?, name_singular = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
+              [newCode, next || '', isHidden, isRemoved, oldCode],
             );
             sessionStorage.setItem('selectedUnitCode', newCode);
           } else {
-            db.run('UPDATE units SET name_singular = ? WHERE code = ?;', [
-              next || '',
-              oldCode || newCode,
-            ]);
+            db.run(
+              'UPDATE units SET name_singular = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
+              [next || '', isHidden, isRemoved, oldCode || newCode],
+            );
             if (newCode && newCode !== oldCode)
               sessionStorage.setItem('selectedUnitCode', newCode);
           }
@@ -3815,6 +4219,8 @@ function loadUnitEditorPage() {
           }
 
           sessionStorage.setItem('selectedUnitNameSingular', next || '');
+          sessionStorage.setItem('selectedUnitIsHidden', String(isHidden));
+          sessionStorage.setItem('selectedUnitIsRemoved', String(isRemoved));
           sessionStorage.removeItem('selectedUnitIsNew');
         },
       });
@@ -3878,38 +4284,36 @@ async function loadUnitsPage() {
   // Expose DB globally for any future helpers
   window.dbInstance = db;
   await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+  ensureUnitsSchemaInMain(db);
 
-  // --- Load units from units table ---
-  // Prefer hiding limbo units when schema supports it.
-  let result = [];
-  try {
-    result = db.exec(`
-      SELECT code, name_singular, name_plural, category, sort_order
-      FROM units
-      WHERE COALESCE(is_hidden, 0) = 0
-      ORDER BY sort_order ASC, code COLLATE NOCASE;
-    `);
-  } catch (_) {
-    // Older DB without is_hidden column.
-    result = db.exec(`
-      SELECT code, name_singular, name_plural, category, sort_order
+  const queryUnits = () => {
+    const result = db.exec(`
+      SELECT
+        code,
+        name_singular,
+        name_plural,
+        category,
+        sort_order,
+        COALESCE(is_hidden, 0) AS is_hidden,
+        COALESCE(is_removed, 0) AS is_removed
       FROM units
       ORDER BY sort_order ASC, code COLLATE NOCASE;
     `);
-  }
-
-  let unitRows = [];
-  if (result.length > 0) {
-    unitRows = result[0].values.map(
-      ([code, nameSingular, namePlural, category, sortOrder]) => ({
+    if (!result.length) return [];
+    return result[0].values.map(
+      ([code, nameSingular, namePlural, category, sortOrder, isHidden, isRemoved]) => ({
         code,
         nameSingular,
         namePlural,
         category,
         sortOrder,
+        isHidden: Number(isHidden || 0) === 1,
+        isRemoved: Number(isRemoved || 0) === 1,
       }),
     );
-  }
+  };
+
+  let unitRows = queryUnits();
 
   const persistDb = () => {
     try {
@@ -3928,6 +4332,79 @@ async function loadUnitsPage() {
     }
   };
 
+  const unitFilterChipDefs = [
+    { id: 'hidden', label: 'hidden' },
+    { id: 'removed', label: 'removed' },
+  ];
+  const activeUnitFilterChips = new Set();
+  let unitChipCounts = new Map();
+  let unitFilterChipRail = null;
+
+  const recomputeUnitChipCounts = () => {
+    const counts = new Map();
+    unitFilterChipDefs.forEach((chip) => counts.set(chip.id, 0));
+    unitRows.forEach((row) => {
+      const state = getUnitSizeRowState(row);
+      if (state.isHidden) counts.set('hidden', (counts.get('hidden') || 0) + 1);
+      if (state.isRemoved) counts.set('removed', (counts.get('removed') || 0) + 1);
+    });
+    unitChipCounts = counts;
+  };
+
+  const rerenderUnitFilterChips = () => {
+    const chipMountEl = unitFilterChipRail?.trackEl;
+    if (!chipMountEl) return;
+    if (typeof window.renderFilterChipList !== 'function') {
+      chipMountEl.innerHTML = '';
+      return;
+    }
+    window.renderFilterChipList({
+      mountEl: chipMountEl,
+      chips: unitFilterChipDefs.map((chipDef) => {
+        const count = Number(unitChipCounts.get(chipDef.id) || 0);
+        return {
+          id: chipDef.id,
+          label: chipDef.label,
+          disabled: count <= 0,
+        };
+      }),
+      activeChipIds: activeUnitFilterChips,
+      onToggle: (chipId) => {
+        const key = String(chipId || '').toLowerCase();
+        const count = Number(unitChipCounts.get(key) || 0);
+        if (!key || count <= 0) return;
+        if (activeUnitFilterChips.has(key)) activeUnitFilterChips.delete(key);
+        else activeUnitFilterChips.add(key);
+        rerenderUnitFilterChips();
+        applyUnitFilters();
+      },
+      chipClassName: 'app-filter-chip',
+    });
+  };
+
+  const mountUnitFilterChips = () => {
+    if (!searchInput) return;
+    if (typeof window.mountTopFilterChipRail !== 'function') return;
+    unitFilterChipRail = window.mountTopFilterChipRail({
+      anchorEl: searchInput,
+      dockId: 'unitFilterChipDock',
+    });
+    recomputeUnitChipCounts();
+    rerenderUnitFilterChips();
+    unitFilterChipRail?.sync?.();
+  };
+
+  const getFilteredUnits = () => {
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    return unitRows.filter((u) => {
+      if (!shouldShowUnitSizeRow(u, activeUnitFilterChips)) return false;
+      const haystack = [u.code || '', u.nameSingular || '', u.namePlural || '', u.category || '']
+        .join(' ')
+        .toLowerCase();
+      return !query || haystack.includes(query);
+    });
+  };
+
   function renderUnitsList({ units }) {
     list.innerHTML = '';
 
@@ -3940,6 +4417,8 @@ async function loadUnitsPage() {
 
     rows.forEach((unit) => {
       const li = document.createElement('li');
+      const state = getUnitSizeRowState(unit);
+      if (state.isRemoved) li.classList.add('list-item--removed');
 
       // Display exactly as stored (no forced capitalization)
       let line = unit.code || '';
@@ -3990,12 +4469,12 @@ async function loadUnitsPage() {
 
         const usedCount = countRecipesUsingUnit(c);
 
-        if (usedCount > 0) {
+        if (getUnitSizeRemovalAction(usedCount) === 'remove') {
           const ok = await uiConfirm({
             title: 'Remove Unit',
             message: `Remove '${c}'?\n\nUsed in ${usedCount} recipe${
               usedCount === 1 ? '' : 's'
-            }.\n\nRemoving will hide it from Units and search (it will remain in recipes until replaced).`,
+            }.\n\nRemoving marks it as removed and blocks it from new selections. It remains in existing recipes until replaced.`,
             confirmText: 'Remove',
             cancelText: 'Cancel',
             danger: true,
@@ -4003,9 +4482,9 @@ async function loadUnitsPage() {
           if (!ok) return false;
 
           try {
-            db.run('UPDATE units SET is_hidden = 1 WHERE code = ?;', [c]);
+            db.run('UPDATE units SET is_removed = 1 WHERE code = ?;', [c]);
           } catch (err) {
-            console.error('❌ Failed to hide unit:', err);
+            console.error('❌ Failed to remove unit:', err);
             uiToast('Failed to remove unit. See console for details.');
             return false;
           }
@@ -4041,7 +4520,11 @@ async function loadUnitsPage() {
           event.stopPropagation();
           void (async () => {
             const ok = await removeUnit(unit.code || '');
-            if (ok) window.location.reload();
+            if (!ok) return;
+            unitRows = queryUnits();
+            recomputeUnitChipCounts();
+            rerenderUnitFilterChips();
+            applyUnitFilters();
           })();
           return;
         }
@@ -4054,6 +4537,8 @@ async function loadUnitsPage() {
         );
         sessionStorage.setItem('selectedUnitNamePlural', unit.namePlural || '');
         sessionStorage.setItem('selectedUnitCategory', unit.category || '');
+        sessionStorage.setItem('selectedUnitIsHidden', state.isHidden ? '1' : '0');
+        sessionStorage.setItem('selectedUnitIsRemoved', state.isRemoved ? '1' : '0');
         sessionStorage.removeItem('selectedUnitIsNew');
 
         window.location.href = 'unitEditor.html';
@@ -4063,7 +4548,11 @@ async function loadUnitsPage() {
         event.preventDefault();
         void (async () => {
           const ok = await removeUnit(unit.code || '');
-          if (ok) window.location.reload();
+          if (!ok) return;
+          unitRows = queryUnits();
+          recomputeUnitChipCounts();
+          rerenderUnitFilterChips();
+          applyUnitFilters();
         })();
       });
 
@@ -4074,8 +4563,15 @@ async function loadUnitsPage() {
     listNav?.syncAfterRender?.();
   }
 
+  const applyUnitFilters = () => {
+    const query = (searchInput?.value || '').trim();
+    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
+    renderUnitsList({ units: getFilteredUnits() });
+  };
+
+  mountUnitFilterChips();
   // Initial render
-  renderUnitsList({ units: unitRows });
+  applyUnitFilters();
 
   async function openCreateUnitDialog() {
     if (!window.ui) {
@@ -4136,7 +4632,7 @@ async function loadUnitsPage() {
       }
 
       db.run(
-        'INSERT INTO units (code, name_singular, name_plural, category, sort_order) VALUES (?, ?, ?, ?, ?);',
+        'INSERT INTO units (code, name_singular, name_plural, category, sort_order, is_hidden, is_removed) VALUES (?, ?, ?, ?, ?, 0, 0);',
         [code, nameSingular, '', '', nextSort],
       );
     } catch (err) {
@@ -4170,6 +4666,8 @@ async function loadUnitsPage() {
     sessionStorage.setItem('selectedUnitNameSingular', nameSingular);
     sessionStorage.setItem('selectedUnitNamePlural', '');
     sessionStorage.setItem('selectedUnitCategory', '');
+    sessionStorage.setItem('selectedUnitIsHidden', '0');
+    sessionStorage.setItem('selectedUnitIsRemoved', '0');
     sessionStorage.setItem('selectedUnitIsNew', '1');
     window.location.href = 'unitEditor.html';
   }
@@ -4182,36 +4680,13 @@ async function loadUnitsPage() {
 
   // Search: filter by code/name/category (case-insensitive)
   if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-
     searchInput.addEventListener('input', () => {
-      const query = searchInput.value.trim().toLowerCase();
-      clearBtn.style.display = query ? 'inline' : 'none';
-
-      if (!query) {
-        renderUnitsList({ units: unitRows });
-        return;
-      }
-
-      const filteredUnits = unitRows.filter((u) => {
-        const haystack = [
-          u.code || '',
-          u.nameSingular || '',
-          u.namePlural || '',
-          u.category || '',
-        ]
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(query);
-      });
-
-      renderUnitsList({ units: filteredUnits });
+      applyUnitFilters();
     });
 
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
-      clearBtn.style.display = 'none';
-      renderUnitsList({ units: unitRows });
+      applyUnitFilters();
       searchInput.focus();
     });
 
@@ -4467,7 +4942,7 @@ function loadTagEditorPage() {
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
     <div id="tagRecipesCard" class="you-will-need-card" aria-label="Recipes with this tag">
-      <h2 class="section-header">RECIPES WITH THIS TAG</h2>
+      <h2 class="section-header">RECIPES</h2>
       <div id="tagRecipesList"></div>
     </div>
   `;
@@ -4704,40 +5179,147 @@ async function loadSizesPage() {
 
   const querySizes = () => {
     const q = db.exec(`
-      SELECT id, name, COALESCE(sort_order, 999999) AS sort_order
+      SELECT
+        id,
+        name,
+        COALESCE(sort_order, 999999) AS sort_order,
+        COALESCE(is_hidden, 0) AS is_hidden,
+        COALESCE(is_removed, 0) AS is_removed
       FROM sizes
-      WHERE COALESCE(is_hidden, 0) = 0
       ORDER BY sort_order, name COLLATE NOCASE;
     `);
     if (!q.length) return [];
-    return q[0].values.map(([id, name, sortOrder]) => ({
-      id: Number(id),
-      name: String(name || ''),
-      sortOrder: Number(sortOrder),
-    }));
+    return sortSizeRows(
+      q[0].values.map(([id, name, sortOrder, isHidden, isRemoved]) => ({
+        id: Number(id),
+        name: String(name || ''),
+        sortOrder: Number(sortOrder),
+        isHidden: Number(isHidden || 0) === 1,
+        isRemoved: Number(isRemoved || 0) === 1,
+      }))
+    );
   };
 
   let sizeRows = querySizes();
 
+  const sizeFilterChipDefs = [
+    { id: 'hidden', label: 'hidden' },
+    { id: 'removed', label: 'removed' },
+  ];
+  const activeSizeFilterChips = new Set();
+  let sizeChipCounts = new Map();
+  let sizeFilterChipRail = null;
+
+  const recomputeSizeChipCounts = () => {
+    const counts = new Map();
+    sizeFilterChipDefs.forEach((chip) => counts.set(chip.id, 0));
+    sizeRows.forEach((row) => {
+      const state = getUnitSizeRowState(row);
+      if (state.isHidden) counts.set('hidden', (counts.get('hidden') || 0) + 1);
+      if (state.isRemoved) counts.set('removed', (counts.get('removed') || 0) + 1);
+    });
+    sizeChipCounts = counts;
+  };
+
+  const rerenderSizeFilterChips = () => {
+    const chipMountEl = sizeFilterChipRail?.trackEl;
+    if (!chipMountEl) return;
+    if (typeof window.renderFilterChipList !== 'function') {
+      chipMountEl.innerHTML = '';
+      return;
+    }
+    window.renderFilterChipList({
+      mountEl: chipMountEl,
+      chips: sizeFilterChipDefs.map((chipDef) => {
+        const count = Number(sizeChipCounts.get(chipDef.id) || 0);
+        return {
+          id: chipDef.id,
+          label: chipDef.label,
+          disabled: count <= 0,
+        };
+      }),
+      activeChipIds: activeSizeFilterChips,
+      onToggle: (chipId) => {
+        const key = String(chipId || '').toLowerCase();
+        const count = Number(sizeChipCounts.get(key) || 0);
+        if (!key || count <= 0) return;
+        if (activeSizeFilterChips.has(key)) activeSizeFilterChips.delete(key);
+        else activeSizeFilterChips.add(key);
+        rerenderSizeFilterChips();
+        applySizeFilters();
+      },
+      chipClassName: 'app-filter-chip',
+    });
+  };
+
+  const mountSizeFilterChips = () => {
+    if (!searchInput) return;
+    if (typeof window.mountTopFilterChipRail !== 'function') return;
+    sizeFilterChipRail = window.mountTopFilterChipRail({
+      anchorEl: searchInput,
+      dockId: 'sizeFilterChipDock',
+    });
+    recomputeSizeChipCounts();
+    rerenderSizeFilterChips();
+    sizeFilterChipRail?.sync?.();
+  };
+
+  const tableHasColumn = (tableName, colName) => {
+    try {
+      const q = db.exec(`PRAGMA table_info(${tableName});`);
+      const cols =
+        Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
+          ? q[0].values
+              .map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase())
+              .filter(Boolean)
+          : [];
+      return cols.includes(String(colName || '').toLowerCase());
+    } catch (_) {
+      return false;
+    }
+  };
+  const hasRimSize = tableHasColumn('recipe_ingredient_map', 'size');
+  const hasRisSize = tableHasColumn('recipe_ingredient_substitutes', 'size');
+  const hasIngSize = tableHasColumn('ingredients', 'size');
+
   const countRecipesUsingSize = (sizeName) => {
     const n = String(sizeName || '').trim();
     if (!n) return 0;
+    const usageSelects = [];
+    if (hasRimSize) {
+      usageSelects.push(`
+          SELECT recipe_id AS rid
+          FROM recipe_ingredient_map
+          WHERE lower(trim(COALESCE(size, ''))) = lower(trim(?))
+      `);
+    }
+    if (hasIngSize) {
+      usageSelects.push(`
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_map rim
+          JOIN ingredients i ON i.ID = rim.ingredient_id
+          WHERE lower(trim(COALESCE(i.size, ''))) = lower(trim(?))
+      `);
+    }
+    if (hasRisSize) {
+      usageSelects.push(`
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_substitutes ris
+          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+          WHERE lower(trim(COALESCE(ris.size, ''))) = lower(trim(?))
+      `);
+    }
+    if (!usageSelects.length) return 0;
+    const params = new Array(usageSelects.length).fill(n);
     try {
       const q = db.exec(
         `
         SELECT COUNT(DISTINCT rid) AS n
         FROM (
-          SELECT recipe_id AS rid
-          FROM recipe_ingredient_map
-          WHERE lower(trim(COALESCE(size, ''))) = lower(trim(?))
-          UNION
-          SELECT rim.recipe_id AS rid
-          FROM recipe_ingredient_substitutes ris
-          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
-          WHERE lower(trim(COALESCE(ris.size, ''))) = lower(trim(?))
+          ${usageSelects.join('\nUNION\n')}
         ) t;
         `,
-        [n, n],
+        params,
       );
       if (q.length && q[0].values.length) {
         const v = Number(q[0].values[0][0]);
@@ -4752,24 +5334,43 @@ async function loadSizesPage() {
   const getRecipesUsingSize = (sizeName) => {
     const n = String(sizeName || '').trim();
     if (!n) return [];
+    const usageSelects = [];
+    if (hasRimSize) {
+      usageSelects.push(`
+          SELECT recipe_id AS rid
+          FROM recipe_ingredient_map
+          WHERE lower(trim(COALESCE(size, ''))) = lower(trim(?))
+      `);
+    }
+    if (hasIngSize) {
+      usageSelects.push(`
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_map rim
+          JOIN ingredients i ON i.ID = rim.ingredient_id
+          WHERE lower(trim(COALESCE(i.size, ''))) = lower(trim(?))
+      `);
+    }
+    if (hasRisSize) {
+      usageSelects.push(`
+          SELECT rim.recipe_id AS rid
+          FROM recipe_ingredient_substitutes ris
+          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+          WHERE lower(trim(COALESCE(ris.size, ''))) = lower(trim(?))
+      `);
+    }
+    if (!usageSelects.length) return [];
+    const params = new Array(usageSelects.length).fill(n);
     try {
       const q = db.exec(
         `
         SELECT r.ID, r.title
         FROM recipes r
         JOIN (
-          SELECT recipe_id AS rid
-          FROM recipe_ingredient_map
-          WHERE lower(trim(COALESCE(size, ''))) = lower(trim(?))
-          UNION
-          SELECT rim.recipe_id AS rid
-          FROM recipe_ingredient_substitutes ris
-          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
-          WHERE lower(trim(COALESCE(ris.size, ''))) = lower(trim(?))
+          ${usageSelects.join('\nUNION\n')}
         ) refs ON refs.rid = r.ID
         ORDER BY r.title COLLATE NOCASE;
         `,
-        [n, n],
+        params,
       );
       if (!q.length || !q[0].values.length) return [];
       return q[0].values
@@ -4817,7 +5418,7 @@ async function loadSizesPage() {
 
       const note = document.createElement('div');
       note.className = 'shopping-remove-dialog-note';
-      note.textContent = `Removing it will hide it from Sizes and suggestions but will not delete it. To delete "${name}" permanently, first remove it from the recipes that use it.`;
+      note.textContent = `Removing marks this size as removed and blocks it from new selections, but keeps existing recipe references intact.`;
       details.appendChild(note);
 
       let ok = false;
@@ -4834,7 +5435,7 @@ async function loadSizesPage() {
       } else {
         ok = await uiConfirm({
           title: 'Remove Size',
-          message: `Remove "${name}"? ${usageLine}\n\nRemoving it will hide it from Sizes and suggestions but will not delete it. To delete "${name}" permanently, first remove it from the recipes that use it.`,
+          message: `Remove "${name}"? ${usageLine}\n\nRemoving marks it as removed and blocks it from new selections.`,
           confirmText: 'Remove',
           cancelText: 'Cancel',
           danger: true,
@@ -4843,9 +5444,9 @@ async function loadSizesPage() {
       if (!ok) return false;
 
       try {
-        db.run('UPDATE sizes SET is_hidden = 1 WHERE id = ?;', [sizeRow.id]);
+        db.run('UPDATE sizes SET is_removed = 1 WHERE id = ?;', [sizeRow.id]);
       } catch (err) {
-        console.error('❌ Failed to hide size:', err);
+        console.error('❌ Failed to remove size:', err);
         uiToast('Failed to remove size. See console.');
         return false;
       }
@@ -4887,6 +5488,7 @@ async function loadSizesPage() {
     }
     items.forEach((sizeRow) => {
       const li = document.createElement('li');
+      if (getUnitSizeRowState(sizeRow).isRemoved) li.classList.add('list-item--removed');
       li.textContent = sizeRow.name || '';
       li.addEventListener('click', (event) => {
         if (event.ctrlKey || event.metaKey) {
@@ -4896,12 +5498,16 @@ async function loadSizesPage() {
             const ok = await removeSize(sizeRow);
             if (!ok) return;
             sizeRows = querySizes();
-            renderSizes(applySizeSearchFilter(sizeRows));
+            recomputeSizeChipCounts();
+            rerenderSizeFilterChips();
+            applySizeFilters();
           })();
           return;
         }
         sessionStorage.setItem('selectedSizeId', String(sizeRow.id));
         sessionStorage.setItem('selectedSizeName', sizeRow.name || '');
+        sessionStorage.setItem('selectedSizeIsHidden', sizeRow.isHidden ? '1' : '0');
+        sessionStorage.setItem('selectedSizeIsRemoved', sizeRow.isRemoved ? '1' : '0');
         sessionStorage.removeItem('selectedSizeIsNew');
         window.location.href = 'sizeEditor.html';
       });
@@ -4911,7 +5517,9 @@ async function loadSizesPage() {
           const ok = await removeSize(sizeRow);
           if (!ok) return;
           sizeRows = querySizes();
-          renderSizes(applySizeSearchFilter(sizeRows));
+          recomputeSizeChipCounts();
+          rerenderSizeFilterChips();
+          applySizeFilters();
         })();
       });
       list.appendChild(li);
@@ -4921,10 +5529,10 @@ async function loadSizesPage() {
 
   const applySizeSearchFilter = (rows) => {
     const q = (searchInput?.value || '').trim().toLowerCase();
-    if (!q) return rows;
-    return (rows || []).filter((row) =>
-      String(row.name || '').toLowerCase().includes(q)
-    );
+    return (rows || []).filter((row) => {
+      if (!shouldShowUnitSizeRow(row, activeSizeFilterChips)) return false;
+      return !q || String(row.name || '').toLowerCase().includes(q);
+    });
   };
 
   const openCreateSizeDialog = async () => {
@@ -4957,7 +5565,10 @@ async function loadSizesPage() {
         maxQ.length && maxQ[0].values.length
           ? Number(maxQ[0].values[0][0]) || 1
           : 1;
-      db.run('INSERT INTO sizes (name, sort_order) VALUES (?, ?);', [name, nextSort]);
+      db.run('INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, 0, 0);', [
+        name,
+        nextSort,
+      ]);
       const idQ = db.exec('SELECT last_insert_rowid();');
       const newId =
         idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
@@ -4965,11 +5576,15 @@ async function loadSizesPage() {
       if (Number.isFinite(newId) && newId > 0) {
         sessionStorage.setItem('selectedSizeId', String(newId));
         sessionStorage.setItem('selectedSizeName', name);
+        sessionStorage.setItem('selectedSizeIsHidden', '0');
+        sessionStorage.setItem('selectedSizeIsRemoved', '0');
         sessionStorage.setItem('selectedSizeIsNew', '1');
         window.location.href = 'sizeEditor.html';
         return;
       }
       sizeRows = querySizes();
+      recomputeSizeChipCounts();
+      rerenderSizeFilterChips();
       renderSizes(applySizeSearchFilter(sizeRows));
     } catch (err) {
       console.error('❌ Failed to create size:', err);
@@ -4987,12 +5602,12 @@ async function loadSizesPage() {
     clearBtn.style.display = 'none';
     searchInput.addEventListener('input', () => {
       clearBtn.style.display = searchInput.value ? 'inline' : 'none';
-      renderSizes(applySizeSearchFilter(sizeRows));
+      applySizeFilters();
     });
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
       clearBtn.style.display = 'none';
-      renderSizes(sizeRows);
+      applySizeFilters();
       searchInput.focus();
     });
     searchInput.addEventListener('keydown', (e) => {
@@ -5000,7 +5615,14 @@ async function loadSizesPage() {
     });
   }
 
-  renderSizes(sizeRows);
+  const applySizeFilters = () => {
+    const query = (searchInput?.value || '').trim();
+    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
+    renderSizes(applySizeSearchFilter(sizeRows));
+  };
+
+  mountSizeFilterChips();
+  applySizeFilters();
 }
 
 function loadSizeEditorPage() {
@@ -5011,12 +5633,28 @@ function loadSizeEditorPage() {
   const idStr = sessionStorage.getItem('selectedSizeId');
   const sizeId = Number(idStr);
   const storedName = sessionStorage.getItem('selectedSizeName') || '';
+  const initialHidden = sessionStorage.getItem('selectedSizeIsHidden') === '1';
+  const initialRemoved = sessionStorage.getItem('selectedSizeIsRemoved') === '1';
   const titleDisplay = storedName || (isNew ? 'New size' : 'Size');
   const initialTitle = storedName || (isNew ? 'new size' : 'size');
 
   initAppBar({ mode: 'editor', titleText: titleDisplay });
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
+    <div class="shopping-item-status" style="margin-top: 20px;">
+      <div class="shopping-item-status-row">
+        <label class="shopping-item-toggle">
+          <input id="sizeIsHiddenToggle" type="checkbox" ${initialHidden ? 'checked' : ''} />
+          <span>Hidden</span>
+        </label>
+      </div>
+      <div class="shopping-item-status-row">
+        <label class="shopping-item-toggle">
+          <input id="sizeIsRemovedToggle" type="checkbox" ${initialRemoved ? 'checked' : ''} />
+          <span>Removed</span>
+        </label>
+      </div>
+    </div>
   `;
 
   if (typeof waitForAppBarReady !== 'function') return;
@@ -5091,17 +5729,26 @@ function loadSizeEditorPage() {
         }
 
         const oldName = String(storedName || '').trim();
+        const isHidden = document.getElementById('sizeIsHiddenToggle')?.checked ? 1 : 0;
+        const isRemoved = document.getElementById('sizeIsRemovedToggle')?.checked ? 1 : 0;
         if (Number.isFinite(sizeId) && sizeId > 0) {
-          db.run('UPDATE sizes SET name = ?, is_hidden = 0 WHERE id = ?;', [name, sizeId]);
+          db.run('UPDATE sizes SET name = ?, is_hidden = ?, is_removed = ? WHERE id = ?;', [
+            name,
+            isHidden,
+            isRemoved,
+            sizeId,
+          ]);
         } else {
           const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;');
           const nextSort =
             maxQ.length && maxQ[0].values.length
               ? Number(maxQ[0].values[0][0]) || 1
               : 1;
-          db.run('INSERT INTO sizes (name, sort_order, is_hidden) VALUES (?, ?, 0);', [
+          db.run('INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, ?, ?);', [
             name,
             nextSort,
+            isHidden,
+            isRemoved,
           ]);
           const idQ = db.exec('SELECT last_insert_rowid();');
           if (idQ.length && idQ[0].values.length) {
@@ -5153,6 +5800,8 @@ function loadSizeEditorPage() {
           );
         }
         sessionStorage.setItem('selectedSizeName', name);
+        sessionStorage.setItem('selectedSizeIsHidden', String(isHidden));
+        sessionStorage.setItem('selectedSizeIsRemoved', String(isRemoved));
         sessionStorage.removeItem('selectedSizeIsNew');
       },
     });
@@ -7139,12 +7788,19 @@ function loadStoreEditorPage() {
 
         for (const n of createQueue) {
           try {
+            // Skip if ingredient already exists by name.
+            const existQ = db.exec(
+              `SELECT 1 FROM ingredients WHERE lower(name) = lower('${n.replace(/'/g, "''")}') LIMIT 1;`
+            );
+            if (existQ.length && existQ[0].values.length) continue;
+
             const cols = ['name'];
             const vals = [n];
             if (ingredientsHasLemma) {
               cols.push('lemma');
               vals.push(deriveIngredientLemmaInMain(n));
             }
+
             const placeholders = cols.map(() => '?').join(', ');
             db.run(
               `INSERT INTO ingredients (${cols.join(', ')}) VALUES (${placeholders});`,
@@ -7740,6 +8396,7 @@ function normalizeRecipeSizeNameList(rawSizes) {
 
 function getVisibleSizeNamePool(db) {
   if (!db) return [];
+  ensureSizesSchemaInMain(db);
   const tableExists = (name) => {
     try {
       const q = db.exec(
@@ -7770,7 +8427,7 @@ function getVisibleSizeNamePool(db) {
       FROM sizes
       WHERE name IS NOT NULL
         AND trim(name) != ''
-        AND COALESCE(is_hidden, 0) = 0
+        AND COALESCE(is_removed, 0) = 0
       ORDER BY COALESCE(sort_order, 999999) ASC,
                name COLLATE NOCASE;
     `);
@@ -7820,17 +8477,17 @@ function getVisibleSizeNamePool(db) {
     }
   }
 
-  return names;
+  return sortSizeNames(names);
 }
 
 function createSizeLookupHelpers(db) {
-  const anyVisibleSizeNamed = (name) => {
+  const anySelectableSizeNamed = (name) => {
     try {
       const stmt = db.prepare(
         `SELECT 1
          FROM sizes
          WHERE lower(trim(name)) = lower(trim(?))
-           AND COALESCE(is_hidden, 0) = 0
+           AND COALESCE(is_removed, 0) = 0
          LIMIT 1;`
       );
       stmt.bind([name]);
@@ -7841,7 +8498,7 @@ function createSizeLookupHelpers(db) {
       return false;
     }
   };
-  return { anyVisibleSizeNamed };
+  return { anySelectableSizeNamed };
 }
 
 function upsertVisibleSizesFromList(db, sizeNames) {
@@ -7893,13 +8550,14 @@ function normalizeRecipeUnitCodeList(rawUnits) {
 }
 
 function getVisibleUnitCodePool(db) {
+  ensureUnitsSchemaInMain(db);
   try {
     const q = db.exec(`
       SELECT DISTINCT code
       FROM units
       WHERE code IS NOT NULL
         AND trim(code) != ''
-        AND COALESCE(is_hidden, 0) = 0
+        AND COALESCE(is_removed, 0) = 0
       ORDER BY COALESCE(sort_order, 999999) ASC,
                code COLLATE NOCASE;
     `);
@@ -7914,13 +8572,13 @@ function getVisibleUnitCodePool(db) {
 }
 
 function createUnitLookupHelpers(db) {
-  const anyVisibleUnitCoded = (code) => {
+  const anySelectableUnitCoded = (code) => {
     try {
       const stmt = db.prepare(
         `SELECT 1
          FROM units
          WHERE lower(trim(code)) = lower(trim(?))
-           AND COALESCE(is_hidden, 0) = 0
+           AND COALESCE(is_removed, 0) = 0
          LIMIT 1;`
       );
       stmt.bind([code]);
@@ -7931,7 +8589,7 @@ function createUnitLookupHelpers(db) {
       return false;
     }
   };
-  return { anyVisibleUnitCoded };
+  return { anySelectableUnitCoded };
 }
 
 function createTagLookupHelpers(db) {
@@ -8184,6 +8842,7 @@ async function loadRecipeEditorPage() {
   window.recipeId = recipeId;
   ensureRecipeTagsSchemaInMain(db);
   ensureSizesSchemaInMain(db);
+  ensureUnitsSchemaInMain(db);
 
   // Notes are recipe-level (stored on recipe_ingredient_map), not shopping-item-level.
   // Ensure the DB has the right column and backfill once for legacy DBs.
@@ -8385,9 +9044,9 @@ async function loadRecipeEditorPage() {
             ensureSizesSchemaInMain(db);
             const { getVisibleCanonicalId, anyIngredientNamed } =
               createIngredientLookupHelpers(db);
-            const { anyVisibleUnitCoded } = createUnitLookupHelpers(db);
+            const { anySelectableUnitCoded } = createUnitLookupHelpers(db);
             const { anyVisibleTagNamed } = createTagLookupHelpers(db);
-            const { anyVisibleSizeNamed } = createSizeLookupHelpers(db);
+            const { anySelectableSizeNamed } = createSizeLookupHelpers(db);
             const unknownUnique = [];
             const seenUnknown = new Set();
             recipeModel.sections.forEach((sec) => {
@@ -8454,7 +9113,7 @@ async function loadRecipeEditorPage() {
                 const key = rawUnit.toLowerCase();
                 if (seenUnknownUnits.has(key)) return;
                 seenUnknownUnits.add(key);
-                if (anyVisibleUnitCoded(rawUnit)) return;
+                if (anySelectableUnitCoded(rawUnit)) return;
                 unknownUnitUnique.push(rawUnit);
               });
             });
@@ -8499,7 +9158,7 @@ async function loadRecipeEditorPage() {
                 const key = rawSize.toLowerCase();
                 if (seenUnknownSizes.has(key)) return;
                 seenUnknownSizes.add(key);
-                if (anyVisibleSizeNamed(rawSize)) return;
+                if (anySelectableSizeNamed(rawSize)) return;
                 unknownSizeUnique.push(rawSize);
               });
             });

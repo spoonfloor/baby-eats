@@ -649,9 +649,9 @@
     const db = getDb();
     if (!db) return [];
     // Keep it simple: suggest unit codes.
-    const hasHidden = tableHasColumn(db, 'units', 'is_hidden');
-    const where = hasHidden
-      ? `code IS NOT NULL AND trim(code) != '' AND COALESCE(is_hidden, 0) = 0`
+    const hasRemoved = tableHasColumn(db, 'units', 'is_removed');
+    const where = hasRemoved
+      ? `code IS NOT NULL AND trim(code) != '' AND COALESCE(is_removed, 0) = 0`
       : `code IS NOT NULL AND trim(code) != ''`;
     const q = safeExec(
       db,
@@ -683,7 +683,7 @@
            FROM sizes
            WHERE name IS NOT NULL
              AND trim(name) != ''
-             AND COALESCE(is_hidden, 0) = 0
+             AND COALESCE(is_removed, 0) = 0
            ORDER BY COALESCE(sort_order, 999999) ASC,
                     name COLLATE NOCASE;`
         ),
@@ -760,7 +760,13 @@
       out.push(v);
     });
 
-    out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const sizeSortHelpers =
+      window.__sizeSortHelpers &&
+      typeof window.__sizeSortHelpers.sortSizeNames === 'function'
+        ? window.__sizeSortHelpers
+        : null;
+    if (sizeSortHelpers) out.splice(0, out.length, ...sizeSortHelpers.sortSizeNames(out));
+    else out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     poolCache.sizeAll = out;
     return out;
   }

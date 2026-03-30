@@ -286,6 +286,37 @@ function ensureRecipeIngredientMapDisplayNameSchema(activeDb) {
   return true;
 }
 
+function ensureRecipeIngredientMapVariantSizeSchema(activeDb) {
+  if (!activeDb) return false;
+  const cols = getTableColumns(activeDb, 'recipe_ingredient_map').map((c) =>
+    String(c).toLowerCase()
+  );
+  if (!cols.includes('variant')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN variant TEXT;'
+      );
+    } catch (_) {}
+  }
+  if (!cols.includes('size')) {
+    try {
+      activeDb.run(
+        'ALTER TABLE recipe_ingredient_map ADD COLUMN size TEXT;'
+      );
+    } catch (_) {}
+  }
+  // Backfill from ingredients table for existing rows that have no rim-level variant/size.
+  try {
+    activeDb.run(`
+      UPDATE recipe_ingredient_map SET
+        variant = COALESCE(variant, (SELECT i.variant FROM ingredients i WHERE i.ID = recipe_ingredient_map.ingredient_id)),
+        size = COALESCE(size, (SELECT i.size FROM ingredients i WHERE i.ID = recipe_ingredient_map.ingredient_id))
+      WHERE ingredient_id IS NOT NULL AND variant IS NULL AND size IS NULL;
+    `);
+  } catch (_) {}
+  return true;
+}
+
 function ensureIngredientSynonymsSchema(activeDb) {
   if (!activeDb) return false;
   const exists = tableExists(activeDb, 'ingredient_synonyms');
@@ -306,6 +337,42 @@ function ensureIngredientSynonymsSchema(activeDb) {
     );
   } catch (_) {}
   return true;
+}
+
+function propagateIngredientGrammarFlags(activeDb) {
+  if (!activeDb) return;
+  try {
+    activeDb.run(`
+      UPDATE ingredients SET
+        is_mass_noun = (
+          SELECT MAX(COALESCE(s.is_mass_noun, 0))
+          FROM ingredients s WHERE lower(s.name) = lower(ingredients.name)
+        ),
+        plural_by_default = (
+          SELECT MAX(COALESCE(s.plural_by_default, 0))
+          FROM ingredients s WHERE lower(s.name) = lower(ingredients.name)
+        ),
+        plural_override = CASE
+          WHEN COALESCE(plural_override, '') = '' THEN COALESCE(
+            (SELECT s.plural_override FROM ingredients s
+             WHERE lower(s.name) = lower(ingredients.name)
+               AND COALESCE(s.plural_override, '') != '' LIMIT 1),
+            '')
+          ELSE plural_override
+        END
+      WHERE COALESCE(is_mass_noun, 0) = 0
+        AND COALESCE(plural_by_default, 0) = 0
+        AND COALESCE(plural_override, '') = ''
+        AND EXISTS (
+          SELECT 1 FROM ingredients s
+          WHERE lower(s.name) = lower(ingredients.name)
+            AND s.ID != ingredients.ID
+            AND (COALESCE(s.is_mass_noun, 0) != 0
+              OR COALESCE(s.plural_by_default, 0) != 0
+              OR COALESCE(s.plural_override, '') != '')
+        );
+    `);
+  } catch (_) {}
 }
 
 function ensureRecipeTagsSchema(activeDb) {
@@ -386,6 +453,8 @@ window.bridge = {
   ensureRecipeIngredientMapDisplayNameSchema,
   ensureIngredientSynonymsSchema,
   ensureRecipeTagsSchema,
+  propagateIngredientGrammarFlags,
+  ensureRecipeIngredientMapVariantSizeSchema,
   writeIngredientSortOrderFromModel,
 };
 
@@ -503,8 +572,8 @@ function loadRecipeFromDB(db, recipeId) {
     hasQtyApprox ? 'COALESCE(rim.quantity_is_approx, 0) AS quantity_is_approx' : '0 AS quantity_is_approx',
     'rim.unit',
     recipeDisplayNameSql,
-    'i.variant',
-    'i.size',
+    rimHas('variant') ? "COALESCE(NULLIF(TRIM(rim.variant), ''), i.variant, '') AS variant" : "COALESCE(i.variant, '') AS variant",
+    rimHas('size') ? "COALESCE(NULLIF(TRIM(rim.size), ''), i.size, '') AS size" : "COALESCE(i.size, '') AS size",
     hasLemma ? 'i.lemma' : 'NULL AS lemma',
     hasPluralByDefault ? 'COALESCE(i.plural_by_default, 0) AS plural_by_default' : '0 AS plural_by_default',
     hasIsMassNoun ? 'COALESCE(i.is_mass_noun, 0) AS is_mass_noun' : '0 AS is_mass_noun',
@@ -865,10 +934,14 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   ensureRecipeIngredientMapQuantityRangeSchema(activeDb);
   // Ensure display_name column exists for preserving typed ingredient names.
   ensureRecipeIngredientMapDisplayNameSchema(activeDb);
+  // Ensure variant/size columns exist on recipe_ingredient_map.
+  ensureRecipeIngredientMapVariantSizeSchema(activeDb);
   // Ensure ingredient synonyms table exists.
   ensureIngredientSynonymsSchema(activeDb);
   // Ensure schema supports is_alt flag.
   ensureRecipeIngredientMapIsAltSchema(activeDb);
+  // Repair any same-name ingredients missing grammar flags from a sibling.
+  propagateIngredientGrammarFlags(activeDb);
 
   const ingredientsCols = getTableColumns(activeDb, 'ingredients');
   const rimCols = getTableColumns(activeDb, 'recipe_ingredient_map');
@@ -941,35 +1014,15 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
 
   const findOrCreateIngredientId = (ing) => {
     const name = (ing.name || '').trim();
-    const variant = (ing.variant || '').trim();
-    const size = (ing.size || '').trim();
     const loc = (ing.locationAtHome || '').trim();
 
-    const where = ['lower(name) = lower(?)'];
-    const params = [name];
-
-    if (ingHas('variant')) {
-      where.push("COALESCE(variant, '') = ?");
-      params.push(variant);
-    }
-    if (ingHas('size')) {
-      where.push("COALESCE(size, '') = ?");
-      params.push(size);
-    }
-    if (ingHas('location_at_home')) {
-      where.push("COALESCE(location_at_home, '') = ?");
-      params.push(loc);
-    }
-
-    // Use prepared statements (SQL.js exec() is not reliably parameterized).
+    // Match on name only — variant/size are per-recipe-line (stored on rim).
     let foundId = null;
     const selStmt = activeDb.prepare(
-      `SELECT ${ingIdCol} AS id FROM ingredients WHERE ${where.join(
-        ' AND '
-      )} LIMIT 1;`
+      `SELECT ${ingIdCol} AS id FROM ingredients WHERE lower(name) = lower(?) LIMIT 1;`
     );
     try {
-      selStmt.bind(params);
+      selStmt.bind([name]);
       if (selStmt.step()) {
         const row = selStmt.getAsObject();
         if (row && row.id != null) {
@@ -1003,21 +1056,13 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       if (foundId != null) return foundId;
     } catch (_) {}
 
-    // Insert new ingredient row (best-effort to include extra columns if present)
+    // Insert new ingredient row — variant/size belong on recipe_ingredient_map now.
     const cols = ['name'];
     const vals = [name];
 
     if (ingHas('lemma')) {
       cols.push('lemma');
       vals.push(deriveIngredientLemma(name));
-    }
-    if (ingHas('variant')) {
-      cols.push('variant');
-      vals.push(variant);
-    }
-    if (ingHas('size')) {
-      cols.push('size');
-      vals.push(size);
     }
     if (ingHas('location_at_home')) {
       cols.push('location_at_home');
@@ -1321,6 +1366,14 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       if (rimHasDisplayName && !normalizedIsRecipe) {
         cols.push('display_name');
         vals.push((ing.name || '').trim());
+      }
+      if (rimHas('variant')) {
+        cols.push('variant');
+        vals.push((ing.variant || '').trim());
+      }
+      if (rimHas('size')) {
+        cols.push('size');
+        vals.push((ing.size || '').trim());
       }
 
       // Update existing row if we have a valid rimId still present in DB.

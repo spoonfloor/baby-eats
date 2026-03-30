@@ -2017,21 +2017,12 @@ function openIngredientEditRow({
         isDeprecated: false,
       };
 
-      // Fetch grammar/pluralization fields from the database
+      // Fetch grammar/pluralization fields from the database (name-only lookup).
       try {
         const db = window.dbInstance;
         if (db) {
           const nameSafe = nameTrimmed.replace(/'/g, "''");
-          const variantMatch = (fields.var || '').trim();
-          const variantSafe = variantMatch.replace(/'/g, "''");
-          
-          let whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
-          
-          if (variantMatch) {
-            whereClause += ` AND LOWER(COALESCE(variant, '')) = LOWER('${variantSafe}')`;
-          } else {
-            whereClause += ` AND (variant IS NULL OR variant = '')`;
-          }
+          const whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
           
           const q = db.exec(
             `SELECT lemma, plural_by_default, is_mass_noun, plural_override
@@ -2167,21 +2158,12 @@ function openIngredientEditRow({
         } catch (_) {}
       }
 
-      // Update grammar/pluralization fields from DB if name or variant changed
+      // Update grammar/pluralization fields from DB (name-only lookup).
       try {
         const db = window.dbInstance;
         if (db) {
           const nameSafe = nameTrimmed.replace(/'/g, "''");
-          const variantMatch = (fields.var || '').trim();
-          const variantSafe = variantMatch.replace(/'/g, "''");
-          
-          let whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
-          
-          if (variantMatch) {
-            whereClause += ` AND LOWER(COALESCE(variant, '')) = LOWER('${variantSafe}')`;
-          } else {
-            whereClause += ` AND (variant IS NULL OR variant = '')`;
-          }
+          const whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
           
           const q = db.exec(
             `SELECT lemma, plural_by_default, is_mass_noun, plural_override

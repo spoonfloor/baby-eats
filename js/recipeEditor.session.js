@@ -308,6 +308,7 @@ async function saveRecipeToDB() {
     if (has('category')) insertCols.push('category');
     if (has('sort_order')) insertCols.push('sort_order');
     if (has('is_hidden')) insertCols.push('is_hidden');
+    if (has('is_removed')) insertCols.push('is_removed');
     const insertPlaceholders = insertCols.map(() => '?').join(', ');
     const insertUnitStmt = activeDb.prepare(
       `INSERT INTO units (${insertCols.join(', ')}) VALUES (${insertPlaceholders});`
@@ -329,6 +330,7 @@ async function saveRecipeToDB() {
         if (has('category')) vals.push('');
         if (has('sort_order')) vals.push(nextUnitSort++);
         if (has('is_hidden')) vals.push(0);
+        if (has('is_removed')) vals.push(0);
         insertUnitStmt.run(vals);
       });
     } finally {

@@ -248,6 +248,10 @@
   border-radius: 8px;
 }
 
+.list-view li.list-item--removed {
+  color: var(--ingredient-deprecated-fg);
+}
+
 .app-filter-chip {
   appearance: none;
   border: none;
@@ -679,7 +683,9 @@ body.store-editor-page .store-aisle-move-btn[aria-disabled='true'] {
   cursor: default;
 }
 
-body.shopping-editor-page .shopping-item-status {
+body.shopping-editor-page .shopping-item-status,
+body.unit-editor-page .shopping-item-status,
+body.size-editor-page .shopping-item-status {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -687,26 +693,36 @@ body.shopping-editor-page .shopping-item-status {
   margin-top: 8px;
 }
 
-body.shopping-editor-page .shopping-item-status-row {
+body.shopping-editor-page .shopping-item-status-row,
+body.unit-editor-page .shopping-item-status-row,
+body.size-editor-page .shopping-item-status-row {
   display: flex;
   align-items: center;
   gap: 18px;
 }
 
-body.shopping-editor-page .shopping-item-toggle {
+body.shopping-editor-page .shopping-item-toggle,
+body.unit-editor-page .shopping-item-toggle,
+body.size-editor-page .shopping-item-toggle {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 6px 0;
 }
 
-body.shopping-editor-page .shopping-item-toggle span {
+body.shopping-editor-page .shopping-item-toggle span,
+body.unit-editor-page .shopping-item-toggle span,
+body.size-editor-page .shopping-item-toggle span {
   font-size: 13px;
   color: rgba(0, 0, 0, 0.7);
 }
 
 body.shopping-editor-page .shopping-item-toggle input[type='checkbox'],
-body.shopping-editor-page .shopping-item-toggle input[type='radio'] {
+body.shopping-editor-page .shopping-item-toggle input[type='radio'],
+body.unit-editor-page .shopping-item-toggle input[type='checkbox'],
+body.unit-editor-page .shopping-item-toggle input[type='radio'],
+body.size-editor-page .shopping-item-toggle input[type='checkbox'],
+body.size-editor-page .shopping-item-toggle input[type='radio'] {
   appearance: none;
   -webkit-appearance: none;
   width: 18px;
@@ -719,7 +735,11 @@ body.shopping-editor-page .shopping-item-toggle input[type='radio'] {
 }
 
 body.shopping-editor-page .shopping-item-toggle input[type='checkbox']:checked,
-body.shopping-editor-page .shopping-item-toggle input[type='radio']:checked {
+body.shopping-editor-page .shopping-item-toggle input[type='radio']:checked,
+body.unit-editor-page .shopping-item-toggle input[type='checkbox']:checked,
+body.unit-editor-page .shopping-item-toggle input[type='radio']:checked,
+body.size-editor-page .shopping-item-toggle input[type='checkbox']:checked,
+body.size-editor-page .shopping-item-toggle input[type='radio']:checked {
   border-color: var(--theme-primary);
 }
 
@@ -727,6 +747,18 @@ body.shopping-editor-page
   .shopping-item-toggle
   input[type='checkbox']:checked::after,
 body.shopping-editor-page
+  .shopping-item-toggle
+  input[type='radio']:checked::after,
+body.unit-editor-page
+  .shopping-item-toggle
+  input[type='checkbox']:checked::after,
+body.unit-editor-page
+  .shopping-item-toggle
+  input[type='radio']:checked::after,
+body.size-editor-page
+  .shopping-item-toggle
+  input[type='checkbox']:checked::after,
+body.size-editor-page
   .shopping-item-toggle
   input[type='radio']:checked::after {
   content: '';
@@ -2092,6 +2124,10 @@ body.recipe-editor-page .recipe-tags-editor-field {
 .you-will-need-card .section-header {
   margin-top: 0;
   margin-bottom: 0;
+}
+
+#tagRecipesList {
+  margin-top: 24px;
 }
 
 .ingredient-line a {
