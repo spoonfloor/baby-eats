@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://cdnjs.cloudflare.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Favorite Eats Proto - Recipes</title>
+    <title>Favorite Eats Proto - Shopping List</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
       rel="stylesheet"
@@ -21,19 +21,19 @@
     <link rel="stylesheet" href="../css/overlays.css" />
     <link rel="stylesheet" href="proto.css" />
   </head>
-  <body class="proto-shell-page" data-proto-page="recipes">
+  <body class="proto-shell-page" data-proto-page="shopping-list">
     <div class="proto-shell">
       <header class="proto-appbar">
-        <h1 class="proto-appbar-title" id="protoAppbarTitle">Recipes</h1>
+        <h1 class="proto-appbar-title" id="protoAppbarTitle">Shopping List</h1>
       </header>
 
       <main class="proto-main">
         <section class="proto-card" aria-live="polite">
           <div class="proto-panel-body is-empty" id="protoPanelBody">
             <div class="proto-empty-state" id="protoEmptyState">
-              <div class="proto-empty-icon" id="protoEmptyIcon">menu_book</div>
+              <div class="proto-empty-icon" id="protoEmptyIcon">checklist</div>
               <p class="proto-empty-copy" id="protoEmptyCopy">
-                No recipes loaded yet.
+                No shopping list yet.
               </p>
               <div class="proto-empty-action-row">
                 <button
@@ -44,20 +44,6 @@
                 ></button>
               </div>
             </div>
-
-            <ul
-              class="proto-recipe-list proto-content-region"
-              id="protoRecipeList"
-              data-proto-content-region="true"
-              hidden
-            ></ul>
-
-            <input
-              type="file"
-              id="protoDbFileInput"
-              class="proto-file-input"
-              accept=".db,.sqlite,.sqlite3"
-            />
           </div>
         </section>
       </main>
@@ -69,9 +55,7 @@
       </nav>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js"></script>
     <script src="proto-shell.js"></script>
-    <script src="proto-db.js"></script>
-    <script src="proto-recipes.js"></script>
+    <script src="proto-placeholder.js"></script>
   </body>
 </html>
