@@ -343,6 +343,122 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   return isNegative && rendered !== '0' ? `-${rendered}` : rendered;
 }
 
+/**
+ * Prettify display-only free text (fractions, ranges, ellipsis, smart quotes).
+ * This is intentionally presentational and should not be used for persisted values.
+ * @param {string} rawText
+ * @returns {string}
+ */
+function prettifyDisplayText(rawText) {
+  const replaceWithMap = (input, mapEntries) => {
+    let out = String(input || '');
+    mapEntries.forEach(([rx, repl]) => {
+      out = out.replace(rx, repl);
+    });
+    return out;
+  };
+
+  const prettifyFractionForms = (input) => {
+    const fractionMap = [
+      [/(^|[^\d/])7\s*\/\s*8(?=$|[^\d/])/g, '$1⅞'],
+      [/(^|[^\d/])5\s*\/\s*8(?=$|[^\d/])/g, '$1⅝'],
+      [/(^|[^\d/])3\s*\/\s*8(?=$|[^\d/])/g, '$1⅜'],
+      [/(^|[^\d/])1\s*\/\s*8(?=$|[^\d/])/g, '$1⅛'],
+      [/(^|[^\d/])3\s*\/\s*4(?=$|[^\d/])/g, '$1¾'],
+      [/(^|[^\d/])1\s*\/\s*4(?=$|[^\d/])/g, '$1¼'],
+      [/(^|[^\d/])2\s*\/\s*3(?=$|[^\d/])/g, '$1⅔'],
+      [/(^|[^\d/])1\s*\/\s*3(?=$|[^\d/])/g, '$1⅓'],
+      [/(^|[^\d/])1\s*\/\s*2(?=$|[^\d/])/g, '$1½'],
+      [/\bthree\s+quarters\b/gi, '¾'],
+      [/\b(one|a)\s+quarter\b/gi, '¼'],
+      [/\btwo\s+thirds\b/gi, '⅔'],
+      [/\bone\s+third\b/gi, '⅓'],
+      [/\b(one|a)\s+half\b/gi, '½'],
+      [/\bseven\s+eighths\b/gi, '⅞'],
+      [/\bfive\s+eighths\b/gi, '⅝'],
+      [/\bthree\s+eighths\b/gi, '⅜'],
+      [/\bone\s+eighth\b/gi, '⅛'],
+    ];
+
+    let out = replaceWithMap(input, fractionMap);
+    out = out.replace(/(\d+)\s+([¼½¾⅓⅔⅛⅜⅝⅞])/g, '$1$2');
+    return out;
+  };
+
+  const prettifyRangesAndEllipsis = (input) => {
+    let out = String(input || '');
+    out = out.replace(/(\d)\s*-\s*(\d)/g, '$1–$2');
+    out = out.replace(/\.{3}/g, '…');
+    return out;
+  };
+
+  const prettifyTemperatures = (input) => {
+    let out = String(input || '');
+    // Normalize common temperature forms: "400 degrees F", "350°f" -> "400° F", "350° F"
+    out = out.replace(
+      /(\d+)\s*(?:degrees?|°)\s*([FC])\b/gi,
+      (_, deg, unit) => `${deg}° ${String(unit || '').toUpperCase()}`
+    );
+    return out;
+  };
+
+  const protectMeasurementPrimes = (input) => {
+    const tokenPrefix = '__FE_DISPLAY_PRETTIFY__';
+    const protectedChunks = [];
+    const protect = (rx, text) =>
+      text.replace(rx, (m) => {
+        const token = `${tokenPrefix}${protectedChunks.length}__`;
+        protectedChunks.push(m);
+        return token;
+      });
+
+    let out = String(input || '');
+    out = protect(/\b\d+\s*'\s*\d+\s*"/g, out);
+    out = protect(/\b\d+\s*"/g, out);
+    out = protect(/\b\d+\s*'/g, out);
+
+    return { text: out, protectedChunks, tokenPrefix };
+  };
+
+  const restoreProtectedChunks = (input, protectedChunks, tokenPrefix) => {
+    let out = String(input || '');
+    protectedChunks.forEach((value, idx) => {
+      const token = `${tokenPrefix}${idx}__`;
+      out = out.split(token).join(value);
+    });
+    return out;
+  };
+
+  const prettifySmartQuotes = (input) => {
+    const protectedState = protectMeasurementPrimes(input);
+    let out = protectedState.text;
+    out = out.replace(/([A-Za-z0-9])'([A-Za-z0-9])/g, '$1’$2');
+    out = out.replace(/"([^"\n]+)"/g, '“$1”');
+    out = out.replace(/'([^'\n]+)'/g, '‘$1’');
+    out = out.replace(/(^|[\s([{\u2014-])"(?=\S)/g, '$1“');
+    out = out.replace(/"(?=[$\s)\]}.,!?;:])/g, '”');
+    out = out.replace(/(^|[\s([{\u2014-])'(?=\S)/g, '$1‘');
+    out = out.replace(/'(?=[$\s)\]}.,!?;:])/g, '’');
+    return restoreProtectedChunks(
+      out,
+      protectedState.protectedChunks,
+      protectedState.tokenPrefix
+    );
+  };
+
+  let out = String(rawText || '');
+  if (!out) return out;
+  out = prettifyFractionForms(out);
+  out = prettifyRangesAndEllipsis(out);
+  out = prettifyTemperatures(out);
+  out = prettifySmartQuotes(out);
+  return out;
+}
+
+if (typeof window !== 'undefined' && !window.prettifyDisplayText) {
+  window.prettifyDisplayText = prettifyDisplayText;
+}
+
 // --- Global Undo (single-slot, toast-based) ---
 function showUndoToastGlobal({ message, onUndo, timeoutMs = 6000 } = {}) {
   try {
@@ -757,7 +873,7 @@ if (typeof window !== 'undefined') {
 
   /**
    * Three-outcome dialog (store editor unknown ingredients).
-   * Backdrop click and Escape resolve to "discard" (same as Discard).
+   * Backdrop click and Escape resolve to `dismissChoice` (default: "discard").
    */
   const dialogThreeChoice = ({
     title = '',
@@ -766,6 +882,7 @@ if (typeof window !== 'undefined') {
     fixText = 'Fix input',
     createText = 'Create',
     discardDanger = false,
+    dismissChoice = 'discard',
   } = {}) =>
     new Promise((resolve) => {
       const host = ensureDialogHost();
@@ -843,13 +960,19 @@ if (typeof window !== 'undefined') {
         cleanup();
         resolve(choice);
       };
+      const dismissToChoice =
+        dismissChoice === 'fix' ||
+        dismissChoice === 'discard' ||
+        dismissChoice === 'create'
+          ? dismissChoice
+          : 'discard';
 
       discardBtn.addEventListener('click', () => finish('discard'));
       fixBtn.addEventListener('click', () => finish('fix'));
       createBtn.addEventListener('click', () => finish('create'));
 
       backdrop.addEventListener('mousedown', (e) => {
-        if (e.target === backdrop) finish('discard');
+        if (e.target === backdrop) finish(dismissToChoice);
       });
 
       panel.addEventListener(
@@ -858,7 +981,7 @@ if (typeof window !== 'undefined') {
           if (!e) return;
           if (e.key === 'Escape') {
             e.preventDefault();
-            finish('discard');
+            finish(dismissToChoice);
             return;
           }
           trapTabKey(e, panel);
@@ -1567,8 +1690,41 @@ if (typeof window !== 'undefined') {
 })();
 
 // --- Ingredient grammar helpers (pluralization) ---
+function normalizeIngredientSingularSpelling(raw) {
+  const base = String(raw || '').trim();
+  const lower = base.toLowerCase();
+  if (lower === 'tomatoe') return 'tomato';
+  if (lower === 'potatoe') return 'potato';
+  return base;
+}
+
+function isContainerStyleUnit(rawUnit) {
+  const unit = String(rawUnit || '').trim().toLowerCase();
+  if (!unit) return false;
+  return new Set([
+    'can',
+    'cans',
+    'jar',
+    'jars',
+    'bottle',
+    'bottles',
+    'box',
+    'boxes',
+    'bag',
+    'bags',
+    'package',
+    'packages',
+    'pkg',
+    'pkgs',
+    'carton',
+    'cartons',
+    'tin',
+    'tins',
+  ]).has(unit);
+}
+
 function pluralizeEnglishNoun(singular, pluralOverride) {
-  const base = (singular || '').trim();
+  const base = normalizeIngredientSingularSpelling(singular);
   const override = (pluralOverride || '').trim();
   if (!base) return '';
   if (override) return override;
@@ -1604,16 +1760,49 @@ function pluralizeEnglishNoun(singular, pluralOverride) {
   return base + 's';
 }
 
+function parseNumericQuantityValue(q) {
+  if (q == null) return null;
+  if (typeof q === 'number') return Number.isFinite(q) ? q : null;
+  const raw = String(q).trim();
+  if (!raw) return null;
+
+  // Mixed fraction: "1 1/2"
+  const mixed = raw.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixed) {
+    const whole = Number(mixed[1]);
+    const num = Number(mixed[2]);
+    const den = Number(mixed[3]);
+    if (
+      Number.isFinite(whole) &&
+      Number.isFinite(num) &&
+      Number.isFinite(den) &&
+      den > 0
+    ) {
+      return whole + num / den;
+    }
+  }
+
+  // Simple fraction: "1/4"
+  const fraction = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (fraction) {
+    const num = Number(fraction[1]);
+    const den = Number(fraction[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && den > 0) {
+      return num / den;
+    }
+  }
+
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function isNumericQuantity(q) {
-  if (q == null) return false;
-  if (q === '') return false;
-  const n = typeof q === 'number' ? q : parseFloat(String(q));
-  return Number.isFinite(n);
+  return parseNumericQuantityValue(q) != null;
 }
 
 function getIngredientGrammarBase(displayBase, lemma, pluralOverride) {
   const display = String(displayBase || '').trim();
-  const root = String(lemma || '').trim();
+  const root = normalizeIngredientSingularSpelling(lemma);
   if (!display) return root;
   if (!root) return display;
 
@@ -1660,10 +1849,17 @@ function getIngredientNounDisplay(line) {
 
   const qtyIsNumeric = isNumericQuantity(line.quantity);
   if (qtyIsNumeric) {
-    const n = typeof line.quantity === 'number'
-      ? line.quantity
-      : parseFloat(String(line.quantity));
-    if (Number.isFinite(n) && n === 1) return grammarBase || displayBase;
+    const n = parseNumericQuantityValue(line.quantity);
+    if (n != null) {
+      const EPS = 1e-9;
+      const isSingularQuantity = n > 0 && n <= 1 + EPS;
+      if (isSingularQuantity) {
+        if (isContainerStyleUnit(line.unit)) {
+          return pluralizeEnglishNoun(grammarBase || displayBase, pluralOverride);
+        }
+        return grammarBase || displayBase;
+      }
+    }
     return pluralizeEnglishNoun(grammarBase || displayBase, pluralOverride);
   }
 

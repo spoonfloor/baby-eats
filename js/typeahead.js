@@ -670,95 +670,19 @@
     if (poolCache.sizeAll) return poolCache.sizeAll;
     const db = getDb();
     if (!db) return [];
-
-    // Sizes are first-class when the `sizes` table exists.
-    // Keep legacy source merging as fallback/back-compat.
-    const pools = [];
-
-    pools.push(
-      columnFromExec(
-        safeExec(
-          db,
-          `SELECT DISTINCT name
-           FROM sizes
-           WHERE name IS NOT NULL
-             AND trim(name) != ''
-             AND COALESCE(is_removed, 0) = 0
-           ORDER BY COALESCE(sort_order, 999999) ASC,
-                    name COLLATE NOCASE;`
-        ),
-        0
-      )
+    const out = columnFromExec(
+      safeExec(
+        db,
+        `SELECT DISTINCT name
+         FROM sizes
+         WHERE name IS NOT NULL
+           AND trim(name) != ''
+           AND COALESCE(is_removed, 0) = 0
+         ORDER BY COALESCE(sort_order, 999999) ASC,
+                  name COLLATE NOCASE;`
+      ),
+      0
     );
-
-    // Per-recipe ingredient sizes (primary use in the tray)
-    pools.push(
-      columnFromExec(
-        safeExec(
-          db,
-          `SELECT DISTINCT size
-           FROM recipe_ingredient_map
-           WHERE size IS NOT NULL AND trim(size) != ''
-           ORDER BY size COLLATE NOCASE;`
-        ),
-        0
-      )
-    );
-
-    // Substitute sizes
-    pools.push(
-      columnFromExec(
-        safeExec(
-          db,
-          `SELECT DISTINCT size
-           FROM recipe_ingredient_substitutes
-           WHERE size IS NOT NULL AND trim(size) != ''
-           ORDER BY size COLLATE NOCASE;`
-        ),
-        0
-      )
-    );
-
-    // Shopping item / ingredient sizes list table (if present)
-    pools.push(
-      columnFromExec(
-        safeExec(
-          db,
-          `SELECT DISTINCT size
-           FROM ingredient_sizes
-           WHERE size IS NOT NULL AND trim(size) != ''
-           ORDER BY size COLLATE NOCASE;`
-        ),
-        0
-      )
-    );
-
-    // Legacy single-value ingredient.size (if present)
-    if (tableHasColumn(db, 'ingredients', 'size')) {
-      pools.push(
-        columnFromExec(
-          safeExec(
-            db,
-            `SELECT DISTINCT size
-             FROM ingredients
-             WHERE size IS NOT NULL AND trim(size) != ''
-             ORDER BY size COLLATE NOCASE;`
-          ),
-          0
-        )
-      );
-    }
-
-    const out = [];
-    const seen = new Set();
-    pools.flat().forEach((s) => {
-      const v = norm(s);
-      if (!v) return;
-      const k = lower(v);
-      if (seen.has(k)) return;
-      seen.add(k);
-      out.push(v);
-    });
 
     const sizeSortHelpers =
       window.__sizeSortHelpers &&
@@ -792,48 +716,100 @@
       ? `AND COALESCE(hide_from_shopping_list, 0) = 0`
       : ``;
 
+    const canonicalIds = [];
+    const seenCanonicalIds = new Set();
+    const pushCanonicalIdsFromExec = (result) => {
+      const rows =
+        Array.isArray(result) && result.length > 0 && Array.isArray(result[0].values)
+          ? result[0].values
+          : [];
+      rows.forEach((row) => {
+        const idRaw = Array.isArray(row) ? row[0] : null;
+        const id = Number(idRaw);
+        if (!Number.isFinite(id) || id <= 0 || seenCanonicalIds.has(id)) return;
+        seenCanonicalIds.add(id);
+        canonicalIds.push(id);
+      });
+    };
+
+    // Resolve canonical ingredient IDs for both direct-name and AKA/synonym matches.
+    pushCanonicalIdsFromExec(
+      safeExec(
+        db,
+        `SELECT i.ID
+         FROM ingredients i
+         WHERE lower(trim(i.name)) = lower(trim(?))
+           ${ingVisibilityClause}
+         ORDER BY i.ID ASC;`,
+        [nameText]
+      )
+    );
+    pushCanonicalIdsFromExec(
+      safeExec(
+        db,
+        `SELECT i.ID
+         FROM ingredient_synonyms s
+         JOIN ingredients i ON i.ID = s.ingredient_id
+         WHERE lower(trim(s.synonym)) = lower(trim(?))
+           ${ingVisibilityClause}
+         ORDER BY i.ID ASC;`,
+        [nameText]
+      )
+    );
+
     // Prefer list table when present; fall back to legacy ingredients.variant.
     let q = [];
-    try {
+    if (canonicalIds.length) {
+      const placeholders = canonicalIds.map(() => '?').join(', ');
+      q = safeExec(
+        db,
+        `SELECT DISTINCT v.variant
+         FROM ingredient_variants v
+         WHERE v.ingredient_id IN (${placeholders})
+           AND v.variant IS NOT NULL
+           AND trim(v.variant) != ''
+         ORDER BY v.variant COLLATE NOCASE;`,
+        canonicalIds
+      );
+    } else {
       q = safeExec(
         db,
         `SELECT DISTINCT v.variant
          FROM ingredient_variants v
          JOIN ingredients i ON i.ID = v.ingredient_id
-         WHERE lower(i.name) = lower(?)
+         WHERE lower(trim(i.name)) = lower(trim(?))
            AND v.variant IS NOT NULL
            AND trim(v.variant) != ''
            ${ingVisibilityClause}
          ORDER BY v.variant COLLATE NOCASE;`,
         [nameText]
       );
-    } catch (_) {
-      q = safeExec(
-        db,
-        `SELECT DISTINCT variant
-         FROM ingredients
-         WHERE lower(name) = lower(?)
-           AND variant IS NOT NULL
-           AND trim(variant) != ''
-           ${ingVisibilityClauseNoAlias}
-         ORDER BY variant COLLATE NOCASE;`,
-        [nameText]
-      );
     }
     let out = columnFromExec(q, 0);
     if (!out || out.length === 0) {
-      // Fallback if the join/table doesn't exist.
-      const q2 = safeExec(
-        db,
-        `SELECT DISTINCT variant
-         FROM ingredients
-         WHERE lower(name) = lower(?)
-           AND variant IS NOT NULL
-           AND trim(variant) != ''
-           ${ingVisibilityClauseNoAlias}
-         ORDER BY variant COLLATE NOCASE;`,
-        [nameText]
-      );
+      // Fallback if ingredient_variants doesn't exist yet.
+      const q2 = canonicalIds.length
+        ? safeExec(
+            db,
+            `SELECT DISTINCT variant
+             FROM ingredients
+             WHERE ID IN (${canonicalIds.map(() => '?').join(', ')})
+               AND variant IS NOT NULL
+               AND trim(variant) != ''
+             ORDER BY variant COLLATE NOCASE;`,
+            canonicalIds
+          )
+        : safeExec(
+            db,
+            `SELECT DISTINCT variant
+             FROM ingredients
+             WHERE lower(trim(name)) = lower(trim(?))
+               AND variant IS NOT NULL
+               AND trim(variant) != ''
+               ${ingVisibilityClauseNoAlias}
+             ORDER BY variant COLLATE NOCASE;`,
+            [nameText]
+          );
       out = columnFromExec(q2, 0);
     }
     poolCache.variantsByName.set(key, out);

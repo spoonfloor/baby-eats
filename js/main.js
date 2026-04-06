@@ -79,6 +79,15 @@ function isTypingContext(target) {
   return !!(el?.closest(selector) || active?.closest(selector));
 }
 
+function isAppBarSearchContext(target) {
+  const el = target instanceof Element ? target : null;
+  const active =
+    document.activeElement instanceof Element ? document.activeElement : null;
+  return !!(
+    el?.closest?.('#appBarSearchInput') || active?.closest?.('#appBarSearchInput')
+  );
+}
+
 function renderTopLevelEmptyState(listEl, message) {
   if (!(listEl instanceof HTMLElement)) return;
   listEl.innerHTML = '';
@@ -813,7 +822,7 @@ initSqlJs({
 
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key))
         return;
-      if (isTypingContext(e.target)) return;
+      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return;
 
       const idx = TOP_LEVEL_PAGES.indexOf(pageId);
       if (idx === -1) return; // only act on top-level list pages
@@ -848,7 +857,7 @@ initSqlJs({
 
       if (e.key !== 'ArrowUp') return;
       if (!CHILD_EDITOR_PAGES.has(pageId)) return;
-      if (isTypingContext(e.target)) return;
+      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return;
 
       const backBtn = document.getElementById('appBarBackBtn');
       if (!backBtn) return;
@@ -1327,6 +1336,9 @@ async function loadRecipesPage() {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
       }
     });
   }
@@ -1523,6 +1535,8 @@ async function loadShoppingPage() {
           name: row.name || '',
           variants: [],
           recentSortId: Number.isFinite(Number(row.id)) ? Number(row.id) : 0,
+          recipeUseCount: 0,
+          aisleUseCount: 0,
           _deprecatedFlags: [],
           _hiddenFlags: [],
           _homeLocations: [],
@@ -1604,6 +1618,87 @@ async function loadShoppingPage() {
     );
   }
 
+  const buildShoppingUsageCountMaps = () => {
+    const recipeCounts = new Map();
+    const aisleCounts = new Map();
+
+    try {
+      const recipeQ = db.exec(`
+        SELECT name_key, COUNT(DISTINCT recipe_id) AS recipe_count
+        FROM (
+          SELECT lower(i.name) AS name_key, rim.recipe_id
+          FROM recipe_ingredient_map rim
+          JOIN ingredients i ON i.ID = rim.ingredient_id
+          UNION ALL
+          SELECT lower(i2.name) AS name_key, rim.recipe_id
+          FROM recipe_ingredient_substitutes ris
+          JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+          JOIN ingredients i2 ON i2.ID = ris.ingredient_id
+        ) refs
+        GROUP BY name_key;
+      `);
+      if (Array.isArray(recipeQ) && recipeQ.length && Array.isArray(recipeQ[0].values)) {
+        recipeQ[0].values.forEach(([nameKey, recipeCount]) => {
+          const key = String(nameKey || '').trim().toLowerCase();
+          if (!key) return;
+          const count = Number(recipeCount);
+          recipeCounts.set(key, Number.isFinite(count) ? count : 0);
+        });
+      }
+    } catch (err) {
+      console.warn('buildShoppingUsageCountMaps: recipe count query failed', err);
+    }
+
+    try {
+      const hasBaseAisleTable = tableExists('ingredient_store_location');
+      const hasVariantAisleTable = tableExists('ingredient_variant_store_location');
+      const aisleSources = [];
+      if (hasBaseAisleTable) {
+        aisleSources.push(`
+          SELECT lower(i.name) AS name_key, isl.store_location_id AS aisle_id
+          FROM ingredient_store_location isl
+          JOIN ingredients i ON i.ID = isl.ingredient_id
+        `);
+      }
+      if (hasVariantAisleTable) {
+        aisleSources.push(`
+          SELECT lower(i.name) AS name_key, ivsl.store_location_id AS aisle_id
+          FROM ingredient_variant_store_location ivsl
+          JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
+          JOIN ingredients i ON i.ID = v.ingredient_id
+        `);
+      }
+      if (aisleSources.length) {
+        const aisleQ = db.exec(`
+          SELECT name_key, COUNT(DISTINCT aisle_id) AS aisle_count
+          FROM (
+            ${aisleSources.join('\nUNION ALL\n')}
+          ) refs
+          GROUP BY name_key;
+        `);
+        if (Array.isArray(aisleQ) && aisleQ.length && Array.isArray(aisleQ[0].values)) {
+          aisleQ[0].values.forEach(([nameKey, aisleCount]) => {
+            const key = String(nameKey || '').trim().toLowerCase();
+            if (!key) return;
+            const count = Number(aisleCount);
+            aisleCounts.set(key, Number.isFinite(count) ? count : 0);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('buildShoppingUsageCountMaps: aisle count query failed', err);
+    }
+
+    return { recipeCounts, aisleCounts };
+  };
+
+  const shoppingUsageCounts = buildShoppingUsageCountMaps();
+  shoppingRows.forEach((item) => {
+    const key = String(item?.name || '').trim().toLowerCase();
+    item.recipeUseCount = Number(shoppingUsageCounts.recipeCounts.get(key) || 0);
+    item.aisleUseCount = Number(shoppingUsageCounts.aisleCounts.get(key) || 0);
+  });
+
   const shoppingLocationChipDefs = [
     { id: 'fridge', label: 'fridge' },
     { id: 'freezer', label: 'freezer' },
@@ -1621,6 +1716,8 @@ async function loadShoppingPage() {
     { id: 'hidden', label: 'hidden', kind: 'flag' },
     { id: 'removed', label: 'removed', kind: 'flag' },
     ...shoppingLocationChipDefs.map((c) => ({ ...c, kind: 'location' })),
+    { id: 'no recipe', label: 'no recipe', kind: 'usage' },
+    { id: 'no aisle', label: 'no aisle', kind: 'usage' },
   ];
   const activeFilterChips = new Set();
   let shoppingChipCounts = new Map();
@@ -1690,6 +1787,12 @@ async function loadShoppingPage() {
       }
       const locId = normalizeLocationForChip(item?.locationAtHome);
       counts.set(locId, (counts.get(locId) || 0) + 1);
+      if (Number(item?.recipeUseCount || 0) <= 0) {
+        counts.set('no recipe', (counts.get('no recipe') || 0) + 1);
+      }
+      if (Number(item?.aisleUseCount || 0) <= 0) {
+        counts.set('no aisle', (counts.get('no aisle') || 0) + 1);
+      }
     });
     shoppingChipCounts = counts;
   };
@@ -1760,6 +1863,8 @@ async function loadShoppingPage() {
     const removedOnly = activeFilterChips.has('removed');
     const hiddenOnly = activeFilterChips.has('hidden');
     const notFoodOnly = activeFilterChips.has('not food');
+    const noRecipeOnly = activeFilterChips.has('no recipe');
+    const noAisleOnly = activeFilterChips.has('no aisle');
     const activeLocationIds = shoppingLocationChipDefs
       .map((c) => c.id)
       .filter((id) => activeFilterChips.has(id));
@@ -1780,12 +1885,20 @@ async function loadShoppingPage() {
       const locationId = normalizeLocationForChip(item?.locationAtHome);
       const matchesLocation =
         activeLocationIds.length === 0 || activeLocationIds.includes(locationId);
+      const matchesNoRecipe = noRecipeOnly
+        ? Number(item?.recipeUseCount || 0) <= 0
+        : true;
+      const matchesNoAisle = noAisleOnly
+        ? Number(item?.aisleUseCount || 0) <= 0
+        : true;
       return (
         matchesSearch &&
         matchesRemoved &&
         matchesHidden &&
         matchesFood &&
-        matchesLocation
+        matchesLocation &&
+        matchesNoRecipe &&
+        matchesNoAisle
       );
     });
     filtered.sort((a, b) => {
@@ -2241,6 +2354,9 @@ async function loadShoppingPage() {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
       }
     });
   }
@@ -2829,6 +2945,7 @@ function wireChildEditorPage({
         discardText: 'Discard',
         createText: 'Save',
         discardDanger: true,
+        dismissChoice: 'fix',
       });
       if (choice === 'fix') return;
       if (choice === 'create') {
@@ -3412,6 +3529,7 @@ function loadShoppingItemEditorPage() {
             ...valsNoId,
             primaryIngredientId,
           ]);
+
           currentId = Number(primaryIngredientId);
         } else {
           const insertCols = ['name'];
@@ -3483,6 +3601,30 @@ function loadShoppingItemEditorPage() {
         if (variantSizeTargetIds.length > 0) {
           if (hasVariantTable) {
             variantSizeTargetIds.forEach((iid) => {
+              // If this ingredient currently has variant-only aisle links and the user
+              // clears the variant list, migrate those aisle assignments to the base
+              // ingredient row so the item does not silently disappear from aisles.
+              let priorVariantAisleIds = [];
+              if (hasVariantAisleTable && hasStoreLocationTable) {
+                try {
+                  const priorAislesQ = db.exec(
+                    `SELECT DISTINCT ivsl.store_location_id
+                     FROM ingredient_variant_store_location ivsl
+                     JOIN ingredient_variants iv ON iv.id = ivsl.ingredient_variant_id
+                     WHERE iv.ingredient_id = ?;`,
+                    [iid],
+                  );
+                  priorVariantAisleIds =
+                    priorAislesQ.length && priorAislesQ[0].values.length
+                      ? priorAislesQ[0].values
+                          .map((r) => Number(Array.isArray(r) ? r[0] : NaN))
+                          .filter((n) => Number.isFinite(n))
+                      : [];
+                } catch (_) {
+                  priorVariantAisleIds = [];
+                }
+              }
+
               db.run('DELETE FROM ingredient_variants WHERE ingredient_id = ?;', [
                 iid,
               ]);
@@ -3492,6 +3634,21 @@ function loadShoppingItemEditorPage() {
                   [iid, v, idx + 1],
                 );
               });
+
+              if (
+                variants.length === 0 &&
+                hasStoreLocationTable &&
+                Array.isArray(priorVariantAisleIds) &&
+                priorVariantAisleIds.length > 0
+              ) {
+                priorVariantAisleIds.forEach((aisleId) => {
+                  db.run(
+                    `INSERT OR IGNORE INTO ingredient_store_location (ingredient_id, store_location_id)
+                     VALUES (?, ?);`,
+                    [iid, aisleId],
+                  );
+                });
+              }
             });
           }
 
@@ -4420,15 +4577,11 @@ async function loadUnitsPage() {
       const state = getUnitSizeRowState(unit);
       if (state.isRemoved) li.classList.add('list-item--removed');
 
-      // Display exactly as stored (no forced capitalization)
-      let line = unit.code || '';
-
-      // If we have a human-friendly singular name different from the code, append it
-      if (
-        unit.nameSingular &&
-        unit.nameSingular.toLowerCase() !== (unit.code || '').toLowerCase()
-      ) {
-        line += ` (${unit.nameSingular})`;
+      const code = (unit.code || '').trim();
+      const nameSingular = (unit.nameSingular || '').trim();
+      let line = nameSingular || code;
+      if (nameSingular && code && nameSingular.toLowerCase() !== code.toLowerCase()) {
+        line = `${nameSingular} (${code})`;
       }
 
       li.textContent = line;
@@ -4583,39 +4736,34 @@ async function loadUnitsPage() {
       title: 'New Unit',
       fields: [
         {
-          key: 'code',
-          label: 'Code',
-          value: '',
-          required: true,
-          normalize: (v) => (v || '').trim(),
-        },
-        {
           key: 'nameSingular',
           label: 'Name (singular)',
           value: '',
           required: true,
           normalize: (v) => (v || '').trim(),
         },
+        {
+          key: 'code',
+          label: 'Abbreviation (optional)',
+          value: '',
+          required: false,
+          normalize: (v) => (v || '').trim(),
+        },
       ],
       confirmText: 'Create',
       cancelText: 'Cancel',
       validate: (v) => {
-        if (
-          !v.code ||
-          !v.code.trim() ||
-          !v.nameSingular ||
-          !v.nameSingular.trim()
-        ) {
-          return 'Code and Name (singular) are required.';
+        if (!v.nameSingular || !v.nameSingular.trim()) {
+          return 'Name (singular) is required.';
         }
         return '';
       },
     });
     if (!vals) return;
 
-    const code = (vals.code || '').trim();
     const nameSingular = (vals.nameSingular || '').trim();
-    if (!code || !nameSingular) return;
+    const code = ((vals.code || '').trim() || nameSingular).trim();
+    if (!nameSingular || !code) return;
 
     try {
       // Best-effort sort order: append at end
@@ -4694,6 +4842,9 @@ async function loadUnitsPage() {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
       }
     });
   }
@@ -4920,7 +5071,12 @@ async function loadTagsPage() {
       searchInput.focus();
     });
     searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') e.preventDefault();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
+      }
     });
   }
 
@@ -5611,7 +5767,12 @@ async function loadSizesPage() {
       searchInput.focus();
     });
     searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') e.preventDefault();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
+      }
     });
   }
 
@@ -6032,6 +6193,9 @@ async function loadStoresPage() {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        searchInput.blur();
       }
     });
   }
@@ -6664,7 +6828,7 @@ function loadStoreEditorPage() {
       Aisles
     </h2>
     <div id="storeAislesList" class="store-aisles-list" aria-label="Store aisles"></div>
-    <div id="storeAddAisleCta" class="store-add-aisle-cta" role="button" tabindex="0">
+    <div id="storeAddAisleCtaEmpty" class="store-add-aisle-cta" role="button" tabindex="0">
       <span class="placeholder-prompt">Add an aisle</span>
     </div>`
       : '';
@@ -6675,8 +6839,10 @@ function loadStoreEditorPage() {
     ${aislesBlock}
   `;
 
-    let hoveredAisleAnchor = null;
-    let pointerOverAddAisleCta = false;
+    const STORE_AISLE_SLOT_CLASS = 'store-aisle-slot';
+    const STORE_AISLE_HINT_ACTIVE_CLASS = 'store-aisle-slot--hint-active';
+    const STORE_MASTER_LINK_MODE_CLASS = 'store-master-link-mode';
+
     let hoverModifierActive = false;
     const desktopHoverEnabled = (() => {
       try {
@@ -6689,86 +6855,164 @@ function loadStoreEditorPage() {
       }
     })();
 
-    const parkAddAisleCta = () => {
-      const list = document.getElementById('storeAislesList');
-      const cta = document.getElementById('storeAddAisleCta');
-      if (list && cta && list.contains(cta)) list.after(cta);
+    const syncStoreMasterLinkModeClass = () => {
+      try {
+        document.body.classList.toggle(
+          STORE_MASTER_LINK_MODE_CLASS,
+          hoverModifierActive,
+        );
+      } catch (_) {}
     };
 
-    const hoverRevealArmed = () =>
-      hoverModifierActive || pointerOverAddAisleCta;
-
-    const syncAddAisleCtaByInteraction = () => {
-      const list = document.getElementById('storeAislesList');
-      const cta = document.getElementById('storeAddAisleCta');
-      if (!list || !cta) return;
-      if (aisleRows.length === 0) {
-        hoveredAisleAnchor = null;
-        list.after(cta);
-        cta.hidden = false;
-        return;
-      }
-      if (hoveredAisleAnchor && !hoveredAisleAnchor.isConnected) {
-        hoveredAisleAnchor = null;
-      }
-      const targetAnchor =
-        desktopHoverEnabled && hoverRevealArmed() ? hoveredAisleAnchor : null;
-      if (targetAnchor) {
-        targetAnchor.after(cta);
-        cta.hidden = false;
-        return;
-      }
-      list.after(cta);
-      cta.hidden = true;
+    const syncActiveAisleHintClass = (targetSlot = null) => {
+      try {
+        const list = document.getElementById('storeAislesList');
+        if (!list) return;
+        list
+          .querySelectorAll(`.${STORE_AISLE_HINT_ACTIVE_CLASS}`)
+          .forEach((el) => el.classList.remove(STORE_AISLE_HINT_ACTIVE_CLASS));
+        if (
+          targetSlot &&
+          targetSlot.classList &&
+          targetSlot.classList.contains(STORE_AISLE_SLOT_CLASS)
+        ) {
+          targetSlot.classList.add(STORE_AISLE_HINT_ACTIVE_CLASS);
+        }
+      } catch (_) {}
     };
 
-    const syncAddAisleCtaAfterRender = () => {
-      syncAddAisleCtaByInteraction();
+    const getTextareaLineBoundsAtCaret = (textarea, caretPos) => {
+      const value = String(textarea && textarea.value ? textarea.value : '');
+      const pos =
+        caretPos != null && Number.isFinite(caretPos)
+          ? Number(caretPos)
+          : Number(textarea && textarea.selectionStart != null ? textarea.selectionStart : 0);
+      const prevNl = value.lastIndexOf('\n', Math.max(0, pos - 1));
+      const lineStart = prevNl === -1 ? 0 : prevNl + 1;
+      const nextNl = value.indexOf('\n', pos);
+      const lineEnd = nextNl === -1 ? value.length : nextNl;
+      return { lineStart, lineEnd };
     };
 
-    const wireAddAisleCtaHover = () => {
-      if (!desktopHoverEnabled) return;
-      const cta = document.getElementById('storeAddAisleCta');
+    const getTextareaLineTextAtCaret = (textarea) => {
+      if (!(textarea instanceof HTMLTextAreaElement)) return '';
+      const caretPos = Number(textarea.selectionStart ?? 0);
+      const { lineStart, lineEnd } = getTextareaLineBoundsAtCaret(textarea, caretPos);
+      return String(textarea.value || '').slice(lineStart, lineEnd);
+    };
+
+    const getShoppingMatchByName = (rawName) => {
+      const name = String(rawName || '').trim();
+      const db = window.dbInstance;
+      if (!name || !db) return null;
+
+      try {
+        const directQ = db.exec(
+          `SELECT ID, name
+           FROM ingredients
+           WHERE lower(trim(name)) = lower(trim(?))
+           ORDER BY ID
+           LIMIT 1;`,
+          [name],
+        );
+        if (directQ.length && directQ[0].values.length) {
+          const [id, matchedName] = directQ[0].values[0];
+          const normalizedId = Number(id);
+          if (Number.isFinite(normalizedId) && normalizedId > 0) {
+            return {
+              id: normalizedId,
+              name: matchedName == null ? name : String(matchedName),
+            };
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const synonymQ = db.exec(
+          `SELECT i.ID, i.name
+           FROM ingredient_synonyms s
+           JOIN ingredients i ON i.ID = s.ingredient_id
+           WHERE lower(trim(s.synonym)) = lower(trim(?))
+           ORDER BY i.ID
+           LIMIT 1;`,
+          [name],
+        );
+        if (synonymQ.length && synonymQ[0].values.length) {
+          const [id, matchedName] = synonymQ[0].values[0];
+          const normalizedId = Number(id);
+          if (Number.isFinite(normalizedId) && normalizedId > 0) {
+            return {
+              id: normalizedId,
+              name: matchedName == null ? name : String(matchedName),
+            };
+          }
+        }
+      } catch (_) {}
+
+      return null;
+    };
+
+    const extractMasterNameFromAisleLine = (rawLine) => {
+      const line = String(rawLine || '').trim();
+      if (!line) return '';
+      try {
+        const parsed = parseSpecsFromRaw(line, [], ingredientCatalog);
+        if (Array.isArray(parsed) && parsed[0] && parsed[0].baseName) {
+          return String(parsed[0].baseName).trim();
+        }
+      } catch (_) {}
+      return line;
+    };
+
+    const navigateToShoppingMatch = (match) => {
+      const normalizedId = Number(match && match.id);
+      const normalizedName = String(match && match.name ? match.name : '').trim();
+      if (!Number.isFinite(normalizedId) || normalizedId <= 0 || !normalizedName) return;
+      sessionStorage.setItem('selectedShoppingItemId', String(normalizedId));
+      sessionStorage.setItem('selectedShoppingItemName', normalizedName);
+      sessionStorage.removeItem('selectedShoppingItemIsNew');
+      window.location.href = 'shoppingEditor.html';
+    };
+
+    const syncEmptyStateAisleCta = () => {
+      const cta = document.getElementById('storeAddAisleCtaEmpty');
       if (!cta) return;
-      cta.addEventListener('mouseenter', () => {
-        pointerOverAddAisleCta = true;
-        syncAddAisleCtaByInteraction();
-      });
-      cta.addEventListener('mouseleave', () => {
-        pointerOverAddAisleCta = false;
-        if (hoveredAisleAnchor) hoveredAisleAnchor = null;
-        syncAddAisleCtaByInteraction();
-      });
-    };
-    const wireAislesSectionLabelHover = () => {
-      if (!desktopHoverEnabled) return;
-      const label = document.getElementById('storeAislesSectionLabel');
-      if (!label) return;
-      label.addEventListener('mouseenter', (e) => {
-        hoverModifierActive = !!e.altKey;
-        hoveredAisleAnchor = label;
-        syncAddAisleCtaByInteraction();
-      });
-      label.addEventListener('mouseleave', (e) => {
-        const cta = document.getElementById('storeAddAisleCta');
-        if (cta && cta.contains(e.relatedTarget)) return;
-        if (hoveredAisleAnchor === label) hoveredAisleAnchor = null;
-        syncAddAisleCtaByInteraction();
-      });
+      cta.hidden = aisleRows.length > 0;
     };
 
+
+    let lastPointerClientX = -1;
+    let lastPointerClientY = -1;
+
+    const getHoveredSlot = () => {
+      try {
+        if (lastPointerClientX < 0) return null;
+        const el = document.elementFromPoint(lastPointerClientX, lastPointerClientY);
+        if (!el) return null;
+        return el.closest ? el.closest(`.${STORE_AISLE_SLOT_CLASS}`) : null;
+      } catch (_) {
+        return null;
+      }
+    };
 
     const syncAddAisleHoverModifier = (e) => {
       const next = !!(e && e.altKey);
       if (next === hoverModifierActive) return;
       hoverModifierActive = next;
-      syncAddAisleCtaByInteraction();
+      syncStoreMasterLinkModeClass();
+      if (hoverModifierActive) {
+        const slot = getHoveredSlot();
+        if (slot) syncActiveAisleHintClass(slot);
+      } else {
+        syncActiveAisleHintClass(null);
+      }
     };
 
     const clearAddAisleHoverModifier = () => {
       if (!hoverModifierActive) return;
       hoverModifierActive = false;
-      syncAddAisleCtaByInteraction();
+      syncStoreMasterLinkModeClass();
+      syncActiveAisleHintClass(null);
     };
 
     try {
@@ -6776,10 +7020,18 @@ function loadStoreEditorPage() {
         window._storeAddAisleHoverModifierTeardown();
       }
     } catch (_) {}
+    const onPointerMove = (e) => {
+      lastPointerClientX = e.clientX;
+      lastPointerClientY = e.clientY;
+    };
+    document.addEventListener('pointermove', onPointerMove, true);
     document.addEventListener('keydown', syncAddAisleHoverModifier, true);
     document.addEventListener('keyup', syncAddAisleHoverModifier, true);
     window.addEventListener('blur', clearAddAisleHoverModifier);
     window._storeAddAisleHoverModifierTeardown = () => {
+      try {
+        document.removeEventListener('pointermove', onPointerMove, true);
+      } catch (_) {}
       try {
         document.removeEventListener('keydown', syncAddAisleHoverModifier, true);
       } catch (_) {}
@@ -6789,6 +7041,9 @@ function loadStoreEditorPage() {
       try {
         window.removeEventListener('blur', clearAddAisleHoverModifier);
       } catch (_) {}
+      hoverModifierActive = false;
+      syncStoreMasterLinkModeClass();
+      syncActiveAisleHintClass(null);
     };
 
     const closeActiveVariantPicker = ({ commit = true } = {}) => {
@@ -7117,25 +7372,27 @@ function loadStoreEditorPage() {
       if (!list) return;
 
       closeActiveVariantPicker({ commit: true });
-      parkAddAisleCta();
       list.innerHTML = '';
       aisleRows.forEach((a) => {
         const aisleIndex = aisleRows.findIndex((r) => r.id === a.id);
+
+        const slot = document.createElement('div');
+        slot.className = STORE_AISLE_SLOT_CLASS;
+
         const card = document.createElement('div');
         card.className = 'shopping-item-editor-card store-aisle-card';
         card.dataset.aisleId = String(a.id);
         card.tabIndex = 0;
         if (desktopHoverEnabled) {
-          card.addEventListener('mouseenter', (e) => {
+          slot.addEventListener('mouseenter', (e) => {
             hoverModifierActive = !!e.altKey;
-            hoveredAisleAnchor = card;
-            syncAddAisleCtaByInteraction();
+            syncStoreMasterLinkModeClass();
+            if (hoverModifierActive) {
+              syncActiveAisleHintClass(slot);
+            }
           });
-          card.addEventListener('mouseleave', (e) => {
-            const cta = document.getElementById('storeAddAisleCta');
-            if (cta && cta.contains(e.relatedTarget)) return;
-            if (hoveredAisleAnchor === card) hoveredAisleAnchor = null;
-            syncAddAisleCtaByInteraction();
+          slot.addEventListener('mouseleave', () => {
+            syncActiveAisleHintClass(null);
           });
         }
 
@@ -7145,7 +7402,7 @@ function loadStoreEditorPage() {
           target.closest('.store-variant-picker') ||
           target.closest('.store-aisle-move-controls');
 
-        const moveAisleByDelta = (delta) => {
+        const moveAisleByDelta = (delta, options = null) => {
           const from = aisleRows.findIndex((r) => r.id === a.id);
           if (from < 0) return;
           const to = from + delta;
@@ -7153,6 +7410,32 @@ function loadStoreEditorPage() {
           const [row] = aisleRows.splice(from, 1);
           aisleRows.splice(to, 0, row);
           renderAisleCards();
+          if (options?.focus === 'textarea') {
+            const movedCard = document.querySelector(
+              `.store-aisle-card[data-aisle-id="${String(a.id)}"]`,
+            );
+            const movedTextarea = movedCard?.querySelector(
+              '.shopping-item-textarea',
+            );
+            if (movedTextarea) {
+              try {
+                movedTextarea.focus({ preventScroll: true });
+              } catch (_) {
+                movedTextarea.focus();
+              }
+              const start = Number.isFinite(options.selectionStart)
+                ? Number(options.selectionStart)
+                : null;
+              const end = Number.isFinite(options.selectionEnd)
+                ? Number(options.selectionEnd)
+                : start;
+              if (start != null) {
+                try {
+                  movedTextarea.setSelectionRange(start, end ?? start);
+                } catch (_) {}
+              }
+            }
+          }
           refreshDirty();
         };
 
@@ -7537,6 +7820,21 @@ function loadStoreEditorPage() {
         });
 
         ta.addEventListener('click', (e) => {
+          if (
+            e &&
+            e.altKey &&
+            card.classList.contains(STORE_AISLE_HINT_ACTIVE_CLASS)
+          ) {
+            const lineText = getTextareaLineTextAtCaret(ta);
+            const baseName = extractMasterNameFromAisleLine(lineText);
+            const match = getShoppingMatchByName(baseName);
+            if (match) {
+              e.preventDefault();
+              e.stopPropagation();
+              navigateToShoppingMatch(match);
+              return;
+            }
+          }
           if (Number(e?.detail || 0) < 3) return;
           if (activeVariantPicker && activeVariantPicker.textarea === ta) return;
           // Let native selection/caret settle first, then inspect caret context.
@@ -7546,6 +7844,25 @@ function loadStoreEditorPage() {
         });
 
         ta.addEventListener('keydown', (e) => {
+          const wantsAisleReorder =
+            e.metaKey &&
+            !e.ctrlKey &&
+            !e.altKey &&
+            !e.shiftKey &&
+            (e.key === 'ArrowUp' || e.key === 'ArrowDown');
+          if (wantsAisleReorder) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof e.stopImmediatePropagation === 'function') {
+              e.stopImmediatePropagation();
+            }
+            moveAisleByDelta(e.key === 'ArrowUp' ? -1 : 1, {
+              focus: 'textarea',
+              selectionStart: ta.selectionStart,
+              selectionEnd: ta.selectionEnd,
+            });
+            return;
+          }
           if (
             e.key === 'Enter' &&
             activeVariantPicker &&
@@ -7615,68 +7932,100 @@ function loadStoreEditorPage() {
         itemsField.appendChild(ta);
         card.appendChild(itemsField);
 
-        list.appendChild(card);
+        slot.appendChild(card);
+
+        const slotCta = document.createElement('div');
+        slotCta.className = 'store-add-aisle-cta store-add-aisle-cta--per-slot';
+        slotCta.setAttribute('role', 'button');
+        slotCta.tabIndex = 0;
+        const slotCtaLabel = document.createElement('span');
+        slotCtaLabel.className = 'placeholder-prompt';
+        slotCtaLabel.textContent = 'Add an aisle';
+        slotCta.appendChild(slotCtaLabel);
+        slot.appendChild(slotCta);
+
+        list.appendChild(slot);
       });
-      syncAddAisleCtaAfterRender();
+      syncEmptyStateAisleCta();
     };
 
-    const wireAddAisleCtaFocus = () => {
-      let tid = null;
-      const onFocusOut = () => {
-        if (aisleRows.length < 1) return;
-        window.clearTimeout(tid);
-        tid = window.setTimeout(() => {
-          tid = null;
-          syncAddAisleCtaByInteraction();
-        }, 0);
-      };
-      view.addEventListener('focusin', (e) => {
-        if (aisleRows.length < 1) return;
-        syncAddAisleCtaByInteraction();
+    const runAddAisle = async (insertAfterIndex) => {
+      if (!window.ui) {
+        uiToast('UI not ready yet.');
+        return;
+      }
+      const name = await window.ui.prompt({
+        title: 'New Aisle',
+        label: 'Name',
+        value: '',
+        confirmText: 'Create',
+        cancelText: 'Cancel',
+        required: true,
+        normalize: (v) => (v || '').trim(),
       });
-      view.addEventListener('focusout', onFocusOut);
+      if (!name) return;
+
+      const tid = nextTempAisleId--;
+      const newRow = { id: tid, name };
+      if (insertAfterIndex != null && insertAfterIndex >= 0 && insertAfterIndex < aisleRows.length) {
+        aisleRows.splice(insertAfterIndex + 1, 0, newRow);
+      } else {
+        aisleRows.push(newRow);
+      }
+      aisleItemsByAisle.set(tid, []);
+      aisleItemSpecsByAisle.set(tid, []);
+      renderAisleCards();
+      refreshDirty();
     };
 
     const wireAddAisle = () => {
-      const cta = document.getElementById('storeAddAisleCta');
-      if (!cta || !hasPersistedStore) return;
+      if (!hasPersistedStore) return;
+      const list = document.getElementById('storeAislesList');
+      const emptyCta = document.getElementById('storeAddAisleCtaEmpty');
 
-      const run = async () => {
-        if (!window.ui) {
-          uiToast('UI not ready yet.');
-          return;
-        }
-        const name = await window.ui.prompt({
-          title: 'New Aisle',
-          label: 'Name',
-          value: '',
-          confirmText: 'Create',
-          cancelText: 'Cancel',
-          required: true,
-          normalize: (v) => (v || '').trim(),
-        });
-        if (!name) return;
-
-        const tid = nextTempAisleId--;
-        aisleRows.push({ id: tid, name });
-        aisleItemsByAisle.set(tid, []);
-        aisleItemSpecsByAisle.set(tid, []);
-        renderAisleCards();
-        refreshDirty();
-      };
-
-      cta.addEventListener('click', () => void run());
-      cta.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+      if (list) {
+        const slotIndex = (cta) => {
+          const slot = cta.closest('.store-aisle-slot');
+          if (!slot) return undefined;
+          const slots = Array.from(list.querySelectorAll('.store-aisle-slot'));
+          return slots.indexOf(slot);
+        };
+        list.addEventListener('click', (e) => {
+          const cta = e.target.closest('.store-add-aisle-cta--per-slot');
+          if (!cta) return;
           e.preventDefault();
-          void run();
-        }
-      });
+          e.stopPropagation();
+          void runAddAisle(slotIndex(cta));
+        });
+        list.addEventListener('keydown', (e) => {
+          const cta = e.target.closest('.store-add-aisle-cta--per-slot');
+          if (!cta) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void runAddAisle(slotIndex(cta));
+          }
+        });
+      }
+
+      if (emptyCta) {
+        emptyCta.addEventListener('click', () => void runAddAisle());
+        emptyCta.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void runAddAisle();
+          }
+        });
+      }
     };
 
     const flushStoreAislesDraft = async (db, sid) => {
       const { getVisibleCanonicalId, anyIngredientNamed } =
         createIngredientLookupHelpers(db);
+      const {
+        hasVariantTable: hasVariantLookupTable,
+        getIngredientNameById,
+        anyVariantForIngredient,
+      } = createVariantLookupHelpers(db);
       ingredientCatalog = loadIngredientCatalog(db);
       const hasVariantTable = tableExistsLocal(db, 'ingredient_variants');
       const hasVariantAisleTable = tableExistsLocal(
@@ -7815,6 +8164,69 @@ function loadStoreEditorPage() {
           window.favoriteEatsTypeahead?.invalidate?.();
         } catch (_) {}
         ingredientCatalog = loadIngredientCatalog(db);
+        normalizeAllAisleSpecs();
+      }
+
+      if (hasVariantLookupTable) {
+        const unknownVariantUnique = [];
+        const seenUnknownVariants = new Set();
+        for (const r of aisleRows) {
+          const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []);
+          for (const spec of specs) {
+            const base = String(spec.baseName || '').trim();
+            if (!base) continue;
+            const ingredientId = Number(getVisibleCanonicalId(base));
+            if (!Number.isFinite(ingredientId) || ingredientId <= 0) continue;
+            const selected = (spec.selectedVariants || []).filter(isSupportedVariantName);
+            for (const variantName of selected) {
+              if (anyVariantForIngredient(ingredientId, variantName)) continue;
+              const key = `${ingredientId}::${normVariantKey(variantName)}`;
+              if (!key || seenUnknownVariants.has(key)) continue;
+              seenUnknownVariants.add(key);
+              unknownVariantUnique.push({
+                ingredientId,
+                ingredientName: getIngredientNameById(ingredientId) || base,
+                variant: variantName,
+              });
+            }
+          }
+        }
+
+        if (unknownVariantUnique.length) {
+          const resolvedVariants = await resolveUnknownIngredientVariants({
+            db,
+            entries: unknownVariantUnique,
+          });
+          if (!resolvedVariants) {
+            uiToast('Save cancelled.');
+            throw { silent: true };
+          }
+          const replacementMap = resolvedVariants.map;
+          for (const r of aisleRows) {
+            const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []);
+            specs.forEach((spec) => {
+              const base = String(spec.baseName || '').trim();
+              const ingredientId = Number(getVisibleCanonicalId(base));
+              if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+              const nextSelected = [];
+              const seenSelected = new Set();
+              (spec.selectedVariants || []).forEach((variantName) => {
+                const original = String(variantName || '').trim();
+                if (!isSupportedVariantName(original)) return;
+                const key = `${ingredientId}::${normVariantKey(original)}`;
+                const replacement = String(replacementMap.get(key) || original).trim();
+                if (!isSupportedVariantName(replacement)) return;
+                const replacementKey = normVariantKey(replacement);
+                if (!replacementKey || seenSelected.has(replacementKey)) return;
+                seenSelected.add(replacementKey);
+                nextSelected.push(replacement);
+              });
+              spec.selectedVariants = nextSelected;
+            });
+            aisleItemSpecsByAisle.set(r.id, specs);
+            syncDisplayLinesFromSpecs(r.id);
+          }
+        }
       }
 
       for (const aid of [...deletedAisleIds]) {
@@ -7861,18 +8273,42 @@ function loadStoreEditorPage() {
         r.id = newId;
       }
 
-      for (const r of aisleRows) {
-        const sortOrder = aisleRows.findIndex((x) => x.id === r.id) + 1;
+      aisleRows.forEach((r, index) => {
+        const sortOrder = index + 1;
         db.run(
           'UPDATE store_locations SET name = ?, sort_order = ? WHERE ID = ? AND store_id = ?;',
           [r.name || 'Aisle', sortOrder, r.id, sid],
         );
-      }
+      });
+
+      const compareAisleItemSpecsForSave = (a, b) => {
+        const baseA = String(a?.baseName || '').trim();
+        const baseB = String(b?.baseName || '').trim();
+        const byBase = baseA.localeCompare(baseB, undefined, {
+          sensitivity: 'base',
+        });
+        if (byBase !== 0) return byBase;
+
+        const variantsA = (Array.isArray(a?.selectedVariants) ? a.selectedVariants : [])
+          .map((v) => String(v || '').trim())
+          .filter(Boolean);
+        const variantsB = (Array.isArray(b?.selectedVariants) ? b.selectedVariants : [])
+          .map((v) => String(v || '').trim())
+          .filter(Boolean);
+        const byVariants = variantsA
+          .join(', ')
+          .localeCompare(variantsB.join(', '), undefined, {
+            sensitivity: 'base',
+          });
+        if (byVariants !== 0) return byVariants;
+
+        return Number(a?.ingredientId || 0) - Number(b?.ingredientId || 0);
+      };
 
       for (const r of aisleRows) {
-        const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []).filter(
-          (spec) => !blockedKeys.has(normItemKey(spec.baseName)),
-        );
+        const specs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || [])
+          .filter((spec) => !blockedKeys.has(normItemKey(spec.baseName)))
+          .sort(compareAisleItemSpecsForSave);
         const resolvedGenericIds = [];
         const seenGenericId = new Set();
         const ensureVariantId = (ingredientId, variantName) => {
@@ -7953,9 +8389,6 @@ function loadStoreEditorPage() {
 
     if (typeof waitForAppBarReady !== 'function') {
       renderAisleCards();
-      wireAddAisleCtaFocus();
-      wireAddAisleCtaHover();
-      wireAislesSectionLabelHover();
       wireAddAisle();
       return;
     }
@@ -8056,9 +8489,6 @@ function loadStoreEditorPage() {
         /* noop */
       });
     renderAisleCards();
-    wireAddAisleCtaFocus();
-    wireAddAisleCtaHover();
-      wireAislesSectionLabelHover();
     wireAddAisle();
   })();
 }
@@ -8397,17 +8827,6 @@ function normalizeRecipeSizeNameList(rawSizes) {
 function getVisibleSizeNamePool(db) {
   if (!db) return [];
   ensureSizesSchemaInMain(db);
-  const tableExists = (name) => {
-    try {
-      const q = db.exec(
-        `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;`,
-        [name],
-      );
-      return !!(Array.isArray(q) && q.length && q[0].values && q[0].values.length);
-    } catch (_) {
-      return false;
-    }
-  };
   const names = [];
   const seen = new Set();
   const pushMany = (arr) => {
@@ -8436,47 +8855,6 @@ function getVisibleSizeNamePool(db) {
     }
   } catch (_) {}
 
-  // Back-compat fallback for older DBs / partially migrated data.
-  if (!names.length) {
-    if (tableExists('ingredient_sizes')) {
-      try {
-        const q = db.exec(`
-          SELECT DISTINCT size
-          FROM ingredient_sizes
-          WHERE size IS NOT NULL
-            AND trim(size) != ''
-          ORDER BY size COLLATE NOCASE;
-        `);
-        if (Array.isArray(q) && q.length && Array.isArray(q[0].values)) {
-          pushMany(q[0].values.map((row) => (Array.isArray(row) ? row[0] : null)));
-        }
-      } catch (_) {}
-    }
-    if (tableExists('ingredients')) {
-      try {
-        const info = db.exec('PRAGMA table_info(ingredients);');
-        const cols =
-          Array.isArray(info) && info.length && Array.isArray(info[0].values)
-            ? info[0].values
-                .map((row) => String((Array.isArray(row) ? row[1] : '') || '').toLowerCase())
-                .filter(Boolean)
-            : [];
-        if (cols.includes('size')) {
-          const q = db.exec(`
-            SELECT DISTINCT size
-            FROM ingredients
-            WHERE size IS NOT NULL
-              AND trim(size) != ''
-            ORDER BY size COLLATE NOCASE;
-          `);
-          if (Array.isArray(q) && q.length && Array.isArray(q[0].values)) {
-            pushMany(q[0].values.map((row) => (Array.isArray(row) ? row[0] : null)));
-          }
-        }
-      } catch (_) {}
-    }
-  }
-
   return sortSizeNames(names);
 }
 
@@ -8499,34 +8877,6 @@ function createSizeLookupHelpers(db) {
     }
   };
   return { anySelectableSizeNamed };
-}
-
-function upsertVisibleSizesFromList(db, sizeNames) {
-  if (!db) return;
-  const normalized = normalizeRecipeSizeNameList(sizeNames);
-  if (!normalized.length) return;
-  ensureSizesSchemaInMain(db);
-  normalized.forEach((name) => {
-    try {
-      const maxQ = db.exec(
-        'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;'
-      );
-      const nextSort =
-        Array.isArray(maxQ) && maxQ.length && maxQ[0].values.length
-          ? Number(maxQ[0].values[0][0]) || 1
-          : 1;
-      db.run(
-        'INSERT OR IGNORE INTO sizes (name, sort_order) VALUES (?, ?);',
-        [name, nextSort]
-      );
-      db.run(
-        `UPDATE sizes
-         SET is_hidden = 0
-         WHERE lower(trim(name)) = lower(trim(?));`,
-        [name]
-      );
-    } catch (_) {}
-  });
 }
 
 function normalizeRecipeUnitCodeList(rawUnits) {
@@ -8613,6 +8963,146 @@ function createTagLookupHelpers(db) {
   return { anyVisibleTagNamed };
 }
 
+function createVariantLookupHelpers(db) {
+  const colsSet = getIngredientTableColumnSet(db);
+  const visibilitySql = createIngredientVisibilitySql(colsSet);
+  const hasVariantTable = (() => {
+    try {
+      const q = db.exec(
+        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredient_variants' LIMIT 1;`
+      );
+      return !!(Array.isArray(q) && q.length && q[0].values && q[0].values.length);
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  const getIngredientNameById = (ingredientId) => {
+    const iid = Number(ingredientId);
+    if (!Number.isFinite(iid) || iid <= 0) return '';
+    try {
+      const stmt = db.prepare(
+        `SELECT name
+         FROM ingredients
+         WHERE ID = ?
+           AND ${visibilitySql}
+         LIMIT 1;`
+      );
+      stmt.bind([iid]);
+      let out = '';
+      if (stmt.step()) out = String(stmt.get()[0] || '').trim();
+      stmt.free();
+      return out;
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const getVisibleVariantPoolForIngredientId = (ingredientId) => {
+    const iid = Number(ingredientId);
+    if (!Number.isFinite(iid) || iid <= 0 || !hasVariantTable) return [];
+    try {
+      const q = db.exec(
+        `SELECT iv.variant
+         FROM ingredient_variants iv
+         JOIN ingredients i ON i.ID = iv.ingredient_id
+         WHERE iv.ingredient_id = ?
+           AND iv.variant IS NOT NULL
+           AND trim(iv.variant) != ''
+           AND ${visibilitySql.replaceAll('COALESCE(', 'COALESCE(i.')}
+         ORDER BY COALESCE(iv.sort_order, 999999) ASC, iv.id ASC;`,
+        [iid]
+      );
+      const rows = Array.isArray(q) && q.length ? q[0].values : [];
+      const out = [];
+      const seen = new Set();
+      rows.forEach((row) => {
+        const value = String((Array.isArray(row) ? row[0] : '') || '').trim();
+        if (!value) return;
+        const key = value.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(value);
+      });
+      return out;
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const anyVariantForIngredient = (ingredientId, variantName) => {
+    const iid = Number(ingredientId);
+    const vv = String(variantName || '').trim();
+    if (!Number.isFinite(iid) || iid <= 0 || !vv) return false;
+    if (hasVariantTable) {
+      try {
+        const stmt = db.prepare(
+          `SELECT 1
+           FROM ingredient_variants iv
+           JOIN ingredients i ON i.ID = iv.ingredient_id
+           WHERE iv.ingredient_id = ?
+             AND lower(trim(iv.variant)) = lower(trim(?))
+             AND ${visibilitySql.replaceAll('COALESCE(', 'COALESCE(i.')}
+           LIMIT 1;`
+        );
+        stmt.bind([iid, vv]);
+        const ok = stmt.step();
+        stmt.free();
+        return ok;
+      } catch (_) {}
+    }
+    try {
+      const stmt = db.prepare(
+        `SELECT 1
+         FROM ingredients
+         WHERE ID = ?
+           AND lower(trim(COALESCE(variant, ''))) = lower(trim(?))
+           AND ${visibilitySql}
+         LIMIT 1;`
+      );
+      stmt.bind([iid, vv]);
+      const ok = stmt.step();
+      stmt.free();
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const ensureVariantForIngredient = (ingredientId, variantName) => {
+    const iid = Number(ingredientId);
+    const vv = String(variantName || '').trim();
+    if (!Number.isFinite(iid) || iid <= 0 || !vv || !hasVariantTable) return false;
+    try {
+      if (anyVariantForIngredient(iid, vv)) return false;
+      const maxQ = db.exec(
+        `SELECT COALESCE(MAX(sort_order), 0) FROM ingredient_variants WHERE ingredient_id = ?;`,
+        [iid]
+      );
+      const nextSort =
+        maxQ.length && maxQ[0].values.length
+          ? Number(maxQ[0].values[0][0]) + 1
+          : 1;
+      db.run(
+        `INSERT INTO ingredient_variants (ingredient_id, variant, sort_order)
+         VALUES (?, ?, ?);`,
+        [iid, vv, nextSort]
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  return {
+    hasVariantTable,
+    getIngredientNameById,
+    getVisibleVariantPoolForIngredientId,
+    anyVariantForIngredient,
+    ensureVariantForIngredient,
+  };
+}
+
 async function resolveUnknownIngredientNames({
   db,
   names,
@@ -8657,6 +9147,82 @@ async function resolveUnknownIngredientNames({
     finalNames.push(replacement);
   });
   return { map, finalNames };
+}
+
+async function resolveUnknownIngredientVariants({
+  db,
+  entries,
+  title = '',
+  message = '',
+}) {
+  if (!db) return null;
+  const ui = window.ui;
+  if (!ui || typeof ui.unknownItems !== 'function') return null;
+
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) return { map: new Map() };
+  const variantLookup = createVariantLookupHelpers(db);
+  if (!variantLookup.hasVariantTable) return { map: new Map() };
+
+  const deduped = [];
+  const seen = new Set();
+  rows.forEach((row) => {
+    const ingredientId = Number(row?.ingredientId);
+    const ingredientName = String(row?.ingredientName || '').trim();
+    const variant = String(row?.variant || '').trim();
+    if (!Number.isFinite(ingredientId) || ingredientId <= 0 || !variant) return;
+    const key = `${ingredientId}::${variant.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    deduped.push({ ingredientId, ingredientName, variant });
+  });
+  if (!deduped.length) return { map: new Map() };
+
+  const groups = new Map();
+  deduped.forEach((entry) => {
+    if (!groups.has(entry.ingredientId)) groups.set(entry.ingredientId, []);
+    groups.get(entry.ingredientId).push(entry);
+  });
+
+  const replacementMap = new Map();
+  for (const [ingredientId, groupEntries] of groups.entries()) {
+    const ingredientName =
+      String(groupEntries[0]?.ingredientName || '').trim() ||
+      variantLookup.getIngredientNameById(ingredientId) ||
+      'ingredient';
+    const suggestionPool =
+      variantLookup.getVisibleVariantPoolForIngredientId(ingredientId);
+    const dialogTitle =
+      title ||
+      `${
+        groupEntries.length === 1 ? 'New variant' : 'New variants'
+      } for ${ingredientName} (${groupEntries.length})`;
+    const dialogMessage =
+      message ||
+      (groupEntries.length === 1
+        ? `This variant for ${ingredientName} is not in your database. Edit, match it to an existing variant, or save it as a new one.`
+        : `These variants for ${ingredientName} are not in your database. Edit, match them to existing variants, or save them as new ones.`);
+    const result = await ui.unknownItems({
+      title: dialogTitle,
+      message: dialogMessage,
+      items: groupEntries.map((entry) => entry.variant),
+      suggestionPool,
+      applyAllText: 'Apply all',
+      cancelText: 'Cancel',
+      editText: 'Edit',
+      saveText: 'Save',
+    });
+    if (!result || !Array.isArray(result.rows)) return null;
+    result.rows.forEach((row) => {
+      const original = String(row?.original || '').trim();
+      const replacement = String(row?.value || '').trim();
+      if (!original || !replacement) return;
+      const key = `${ingredientId}::${original.toLowerCase()}`;
+      replacementMap.set(key, replacement);
+    });
+  }
+
+  return { map: replacementMap };
 }
 
 async function resolveUnknownTagNames({ db, tags, title = '', message = '' }) {
@@ -8941,14 +9507,13 @@ async function loadRecipeEditorPage() {
     // Allow empty ingredient arrays; UI provides an add CTA instead of data placeholders.
   }
 
-  // --- On load/return: apply full ingredient sort (per section) for display only ---
-  // We intentionally do NOT persist or migrate the DB just by opening a recipe.
+  // --- On load/return: keep ingredient order as loaded ---
   try {
     if (typeof window.recipeEditorSortIngredientsOnLoad === 'function') {
       window.recipeEditorSortIngredientsOnLoad(recipe);
     }
   } catch (err) {
-    console.warn('⚠️ Ingredient sort-on-load failed:', err);
+    console.warn('⚠️ Ingredient load-order normalization failed:', err);
   }
 
   const titleEl = document.getElementById('recipeTitle');
@@ -8959,61 +9524,19 @@ async function loadRecipeEditorPage() {
     mode: 'editor',
     titleText: recipe.title || '',
     onBack: () => {
-      void (async () => {
-        const dirty =
-          typeof window.recipeEditorGetIsDirty === 'function'
-            ? window.recipeEditorGetIsDirty()
-            : false;
-        if (!dirty) {
-          window.location.href = 'recipes.html';
-          return;
-        }
-
-        if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
-          const choice = await window.ui.dialogThreeChoice({
-            title: 'Unsaved changes',
-            message: 'Save changes before exiting?',
-            fixText: 'Cancel',
-            discardText: 'Discard',
-            createText: 'Save',
-            discardDanger: true,
-          });
-
-          if (choice === 'fix') return;
-
-          if (choice === 'create') {
-            try {
-              if (typeof window.recipeEditorSave === 'function') {
-                await window.recipeEditorSave();
-              }
-            } catch (_) {
-              return;
-            }
-            const stillDirty =
-              typeof window.recipeEditorGetIsDirty === 'function'
-                ? window.recipeEditorGetIsDirty()
-                : false;
-            if (stillDirty) return;
-          } else if (choice !== 'discard') {
-            return;
-          }
-
-          window.location.href = 'recipes.html';
-          return;
-        }
-
-        if (
-          await uiConfirm({
-            title: 'Discard Changes?',
-            message: 'Discard unsaved changes?',
-            confirmText: 'Discard',
-            cancelText: 'Cancel',
-            danger: true,
-          })
-        ) {
-          window.location.href = 'recipes.html';
-        }
-      })();
+      const goRecipes = () => {
+        window.location.href = 'recipes.html';
+      };
+      if (typeof window.recipeEditorAttemptExit === 'function') {
+        void window.recipeEditorAttemptExit({
+          reason: 'back',
+          onClean: goRecipes,
+          onDiscard: goRecipes,
+          onSaveSuccess: goRecipes,
+        });
+        return;
+      }
+      goRecipes();
     },
     onCancel: () => {
       if (typeof revertChanges === 'function') {
@@ -9047,6 +9570,12 @@ async function loadRecipeEditorPage() {
             const { anySelectableUnitCoded } = createUnitLookupHelpers(db);
             const { anyVisibleTagNamed } = createTagLookupHelpers(db);
             const { anySelectableSizeNamed } = createSizeLookupHelpers(db);
+            const {
+              hasVariantTable: hasIngredientVariantTable,
+              getIngredientNameById,
+              anyVariantForIngredient,
+              ensureVariantForIngredient,
+            } = createVariantLookupHelpers(db);
             const unknownUnique = [];
             const seenUnknown = new Set();
             recipeModel.sections.forEach((sec) => {
@@ -9100,6 +9629,91 @@ async function loadRecipeEditorPage() {
               if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
                 window.recipeEditorRerenderIngredientsFromModel();
               }
+            }
+
+            if (hasIngredientVariantTable) {
+              const unknownVariantUnique = [];
+              const seenUnknownVariants = new Set();
+              recipeModel.sections.forEach((sec) => {
+                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                rows.forEach((row) => {
+                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                  const linkedRecipeId = Number(row.linkedRecipeId);
+                  const currentRecipeId = Number(recipeModel.id);
+                  const isLinkedSubrecipe =
+                    !!row.isRecipe &&
+                    Number.isFinite(linkedRecipeId) &&
+                    linkedRecipeId > 0 &&
+                    (!Number.isFinite(currentRecipeId) || linkedRecipeId !== currentRecipeId);
+                  if (isLinkedSubrecipe) return;
+                  const rawName = String(row.name || '').trim();
+                  const rawVariant = String(row.variant || '').trim();
+                  if (!rawName || !rawVariant) return;
+                  const ingredientId = Number(getVisibleCanonicalId(rawName));
+                  if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                  if (anyVariantForIngredient(ingredientId, rawVariant)) return;
+                  const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
+                  if (seenUnknownVariants.has(key)) return;
+                  seenUnknownVariants.add(key);
+                  unknownVariantUnique.push({
+                    ingredientId,
+                    ingredientName:
+                      getIngredientNameById(ingredientId) || rawName,
+                    variant: rawVariant,
+                  });
+                });
+              });
+              if (unknownVariantUnique.length) {
+                const resolvedVariants = await resolveUnknownIngredientVariants({
+                  db,
+                  entries: unknownVariantUnique,
+                });
+                if (!resolvedVariants) {
+                  uiToast('Save cancelled.');
+                  return;
+                }
+                const variantReplacementMap = resolvedVariants.map;
+                recipeModel.sections.forEach((sec) => {
+                  const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                  rows.forEach((row) => {
+                    if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                    const rawName = String(row.name || '').trim();
+                    const rawVariant = String(row.variant || '').trim();
+                    if (!rawName || !rawVariant) return;
+                    const ingredientId = Number(getVisibleCanonicalId(rawName));
+                    if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                    const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
+                    const nextVariant = String(
+                      variantReplacementMap.get(key) || ''
+                    ).trim();
+                    if (nextVariant) row.variant = nextVariant;
+                  });
+                });
+                if (
+                  typeof window.recipeEditorRerenderIngredientsFromModel === 'function'
+                ) {
+                  window.recipeEditorRerenderIngredientsFromModel();
+                }
+              }
+
+              const ensuredVariantKeys = new Set();
+              recipeModel.sections.forEach((sec) => {
+                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                rows.forEach((row) => {
+                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                  const rawName = String(row.name || '').trim();
+                  const rawVariant = String(row.variant || '').trim();
+                  if (!rawName || !rawVariant) return;
+                  const ingredientId = Number(getVisibleCanonicalId(rawName));
+                  if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                  const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
+                  if (ensuredVariantKeys.has(key)) return;
+                  ensuredVariantKeys.add(key);
+                  if (!anyVariantForIngredient(ingredientId, rawVariant)) {
+                    ensureVariantForIngredient(ingredientId, rawVariant);
+                  }
+                });
+              });
             }
 
             const unknownUnitUnique = [];
@@ -9236,22 +9850,6 @@ async function loadRecipeEditorPage() {
               recipeModel.tags = normalizedDraftTags;
             }
 
-            // Keep canonical sizes table in sync with whichever sizes remain in the model.
-            const normalizedModelSizes = [];
-            recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
-              rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading') return;
-                const ownSize = String(row.size || '').trim();
-                if (ownSize) normalizedModelSizes.push(ownSize);
-                if (!Array.isArray(row.substitutes)) return;
-                row.substitutes.forEach((sub) => {
-                  const subSize = String(sub?.size || '').trim();
-                  if (subSize) normalizedModelSizes.push(subSize);
-                });
-              });
-            });
-            upsertVisibleSizesFromList(db, normalizedModelSizes);
           }
         } catch (unknownErr) {
           console.warn('Unknown-item resolution skipped:', unknownErr);
@@ -9324,30 +9922,20 @@ async function loadRecipeEditorPage() {
 window.openRecipe = function openRecipe(recipeId) {
   const rid = Number(recipeId);
   if (!Number.isFinite(rid) || rid <= 0) return;
-  void (async () => {
-    const dirty =
-      typeof window.recipeEditorGetIsDirty === 'function'
-        ? window.recipeEditorGetIsDirty()
-        : false;
-    if (dirty) {
-      const choice = await window.ui.dialogThreeChoice({
-        title: 'Unsaved changes',
-        message: 'Save changes before exiting?',
-        fixText: 'Cancel',
-        discardText: 'Discard',
-        createText: 'Save',
-        discardDanger: true,
-      });
-      if (choice === 'fix') return;
-      if (choice === 'create') {
-        if (typeof window.recipeEditorSave === 'function') {
-          await window.recipeEditorSave();
-        }
-      }
-    }
+  const proceed = () => {
     sessionStorage.setItem('selectedRecipeId', String(rid));
     window.location.href = 'recipeEditor.html';
-  })();
+  };
+  if (typeof window.recipeEditorAttemptExit === 'function') {
+    void window.recipeEditorAttemptExit({
+      reason: 'open-recipe',
+      onClean: proceed,
+      onDiscard: proceed,
+      onSaveSuccess: proceed,
+    });
+    return;
+  }
+  proceed();
 };
 
 document.addEventListener('DOMContentLoaded', () => {

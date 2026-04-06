@@ -7,6 +7,41 @@
     /\bif desired\b/i,
   ];
   const QUALITATIVE_AMOUNT_PATTERNS = [/\bto taste\b/i, /\bas needed\b/i];
+  const LEADING_VARIANT_PREFIXES = new Set(['raw', 'frozen', 'smoked', 'fresh', 'dried', 'uncooked']);
+  const INFERRED_LEADING_UNITS = new Set([
+    'head',
+    'heads',
+    'crown',
+    'crowns',
+    'package',
+    'packages',
+    'pkg',
+    'pkgs',
+    'bag',
+    'bags',
+    'shake',
+    'shakes',
+    'stalk',
+    'stalks',
+    'sprig',
+    'sprigs',
+    'handful',
+    'handfuls',
+  ]);
+  const PREP_TRAILING_TERMS = [
+    'chopped',
+    'minced',
+    'diced',
+    'sliced',
+    'crushed',
+    'grated',
+    'shredded',
+    'peeled',
+    'cubed',
+    'julienned',
+    'halved',
+  ];
+  const PREP_TRAILING_MODIFIERS = ['finely', 'coarsely', 'roughly', 'thinly', 'thickly', 'freshly'];
   // Product-driven compounds that should stay as full ingredient names.
   // These are lexicalized ingredients, not adjective+base variant pairs.
   const PROTECTED_COMPOUND_NAMES = new Set(
@@ -95,6 +130,30 @@
       'vegetable stock',
     ].map((v) => String(v || '').toLowerCase())
   );
+  const DRY_BEAN_VARIANTS = new Set(
+    [
+      'pinto',
+      'black',
+      'kidney',
+      'red kidney',
+      'navy',
+      'cannellini',
+      'great northern',
+      'cranberry',
+      'borlotti',
+      'adzuki',
+      'mung',
+      'white',
+    ].map((v) => String(v || '').toLowerCase())
+  );
+  const TOFU_TEXTURE_VARIANTS = new Set(['silken', 'firm', 'extra firm', 'extra-firm']);
+  const SHELLED_VARIANT_BASES = new Set(['peanut', 'peanuts', 'edamame']);
+  const PRODUCE_COLOR_PREFIXES = new Set(['purple', 'red', 'green', 'yellow', 'white']);
+  const COLOR_VARIANT_BASES = new Set(
+    ['cabbage', 'onion', 'carrot', 'potato', 'cauliflower', 'zucchini', 'broccoli'].map((v) =>
+      String(v || '').toLowerCase()
+    )
+  );
 
   function normalizeDash(text) {
     return String(text || '')
@@ -115,13 +174,32 @@
     return n;
   }
 
+  function splitColorQualifiedProduce(text) {
+    const src = normalizeDash(normalizeWhitespace(String(text || '').toLowerCase()));
+    if (!src) return null;
+    const m = src.match(/^([a-z][a-z-]*)\s+(.+)$/);
+    if (!m) return null;
+    const color = m[1];
+    const baseRaw = normalizeWhitespace(m[2] || '');
+    const base = singularizeSimpleNoun(baseRaw);
+    if (!PRODUCE_COLOR_PREFIXES.has(color)) return null;
+    if (!COLOR_VARIANT_BASES.has(base)) return null;
+    return { name: base, variant: color };
+  }
+
   function splitIngredientNameAndVariant(nameText) {
     const raw = normalizeWhitespace(nameText);
     if (!raw) return { name: '', variant: '', size: '' };
     const lower = raw.toLowerCase();
+    const singularizedLower = singularizeSimpleNoun(lower);
     const normalizedLower = normalizeDash(lower);
-    if (PROTECTED_COMPOUND_NAMES.has(lower)) {
+    if (PROTECTED_COMPOUND_NAMES.has(lower) || PROTECTED_COMPOUND_NAMES.has(singularizedLower)) {
       return { name: raw, variant: '', size: '' };
+    }
+
+    const colorProduceSplit = splitColorQualifiedProduce(raw);
+    if (colorProduceSplit) {
+      return { name: colorProduceSplit.name, variant: colorProduceSplit.variant, size: '' };
     }
 
     // Keep these as distinct ingredients, not "oil" variants.
@@ -149,6 +227,52 @@
         variant: sesameMatch[1],
         size: '',
       };
+    }
+
+    // High-confidence tofu texture descriptors.
+    const tofuTextureMatch = normalizedLower.match(/^([a-z][a-z-]*(?:\s+[a-z][a-z-]*)?)\s+tofu$/);
+    if (tofuTextureMatch) {
+      const normalizedTexture = normalizeWhitespace(normalizeDash(tofuTextureMatch[1] || ''));
+      if (TOFU_TEXTURE_VARIANTS.has(normalizedTexture)) {
+        return {
+          name: 'tofu',
+          variant: normalizedTexture,
+          size: '',
+        };
+      }
+    }
+
+    // High-confidence sesame seed prep descriptor.
+    const toastedSesameSeedMatch = normalizedLower.match(/^toasted\s+sesame seeds?$/);
+    if (toastedSesameSeedMatch) {
+      return {
+        name: 'sesame seed',
+        variant: 'toasted',
+        size: '',
+      };
+    }
+
+    // High-confidence pickled ginger descriptor.
+    const pickledGingerMatch = normalizedLower.match(/^pickled\s+ginger$/);
+    if (pickledGingerMatch) {
+      return {
+        name: 'ginger',
+        variant: 'pickled',
+        size: '',
+      };
+    }
+
+    // High-confidence shelled nut/legume descriptor.
+    const shelledMatch = normalizedLower.match(/^shelled\s+(.+)$/);
+    if (shelledMatch) {
+      const shelledBase = singularizeSimpleNoun(normalizeWhitespace(shelledMatch[1] || ''));
+      if (SHELLED_VARIANT_BASES.has(shelledBase)) {
+        return {
+          name: shelledBase,
+          variant: 'shelled',
+          size: '',
+        };
+      }
     }
 
     // Group generic oils under "oil", preserving source modifier as variant.
@@ -236,6 +360,29 @@
       };
     }
 
+    // Common rice style descriptor.
+    const riceStyleMatch = normalizedLower.match(/^(white|brown|jasmine|basmati)\s+rice$/);
+    if (riceStyleMatch) {
+      return {
+        name: 'rice',
+        variant: riceStyleMatch[1],
+        size: '',
+      };
+    }
+
+    // High-confidence dry bean variety descriptors.
+    const beanVariantMatch = normalizedLower.match(/^(.+)\s+beans?$/);
+    if (beanVariantMatch) {
+      const beanVariant = normalizeWhitespace(beanVariantMatch[1] || '');
+      if (DRY_BEAN_VARIANTS.has(beanVariant)) {
+        return {
+          name: 'bean',
+          variant: beanVariant,
+          size: '',
+        };
+      }
+    }
+
     // Egg size descriptors.
     const eggMatch = normalizedLower.match(/^(small|medium|large|extra-large)\s+eggs?$/);
     if (eggMatch) {
@@ -249,10 +396,47 @@
     // Generic produce size descriptors.
     const produceSizeMatch = normalizedLower.match(/^(small|medium|large|extra-large)\s+(.+)$/);
     if (produceSizeMatch) {
+      const produceBase = normalizeWhitespace(produceSizeMatch[2] || '');
+      const produceColorSplit = splitColorQualifiedProduce(produceBase);
+      if (produceColorSplit) {
+        return {
+          name: produceColorSplit.name,
+          variant: produceColorSplit.variant,
+          size: produceSizeMatch[1],
+        };
+      }
       return {
-        name: singularizeSimpleNoun(produceSizeMatch[2]),
+        name: singularizeSimpleNoun(produceBase),
         variant: '',
         size: produceSizeMatch[1],
+      };
+    }
+
+    const potatoTypeMatch = normalizedLower.match(/^(gold|yukon gold|red|yellow|russet)\s+potatoes?$/);
+    if (potatoTypeMatch) {
+      return {
+        name: 'potato',
+        variant: potatoTypeMatch[1],
+        size: '',
+      };
+    }
+
+    const brothLikeMatch = normalizedLower.match(
+      /^([a-z][a-z-]*(?:\s+[a-z][a-z-]*)?)\s+(broth|stock|bouillon|bullion)$/
+    );
+    if (brothLikeMatch) {
+      return {
+        name: brothLikeMatch[2],
+        variant: brothLikeMatch[1],
+        size: '',
+      };
+    }
+
+    if (normalizedLower === 'bay leaves') {
+      return {
+        name: 'bay leaf',
+        variant: '',
+        size: '',
       };
     }
 
@@ -277,6 +461,24 @@
         return {
           name: veganBase,
           variant: 'vegan',
+          size: '',
+        };
+      }
+    }
+
+    const leadingVariantMatch = normalizedLower.match(/^([a-z][a-z-]*)\s+(.+)$/);
+    if (leadingVariantMatch) {
+      const prefix = leadingVariantMatch[1];
+      const base = normalizeWhitespace(leadingVariantMatch[2] || '');
+      const baseLower = base.toLowerCase();
+      if (
+        LEADING_VARIANT_PREFIXES.has(prefix) &&
+        base &&
+        !PROTECTED_COMPOUND_NAMES.has(baseLower)
+      ) {
+        return {
+          name: base,
+          variant: prefix,
           size: '',
         };
       }
@@ -332,6 +534,25 @@
     cans: 'can',
     bunch: 'bunch',
     bunches: 'bunch',
+    // Colloquial count units (e.g., "3 shakes soy sauce").
+    bag: 'bag',
+    bags: 'bag',
+    head: 'head',
+    heads: 'head',
+    package: 'package',
+    packages: 'package',
+    pkg: 'package',
+    pkgs: 'package',
+    shake: 'shake',
+    shakes: 'shake',
+    stalk: 'stalk',
+    stalks: 'stalk',
+    crown: 'crown',
+    crowns: 'crown',
+    sprig: 'sprig',
+    sprigs: 'sprig',
+    handful: 'handful',
+    handfuls: 'handful',
   };
 
   const UNICODE_FRACTIONS = {
@@ -444,7 +665,7 @@
       return null;
     }
 
-    if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+    if (/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(t)) return Number(t);
     return null;
   }
 
@@ -453,7 +674,7 @@
     if (!src) return { quantity: '', rest: '' };
 
     const qtyMatch = src.match(
-      /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])\b\s*(.*)$/
+      /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\b\s*(.*)$/
     );
     if (!qtyMatch) return { quantity: '', rest: src };
 
@@ -489,7 +710,8 @@
       rest = rest.slice(approxMatch[0].length).trim();
     }
 
-    const numToken = '(\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])';
+    const numToken =
+      '(\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?|\\.\\d+|[¼½¾⅓⅔⅛⅜⅝⅞])';
     const plusRx = new RegExp(`^${numToken}\\s*\\+\\s*${numToken}\\b\\s*(.*)$`, 'i');
     const plusMatch = rest.match(plusRx);
     if (plusMatch) {
@@ -509,7 +731,7 @@
       };
     }
 
-    const rangeRx = new RegExp(`^${numToken}\\s*(?:to|-)\\s*${numToken}\\b\\s*(.*)$`, 'i');
+    const rangeRx = new RegExp(`^${numToken}\\s*(?:to|or|-)\\s*${numToken}\\b\\s*(.*)$`, 'i');
     const rangeMatch = rest.match(rangeRx);
     if (rangeMatch) {
       const min = parseFractionText(rangeMatch[1]);
@@ -530,7 +752,7 @@
     const single = parseLeadingQuantity(rest);
     if (single.quantity !== '') {
       const qtyText = `${isApprox ? 'about ' : ''}${String(rest).match(
-        /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])/
+        /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/
       )?.[1] || ''}`.trim();
       const qNum = Number(single.quantity);
       const asNumber = Number.isFinite(qNum) ? qNum : null;
@@ -604,6 +826,124 @@
       text: next,
       parenthetical: inner,
     };
+  }
+
+  function extractLoosePrepNotes(text) {
+    let src = normalizeWhitespace(text);
+    if (!src) return { text: '', prepNotes: '' };
+    let prepNotes = '';
+    const modifierPart = `(?:${PREP_TRAILING_MODIFIERS.join('|')})`;
+    const prepTermPart = `(?:${PREP_TRAILING_TERMS.join('|')})`;
+
+    const leadingGroundMatch = src.match(/^(freshly|finely|coarsely)\s+ground\s+(.+)$/i);
+    if (leadingGroundMatch) {
+      const remainder = normalizeWhitespace(leadingGroundMatch[2]);
+      if (PROTECTED_COMPOUND_NAMES.has(remainder.toLowerCase())) {
+        prepNotes = normalizeWhitespace(`${leadingGroundMatch[1]} ground`);
+        src = remainder;
+      }
+    }
+
+    const leadingPrepRx = new RegExp(
+      `^((?:${modifierPart}\\s+)?${prepTermPart}(?:\\s+and\\s+(?:${modifierPart}\\s+)?${prepTermPart})*)\\s+(.+)$`,
+      'i'
+    );
+    const leadingPrepMatch = src.match(leadingPrepRx);
+    if (leadingPrepMatch) {
+      const normalizedSrcLower = normalizeDash(src.toLowerCase());
+      const keepAsVariant =
+        /^(crushed|diced|whole|peeled|stewed|fire-roasted|roasted|sun-dried)\s+tomatoes?$/.test(
+          normalizedSrcLower
+        );
+      const remainder = normalizeWhitespace(leadingPrepMatch[2]);
+      if (remainder && !keepAsVariant) {
+        src = remainder;
+        prepNotes = normalizeWhitespace(
+          [prepNotes, normalizeWhitespace(leadingPrepMatch[1])].filter(Boolean).join(', ')
+        );
+      }
+    }
+
+    const trailingPrepRx = new RegExp(
+      `^(.+?)\\s+((?:${modifierPart}\\s+)?${prepTermPart}(?:\\s+and\\s+(?:${modifierPart}\\s+)?${prepTermPart})*)$`,
+      'i'
+    );
+    const trailingPrepMatch = src.match(trailingPrepRx);
+    if (trailingPrepMatch) {
+      src = normalizeWhitespace(trailingPrepMatch[1]);
+      prepNotes = normalizeWhitespace(
+        [prepNotes, normalizeWhitespace(trailingPrepMatch[2])].filter(Boolean).join(', ')
+      );
+    }
+
+    return { text: src, prepNotes };
+  }
+
+  function extractInPrepNotes(text) {
+    const src = normalizeWhitespace(text);
+    if (!src) return { text: '', prepNotes: '' };
+    const inPrepMatch = src.match(/^(.+?)\s+(in|into)\s+(.+)$/i);
+    if (!inPrepMatch) return { text: src, prepNotes: '' };
+    const tail = normalizeWhitespace(inPrepMatch[3] || '');
+    if (!tail) return { text: src, prepNotes: '' };
+    // Limit "in/into ..." extraction to known cutting/shape cues.
+    if (
+      !/\b(quarter|half|moons?|slices?|sliced|florets?|rings?|strips?|chunks?|pieces?|dice|diced|mince|minced|chop|chopped|wedges?|shred|shredded)\b/i.test(
+        tail
+      )
+    ) {
+      return { text: src, prepNotes: '' };
+    }
+    return {
+      text: normalizeWhitespace(inPrepMatch[1]),
+      prepNotes: normalizeWhitespace(`${inPrepMatch[2]} ${tail}`),
+    };
+  }
+
+  function normalizeLeadingPrepTail(text) {
+    const src = normalizeWhitespace(text);
+    if (!src) return '';
+    const modifierPart = `(?:${PREP_TRAILING_MODIFIERS.join('|')})`;
+    const prepTermPart = `(?:${PREP_TRAILING_TERMS.join('|')})`;
+    const leadingPrepRx = new RegExp(
+      `^((?:${modifierPart}\\s+)?${prepTermPart}(?:\\s+and\\s+(?:${modifierPart}\\s+)?${prepTermPart})*)\\s+(.+)$`,
+      'i'
+    );
+    const m = src.match(leadingPrepRx);
+    if (!m) return src;
+    return normalizeWhitespace(`${m[2]} ${m[1]}`);
+  }
+
+  function inferUnitAndInlineNoteFromName(text) {
+    let src = normalizeWhitespace(text);
+    if (!src) return { name: '', unit: '', parentheticalNote: '' };
+    let unit = '';
+    let note = '';
+
+    const packageOfMatch = src.match(/^(package|packages|pkg|pkgs)\s+of\s+(.+)$/i);
+    if (packageOfMatch) {
+      unit = 'package';
+      src = normalizeWhitespace(packageOfMatch[2]);
+    }
+
+    const leadingUnitMatch = src.match(/^([a-z][a-z-]*)\s+(.+)$/i);
+    if (leadingUnitMatch && !unit) {
+      const maybeUnit = String(leadingUnitMatch[1] || '').toLowerCase();
+      if (INFERRED_LEADING_UNITS.has(maybeUnit)) {
+        unit = UNIT_ALIASES[maybeUnit] || maybeUnit;
+        src = normalizeWhitespace(leadingUnitMatch[2]);
+      }
+    }
+
+    const weightMatch = src.match(
+      /^(.+?)\s+(about\s+\d+\s+\d+\s*\/\s*\d+\s*(?:lb|oz|g|kg)|about\s+\d+(?:\.\d+)?\s*(?:lb|oz|g|kg)|\d+\s+\d+\s*\/\s*\d+\s*(?:lb|oz|g|kg)|\d+(?:\.\d+)?\s*(?:lb|oz|g|kg))$/i
+    );
+    if (weightMatch) {
+      src = normalizeWhitespace(weightMatch[1]);
+      note = normalizeWhitespace(weightMatch[2]);
+    }
+
+    return { name: src, unit, parentheticalNote: note };
   }
 
   function extractHeapingQualifier(text) {
@@ -683,6 +1023,22 @@
     };
   }
 
+  function parseParentheticalQuantitySize(parentheticalText) {
+    const src = normalizeWhitespace(parentheticalText);
+    if (!src) return null;
+    const qtyParsed = parseQuantityDescriptor(src);
+    if (qtyParsed.quantityMin == null || qtyParsed.quantityMax == null) return null;
+    const sizeToken = normalizeDash(String(qtyParsed.rest || '').toLowerCase());
+    if (!/^(small|medium|large|extra-large)$/.test(sizeToken)) return null;
+    return {
+      quantity: qtyParsed.quantity,
+      quantityMin: qtyParsed.quantityMin,
+      quantityMax: qtyParsed.quantityMax,
+      quantityIsApprox: !!qtyParsed.quantityIsApprox,
+      size: sizeToken,
+    };
+  }
+
   function parseIngredientLine(line) {
     const raw = normalizeWhitespace(line);
     if (!raw) return null;
@@ -697,6 +1053,7 @@
     const sizedContainerParsed = multiplierParsed
       ? null
       : parseSingleSizedContainer(qtyParsed);
+    const parentheticalQtySize = parseParentheticalQuantitySize(parentheticalSplit.parenthetical);
     const unitParsed = multiplierParsed || sizedContainerParsed
       ? {
           unit: (multiplierParsed || sizedContainerParsed).unit,
@@ -707,35 +1064,69 @@
       [split.prepNotes, heapingSplit.heaping].filter(Boolean).join(', ')
     );
 
-    const normalizedName = stripOptionalLanguage(
+    const normalizedNameRaw = stripOptionalLanguage(
       unitParsed.rest || (multiplierParsed && multiplierParsed.rest) || qtyParsed.rest || split.head
     );
-    const nameVariant = splitIngredientNameAndVariant(normalizedName);
-    const prep = stripOptionalLanguage(combinedPrep || '');
+    const normalizedName = unitParsed.unit
+      ? normalizeWhitespace(normalizedNameRaw.replace(/^of\s+/i, ''))
+      : normalizedNameRaw;
+    const loosePrepSplit = extractLoosePrepNotes(normalizedName);
+    const inPrepSplit = extractInPrepNotes(loosePrepSplit.text);
+    const nameVariant = splitIngredientNameAndVariant(inPrepSplit.text);
+    const inferredNameData = inferUnitAndInlineNoteFromName(nameVariant.name || raw);
+    const hasPrimaryQuantity =
+      qtyParsed.quantityMin != null ||
+      qtyParsed.quantityMax != null ||
+      String(qtyParsed.quantity || '').trim() !== '';
+    const hasPrimarySize = String(nameVariant.size || '').trim() !== '';
+    const canPromoteParentheticalQtySize =
+      !multiplierParsed &&
+      !sizedContainerParsed &&
+      !hasPrimaryQuantity &&
+      !hasPrimarySize &&
+      !!parentheticalQtySize;
+    const prep = stripOptionalLanguage(
+      normalizeWhitespace(
+        [combinedPrep, loosePrepSplit.prepNotes, inPrepSplit.prepNotes].filter(Boolean).join(', ')
+      )
+    );
 
     return {
       quantity: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).quantityText
+        : canPromoteParentheticalQtySize
+        ? parentheticalQtySize.quantity
         : qtyParsed.quantity,
       quantityMin: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).quantityMin
+        : canPromoteParentheticalQtySize
+        ? parentheticalQtySize.quantityMin
         : qtyParsed.quantityMin,
       quantityMax: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).quantityMax
+        : canPromoteParentheticalQtySize
+        ? parentheticalQtySize.quantityMax
         : qtyParsed.quantityMax,
       quantityIsApprox: multiplierParsed || sizedContainerParsed
         ? !!(multiplierParsed || sizedContainerParsed).quantityIsApprox
+        : canPromoteParentheticalQtySize
+        ? !!parentheticalQtySize.quantityIsApprox
         : !!qtyParsed.quantityIsApprox,
-      unit: unitParsed.unit || '',
-      name: nameVariant.name || raw,
+      unit: unitParsed.unit || inferredNameData.unit || '',
+      name: inferredNameData.name || nameVariant.name || raw,
       variant: nameVariant.variant || '',
       size: multiplierParsed || sizedContainerParsed
         ? (multiplierParsed || sizedContainerParsed).size
+        : canPromoteParentheticalQtySize
+        ? parentheticalQtySize.size
         : nameVariant.size || '',
       prepNotes: prep,
       parentheticalNote: normalizeWhitespace(
         [
-          stripOptionalLanguage(parentheticalSplit.parenthetical || ''),
+          inferredNameData.parentheticalNote || '',
+          stripOptionalLanguage(
+            canPromoteParentheticalQtySize ? '' : parentheticalSplit.parenthetical || ''
+          ),
           ...qualitative.phrases.filter(
             (phrase) => !QUALITATIVE_AMOUNT_PATTERNS.every((rx) => !rx.test(phrase))
           ),
@@ -750,13 +1141,68 @@
       linkedRecipeId: null,
       recipeText: '',
       isDeprecated: false,
+      isAlt: false,
     };
+  }
+
+  function parseIngredientLineWithAlternates(line) {
+    const src = normalizeWhitespace(line);
+    if (!src) return [];
+
+    const leadingAlt = src.match(/^or\s+(.+)$/i);
+    if (leadingAlt) {
+      const altRow = parseIngredientLine(leadingAlt[1]);
+      if (!altRow) return [];
+      altRow.isAlt = true;
+      return [altRow];
+    }
+
+    const numToken =
+      '(?:\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d+(?:\\.\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])';
+    const quantityOrRangeRx = new RegExp(`^(${numToken})\\s+or\\s+(${numToken})\\b\\s+(.+)$`, 'i');
+    const quantityOrRangeMatch = src.match(quantityOrRangeRx);
+    if (quantityOrRangeMatch) {
+      const normalized = `${quantityOrRangeMatch[1]} to ${quantityOrRangeMatch[2]} ${quantityOrRangeMatch[3]}`;
+      const single = parseIngredientLine(normalized);
+      return single ? [single] : [];
+    }
+
+    const sizeToken = '(?:small|medium|large|extra-large)';
+    const sizedAltWithSharedTailRx = new RegExp(
+      `^((${numToken})\\s+${sizeToken})\\s+or\\s+((${numToken})\\s+${sizeToken})\\s+(.+)$`,
+      'i'
+    );
+    const sizedAltWithSharedTailMatch = src.match(sizedAltWithSharedTailRx);
+    if (sizedAltWithSharedTailMatch) {
+      const sharedTail = normalizeLeadingPrepTail(sizedAltWithSharedTailMatch[5] || '');
+      const firstExpanded = normalizeWhitespace(`${sizedAltWithSharedTailMatch[1]} ${sharedTail}`);
+      const secondExpanded = normalizeWhitespace(`${sizedAltWithSharedTailMatch[3]} ${sharedTail}`);
+      const first = parseIngredientLine(firstExpanded);
+      const second = parseIngredientLine(secondExpanded);
+      if (first && second) {
+        second.isAlt = true;
+        return [first, second];
+      }
+    }
+
+    const altParts = src.split(/\s+\bor\b\s+/i).map(normalizeWhitespace).filter(Boolean);
+    if (altParts.length === 2) {
+      const first = parseIngredientLine(altParts[0]);
+      const second = parseIngredientLine(altParts[1]);
+      if (first && second) {
+        second.isAlt = true;
+        return [first, second];
+      }
+    }
+
+    const parsed = parseIngredientLine(src);
+    return parsed ? [parsed] : [];
   }
 
   function parseIngredientLines(multilineText) {
     return String(multilineText || '')
       .split(/\r?\n/)
-      .map((line) => parseIngredientLine(line))
+      .flatMap((line) => parseIngredientLineWithAlternates(line))
       .filter((row) => !!row && !!String(row.name || '').trim());
   }
 

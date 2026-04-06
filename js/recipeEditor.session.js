@@ -77,6 +77,7 @@ function recipeEditorResetDirty() {
 // Expose for main.js so back/cancel/save can share one path.
 window.recipeEditorGetIsDirty = recipeEditorGetIsDirty;
 window.recipeEditorResetDirty = recipeEditorResetDirty;
+let recipeEditorExitPromptInFlight = false;
 
 function markDirty() {
   if (!isDirty) {
@@ -123,10 +124,116 @@ function revertChanges() {
   recipeEditorResetDirty();
 }
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isDirty) {
-    revertChanges();
+async function recipeEditorAttemptExit({
+  reason = 'exit',
+  onClean = null,
+  onDiscard = null,
+  onSaveSuccess = null,
+} = {}) {
+  const run = async (fn) => {
+    if (typeof fn === 'function') {
+      await fn();
+    }
+  };
+
+  if (
+    window.ui &&
+    typeof window.ui.isDialogOpen === 'function' &&
+    window.ui.isDialogOpen()
+  ) {
+    return false;
   }
+
+  const dirty = recipeEditorGetIsDirty();
+  if (!dirty) {
+    await run(onClean);
+    return true;
+  }
+
+  if (recipeEditorExitPromptInFlight) return false;
+  recipeEditorExitPromptInFlight = true;
+
+  try {
+    if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
+      const message =
+        reason === 'manage'
+          ? 'Save changes before leaving?'
+          : 'Save changes before exiting?';
+      const choice = await window.ui.dialogThreeChoice({
+        title: 'Unsaved changes',
+        message,
+        fixText: 'Cancel',
+        discardText: 'Discard',
+        createText: 'Save',
+        discardDanger: true,
+        dismissChoice: 'fix',
+      });
+      if (choice === 'fix') return false;
+
+      if (choice === 'create') {
+        try {
+          if (typeof window.recipeEditorSave === 'function') {
+            await window.recipeEditorSave();
+          }
+        } catch (_) {
+          return false;
+        }
+        if (recipeEditorGetIsDirty()) return false;
+        await run(onSaveSuccess);
+        return true;
+      }
+
+      if (choice === 'discard') {
+        recipeEditorResetDirty();
+        await run(onDiscard);
+        return true;
+      }
+      return false;
+    }
+
+    const ok =
+      typeof uiConfirm === 'function'
+        ? await uiConfirm({
+            title: 'Discard Changes?',
+            message: 'Discard unsaved changes?',
+            confirmText: 'Discard',
+            cancelText: 'Cancel',
+            danger: true,
+          })
+        : window.confirm('Discard unsaved changes?');
+    if (!ok) return false;
+    recipeEditorResetDirty();
+    await run(onDiscard);
+    return true;
+  } finally {
+    recipeEditorExitPromptInFlight = false;
+  }
+}
+
+window.recipeEditorAttemptExit = recipeEditorAttemptExit;
+
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (!e || e.key !== 'Escape') return;
+    if (e.defaultPrevented) return;
+    if (!recipeEditorGetIsDirty()) return;
+    e.preventDefault();
+    void recipeEditorAttemptExit({
+      reason: 'esc',
+      onDiscard: () => {
+        if (typeof revertChanges === 'function') revertChanges();
+      },
+    });
+  },
+  true
+);
+
+window.addEventListener('beforeunload', (e) => {
+  if (!recipeEditorGetIsDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
 });
 
 async function saveRecipeToDB() {

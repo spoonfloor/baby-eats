@@ -88,6 +88,8 @@ CREATE TABLE IF NOT EXISTS "recipe_ingredient_map" (
 	"is_recipe"	INTEGER NOT NULL DEFAULT 0,
 	"is_alt"	INTEGER NOT NULL DEFAULT 0,
 	"display_name"	TEXT,
+	"variant"	TEXT,
+	"size"	TEXT,
 	PRIMARY KEY("ID" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID"),
 	FOREIGN KEY("recipe_id") REFERENCES "recipes"("ID"),

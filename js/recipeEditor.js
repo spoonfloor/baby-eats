@@ -52,20 +52,6 @@ const NEED_LOCATION_ORDER = [
   'measures',
 ];
 
-// --- Canonical order for Ingredients section (for normal reading) ---
-const INGREDIENTS_LOCATION_ORDER = [
-  '', // null / top-level
-  'fridge',
-  'above fridge',
-  'pantry',
-  'coffee bar',
-  'cereal cabinet',
-  'spices',
-  'fruit stand',
-  'freezer',
-  'measures',
-];
-
 // --- You Will Need helpers ---
 function formatNeedLine(ing) {
   const hasFinitePositive = (v) => {
@@ -148,7 +134,8 @@ function formatNeedLine(ing) {
   if (unitText && Number.isFinite(qtyForUnit) && typeof window.getUnitDisplay === 'function') {
     unitText = window.getUnitDisplay(unitText, qtyForUnit);
   }
-  const qtyUnit = [qtyText, unitText].filter(Boolean).join(' ');
+  const sizeText = String(ing.size || '').trim();
+  const qtyUnit = [qtyText, sizeText, unitText].filter(Boolean).join(' ');
 
   const fallbackBaseName = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`.trim();
   const baseName = (() => {
@@ -180,6 +167,261 @@ function formatNeedLine(ing) {
   return text.trim();
 }
 
+function getNeedLineBaseName(ing) {
+  const hasFinitePositive = (v) => {
+    if (v == null) return false;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) && n > 0;
+  };
+  const fallbackBaseName = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`.trim();
+  if (typeof window.getIngredientDisplayName !== 'function') return fallbackBaseName;
+  try {
+    const quantityForNoun = hasFinitePositive(ing.quantityMax)
+      ? Number(ing.quantityMax)
+      : hasFinitePositive(ing.quantityMin)
+        ? Number(ing.quantityMin)
+        : ing.quantity;
+    const computed = window.getIngredientDisplayName({
+      ...ing,
+      quantity: quantityForNoun,
+    });
+    return String(computed || '').trim() || fallbackBaseName;
+  } catch (_) {
+    return fallbackBaseName;
+  }
+}
+
+function findYwnShoppingItemMatchByName(rawName) {
+  const name = String(rawName || '').trim();
+  if (!name) return null;
+  const db = window.dbInstance;
+  if (!db) return null;
+
+  try {
+    const directQ = db.exec(
+      `SELECT ID, name
+       FROM ingredients
+       WHERE lower(trim(name)) = lower(trim(?))
+       ORDER BY ID
+       LIMIT 1;`,
+      [name]
+    );
+    if (directQ.length && directQ[0].values.length) {
+      const [id, matchedName] = directQ[0].values[0];
+      const normalizedId = Number(id);
+      if (Number.isFinite(normalizedId) && normalizedId > 0) {
+        return {
+          id: normalizedId,
+          name: matchedName == null ? name : String(matchedName),
+        };
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const synonymQ = db.exec(
+      `SELECT i.ID, i.name
+       FROM ingredient_synonyms s
+       JOIN ingredients i ON i.ID = s.ingredient_id
+       WHERE lower(trim(s.synonym)) = lower(trim(?))
+       ORDER BY i.ID
+       LIMIT 1;`,
+      [name]
+    );
+    if (synonymQ.length && synonymQ[0].values.length) {
+      const [id, matchedName] = synonymQ[0].values[0];
+      const normalizedId = Number(id);
+      if (Number.isFinite(normalizedId) && normalizedId > 0) {
+        return {
+          id: normalizedId,
+          name: matchedName == null ? name : String(matchedName),
+        };
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+function navigateToYwnShoppingTarget(rawName) {
+  const name = String(rawName || '').trim();
+  if (!name) return;
+
+  try {
+    const match = findYwnShoppingItemMatchByName(name);
+    if (match) {
+      sessionStorage.setItem('selectedShoppingItemId', String(match.id));
+      sessionStorage.setItem('selectedShoppingItemName', String(match.name));
+      sessionStorage.removeItem('selectedShoppingItemIsNew');
+      const goEditor = () => {
+        window.location.href = 'shoppingEditor.html';
+      };
+      if (typeof window.recipeEditorAttemptExit === 'function') {
+        void window.recipeEditorAttemptExit({
+          reason: 'manage',
+          onClean: goEditor,
+          onDiscard: goEditor,
+          onSaveSuccess: goEditor,
+        });
+        return;
+      }
+      goEditor();
+      return;
+    }
+  } catch (_) {}
+
+  const fallback = () => {
+    window.location.href = 'shopping.html';
+  };
+  if (typeof window.recipeEditorAttemptExit === 'function') {
+    void window.recipeEditorAttemptExit({
+      reason: 'manage',
+      onClean: fallback,
+      onDiscard: fallback,
+      onSaveSuccess: fallback,
+    });
+    return;
+  }
+  fallback();
+}
+
+function isYwnMasterLinkActive(linkEl, e) {
+  if (!(linkEl instanceof HTMLElement)) return false;
+  if (!linkEl.classList.contains('ingredient-master-link')) return false;
+  if (!e || !e.altKey) return false;
+  const line = linkEl.closest('.ingredient-line');
+  return !!(line && line.classList.contains('ywn-line--hint-active'));
+}
+
+function buildYwnMasterLink(label, ingredient) {
+  const link = document.createElement('a');
+  link.href = '#';
+  link.className = 'ingredient-master-link ywn-master-link';
+  link.textContent = label;
+  link.tabIndex = -1;
+
+  link.addEventListener('click', (e) => {
+    if (!e) return;
+    e.preventDefault();
+    if (!isYwnMasterLinkActive(link, e)) return;
+    e.stopPropagation();
+    navigateToYwnShoppingTarget(ingredient && ingredient.name);
+  });
+
+  return link;
+}
+
+function appendYwnLineTextWithMasterLink(span, ing) {
+  if (!span || !ing) return;
+  const fullText = formatNeedLine(ing);
+  const baseName = getNeedLineBaseName(ing);
+  if (!baseName) {
+    span.appendChild(document.createTextNode(fullText));
+    return;
+  }
+
+  const fullLower = String(fullText).toLowerCase();
+  const baseLower = String(baseName).toLowerCase();
+  const idx = fullLower.indexOf(baseLower);
+  if (idx === -1) {
+    span.appendChild(document.createTextNode(fullText));
+    return;
+  }
+
+  const before = fullText.slice(0, idx);
+  const matched = fullText.slice(idx, idx + baseName.length);
+  const after = fullText.slice(idx + baseName.length);
+
+  if (before) span.appendChild(document.createTextNode(before));
+  span.appendChild(buildYwnMasterLink(matched || baseName, ing));
+  if (after) span.appendChild(document.createTextNode(after));
+}
+
+function initYwnMasterLinkController(needWrapper) {
+  if (!needWrapper) return;
+
+  try {
+    if (typeof needWrapper._teardownYwnMasterLinkController === 'function') {
+      needWrapper._teardownYwnMasterLinkController();
+    }
+  } catch (_) {}
+
+  const ACTIVE_CLASS = 'ywn-line--hint-active';
+  let hoverLine = null;
+  let hoverModifierActive = false;
+
+  const hasLink = (line) =>
+    !!(line && line.querySelector && line.querySelector('.ingredient-master-link'));
+
+  const findLine = (target) => {
+    if (!target || !target.closest) return null;
+    const line = target.closest('.ingredient-line');
+    if (!line || !needWrapper.contains(line)) return null;
+    return hasLink(line) ? line : null;
+  };
+
+  const apply = () => {
+    const winner = hoverModifierActive ? hoverLine : null;
+    needWrapper.querySelectorAll(`.${ACTIVE_CLASS}`).forEach((line) => {
+      line.classList.remove(ACTIVE_CLASS);
+    });
+    if (winner) winner.classList.add(ACTIVE_CLASS);
+  };
+
+  const onMouseOver = (e) => {
+    hoverLine = findLine(e && e.target);
+    apply();
+  };
+
+  const onMouseOut = (e) => {
+    const related = e && e.relatedTarget;
+    const nextLine = findLine(related);
+    if (nextLine === hoverLine) return;
+    if (related && needWrapper.contains(related)) {
+      hoverLine = nextLine;
+    } else {
+      hoverLine = null;
+    }
+    apply();
+  };
+
+  const syncModifier = (e) => {
+    const next = !!(e && e.altKey);
+    if (next === hoverModifierActive) return;
+    hoverModifierActive = next;
+    apply();
+  };
+
+  const clearModifier = () => {
+    if (!hoverModifierActive) return;
+    hoverModifierActive = false;
+    apply();
+  };
+
+  needWrapper.addEventListener('mouseover', onMouseOver);
+  needWrapper.addEventListener('mouseout', onMouseOut);
+  needWrapper.addEventListener('mouseleave', onMouseOut);
+  document.addEventListener('keydown', syncModifier, true);
+  document.addEventListener('keyup', syncModifier, true);
+  window.addEventListener('blur', clearModifier);
+
+  apply();
+
+  needWrapper._teardownYwnMasterLinkController = () => {
+    needWrapper.removeEventListener('mouseover', onMouseOver);
+    needWrapper.removeEventListener('mouseout', onMouseOut);
+    needWrapper.removeEventListener('mouseleave', onMouseOut);
+    document.removeEventListener('keydown', syncModifier, true);
+    document.removeEventListener('keyup', syncModifier, true);
+    window.removeEventListener('blur', clearModifier);
+    hoverLine = null;
+    hoverModifierActive = false;
+    needWrapper.querySelectorAll(`.${ACTIVE_CLASS}`).forEach((line) => {
+      line.classList.remove(ACTIVE_CLASS);
+    });
+  };
+}
+
 function normalizeYwnIngredientRows(rawRows) {
   const out = [];
   let activeAltAnchorLocation = '';
@@ -205,26 +447,6 @@ function normalizeYwnIngredientRows(rawRows) {
   });
 
   return out;
-}
-
-function sortIngredients(list, locationOrder = INGREDIENTS_LOCATION_ORDER) {
-  return [...list].sort((a, b) => {
-    const aLoc = a.locationAtHome || '';
-    const bLoc = b.locationAtHome || '';
-    const locIndexA = locationOrder.indexOf(aLoc);
-    const locIndexB = locationOrder.indexOf(bLoc);
-    if (locIndexA !== locIndexB) return locIndexA - locIndexB;
-
-    if (a.isOptional !== b.isOptional) return a.isOptional ? 1 : -1;
-
-    const nameA = a.name.toLowerCase();
-    const nameB = b.name.toLowerCase();
-    if (nameA !== nameB) return nameA.localeCompare(nameB);
-
-    const varA = a.variant ? a.variant.toLowerCase() : '';
-    const varB = b.variant ? b.variant.toLowerCase() : '';
-    return varA.localeCompare(varB);
-  });
 }
 
 function mergeByIngredient(list) {
@@ -270,83 +492,6 @@ function ensureIngredientSubheadInsertModeWiring() {
   try {
     document.body.classList.remove('subhead-insert-mode');
   } catch (_) {}
-}
-
-// --- Ingredient ordering helpers (main Ingredients list) ---
-const INGREDIENT_SORT_LOCATION_ORDER = NEED_LOCATION_ORDER.slice();
-
-function ingredientLocationRank(loc) {
-  const v = (loc || '').toLowerCase().trim();
-  // Blank/unknown should be last in the location tier.
-  if (!v) return INGREDIENT_SORT_LOCATION_ORDER.length + 1;
-  const idx = INGREDIENT_SORT_LOCATION_ORDER.indexOf(v);
-  return idx === -1 ? INGREDIENT_SORT_LOCATION_ORDER.length + 1 : idx;
-}
-
-function sortIngredientsForMainList(list) {
-  return [...list].sort((a, b) => {
-    const aOpt = !!a.isOptional;
-    const bOpt = !!b.isOptional;
-    if (aOpt !== bOpt) return aOpt ? 1 : -1;
-
-    const la = ingredientLocationRank(a.locationAtHome);
-    const lb = ingredientLocationRank(b.locationAtHome);
-    if (la !== lb) return la - lb;
-
-    const na = (a.name || '').toLowerCase();
-    const nb = (b.name || '').toLowerCase();
-    if (na !== nb) return na.localeCompare(nb);
-
-    const va = (a.variant || '').toLowerCase();
-    const vb = (b.variant || '').toLowerCase();
-    return va.localeCompare(vb);
-  });
-}
-
-function stablePartitionOptionals(list) {
-  const required = [];
-  const optional = [];
-  list.forEach((ing) => {
-    if (!ing) return;
-    // Ignore subsection headings; they are handled by partitionOptionalsWithinSubsections.
-    if (ing && ing.rowType === 'heading') return;
-    if (ing.isOptional) optional.push(ing);
-    else required.push(ing);
-  });
-  return required.concat(optional);
-}
-
-function partitionOptionalsWithinSubsections(list) {
-  const out = [];
-
-  let segment = [];
-  const flushSegment = () => {
-    if (!segment.length) return;
-    const req = [];
-    const opt = [];
-    segment.forEach((row) => {
-      if (!row) return;
-      if (row.isOptional) opt.push(row);
-      else req.push(row);
-    });
-    out.push(...req, ...opt);
-    segment = [];
-  };
-
-  (list || []).forEach((row) => {
-    if (!row) return;
-    if (row.rowType === 'heading') {
-      flushSegment();
-      out.push(row);
-      return;
-    }
-    // Treat everything else as an ingredient row.
-    segment.push(row);
-  });
-
-  flushSegment();
-
-  return out;
 }
 
 function stripIngredientPlaceholders(section) {
@@ -399,40 +544,19 @@ function rerenderIngredientsSectionFromModel() {
   manageBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    void (async () => {
-      const dirty =
-        typeof window.recipeEditorGetIsDirty === 'function'
-          ? window.recipeEditorGetIsDirty()
-          : false;
-      if (!dirty) { window.location.href = 'shopping.html'; return; }
-
-      if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
-        const choice = await window.ui.dialogThreeChoice({
-          title: 'Unsaved changes',
-          message: 'Save changes before leaving?',
-          fixText: 'Cancel',
-          discardText: 'Discard',
-          createText: 'Save',
-          discardDanger: true,
-        });
-        if (choice === 'fix') return;
-        if (choice === 'create') {
-          try {
-            if (typeof window.recipeEditorSave === 'function') {
-              await window.recipeEditorSave();
-            }
-          } catch (_) { return; }
-          const stillDirty =
-            typeof window.recipeEditorGetIsDirty === 'function'
-              ? window.recipeEditorGetIsDirty()
-              : false;
-          if (stillDirty) return;
-        } else if (choice !== 'discard') {
-          return;
-        }
-        window.location.href = 'shopping.html';
-      }
-    })();
+    const goShopping = () => {
+      window.location.href = 'shopping.html';
+    };
+    if (typeof window.recipeEditorAttemptExit === 'function') {
+      void window.recipeEditorAttemptExit({
+        reason: 'manage',
+        onClean: goShopping,
+        onDiscard: goShopping,
+        onSaveSuccess: goShopping,
+      });
+      return;
+    }
+    goShopping();
   });
   ingredientsSection.appendChild(manageBtn);
 
@@ -623,6 +747,7 @@ function rerenderYouWillNeedFromModel() {
     span.textContent = 'No ingredients yet. Add some above.';
     line.appendChild(span);
     needWrapper.appendChild(line);
+    initYwnMasterLinkController(needWrapper);
     return;
   }
 
@@ -646,7 +771,7 @@ function rerenderYouWillNeedFromModel() {
     subHeader.textContent = loc || 'Misc';
     needWrapper.appendChild(subHeader);
 
-    const sortedItems = [...items].sort((a, b) => {
+    const compareYwnIngredientRows = (a, b) => {
       const nameA = String(a?.name || '').toLowerCase();
       const nameB = String(b?.name || '').toLowerCase();
       if (nameA !== nameB) return nameA.localeCompare(nameB);
@@ -655,14 +780,41 @@ function rerenderYouWillNeedFromModel() {
       const varB = String(b?.variant || '').toLowerCase();
       if (varA !== varB) return varA.localeCompare(varB);
 
-      return String(a?.size || '').toLowerCase().localeCompare(String(b?.size || '').toLowerCase());
+      return String(a?.size || '')
+        .toLowerCase()
+        .localeCompare(String(b?.size || '').toLowerCase());
+    };
+
+    // Keep OR rows attached to their primary line while still alphabetizing groups.
+    const ywnGroups = [];
+    items.forEach((item) => {
+      if (!item) return;
+      if (!item.isAlt || ywnGroups.length === 0) {
+        ywnGroups.push([item]);
+        return;
+      }
+      ywnGroups[ywnGroups.length - 1].push(item);
     });
+
+    const sortedItems = ywnGroups
+      .sort((groupA, groupB) =>
+        compareYwnIngredientRows(groupA[0] || {}, groupB[0] || {})
+      )
+      .flat();
 
     sortedItems.forEach((ing) => {
       const line = document.createElement('div');
       line.className = 'ingredient-line';
       const span = document.createElement('span');
-      span.textContent = `${ing.isAlt ? 'OR ' : ''}${formatNeedLine(ing)}`;
+      if (ing.isAlt) {
+        const orPrefix = document.createElement('span');
+        orPrefix.className = 'ingredient-alt-prefix';
+        orPrefix.textContent = 'OR\u00A0';
+        span.appendChild(orPrefix);
+        appendYwnLineTextWithMasterLink(span, ing);
+      } else {
+        appendYwnLineTextWithMasterLink(span, ing);
+      }
       line.appendChild(span);
       needWrapper.appendChild(line);
     });
@@ -684,6 +836,8 @@ function rerenderYouWillNeedFromModel() {
       needWrapper.appendChild(line);
     });
   }
+
+  initYwnMasterLinkController(needWrapper);
 }
 
 window.recipeEditorRerenderYouWillNeedFromModel = rerenderYouWillNeedFromModel;
@@ -1024,6 +1178,7 @@ function deleteIngredientHeadingRowFromSection(sectionRef, rowRef) {
   return { idx, removed };
 }
 
+// --- Ingredient reorder helpers (tests extract this block) ---
 function isIngredientRenderableRow(row) {
   return !!(row && !row.isPlaceholder);
 }
@@ -1130,26 +1285,6 @@ function promoteTrailingAltRowsAbovePrimary(sectionRef, rowRef) {
   return true;
 }
 
-function findIngredientTargetIndexWithinList(list, fromIndex, delta) {
-  if (!Array.isArray(list) || !Number.isFinite(fromIndex) || !delta) return -1;
-
-  if (delta < 0) {
-    for (let i = fromIndex - 1; i >= 0; i--) {
-      const row = list[i];
-      if (!isIngredientRenderableRow(row)) continue;
-      return i;
-    }
-    return -1;
-  }
-
-  for (let i = fromIndex + 1; i < list.length; i++) {
-    const row = list[i];
-    if (!isIngredientRenderableRow(row)) continue;
-    return i;
-  }
-  return -1;
-}
-
 // Returns the array indices of all rows in the same OR-group as the row at `index`.
 // A group = nearest non-alt renderable anchor + all consecutive isAlt rows after it.
 // Headings break groups. Any member of the group resolves to the full group.
@@ -1182,6 +1317,40 @@ function getIngredientOrGroupIndices(list, index) {
   return indices;
 }
 
+function findIngredientAdjacentGroupBounds(list, fromIndex, delta) {
+  if (!Array.isArray(list) || !Number.isFinite(fromIndex) || !delta) return null;
+
+  if (delta < 0) {
+    for (let i = fromIndex - 1; i >= 0; i--) {
+      const row = list[i];
+      if (!isIngredientRenderableRow(row)) continue;
+      const indices = getIngredientOrGroupIndices(list, i);
+      return {
+        start: indices[0],
+        end: indices[indices.length - 1],
+      };
+    }
+    return null;
+  }
+
+  for (let i = fromIndex + 1; i < list.length; i++) {
+    const row = list[i];
+    if (!isIngredientRenderableRow(row)) continue;
+    const indices = getIngredientOrGroupIndices(list, i);
+    return {
+      start: indices[0],
+      end: indices[indices.length - 1],
+    };
+  }
+  return null;
+}
+
+window.__ingredientReorderHelpers = {
+  getIngredientOrGroupIndices,
+  findIngredientAdjacentGroupBounds,
+};
+// --- End ingredient reorder helpers ---
+
 window.recipeEditorGetIngredientMoveAvailability = ({ rowRef } = {}) => {
   const ctx = findIngredientRowContext(rowRef);
   if (!ctx) return { canMoveUp: false, canMoveDown: false };
@@ -1191,9 +1360,9 @@ window.recipeEditorGetIngredientMoveAvailability = ({ rowRef } = {}) => {
   const firstIdx = groupIndices[0];
   const lastIdx = groupIndices[groupIndices.length - 1];
 
-  const upIdx = findIngredientTargetIndexWithinList(list, firstIdx, -1);
-  const downIdx = findIngredientTargetIndexWithinList(list, lastIdx, 1);
-  return { canMoveUp: upIdx !== -1, canMoveDown: downIdx !== -1 };
+  const upGroup = findIngredientAdjacentGroupBounds(list, firstIdx, -1);
+  const downGroup = findIngredientAdjacentGroupBounds(list, lastIdx, 1);
+  return { canMoveUp: !!upGroup, canMoveDown: !!downGroup };
 };
 
 window.recipeEditorMoveIngredientRowByDelta = ({
@@ -1218,21 +1387,22 @@ window.recipeEditorMoveIngredientRowByDelta = ({
 
   let moved;
   if (dir < 0) {
-    // Moving up: find the renderable row just above the group's first member.
-    const targetIndex = findIngredientTargetIndexWithinList(list, firstGroupIdx, -1);
-    if (targetIndex === -1) return false;
+    // Moving up: insert before the previous group's first row.
+    const targetGroup = findIngredientAdjacentGroupBounds(list, firstGroupIdx, -1);
+    if (!targetGroup) return false;
+    const targetIndex = targetGroup.start;
     const groupRows = list.splice(firstGroupIdx, groupSize);
     list.splice(targetIndex, 0, ...groupRows);
     moved = list[targetIndex + groupIndices.indexOf(index)];
   } else {
-    // Moving down: find the renderable row just below the group's last member.
-    const targetIndex = findIngredientTargetIndexWithinList(list, lastGroupIdx, 1);
-    if (targetIndex === -1) return false;
+    // Moving down: insert after the next group's last row.
+    const targetGroup = findIngredientAdjacentGroupBounds(list, lastGroupIdx, 1);
+    if (!targetGroup) return false;
     const groupRows = list.splice(firstGroupIdx, groupSize);
-    // After removing groupSize items, the target has shifted left by groupSize.
-    const adjustedTarget = targetIndex - groupSize;
-    list.splice(adjustedTarget + 1, 0, ...groupRows);
-    moved = list[adjustedTarget + 1 + groupIndices.indexOf(index)];
+    // After removing groupSize items, the next group's tail shifts left by groupSize.
+    const adjustedTargetEnd = targetGroup.end - groupSize;
+    list.splice(adjustedTargetEnd + 1, 0, ...groupRows);
+    moved = list[adjustedTargetEnd + 1 + groupIndices.indexOf(index)];
   }
   normalizeIngredientSortOrder(sectionRef);
 
@@ -1551,11 +1721,6 @@ window.recipeEditorAfterIngredientEditCommit = (sectionRef) => {
   // Remove any legacy placeholder-ish rows that may have slipped in.
   stripIngredientPlaceholders(sectionRef);
 
-  // Always enforce "optional goes to bottom" within the current subsection.
-  sectionRef.ingredients = partitionOptionalsWithinSubsections(
-    sectionRef.ingredients
-  );
-
   // Keep "You will need" in sync even if we skip a disruptive rerender.
   try {
     if (typeof window.recipeEditorRerenderYouWillNeedFromModel === 'function') {
@@ -1598,27 +1763,6 @@ window.recipeEditorSortIngredientsOnLoad = (recipe) => {
         return `i:${row.rimId ?? ''}`;
       })
       .join('|');
-
-    const hasHeadings = sec.ingredients.some(
-      (r) => r && r.rowType === 'heading'
-    );
-    const hasSortOrder = sec.ingredients.some(
-      (r) => r && Number.isFinite(r.sortOrder)
-    );
-
-    if (hasHeadings || hasSortOrder) {
-      // Respect persisted ordering; only enforce optional placement within subsections.
-      sec.ingredients = [...sec.ingredients].sort((a, b) => {
-        const sa = a && Number.isFinite(a.sortOrder) ? a.sortOrder : 999999;
-        const sb = b && Number.isFinite(b.sortOrder) ? b.sortOrder : 999999;
-        if (sa !== sb) return sa - sb;
-        return 0;
-      });
-      sec.ingredients = partitionOptionalsWithinSubsections(sec.ingredients);
-    } else {
-      // Legacy behavior for DBs without sort_order/headings.
-      sec.ingredients = sortIngredientsForMainList(sec.ingredients);
-    }
 
     const after = sec.ingredients
       .map((row) => {

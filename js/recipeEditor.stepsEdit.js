@@ -50,6 +50,16 @@
     return out;
   };
 
+  const prettifyTemperatures = (input) => {
+    let out = String(input || '');
+    // Normalize common temperature forms: "400 degrees F", "350°f" -> "400° F", "350° F"
+    out = out.replace(
+      /(\d+)\s*(?:degrees?|°)\s*([FC])\b/gi,
+      (_, deg, unit) => `${deg}° ${String(unit || '').toUpperCase()}`
+    );
+    return out;
+  };
+
   const protectMeasurementPrimes = (input) => {
     const protectedChunks = [];
     const protect = (rx, text) =>
@@ -102,6 +112,7 @@
     if (!out) return out;
     out = prettifyFractionForms(out);
     out = prettifyRangesAndEllipsis(out);
+    out = prettifyTemperatures(out);
     out = prettifySmartQuotes(out);
     return out;
   };
@@ -2256,13 +2267,17 @@ function attachStepInlineEditor(textEl) {
         handleEnterSplit();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        try {
-          document.body.classList.remove('step-editing');
-        } catch (_) {}
 
-        // ESC should revert the entire edit session via the central handler,
-        // which restores both recipeData and stepNodes.
-        if (typeof window.revertChanges === 'function') {
+        if (typeof window.recipeEditorAttemptExit === 'function') {
+          void window.recipeEditorAttemptExit({
+            reason: 'esc-step',
+            onDiscard: () => {
+              if (typeof window.revertChanges === 'function') {
+                window.revertChanges();
+              }
+            },
+          });
+        } else if (typeof window.revertChanges === 'function') {
           window.revertChanges();
         } else {
           // Fallback: blur without committing changes

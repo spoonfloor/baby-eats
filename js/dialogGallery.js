@@ -46,8 +46,8 @@ document.getElementById('demoForm')?.addEventListener('click', async () => {
   await ui()?.form({
     title: 'New Unit',
     fields: [
-      { key: 'code', label: 'Code', required: true },
       { key: 'name', label: 'Name (singular)', required: true },
+      { key: 'code', label: 'Abbreviation', required: true },
     ],
     confirmText: 'Create',
     cancelText: 'Cancel',

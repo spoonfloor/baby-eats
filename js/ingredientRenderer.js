@@ -652,6 +652,128 @@ function openLinkedRecipe(recipeId) {
   }
 }
 
+function findShoppingItemMatchByName(rawName) {
+  const name = String(rawName || '').trim();
+  if (!name) return null;
+  const db = window.dbInstance;
+  if (!db) return null;
+
+  try {
+    const directQ = db.exec(
+      `SELECT ID, name
+       FROM ingredients
+       WHERE lower(trim(name)) = lower(trim(?))
+       ORDER BY ID
+       LIMIT 1;`,
+      [name]
+    );
+    if (directQ.length && directQ[0].values.length) {
+      const [id, matchedName] = directQ[0].values[0];
+      const normalizedId = Number(id);
+      if (Number.isFinite(normalizedId) && normalizedId > 0) {
+        return {
+          id: normalizedId,
+          name: matchedName == null ? name : String(matchedName),
+        };
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const synonymQ = db.exec(
+      `SELECT i.ID, i.name
+       FROM ingredient_synonyms s
+       JOIN ingredients i ON i.ID = s.ingredient_id
+       WHERE lower(trim(s.synonym)) = lower(trim(?))
+       ORDER BY i.ID
+       LIMIT 1;`,
+      [name]
+    );
+    if (synonymQ.length && synonymQ[0].values.length) {
+      const [id, matchedName] = synonymQ[0].values[0];
+      const normalizedId = Number(id);
+      if (Number.isFinite(normalizedId) && normalizedId > 0) {
+        return {
+          id: normalizedId,
+          name: matchedName == null ? name : String(matchedName),
+        };
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+function navigateToShoppingItemEditor(selection) {
+  const normalizedId = Number(selection && selection.id);
+  const normalizedName = String(selection && selection.name ? selection.name : '').trim();
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0 || !normalizedName) return;
+
+  const navigate = () => {
+    sessionStorage.setItem('selectedShoppingItemId', String(normalizedId));
+    sessionStorage.setItem('selectedShoppingItemName', normalizedName);
+    sessionStorage.removeItem('selectedShoppingItemIsNew');
+    window.location.href = 'shoppingEditor.html';
+  };
+
+  if (typeof window.recipeEditorAttemptExit === 'function') {
+    void window.recipeEditorAttemptExit({
+      reason: 'manage',
+      onClean: navigate,
+      onDiscard: navigate,
+      onSaveSuccess: navigate,
+    });
+    return;
+  }
+
+  navigate();
+}
+
+function isIngredientMasterLinkActive(linkEl, e) {
+  if (!(linkEl instanceof HTMLElement)) return false;
+  if (!linkEl.classList.contains('ingredient-master-link')) return false;
+  if (!e || !e.altKey) return false;
+  const slot = linkEl.closest('.ingredient-slot');
+  return !!(slot && slot.classList.contains('ingredient-slot--hint-active'));
+}
+
+function buildIngredientMasterLink(label, line) {
+  const link = document.createElement('a');
+  link.href = '#';
+  link.className = 'ingredient-master-link';
+  link.textContent = label;
+  link.tabIndex = -1;
+
+  link.addEventListener('click', (e) => {
+    if (!e) return;
+    e.preventDefault();
+    if (!isIngredientMasterLinkActive(link, e)) return;
+    e.stopPropagation();
+
+    const match = findShoppingItemMatchByName(line && line.name);
+    if (match) {
+      navigateToShoppingItemEditor(match);
+      return;
+    }
+
+    const fallback = () => {
+      window.location.href = 'shopping.html';
+    };
+    if (typeof window.recipeEditorAttemptExit === 'function') {
+      void window.recipeEditorAttemptExit({
+        reason: 'manage',
+        onClean: fallback,
+        onDiscard: fallback,
+        onSaveSuccess: fallback,
+      });
+      return;
+    }
+    fallback();
+  });
+
+  return link;
+}
+
 function renderIngredient(line) {
   // NOTE: edit-row scaffold added further down
 
@@ -677,6 +799,10 @@ function renderIngredient(line) {
 
   const textSpan = document.createElement('span');
   textSpan.className = 'ingredient-text';
+  const prettifyDisplayText =
+    typeof window !== 'undefined' && typeof window.prettifyDisplayText === 'function'
+      ? window.prettifyDisplayText
+      : (text) => String(text == null ? '' : text);
 
   const hasFiniteNumber = (v) => {
     if (v == null) return false;
@@ -716,10 +842,14 @@ function renderIngredient(line) {
   // --- Build base name (variant + name) ---
   // Prefer DB-backed grammar fields when present (lemma / plural flags).
   // Falls back to name/variant as-is on older DBs.
+  const quantityForNoun = qMax != null ? qMax : line.quantity;
   const baseName =
     typeof window !== 'undefined' &&
     typeof window.getIngredientDisplayName === 'function'
-      ? window.getIngredientDisplayName(line)
+      ? window.getIngredientDisplayName({
+          ...line,
+          quantity: quantityForNoun,
+        })
       : line.variant
       ? `${line.variant} ${line.name}`.trim()
       : line.name;
@@ -789,6 +919,7 @@ function renderIngredient(line) {
       : null;
   const hasLinkedRecipe = linkedRecipeId != null;
   const linkedRecipeLabel = baseName || String(line?.recipeText || '').trim();
+  const ingredientNameLabel = prettifyDisplayText(baseName);
 
   if (hasLinkedRecipe) {
     // clickable link only for the linked recipe label
@@ -823,13 +954,17 @@ function renderIngredient(line) {
           : sizeValue || line.unit || '';
     }
     if (leadText) {
-      textSpan.appendChild(document.createTextNode(`${leadText} `));
+      textSpan.appendChild(
+        document.createTextNode(`${prettifyDisplayText(leadText)} `)
+      );
     }
 
     textSpan.appendChild(link);
 
     if (line.prepNotes) {
-      textSpan.appendChild(document.createTextNode(', ' + line.prepNotes));
+      textSpan.appendChild(
+        document.createTextNode(`, ${prettifyDisplayText(line.prepNotes)}`)
+      );
     }
 
     if (line.substitutes && line.substitutes.length > 0) {
@@ -840,7 +975,9 @@ function renderIngredient(line) {
         return [sub.quantity, sub.unit, subBase].filter(Boolean).join(' ');
       });
       textSpan.appendChild(
-        document.createTextNode(' or ' + subsText.join(' or '))
+        document.createTextNode(
+          ` or ${prettifyDisplayText(subsText.join(' or '))}`
+        )
       );
     }
 
@@ -848,11 +985,75 @@ function renderIngredient(line) {
       const bits = [];
       if (line.parentheticalNote) bits.push(line.parentheticalNote);
       if (line.isOptional) bits.push('optional');
-      textSpan.appendChild(document.createTextNode(` (${bits.join(', ')})`));
+      textSpan.appendChild(
+        document.createTextNode(
+          ` (${prettifyDisplayText(bits.join(', '))})`
+        )
+      );
     }
   } else {
-    // fallback for normal ingredients
-    textSpan.textContent = groupText;
+    let leadText = '';
+    if (isNumericQty && quantityForDisplay !== '') {
+      const numericVal = parseFloat(quantityForDisplay);
+      const unitText = getUnitDisplay(line.unit || '', numericVal);
+      const amountUnitText =
+        sizeValue && unitText
+          ? `${sizeValue} ${unitText}`
+          : sizeValue || unitText;
+      leadText = [qtyDisplay, amountUnitText].filter(Boolean).join(' ');
+    } else if (quantityForDisplay) {
+      const amountUnitText =
+        sizeValue && line.unit
+          ? `${sizeValue} ${line.unit}`
+          : sizeValue || line.unit || '';
+      leadText = [quantityForDisplay, amountUnitText].filter(Boolean).join(' ');
+    } else {
+      leadText =
+        sizeValue && line.unit
+          ? `${sizeValue} ${line.unit}`
+          : sizeValue || line.unit || '';
+    }
+
+    if (leadText) {
+      textSpan.appendChild(
+        document.createTextNode(`${prettifyDisplayText(leadText)} `)
+      );
+    }
+
+    if (ingredientNameLabel) {
+      textSpan.appendChild(buildIngredientMasterLink(ingredientNameLabel, line));
+    }
+
+    if (line.prepNotes) {
+      textSpan.appendChild(
+        document.createTextNode(`, ${prettifyDisplayText(line.prepNotes)}`)
+      );
+    }
+
+    if (line.substitutes && line.substitutes.length > 0) {
+      const subsText = line.substitutes.map((sub) => {
+        const subBase = sub.variant
+          ? `${sub.variant} ${sub.name}`.trim()
+          : sub.name;
+        return [sub.quantity, sub.unit, subBase].filter(Boolean).join(' ');
+      });
+      textSpan.appendChild(
+        document.createTextNode(
+          ` or ${prettifyDisplayText(subsText.join(' or '))}`
+        )
+      );
+    }
+
+    if (line.parentheticalNote || line.isOptional) {
+      const bits = [];
+      if (line.parentheticalNote) bits.push(line.parentheticalNote);
+      if (line.isOptional) bits.push('optional');
+      textSpan.appendChild(
+        document.createTextNode(
+          ` (${prettifyDisplayText(bits.join(', '))})`
+        )
+      );
+    }
   }
 
   // Save raw quantity separately for editing
@@ -924,8 +1125,16 @@ function renderIngredient(line) {
   });
 
   div.addEventListener('click', (e) => {
-    // Let clicks on sub-recipe links behave normally.
-    if (e && e.target && e.target.closest && e.target.closest('a')) return;
+    const clickedLink =
+      e && e.target && e.target.closest ? e.target.closest('a') : null;
+    if (clickedLink && clickedLink.classList.contains('sub-recipe-link')) return;
+    if (
+      clickedLink &&
+      clickedLink.classList.contains('ingredient-master-link') &&
+      isIngredientMasterLinkActive(clickedLink, e)
+    ) {
+      return;
+    }
 
     // Ctrl/⌘-click deletes the row (recipe-local).
     if (handleMaybeDelete(e)) return;
@@ -1286,20 +1495,20 @@ function openIngredientEditRow({
   };
 
   // Location is edited elsewhere; suppress it here.
-  // Field order: QtyMin, QtyMax, Unit, Name, Var, LinkedRecipe, Size, Prep, Notes, QtyIsApprox, IsAlt, IsOpt
+  // Field order: QtyMin, QtyMax, Unit, Name, Var, Size, Prep, Notes, QtyIsApprox, IsAlt, IsOpt, LinkedRecipe
   const fieldsConfig = [
     { key: 'qtymin', label: 'QtyMin' },
     { key: 'qtymax', label: 'QtyMax' },
     { key: 'unit', label: 'Unit' },
     { key: 'name', label: 'Name' },
     { key: 'var', label: 'Var' },
-    { key: 'recipe', label: 'LinkedRecipe' },
     { key: 'size', label: 'Size' },
     { key: 'prep', label: 'Prep' },
     { key: 'notes', label: 'Notes' },
     { key: 'isaprx', label: 'QtyIsApprox', isBoolean: true },
     { key: 'isalt', label: 'IsAlt', isBoolean: true },
     { key: 'isopt', label: 'IsOpt', isBoolean: true },
+    { key: 'recipe', label: 'LinkedRecipe' },
   ];
   fieldsConfig.forEach((cfg) => row.appendChild(makeCell(cfg)));
 
@@ -1893,7 +2102,7 @@ function openIngredientEditRow({
           if (mn != null && mx != null && Math.abs(mn - mx) < 1e-9) return mn;
         }
       } catch (_) {}
-      if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+      if (/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(t)) return Number(t);
       return null;
     };
 
@@ -1948,7 +2157,7 @@ function openIngredientEditRow({
         quantityMin = parsedMin;
         quantityMax = parsedMax;
         quantityIsApprox = !!parsedLegacy?.quantityIsApprox;
-      } else if (/^\d+(\.\d+)?$/.test(legacyQtyText)) {
+      } else if (/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(legacyQtyText)) {
         const n = Number(legacyQtyText);
         if (Number.isFinite(n) && n > 0) {
           quantityMin = n;
@@ -1978,7 +2187,7 @@ function openIngredientEditRow({
     };
 
     const quantity = buildQuantityText() || preservedLegacyQuantityText;
-    const normalizedUnit = quantity ? fields.unit || '' : '';
+    const normalizedUnit = fields.unit || '';
 
     if (isInsert) {
       // If user cleared the name, treat it as "no-op" insert.
@@ -2521,6 +2730,7 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
           linkedRecipeId: row.linkedRecipeId || null,
           linkedRecipeTitle: row.linkedRecipeTitle || '',
           recipeText: row.recipeText || '',
+          isAlt: !!row.isAlt,
           clientId: `tmp-ing-${Date.now()}-${idx}-${Math.random()
             .toString(16)
             .slice(2)}`,

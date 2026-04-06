@@ -24,6 +24,7 @@
 
   const ACTIVE_CLASS = 'ingredient-slot--hint-active';
   const HOVER_REVEAL_MODIFIER_KEY = 'Alt';
+  const MASTER_LINK_MODE_CLASS = 'ingredient-master-link-mode';
 
   let _teardown = null;
 
@@ -56,6 +57,11 @@
       return !!(cta && !cta.classList.contains('ingredient-header-cta--persistent'));
     };
     const hoverRevealArmed = () => hoverModifierActive;
+    const syncMasterLinkModeClass = () => {
+      try {
+        document.body.classList.toggle(MASTER_LINK_MODE_CLASS, hoverModifierActive);
+      } catch (_) {}
+    };
 
     function slotHasActiveEditor(slot) {
       if (!slot || !slot.isConnected || !section.contains(slot)) return false;
@@ -387,6 +393,7 @@
       const next = !!(e && e.altKey);
       if (next === hoverModifierActive) return;
       hoverModifierActive = next;
+      syncMasterLinkModeClass();
       syncHoverTargetFromPointer();
       resolve();
     }
@@ -394,6 +401,7 @@
     function clearHoverModifier() {
       if (!hoverModifierActive) return;
       hoverModifierActive = false;
+      syncMasterLinkModeClass();
       resolve();
     }
 
@@ -465,6 +473,7 @@
       focusTarget = null;
       hoverOverCta = false;
       hoverModifierActive = false;
+      syncMasterLinkModeClass();
       activeTarget = null;
       requestedTarget = null;
       pointerTarget = null;

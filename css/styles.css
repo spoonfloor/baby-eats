@@ -422,7 +422,7 @@ body.store-editor-page .shopping-item-textarea {
 
 /* Store aisle editor: wrap long lines instead of horizontal scrolling. */
 body.store-editor-page .shopping-item-textarea {
-  min-height: 144px;
+  min-height: 72px;
   white-space: pre-wrap;
   overflow-x: hidden;
 }
@@ -486,6 +486,18 @@ body.store-editor-page .store-add-aisle-cta {
   padding: 10px 0 6px;
   cursor: pointer;
   user-select: none;
+}
+
+body.store-editor-page .store-aisle-slot {
+  position: relative;
+}
+
+body.store-editor-page .store-add-aisle-cta--per-slot {
+  display: none;
+}
+
+body.store-editor-page .store-aisle-slot.store-aisle-slot--hint-active > .store-add-aisle-cta--per-slot {
+  display: block;
 }
 
 body.store-editor-page .store-add-aisle-cta .placeholder-prompt {
@@ -683,6 +695,12 @@ body.store-editor-page .store-aisle-move-btn[aria-disabled='true'] {
   cursor: default;
 }
 
+body.store-editor-page.store-master-link-mode
+  .store-aisle-slot.store-aisle-slot--hint-active
+  .shopping-item-textarea {
+  cursor: pointer;
+}
+
 body.shopping-editor-page .shopping-item-status,
 body.unit-editor-page .shopping-item-status,
 body.size-editor-page .shopping-item-status {
@@ -867,6 +885,10 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
 .you-will-need-card .ingredient-line {
   margin: 0;
   cursor: default;
+}
+
+.ingredient-alt-prefix {
+  color: var(--theme-primary);
 }
 
 .ingredient-subsection-heading-line {
@@ -2139,6 +2161,77 @@ body.recipe-editor-page .recipe-tags-editor-field {
 .ingredient-line a:hover {
   text-decoration: underline;
   color: var(--theme-secondary);
+}
+
+/* Master links are reveal-only in modifier mode; suppress generic anchor hover affordance. */
+#ingredientsSection .ingredient-master-link:hover,
+#ingredientsSection .ingredient-master-link:focus-visible,
+.you-will-need-card .ingredient-master-link:hover,
+.you-will-need-card .ingredient-master-link:focus-visible {
+  text-decoration: none;
+  color: inherit;
+}
+
+#ingredientsSection .ingredient-master-link,
+#ingredientsSection .ingredient-master-link:visited {
+  color: inherit;
+  text-decoration: none;
+  cursor: text;
+}
+
+.you-will-need-card .ingredient-master-link,
+.you-will-need-card .ingredient-master-link:visited {
+  color: inherit;
+  text-decoration: none;
+  cursor: text;
+}
+
+body.ingredient-master-link-mode
+  #ingredientsSection
+  .ingredient-slot.ingredient-slot--hint-active
+  .ingredient-master-link,
+body.ingredient-master-link-mode
+  #ingredientsSection
+  .ingredient-slot.ingredient-slot--hint-active
+  .ingredient-master-link:visited {
+  color: var(--theme-primary);
+  cursor: pointer;
+}
+
+body.ingredient-master-link-mode
+  .you-will-need-card
+  .ingredient-line.ywn-line--hint-active
+  .ingredient-master-link,
+body.ingredient-master-link-mode
+  .you-will-need-card
+  .ingredient-line.ywn-line--hint-active
+  .ingredient-master-link:visited {
+  color: var(--theme-primary);
+  cursor: pointer;
+}
+
+body.ingredient-master-link-mode
+  #ingredientsSection
+  .ingredient-slot.ingredient-slot--hint-active
+  .ingredient-master-link:hover,
+body.ingredient-master-link-mode
+  #ingredientsSection
+  .ingredient-slot.ingredient-slot--hint-active
+  .ingredient-master-link:focus-visible {
+  color: var(--theme-secondary);
+  text-decoration: underline;
+}
+
+body.ingredient-master-link-mode
+  .you-will-need-card
+  .ingredient-line.ywn-line--hint-active
+  .ingredient-master-link:hover,
+body.ingredient-master-link-mode
+  .you-will-need-card
+  .ingredient-line.ywn-line--hint-active
+  .ingredient-master-link:focus-visible {
+  color: var(--theme-secondary);
+  text-decoration: underline;
 }
 
 /* Highlight active editing line text */

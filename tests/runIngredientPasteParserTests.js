@@ -19,10 +19,16 @@ function loadParser() {
   };
   vm.createContext(context);
   vm.runInContext(parserSource, context, { filename: 'ingredientPasteParser.js' });
-  if (typeof context.window.parseIngredientLine !== 'function') {
-    throw new Error('parseIngredientLine was not attached to window.');
+  if (
+    typeof context.window.parseIngredientLine !== 'function' ||
+    typeof context.window.parseIngredientLines !== 'function'
+  ) {
+    throw new Error('Ingredient parser functions were not attached to window.');
   }
-  return context.window.parseIngredientLine;
+  return {
+    parseIngredientLine: context.window.parseIngredientLine,
+    parseIngredientLines: context.window.parseIngredientLines,
+  };
 }
 
 function assertEqual(actual, expected, key, line) {
@@ -47,7 +53,7 @@ function assertContains(actual, expectedSnippet, key, line) {
 }
 
 function run() {
-  const parseIngredientLine = loadParser();
+  const { parseIngredientLine, parseIngredientLines } = loadParser();
   const fixtures = JSON.parse(fs.readFileSync(fixturesPath, 'utf8'));
   let passed = 0;
   const failures = [];
@@ -88,6 +94,78 @@ function run() {
     }
   });
 
+  const multilineFixtures = [
+    {
+      line: '1 large or 2 small diced carrots',
+      expectLength: 2,
+      expect: [
+        { quantityMin: 1, quantityMax: 1, name: 'carrot', size: 'large', prepNotesContains: 'diced' },
+        {
+          quantityMin: 2,
+          quantityMax: 2,
+          name: 'carrot',
+          size: 'small',
+          prepNotesContains: 'diced',
+          isAlt: true,
+        },
+      ],
+    },
+    {
+      line: '1/4 large or 1/2 small purple cabbage, diced',
+      expectLength: 2,
+      expect: [
+        {
+          quantityMin: 0.25,
+          quantityMax: 0.25,
+          name: 'cabbage',
+          variant: 'purple',
+          size: 'large',
+          prepNotesContains: 'diced',
+        },
+        {
+          quantityMin: 0.5,
+          quantityMax: 0.5,
+          name: 'cabbage',
+          variant: 'purple',
+          size: 'small',
+          prepNotesContains: 'diced',
+          isAlt: true,
+        },
+      ],
+    },
+  ];
+
+  multilineFixtures.forEach((fixture, index) => {
+    const line = fixture.line;
+    try {
+      const parsedRows = parseIngredientLines(line);
+      assertEqual(parsedRows.length, fixture.expectLength, 'rowCount', line);
+      fixture.expect.forEach((rowExpect, rowIndex) => {
+        const row = parsedRows[rowIndex];
+        if (!row) {
+          throw new Error(`Missing parsed row ${rowIndex} for line: ${JSON.stringify(line)}`);
+        }
+        Object.keys(rowExpect).forEach((key) => {
+          const expectedValue = rowExpect[key];
+          if (key === 'prepNotesContains') {
+            assertContains(row.prepNotes, expectedValue, key, line);
+            return;
+          }
+          assertEqual(row[key], expectedValue, key, line);
+        });
+      });
+      passed += 1;
+    } catch (err) {
+      failures.push({
+        index: fixtures.length + index,
+        line,
+        error: err && err.message ? err.message : String(err),
+      });
+    }
+  });
+
+  const total = fixtures.length + multilineFixtures.length;
+
   if (failures.length) {
     console.error(
       `Ingredient parser tests failed: ${failures.length} failed, ${passed} passed.`
@@ -99,7 +177,7 @@ function run() {
     process.exit(1);
   }
 
-  console.log(`Ingredient parser tests passed: ${passed}/${fixtures.length}.`);
+  console.log(`Ingredient parser tests passed: ${passed}/${total}.`);
 }
 
 run();

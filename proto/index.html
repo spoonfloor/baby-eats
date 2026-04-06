@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://cdnjs.cloudflare.com;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Favorite Eats Proto Shell</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+    <link rel="stylesheet" href="../css/overrides.css" />
+    <link rel="stylesheet" href="../css/styles.css" />
+    <link rel="stylesheet" href="../css/overlays.css" />
+
+    <style>
+      body.proto-shell-page {
+        min-height: 100vh;
+        margin: 0;
+        background: #ffffff;
+        color: var(--font-color-near-black, #1a1a1a);
+      }
+
+      .proto-shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+      }
+
+      .proto-appbar {
+        background: linear-gradient(135deg, #5b43d6 0%, #7057ff 100%);
+        color: #ffffff;
+        padding: calc(env(safe-area-inset-top, 0px) + 22px) 20px 22px;
+        box-shadow: 0 3px 14px rgba(91, 67, 214, 0.16);
+      }
+
+      .proto-appbar-title {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 400;
+      }
+
+      .proto-main {
+        flex: 1;
+        padding: 0 0 calc(var(--bottom-nav-height) + 28px);
+        background: #ffffff;
+      }
+
+      .proto-card {
+        background: #ffffff;
+        display: grid;
+        min-height: calc(100vh - 170px);
+      }
+
+      .proto-panel-body {
+        min-height: calc(100vh - 170px);
+        padding: 20px 24px;
+      }
+
+      .proto-panel-body.is-empty {
+        display: grid;
+        place-items: center;
+      }
+
+      .proto-panel-body.is-list-mode {
+        display: block;
+        padding-top: 28px;
+      }
+
+      .proto-empty-state {
+        text-align: center;
+        max-width: 24rem;
+        display: grid;
+        gap: 12px;
+      }
+
+      .proto-empty-icon {
+        font-family: 'Material Symbols Outlined';
+        font-size: 42px;
+        line-height: 1;
+        color: #7057ff;
+      }
+
+      .proto-empty-copy {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: rgba(0, 0, 0, 0.68);
+      }
+
+      .proto-recipe-list {
+        list-style: none;
+        margin: 0;
+        padding: 20px 0 10px;
+        width: min(560px, 100%);
+      }
+
+      .proto-recipe-list-item {
+        padding: 10px 6px;
+        font-size: 36px;
+        line-height: 1.22;
+      }
+
+      .proto-action-row {
+        display: flex;
+        justify-content: center;
+        margin-top: 8px;
+      }
+
+      .proto-action-button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        background: #7057ff;
+        color: #fff;
+        padding: 12px 18px;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .proto-action-button[hidden] {
+        display: none;
+      }
+
+      .proto-file-input {
+        display: none;
+      }
+
+      .proto-tabbar {
+        position: sticky;
+        bottom: 0;
+        padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(
+          to top,
+          rgba(245, 241, 255, 0.98) 70%,
+          rgba(245, 241, 255, 0)
+        );
+      }
+
+      .proto-tabbar-scroll {
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .proto-tabbar-row {
+        display: flex;
+        gap: 8px;
+        min-width: max-content;
+      }
+
+      .proto-tab {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        background: #eae5ff;
+        color: #5b43d6;
+        padding: 12px 16px;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .proto-tab.is-active {
+        background: #7057ff;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body class="proto-shell-page">
+    <div class="proto-shell">
+      <header class="proto-appbar">
+        <h1 class="proto-appbar-title" id="protoAppbarTitle">Recipes</h1>
+      </header>
+
+      <main class="proto-main">
+        <section class="proto-card" aria-live="polite">
+          <div class="proto-panel-body is-empty" id="protoPanelBody">
+            <div class="proto-empty-state" id="protoEmptyState">
+              <div class="proto-empty-icon" id="protoEmptyIcon">menu_book</div>
+              <p class="proto-empty-copy" id="protoEmptyCopy">
+                No recipes loaded yet.
+              </p>
+              <div class="proto-action-row">
+                <button type="button" class="proto-action-button" id="protoLoadDbBtn" hidden>
+                  Load DB
+                </button>
+              </div>
+            </div>
+            <ul class="proto-recipe-list" id="protoRecipeList" hidden></ul>
+            <input
+              type="file"
+              id="protoDbFileInput"
+              class="proto-file-input"
+              accept=".db,.sqlite,.sqlite3"
+            />
+          </div>
+        </section>
+      </main>
+
+      <nav class="proto-tabbar" aria-label="Prototype tabs">
+        <div class="proto-tabbar-scroll">
+          <div class="proto-tabbar-row" id="protoTabRow"></div>
+        </div>
+      </nav>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js"></script>
+    <script>
+      const protoTabs = [
+        {
+          id: 'recipes',
+          label: 'Recipes',
+          icon: 'menu_book',
+          title: 'Recipes',
+          copy: 'No recipes loaded yet.',
+        },
+        {
+          id: 'items',
+          label: 'Items',
+          icon: 'shopping_bag',
+          title: 'Shopping Items',
+          copy: 'No extra shopping items selected yet.',
+        },
+        {
+          id: 'menu-plan',
+          label: 'Menu Plan',
+          icon: 'event_note',
+          title: 'Menu Plan',
+          copy: 'No recipes in your menu plan yet.',
+        },
+        {
+          id: 'stores',
+          label: 'Stores',
+          icon: 'storefront',
+          title: 'Stores',
+          copy: 'No stores selected yet.',
+        },
+        {
+          id: 'shopping-list',
+          label: 'Shopping List',
+          icon: 'checklist',
+          title: 'Shopping List',
+          copy: 'No shopping list yet.',
+        },
+      ];
+
+      const tabRow = document.getElementById('protoTabRow');
+      const appbarTitle = document.getElementById('protoAppbarTitle');
+      const panelBody = document.getElementById('protoPanelBody');
+      const emptyState = document.getElementById('protoEmptyState');
+      const emptyIcon = document.getElementById('protoEmptyIcon');
+      const emptyCopy = document.getElementById('protoEmptyCopy');
+      const loadDbBtn = document.getElementById('protoLoadDbBtn');
+      const dbFileInput = document.getElementById('protoDbFileInput');
+      const recipeList = document.getElementById('protoRecipeList');
+      const PROTO_DEFAULT_DB_PATH =
+        '/Users/erichenry/Desktop/recipe-app/db-sandbox/favorite_eats.db';
+      const SQL_CDN_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0';
+
+      let activeTabId = 'recipes';
+      let sqlInitPromise = null;
+      let recipeLoadPromise = null;
+
+      function renderProtoTabs() {
+        tabRow.innerHTML = '';
+
+        protoTabs.forEach((tab) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'proto-tab';
+          button.textContent = tab.label;
+          button.dataset.tabId = tab.id;
+          if (tab.id === activeTabId) button.classList.add('is-active');
+          button.addEventListener('click', () => {
+            activeTabId = tab.id;
+            renderProtoTabs();
+            renderProtoPanel();
+          });
+          tabRow.appendChild(button);
+        });
+      }
+
+      function renderProtoPanel() {
+        const tab = protoTabs.find((entry) => entry.id === activeTabId) || protoTabs[0];
+        appbarTitle.textContent = tab.title;
+        document.title = `Favorite Eats Proto - ${tab.title}`;
+
+        if (tab.id === 'recipes') {
+          void renderRecipesPanel(tab);
+          return;
+        }
+
+        showEmptyState(tab.icon, tab.copy);
+      }
+
+      function showEmptyState(icon, copy, options = {}) {
+        const { showLoadButton = false } = options;
+        emptyIcon.textContent = icon;
+        emptyCopy.textContent = copy;
+        emptyState.hidden = false;
+        recipeList.hidden = true;
+        recipeList.innerHTML = '';
+        loadDbBtn.hidden = !showLoadButton;
+        panelBody.classList.add('is-empty');
+        panelBody.classList.remove('is-list-mode');
+      }
+
+      function showRecipeList(titles) {
+        recipeList.innerHTML = '';
+        titles.forEach((title) => {
+          const item = document.createElement('li');
+          item.className = 'proto-recipe-list-item';
+          item.textContent = title;
+          recipeList.appendChild(item);
+        });
+        emptyState.hidden = true;
+        recipeList.hidden = false;
+        loadDbBtn.hidden = true;
+        panelBody.classList.remove('is-empty');
+        panelBody.classList.add('is-list-mode');
+      }
+
+      function isBrowserOnlyMode() {
+        return !window.electronAPI?.loadDB;
+      }
+
+      async function ensureSqlModule() {
+        if (window.SQL) return window.SQL;
+        if (!sqlInitPromise) {
+          if (typeof initSqlJs !== 'function') {
+            return null;
+          }
+          sqlInitPromise = initSqlJs({
+            locateFile: (file) => `${SQL_CDN_BASE}/${file}`,
+          }).then((SQL) => {
+            window.SQL = SQL;
+            return SQL;
+          });
+        }
+        return sqlInitPromise;
+      }
+
+      async function readDbBytes() {
+        if (window.electronAPI?.loadDB) {
+          try {
+            const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
+            const preferredPath = pathHint || PROTO_DEFAULT_DB_PATH;
+            const bytes = await window.electronAPI.loadDB(preferredPath);
+            if (bytes) return new Uint8Array(bytes);
+          } catch (err) {
+            console.warn('Proto recipes failed to load DB from Electron:', err);
+          }
+        }
+
+        try {
+          const stored = localStorage.getItem('favoriteEatsDb');
+          if (stored) return new Uint8Array(JSON.parse(stored));
+        } catch (err) {
+          console.warn('Proto recipes local DB parse failed:', err);
+        }
+
+        return null;
+      }
+
+      async function loadRecipeTitlesFromDb() {
+        const SQL = await ensureSqlModule();
+        if (!SQL) return { titles: [], reason: 'sql-unavailable' };
+        const bytes = await readDbBytes();
+        if (!bytes || !bytes.length) return { titles: [], reason: 'db-unavailable' };
+
+        const db = new SQL.Database(bytes);
+        try {
+          const result = db.exec(
+            'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
+          );
+          if (!result.length) return { titles: [], reason: 'empty' };
+          const titles = result[0].values
+            .map((row) => String(row?.[1] || '').trim())
+            .filter(Boolean);
+          return {
+            titles,
+            reason: titles.length ? 'ok' : 'empty',
+          };
+        } finally {
+          if (typeof db.close === 'function') db.close();
+        }
+      }
+
+      async function ensureRecipeTitlesLoaded() {
+        if (!recipeLoadPromise) {
+          recipeLoadPromise = loadRecipeTitlesFromDb()
+            .then((result) => result)
+            .catch((err) => {
+              console.warn('Proto recipes query failed:', err);
+              return { titles: [], reason: 'query-failed' };
+            });
+        }
+        return recipeLoadPromise;
+      }
+
+      function getRecipesEmptyStateCopy(reason) {
+        if (reason === 'sql-unavailable') {
+          return 'Recipe loader is unavailable right now.';
+        }
+        if (reason === 'db-unavailable') {
+          return isBrowserOnlyMode()
+            ? 'Choose your recipes DB to load the recipe list.'
+            : 'No recipes loaded yet.';
+        }
+        if (reason === 'query-failed') {
+          return 'Could not read recipes from the DB.';
+        }
+        return 'No recipes loaded yet.';
+      }
+
+      async function renderRecipesPanel(tab) {
+        if (!recipeLoadPromise) {
+          showEmptyState(tab.icon, tab.copy, {
+            showLoadButton: isBrowserOnlyMode(),
+          });
+        }
+
+        const { titles, reason } = await ensureRecipeTitlesLoaded();
+        if (activeTabId !== 'recipes') return;
+        if (!titles.length) {
+          showEmptyState(tab.icon, getRecipesEmptyStateCopy(reason), {
+            showLoadButton: isBrowserOnlyMode(),
+          });
+          return;
+        }
+        showRecipeList(titles);
+      }
+
+      loadDbBtn.addEventListener('click', () => {
+        dbFileInput.click();
+      });
+
+      dbFileInput.addEventListener('change', async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+          const buffer = await file.arrayBuffer();
+          localStorage.setItem(
+            'favoriteEatsDb',
+            JSON.stringify(Array.from(new Uint8Array(buffer)))
+          );
+          recipeLoadPromise = null;
+          if (activeTabId === 'recipes') void renderRecipesPanel(protoTabs[0]);
+        } catch (err) {
+          console.warn('Proto DB file read failed:', err);
+          recipeLoadPromise = null;
+          showEmptyState('menu_book', 'Could not read that DB file.', {
+            showLoadButton: true,
+          });
+        } finally {
+          dbFileInput.value = '';
+        }
+      });
+
+      renderProtoTabs();
+      void renderProtoPanel();
+    </script>
+  </body>
+</html>

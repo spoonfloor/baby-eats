@@ -36,6 +36,8 @@ function deriveIngredientLemma(rawTitle) {
   const t = String(rawTitle || '').trim();
   if (!t) return '';
   // Small heuristic singularizer (good enough for simple plurals).
+  if (/^tomatoes$/i.test(t)) return t.slice(0, -2);
+  if (/^potatoes$/i.test(t)) return t.slice(0, -2);
   if (/ies$/i.test(t) && t.length > 3) return t.slice(0, -3) + 'y';
   if (/(ch|sh|s|x|z)es$/i.test(t) && t.length > 2) return t.slice(0, -2);
   if (/ses$/i.test(t) && t.length > 3) return t.slice(0, -2);
@@ -546,7 +548,12 @@ function loadRecipeFromDB(db, recipeId) {
     : null;
   const linkedRecipeTitleSql = linkedRecipeJoinIdSql ? 'lr.title' : 'NULL';
   const nonRecipeNameSql = hasDisplayName
-    ? "COALESCE(NULLIF(TRIM(rim.display_name), ''), i.name)"
+    ? `CASE
+         WHEN TRIM(COALESCE(rim.display_name, '')) != ''
+              AND LOWER(TRIM(rim.display_name)) != LOWER(TRIM(i.name))
+           THEN rim.display_name
+         ELSE i.name
+       END`
     : 'i.name';
   const recipeDisplayNameSql = hasIsRecipe
     ? hasRecipeText
@@ -1369,7 +1376,22 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       }
       if (rimHasDisplayName && !normalizedIsRecipe) {
         cols.push('display_name');
-        vals.push((ing.name || '').trim());
+        const typed = (ing.name || '').trim();
+        let canonicalIngName = '';
+        if (ingredientId != null) {
+          try {
+            const cq = activeDb.exec(
+              `SELECT name FROM ingredients WHERE ${ingIdCol} = ? LIMIT 1;`,
+              [ingredientId],
+            );
+            if (cq.length && cq[0].values.length) {
+              canonicalIngName = String(cq[0].values[0][0] || '').trim();
+            }
+          } catch (_) {}
+        }
+        vals.push(
+          typed.toLowerCase() === canonicalIngName.toLowerCase() ? null : typed,
+        );
       }
       if (rimHas('variant')) {
         cols.push('variant');
