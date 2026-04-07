@@ -54,141 +54,24 @@ const NEED_LOCATION_ORDER = [
 
 // --- You Will Need helpers ---
 function formatNeedLine(ing) {
-  const hasFinitePositive = (v) => {
-    if (v == null) return false;
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) && n > 0;
-  };
-  const parseFractionToken = (token) => {
-    const t = String(token || '').trim();
-    if (!t) return null;
-    const mixed = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
-    if (mixed) {
-      const whole = Number(mixed[1]);
-      const num = Number(mixed[2]);
-      const den = Number(mixed[3]);
-      if (Number.isFinite(whole) && Number.isFinite(num) && den) {
-        return whole + num / den;
-      }
-      return null;
-    }
-    const frac = t.match(/^(\d+)\s*\/\s*(\d+)$/);
-    if (frac) {
-      const num = Number(frac[1]);
-      const den = Number(frac[2]);
-      if (Number.isFinite(num) && den) return num / den;
-      return null;
-    }
-    if (/^\d+(\.\d+)?$/.test(t)) {
-      const n = Number(t);
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
-  };
-
-  let qtyText = '';
-  let qtyForUnit = null;
-
-  const hasRange =
-    hasFinitePositive(ing.quantityMin) && hasFinitePositive(ing.quantityMax);
-  if (hasRange) {
-    const qMin = Number(ing.quantityMin);
-    const qMax = Number(ing.quantityMax);
-    const same = Math.abs(qMin - qMax) < 1e-9;
-    qtyText = same
-      ? decimalToFractionDisplay(qMin)
-      : `${decimalToFractionDisplay(qMin)} to ${decimalToFractionDisplay(qMax)}`;
-    if (ing.quantityIsApprox) qtyText = `about ${qtyText}`;
-    if (same) qtyForUnit = qMin;
-  } else if (typeof ing.quantity === 'number' && !isNaN(ing.quantity) && ing.quantity > 0) {
-    qtyText = decimalToFractionDisplay(ing.quantity);
-    qtyForUnit = ing.quantity;
-  } else if (typeof ing.quantity === 'string' && ing.quantity.trim()) {
-    const rawQty = ing.quantity.trim();
-    const approxMatch = rawQty.match(/^(about|approx(?:\.|imately)?|around|roughly|~)\s+/i);
-    const approxPrefix = approxMatch ? 'about ' : '';
-    const coreQty = approxMatch ? rawQty.slice(approxMatch[0].length).trim() : rawQty;
-    const rangeMatch = coreQty.match(/^(.+?)\s*(?:to|-)\s*(.+)$/i);
-    if (rangeMatch) {
-      const left = parseFractionToken(rangeMatch[1]);
-      const right = parseFractionToken(rangeMatch[2]);
-      if (Number.isFinite(left) && Number.isFinite(right) && left > 0 && right > 0) {
-        qtyText = `${approxPrefix}${decimalToFractionDisplay(
-          rangeMatch[1]
-        )} to ${decimalToFractionDisplay(rangeMatch[2])}`.trim();
-      } else {
-        qtyText = rawQty;
-      }
-    } else {
-      const parsed = parseFractionToken(coreQty);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        qtyText = `${approxPrefix}${decimalToFractionDisplay(coreQty)}`.trim();
-        qtyForUnit = parsed;
-      } else {
-        qtyText = rawQty;
-      }
-    }
+  if (typeof window.formatNeedLineText === 'function') {
+    return window.formatNeedLineText(ing);
   }
-
-  let unitText = ing.unit || '';
-  if (unitText && Number.isFinite(qtyForUnit) && typeof window.getUnitDisplay === 'function') {
-    unitText = window.getUnitDisplay(unitText, qtyForUnit);
-  }
-  const sizeText = String(ing.size || '').trim();
-  const qtyUnit = [qtyText, sizeText, unitText].filter(Boolean).join(' ');
 
   const fallbackBaseName = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`.trim();
-  const baseName = (() => {
-    if (typeof window.getIngredientDisplayName !== 'function') return fallbackBaseName;
-    try {
-      const quantityForNoun = Number.isFinite(qtyForUnit)
-        ? qtyForUnit
-        : hasRange && hasFinitePositive(ing.quantityMax)
-          ? Number(ing.quantityMax)
-          : ing.quantity;
-      const computed = window.getIngredientDisplayName({
-        ...ing,
-        quantity: quantityForNoun,
-      });
-      return String(computed || '').trim() || fallbackBaseName;
-    } catch (_) {
-      return fallbackBaseName;
-    }
-  })();
-
-  let text = baseName;
-  if (qtyUnit) text += ` (${qtyUnit})`;
-
-  if (ing.isOptional) {
-    if (qtyUnit) text = text.replace(/\)$/, ', optional)');
-    else text += ' (optional)';
-  }
-
-  return text.trim();
+  return fallbackBaseName || '';
 }
 
 function getNeedLineBaseName(ing) {
-  const hasFinitePositive = (v) => {
-    if (v == null) return false;
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) && n > 0;
-  };
   const fallbackBaseName = `${ing.variant ? ing.variant + ' ' : ''}${ing.name}`.trim();
-  if (typeof window.getIngredientDisplayName !== 'function') return fallbackBaseName;
-  try {
-    const quantityForNoun = hasFinitePositive(ing.quantityMax)
-      ? Number(ing.quantityMax)
-      : hasFinitePositive(ing.quantityMin)
-        ? Number(ing.quantityMin)
-        : ing.quantity;
-    const computed = window.getIngredientDisplayName({
-      ...ing,
-      quantity: quantityForNoun,
-    });
-    return String(computed || '').trim() || fallbackBaseName;
-  } catch (_) {
-    return fallbackBaseName;
+  if (typeof window.getIngredientDisplayCoreParts === 'function') {
+    try {
+      return window.getIngredientDisplayCoreParts(ing).nameText || fallbackBaseName;
+    } catch (_) {
+      return fallbackBaseName;
+    }
   }
+  return fallbackBaseName;
 }
 
 function findYwnShoppingItemMatchByName(rawName) {

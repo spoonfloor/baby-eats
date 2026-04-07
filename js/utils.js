@@ -2240,6 +2240,12 @@ function mountTopFilterChipRail(opts = {}) {
   const gapFromAppBarPx = Number.isFinite(opts?.gapFromAppBarPx)
     ? Number(opts.gapFromAppBarPx)
     : 8;
+  const comfortableWidthPx = Number.isFinite(opts?.comfortableWidthPx)
+    ? Number(opts.comfortableWidthPx)
+    : 600;
+  const edgeToEdgeWidthPx = Number.isFinite(opts?.edgeToEdgeWidthPx)
+    ? Number(opts.edgeToEdgeWidthPx)
+    : 360;
 
   let dock = dockId ? document.getElementById(dockId) : null;
   if (!dock) {
@@ -2265,6 +2271,9 @@ function mountTopFilterChipRail(opts = {}) {
     viewport.appendChild(track);
   }
 
+  const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
+  const lerp = (start, end, amount) => start + (end - start) * amount;
+
   const sync = () => {
     if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
     const rect = anchorEl.getBoundingClientRect();
@@ -2275,24 +2284,51 @@ function mountTopFilterChipRail(opts = {}) {
     const safeTop = Number.isFinite(appBarBottom)
       ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
       : rect.bottom + gapFromAnchorPx;
-    dock.style.left = `${Math.round(rect.left)}px`;
-    dock.style.width = `${Math.round(rect.width)}px`;
+
+    const docEl =
+      document.documentElement instanceof HTMLElement
+        ? document.documentElement
+        : null;
+    const vw = window.innerWidth || docEl?.clientWidth || 0;
+    const alignedLeft = Number(rect.left) || 0;
+    const alignedRight = Number(rect.right) || alignedLeft + (Number(rect.width) || 0);
+    const fullyRelaxedLeft = 0;
+    const fullyRelaxedRight = vw;
+    const widthDenominator = Math.max(1, comfortableWidthPx - edgeToEdgeWidthPx);
+    const blend = clamp01((comfortableWidthPx - rect.width) / widthDenominator);
+    const dockLeft = lerp(alignedLeft, fullyRelaxedLeft, blend);
+    const dockRight = lerp(alignedRight, fullyRelaxedRight, blend);
+    const dockWidth = Math.max(0, dockRight - dockLeft);
+
+    dock.style.left = `${Math.round(dockLeft)}px`;
+    dock.style.width = `${Math.round(dockWidth)}px`;
     dock.style.top = `${Math.round(safeTop)}px`;
   };
 
-  const onViewportShift = () => sync();
-  window.addEventListener('resize', onViewportShift);
-  window.addEventListener('scroll', onViewportShift, { passive: true });
-  requestAnimationFrame(sync);
+  let _syncRafId = 0;
+  const scheduleSync = () => {
+    if (_syncRafId) return;
+    _syncRafId = requestAnimationFrame(() => {
+      _syncRafId = 0;
+      sync();
+    });
+  };
+  window.addEventListener('resize', scheduleSync);
+  window.addEventListener('scroll', scheduleSync, { passive: true });
+  scheduleSync();
 
   return {
     dockEl: dock,
     viewportEl: viewport,
     trackEl: track,
-    sync,
+    sync: scheduleSync,
     destroy() {
-      window.removeEventListener('resize', onViewportShift);
-      window.removeEventListener('scroll', onViewportShift);
+      window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('scroll', scheduleSync);
+      if (_syncRafId) {
+        cancelAnimationFrame(_syncRafId);
+        _syncRafId = 0;
+      }
       if (removeOnDestroy && dock?.parentNode) {
         dock.parentNode.removeChild(dock);
       }

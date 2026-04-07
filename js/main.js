@@ -68,6 +68,47 @@ function attachSecretGalleryShortcut(addBtn) {
   addBtn.addEventListener('click', handler, { capture: true });
 }
 
+const FORCE_WEB_MODE_STORAGE_KEY = 'favoriteEatsForceWebMode';
+const FORCE_WEB_MODE_MENU_ENABLED = true;
+
+function isForceWebModeMenuEnabled() {
+  return FORCE_WEB_MODE_MENU_ENABLED;
+}
+
+function isForceWebModeEnabled() {
+  try {
+    return localStorage.getItem(FORCE_WEB_MODE_STORAGE_KEY) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
+  const body = document.body;
+  if (!(body instanceof HTMLElement)) return !!enabled;
+
+  const forceWebMode = !!enabled;
+  body.dataset.forceWebMode = forceWebMode ? 'on' : 'off';
+  body.dataset.pageSet = forceWebMode ? 'web' : 'editor';
+  body.classList.toggle('force-web-mode', forceWebMode);
+  return forceWebMode;
+}
+
+function setForceWebModeEnabled(enabled) {
+  const next = !!enabled;
+  try {
+    localStorage.setItem(FORCE_WEB_MODE_STORAGE_KEY, next ? '1' : '0');
+  } catch (_) {}
+  return applyForceWebModePresentation(next);
+}
+
+applyForceWebModePresentation();
+window.forceWebMode = Object.freeze({
+  isEnabled: isForceWebModeEnabled,
+  setEnabled: setForceWebModeEnabled,
+  apply: applyForceWebModePresentation,
+});
+
 function isTypingContext(target) {
   const el = target instanceof Element ? target : null;
   const active =
@@ -1720,11 +1761,98 @@ async function loadShoppingPage() {
     { id: 'no aisle', label: 'no aisle', kind: 'usage' },
   ];
   const activeFilterChips = new Set();
+  const selectedShoppingNames = new Set();
+  const shoppingQuantities = new Map();
   let shoppingChipCounts = new Map();
   let filterChipRail = null;
   const previousPageId = String(window.__favoriteEatsPreviousPageId || '').trim();
   const shouldRestoreChipState =
     previousPageId === 'shopping' || previousPageId === 'shopping-editor';
+
+  const getShoppingSelectionKey = (rawName) =>
+    String(rawName || '').trim().toLowerCase();
+  const isShoppingWebSelectMode = () => isForceWebModeEnabled();
+  const getShoppingQty = (key) => shoppingQuantities.get(key) || 0;
+  const setShoppingQty = (key, qty) => {
+    const clamped = Math.max(0, Math.min(99, qty));
+    if (clamped <= 0) {
+      shoppingQuantities.delete(key);
+      selectedShoppingNames.delete(key);
+    } else {
+      shoppingQuantities.set(key, clamped);
+      selectedShoppingNames.add(key);
+    }
+  };
+  let activeStepperRow = null;
+  let activeStepperName = '';
+  const collapseActiveStepper = () => {
+    if (activeStepperRow) {
+      syncShoppingRowVisuals(activeStepperRow, activeStepperName, false);
+    }
+    activeStepperRow = null;
+    activeStepperName = '';
+  };
+  const activateStepper = (rowEl, itemName) => {
+    if (activeStepperRow === rowEl) return;
+    collapseActiveStepper();
+    activeStepperRow = rowEl;
+    activeStepperName = itemName;
+    syncShoppingRowVisuals(rowEl, itemName, true);
+  };
+  const syncShoppingRowVisuals = (rowEl, itemName, isActive) => {
+    if (!(rowEl instanceof HTMLElement)) return;
+    const key = getShoppingSelectionKey(itemName);
+    const qty = getShoppingQty(key);
+    const isSelected = qty > 0;
+    rowEl.dataset.shoppingSelected = isSelected ? 'true' : 'false';
+    rowEl.classList.toggle('shopping-row-checked', isSelected);
+    const icon = rowEl.querySelector('.shopping-list-row-icon');
+    const stepper = rowEl.querySelector('.shopping-list-row-stepper');
+    const badge = rowEl.querySelector('.shopping-list-row-badge');
+    if (isActive && isSelected) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) {
+        stepper.style.display = '';
+        const qtyEl = stepper.querySelector('.shopping-stepper-qty');
+        if (qtyEl) qtyEl.textContent = String(qty);
+      }
+      if (badge) badge.style.display = 'none';
+    } else if (isSelected) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) stepper.style.display = 'none';
+      if (badge) {
+        badge.style.display = 'inline-block';
+        badge.textContent = `${qty}x`;
+      }
+    } else {
+      if (icon) icon.style.display = '';
+      if (stepper) stepper.style.display = 'none';
+      if (badge) badge.style.display = 'none';
+    }
+  };
+  const syncShoppingRowSelectionState = (rowEl, itemName) => {
+    const isActive = activeStepperRow === rowEl;
+    syncShoppingRowVisuals(rowEl, itemName, isActive);
+    if (isActive && getShoppingQty(getShoppingSelectionKey(itemName)) <= 0) {
+      activeStepperRow = null;
+      activeStepperName = '';
+    }
+  };
+  const toggleShoppingRowSelectionState = (rowEl, itemName) => {
+    const key = getShoppingSelectionKey(itemName);
+    if (!key) return;
+    const qty = getShoppingQty(key);
+    setShoppingQty(key, qty > 0 ? 0 : 1);
+    syncShoppingRowSelectionState(rowEl, itemName);
+  };
+  const incrementShoppingQty = (rowEl, itemName, delta) => {
+    const key = getShoppingSelectionKey(itemName);
+    if (!key) return;
+    const qty = getShoppingQty(key);
+    setShoppingQty(key, qty + delta);
+    activateStepper(rowEl, itemName);
+    syncShoppingRowSelectionState(rowEl, itemName);
+  };
 
   const persistShoppingChipState = () => {
     try {
@@ -2220,7 +2348,11 @@ async function loadShoppingPage() {
       const cs = window.getComputedStyle ? getComputedStyle(li) : null;
       const padL = cs ? parseFloat(cs.paddingLeft) : 0;
       const padR = cs ? parseFloat(cs.paddingRight) : 0;
-      const maxPx = Math.max(0, li.clientWidth - (padL || 0) - (padR || 0));
+      const checkboxReserve = isShoppingWebSelectMode() ? 96 : 0;
+      const maxPx = Math.max(
+        0,
+        li.clientWidth - (padL || 0) - (padR || 0) - checkboxReserve,
+      );
       const measure = makeTextMeasurer(li);
       if (!measure || maxPx <= 0) return `${baseName} (${vs[0]})`;
 
@@ -2268,8 +2400,82 @@ async function loadShoppingPage() {
     items.forEach((item) => {
       const li = document.createElement('li');
       const baseName = String(item?.name || '').trim();
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'shopping-list-row-label';
+      labelSpan.textContent = baseName;
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-outlined shopping-list-row-icon';
+      icon.textContent = 'add_box';
+      icon.setAttribute('aria-hidden', 'true');
 
-      li.textContent = baseName;
+      const stepper = document.createElement('span');
+      stepper.className = 'shopping-list-row-stepper';
+      stepper.style.display = 'none';
+
+      const minusBtn = document.createElement('button');
+      minusBtn.type = 'button';
+      minusBtn.className = 'shopping-stepper-btn';
+      minusBtn.setAttribute('aria-label', 'Decrease quantity');
+      const minusIcon = document.createElement('span');
+      minusIcon.className = 'material-symbols-outlined';
+      minusIcon.textContent = 'remove';
+      minusIcon.setAttribute('aria-hidden', 'true');
+      minusBtn.appendChild(minusIcon);
+
+      const qtySpan = document.createElement('span');
+      qtySpan.className = 'shopping-stepper-qty';
+      qtySpan.textContent = '0';
+
+      const plusBtn = document.createElement('button');
+      plusBtn.type = 'button';
+      plusBtn.className = 'shopping-stepper-btn';
+      plusBtn.setAttribute('aria-label', 'Increase quantity');
+      const plusIcon = document.createElement('span');
+      plusIcon.className = 'material-symbols-outlined';
+      plusIcon.textContent = 'add';
+      plusIcon.setAttribute('aria-hidden', 'true');
+      plusBtn.appendChild(plusIcon);
+
+      stepper.appendChild(minusBtn);
+      stepper.appendChild(qtySpan);
+      stepper.appendChild(plusBtn);
+
+      const badge = document.createElement('span');
+      badge.className = 'shopping-list-row-badge';
+      badge.style.display = 'none';
+
+      li.appendChild(labelSpan);
+      li.appendChild(icon);
+      li.appendChild(stepper);
+      li.appendChild(badge);
+      syncShoppingRowSelectionState(li, baseName);
+
+      icon.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isShoppingWebSelectMode()) return;
+        incrementShoppingQty(li, baseName, 1);
+      });
+
+      badge.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isShoppingWebSelectMode()) return;
+        activateStepper(li, baseName);
+        syncShoppingRowSelectionState(li, baseName);
+      });
+
+      minusBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        incrementShoppingQty(li, baseName, -1);
+      });
+
+      plusBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        incrementShoppingQty(li, baseName, 1);
+      });
 
       li.addEventListener('click', (event) => {
         const wantsRemove = event.ctrlKey || event.metaKey;
@@ -2279,23 +2485,32 @@ async function loadShoppingPage() {
           void (async () => {
             const ok = await removeShoppingName(item.name || '');
             if (!ok) return;
-            // Keep viewport stable when delete triggers a full list reload.
             rememberShoppingScrollForReload();
             window.location.reload();
           })();
           return;
         }
 
+        if (isShoppingWebSelectMode()) {
+          if (activeStepperRow && activeStepperRow !== li) {
+            collapseActiveStepper();
+          }
+          return;
+        }
+
         sessionStorage.setItem('selectedShoppingItemId', String(item.id));
         sessionStorage.setItem('selectedShoppingItemName', item.name || '');
         sessionStorage.removeItem('selectedShoppingItemIsNew');
-        // Preserve list scroll when returning from child editor.
         rememberShoppingScrollForReload();
         window.location.href = 'shoppingEditor.html';
       });
 
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
+        if (isShoppingWebSelectMode()) {
+          li.classList.toggle('shopping-row-flagged');
+          return;
+        }
         void (async () => {
           const ok = await removeShoppingName(item.name || '');
           if (!ok) return;
@@ -2317,7 +2532,7 @@ async function loadShoppingPage() {
                 baseName || '',
                 item.variants,
               );
-              li.textContent = nextText;
+              labelSpan.textContent = nextText;
               li.title = `${baseName || ''}\n\nAll variants: ${item.variants.join(
                 ', ',
               )}`;
@@ -4251,6 +4466,7 @@ function loadUnitEditorPage() {
 
   const isNew = sessionStorage.getItem('selectedUnitIsNew') === '1';
   const storedName = sessionStorage.getItem('selectedUnitNameSingular') || '';
+  const storedPlural = sessionStorage.getItem('selectedUnitNamePlural') || '';
   const code = sessionStorage.getItem('selectedUnitCode') || '';
   const initialHidden = sessionStorage.getItem('selectedUnitIsHidden') === '1';
   const initialRemoved = sessionStorage.getItem('selectedUnitIsRemoved') === '1';
@@ -4267,21 +4483,39 @@ function loadUnitEditorPage() {
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
     <div id="unitAbbreviation" class="unit-abbreviation-line">${abbreviationDisplay}</div>
-    <div class="shopping-item-status" style="margin-top: 20px;">
-      <div class="shopping-item-status-row">
-        <label class="shopping-item-toggle">
-          <input id="unitIsHiddenToggle" type="checkbox" ${initialHidden ? 'checked' : ''} />
-          <span>Hidden</span>
-        </label>
+    <div
+      id="unitDetailsCard"
+      class="shopping-item-editor-card"
+      aria-label="Unit details"
+      style="margin-top: 20px;"
+    >
+      <div class="shopping-item-field" style="width: 100%;">
+        <div class="shopping-item-label">Plural form</div>
+        <input
+          id="unitPluralInput"
+          class="shopping-item-input"
+          type="text"
+          placeholder="e.g. bunches, cloves, pinches"
+        />
       </div>
-      <div class="shopping-item-status-row">
-        <label class="shopping-item-toggle">
-          <input id="unitIsRemovedToggle" type="checkbox" ${initialRemoved ? 'checked' : ''} />
-          <span>Removed</span>
-        </label>
+      <div class="shopping-item-status">
+        <div class="shopping-item-status-row">
+          <label class="shopping-item-toggle">
+            <input id="unitIsHiddenToggle" type="checkbox" ${initialHidden ? 'checked' : ''} />
+            <span>Hidden</span>
+          </label>
+        </div>
+        <div class="shopping-item-status-row">
+          <label class="shopping-item-toggle">
+            <input id="unitIsRemovedToggle" type="checkbox" ${initialRemoved ? 'checked' : ''} />
+            <span>Removed</span>
+          </label>
+        </div>
       </div>
     </div>
   `;
+  const unitPluralInput = document.getElementById('unitPluralInput');
+  if (unitPluralInput) unitPluralInput.value = storedPlural;
 
   if (typeof waitForAppBarReady === 'function') {
     waitForAppBarReady().then(() => {
@@ -4298,6 +4532,39 @@ function loadUnitEditorPage() {
         initialSubtitle: code,
         normalizeSubtitle: (s) => (s || '').trim().toLowerCase(),
         hideSubtitleWhenMatchesTitle: true,
+        extraFields: [
+          {
+            key: 'name_plural',
+            el: document.getElementById('unitPluralInput'),
+            initialValue: storedPlural,
+          },
+          {
+            key: 'is_hidden',
+            el: document.getElementById('unitIsHiddenToggle'),
+            initialValue: initialHidden ? '1' : '0',
+            getValue: () =>
+              document.getElementById('unitIsHiddenToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById('unitIsHiddenToggle');
+              if (el) el.checked = String(v) === '1';
+            },
+          },
+          {
+            key: 'is_removed',
+            el: document.getElementById('unitIsRemovedToggle'),
+            initialValue: initialRemoved ? '1' : '0',
+            getValue: () =>
+              document.getElementById('unitIsRemovedToggle')?.checked
+                ? '1'
+                : '0',
+            setValue: (v) => {
+              const el = document.getElementById('unitIsRemovedToggle');
+              if (el) el.checked = String(v) === '1';
+            },
+          },
+        ],
         onSave: async ({ title: next, subtitle: nextCode }) => {
           const oldCode = (sessionStorage.getItem('selectedUnitCode') || '')
             .trim()
@@ -4325,6 +4592,7 @@ function loadUnitEditorPage() {
           ensureUnitsSchemaInMain(db);
 
           const newCode = (nextCode ?? '').trim().toLowerCase();
+          const pluralForm = (document.getElementById('unitPluralInput')?.value || '').trim();
           const isHidden = document.getElementById('unitIsHiddenToggle')?.checked ? 1 : 0;
           const isRemoved = document.getElementById('unitIsRemovedToggle')?.checked ? 1 : 0;
 
@@ -4350,14 +4618,14 @@ function loadUnitEditorPage() {
               );
             } catch (_) {}
             db.run(
-              'UPDATE units SET code = ?, name_singular = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
-              [newCode, next || '', isHidden, isRemoved, oldCode],
+              'UPDATE units SET code = ?, name_singular = ?, name_plural = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
+              [newCode, next || '', pluralForm, isHidden, isRemoved, oldCode],
             );
             sessionStorage.setItem('selectedUnitCode', newCode);
           } else {
             db.run(
-              'UPDATE units SET name_singular = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
-              [next || '', isHidden, isRemoved, oldCode || newCode],
+              'UPDATE units SET name_singular = ?, name_plural = ?, is_hidden = ?, is_removed = ? WHERE code = ?;',
+              [next || '', pluralForm, isHidden, isRemoved, oldCode || newCode],
             );
             if (newCode && newCode !== oldCode)
               sessionStorage.setItem('selectedUnitCode', newCode);
@@ -4376,6 +4644,7 @@ function loadUnitEditorPage() {
           }
 
           sessionStorage.setItem('selectedUnitNameSingular', next || '');
+          sessionStorage.setItem('selectedUnitNamePlural', pluralForm);
           sessionStorage.setItem('selectedUnitIsHidden', String(isHidden));
           sessionStorage.setItem('selectedUnitIsRemoved', String(isRemoved));
           sessionStorage.removeItem('selectedUnitIsNew');
@@ -8578,19 +8847,81 @@ function initBottomNav() {
 
   const menuButton = document.getElementById('appBarMenuBtn');
   const titleToggle = document.getElementById('appBarTitle');
+  const pillRow = nav.querySelector('.bottom-nav-pill-row');
 
-  const toggleNavVisibility = () => {
-    nav.classList.toggle('bottom-nav--hidden');
+  let forceWebModeButton = null;
+
+  const syncForceWebModeButton = () => {
+    if (!(forceWebModeButton instanceof HTMLButtonElement)) return;
+    const enabled = isForceWebModeEnabled();
+    forceWebModeButton.textContent = 'Force web mode';
+    forceWebModeButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    forceWebModeButton.classList.toggle('bottom-nav-pill--active', enabled);
+    forceWebModeButton.dataset.forceWebMode = enabled ? 'on' : 'off';
+  };
+
+  if (pillRow instanceof HTMLElement && isForceWebModeMenuEnabled()) {
+    forceWebModeButton = document.createElement('button');
+    forceWebModeButton.type = 'button';
+    forceWebModeButton.hidden = true;
+    forceWebModeButton.className =
+      'bottom-nav-pill bottom-nav-pill--force-web-mode';
+    syncForceWebModeButton();
+    forceWebModeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const next = !isForceWebModeEnabled();
+      setForceWebModeEnabled(next);
+      syncForceWebModeButton();
+    });
+    pillRow.appendChild(forceWebModeButton);
+  }
+
+  const setForceWebModeToggleVisible = (visible) => {
+    if (!(forceWebModeButton instanceof HTMLButtonElement)) return;
+    forceWebModeButton.hidden = !visible;
+    if (visible) syncForceWebModeButton();
+  };
+
+  const shouldRevealForceWebModeToggle = (revealForceWebMode = false) =>
+    !!(isForceWebModeEnabled() || (revealForceWebMode && isForceWebModeMenuEnabled()));
+
+  const closeNav = () => {
+    nav.classList.add('bottom-nav--hidden');
+    setForceWebModeToggleVisible(false);
+  };
+
+  const openNav = ({ revealForceWebMode = false } = {}) => {
+    setForceWebModeToggleVisible(
+      shouldRevealForceWebModeToggle(revealForceWebMode)
+    );
+    nav.classList.remove('bottom-nav--hidden');
+  };
+
+  const toggleNavVisibility = ({ revealForceWebMode = false } = {}) => {
+    if (nav.classList.contains('bottom-nav--hidden')) {
+      openNav({ revealForceWebMode });
+      return;
+    }
+    if (revealForceWebMode && isForceWebModeMenuEnabled()) {
+      setForceWebModeToggleVisible(true);
+      return;
+    }
+    closeNav();
   };
 
   // Menu icon toggles bottom nav visibility on list pages.
   if (menuButton) {
-    menuButton.addEventListener('click', toggleNavVisibility);
+    menuButton.addEventListener('click', (event) => {
+      toggleNavVisibility({ revealForceWebMode: !!event?.altKey });
+    });
   }
 
   // App-bar title also acts as a nav toggle.
   if (titleToggle) {
-    titleToggle.addEventListener('click', toggleNavVisibility);
+    titleToggle.addEventListener('click', () => {
+      toggleNavVisibility();
+    });
   }
 
   // Click-outside / blur-to-dismiss behavior.
@@ -8608,7 +8939,7 @@ function initBottomNav() {
       return;
     }
 
-    nav.classList.add('bottom-nav--hidden');
+    closeNav();
   });
 
   pills.forEach((pill) => {

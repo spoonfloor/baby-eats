@@ -120,59 +120,6 @@ function attachIngredientInputAutosize(input) {
   updateWidth();
 }
 
-// --- Unit display helper (DB-aware when available) ---
-function getUnitDisplay(unitText, numericVal) {
-  let unit = unitText || '';
-  const codeLower = unit.toLowerCase();
-
-  // Optional: use DB-backed metadata if present (populated elsewhere).
-  let meta = null;
-  if (window.unitsDisplayMap && window.unitsDisplayMap[codeLower]) {
-    meta = window.unitsDisplayMap[codeLower];
-  } else if (window.unitsMeta && window.unitsMeta[codeLower]) {
-    meta = window.unitsMeta[codeLower];
-  }
-
-  if (meta) {
-    // Prefer explicit short label, then singular name, then original code.
-    unit =
-      meta.abbrev ||
-      meta.abbreviation ||
-      meta.name_singular ||
-      meta.name ||
-      unit;
-  }
-
-  // U.S. cookbook style: abbreviations never pluralize based on quantity.
-  if (unit && numericVal && numericVal !== 1) {
-    const abbrevUnits = [
-      'tsp',
-      'tbsp',
-      'cup',
-      'fl oz',
-      'oz',
-      'lb',
-      'pt',
-      'qt',
-      'gal',
-      'ml',
-      'l',
-      'g',
-      'kg',
-    ];
-
-    if (!abbrevUnits.includes(codeLower) && !unit.endsWith('s')) {
-      unit = unit + 's';
-    }
-  }
-
-  return unit;
-}
-
-if (typeof window !== 'undefined' && !window.getUnitDisplay) {
-  window.getUnitDisplay = getUnitDisplay;
-}
-
 function normalizeIngredientHeadingText(raw) {
   if (raw == null) return '';
   const t = String(raw).replace(/\s+/g, ' ').trim();
@@ -803,114 +750,20 @@ function renderIngredient(line) {
     typeof window !== 'undefined' && typeof window.prettifyDisplayText === 'function'
       ? window.prettifyDisplayText
       : (text) => String(text == null ? '' : text);
-
-  const hasFiniteNumber = (v) => {
-    if (v == null) return false;
-    const raw = String(v).trim();
-    if (!raw) return false;
-    const n = Number(raw);
-    return Number.isFinite(n);
-  };
-  const formatNumericDisplay = (v) => decimalToFractionDisplay(v);
-
-  // Guard against null -> 0 coercion and never show zero quantities.
-  const qMinRaw = hasFiniteNumber(line.quantityMin) ? Number(line.quantityMin) : null;
-  const qMaxRaw = hasFiniteNumber(line.quantityMax) ? Number(line.quantityMax) : null;
-  const qMin = qMinRaw != null && qMinRaw > 0 ? qMinRaw : null;
-  const qMax = qMaxRaw != null && qMaxRaw > 0 ? qMaxRaw : null;
-  const qApprox = !!line.quantityIsApprox;
-
-  // Prefer structured quantity fields when present; fall back to raw quantity text.
-  // This keeps paste/import and edit flows consistent (single source of truth).
-  let quantityForDisplay = '';
-  if (qMin != null && qMax != null) {
-    quantityForDisplay =
-      Math.abs(qMin - qMax) < 1e-9
-        ? formatNumericDisplay(qMin)
-        : `${formatNumericDisplay(qMin)} to ${formatNumericDisplay(qMax)}`;
-    if (qApprox) quantityForDisplay = `about ${quantityForDisplay}`;
-  } else if (line.quantity != null && String(line.quantity).trim() !== '') {
-    quantityForDisplay = String(line.quantity).trim();
-  }
-
-  // Show quantity as fraction if numeric-ish and singular.
-  let qtyDisplay = quantityForDisplay;
-  if (!isNaN(parseFloat(quantityForDisplay)) && /^[\d.]+$/.test(quantityForDisplay)) {
-    qtyDisplay = formatNumericDisplay(quantityForDisplay);
-  }
-
-  // --- Build base name (variant + name) ---
-  // Prefer DB-backed grammar fields when present (lemma / plural flags).
-  // Falls back to name/variant as-is on older DBs.
-  const quantityForNoun = qMax != null ? qMax : line.quantity;
-  const baseName =
-    typeof window !== 'undefined' &&
-    typeof window.getIngredientDisplayName === 'function'
-      ? window.getIngredientDisplayName({
-          ...line,
-          quantity: quantityForNoun,
-        })
-      : line.variant
-      ? `${line.variant} ${line.name}`.trim()
-      : line.name;
-
-  // --- Decide if quantity is numeric or free-text ---
-  const isNumericQty =
-    quantityForDisplay !== '' &&
-    !isNaN(parseFloat(quantityForDisplay)) &&
-    /^[\d.]+$/.test(quantityForDisplay);
-
-  let mainText;
-  const sizeValue = String(line.size || '').trim();
-  if (isNumericQty && quantityForDisplay !== '') {
-    const numericVal = parseFloat(quantityForDisplay);
-    const unitText = getUnitDisplay(line.unit || '', numericVal);
-    const amountUnitText =
-      sizeValue && unitText
-        ? `${sizeValue} ${unitText}`
-        : sizeValue || unitText;
-    mainText = [qtyDisplay, amountUnitText, baseName].filter(Boolean).join(' ');
-  } else if (quantityForDisplay) {
-    // Free-text quantities and ranges should still read naturally.
-    const amountUnitText =
-      sizeValue && line.unit
-        ? `${sizeValue} ${line.unit}`
-        : sizeValue || line.unit || '';
-    mainText = [quantityForDisplay, amountUnitText, baseName]
-      .filter(Boolean)
-      .join(' ');
-  } else {
-    const amountUnitText =
-      sizeValue && line.unit
-        ? `${sizeValue} ${line.unit}`
-        : sizeValue || line.unit || '';
-    mainText = [amountUnitText, baseName].filter(Boolean).join(' ');
-  }
-
-  // --- Append prep notes (if still left) ---
-  if (line.prepNotes) {
-    mainText += `, ${line.prepNotes}`;
-  }
-
-  // --- Handle substitutes (join with " or ") ---
-  let groupText = mainText;
-  if (line.substitutes && line.substitutes.length > 0) {
-    const subsText = line.substitutes.map((sub) => {
-      const subBase = sub.variant
-        ? `${sub.variant} ${sub.name}`.trim()
-        : sub.name;
-      return [sub.quantity, sub.unit, subBase].filter(Boolean).join(' ');
-    });
-    groupText += ' or ' + subsText.join(' or ');
-  }
-
-  // --- Build parenthetical collector (AFTER group) ---
-  let parenBits = [];
-  if (line.parentheticalNote) parenBits.push(line.parentheticalNote);
-  if (line.isOptional) parenBits.push('optional');
-  if (parenBits.length > 0) {
-    groupText += ` (${parenBits.join(', ')})`;
-  }
+  const fallbackName = [String(line?.variant || '').trim(), String(line?.name || '').trim()]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const displayParts =
+    typeof window !== 'undefined' && typeof window.getIngredientDisplayParts === 'function'
+      ? window.getIngredientDisplayParts(line)
+      : {
+          leadText: '',
+          nameText: fallbackName,
+          prepText: String(line?.prepNotes || '').trim(),
+          substituteTexts: [],
+          parentheticalText: '',
+        };
 
   const linkedRecipeIdRaw = Number(line && line.linkedRecipeId);
   const linkedRecipeId =
@@ -918,8 +771,8 @@ function renderIngredient(line) {
       ? linkedRecipeIdRaw
       : null;
   const hasLinkedRecipe = linkedRecipeId != null;
-  const linkedRecipeLabel = baseName || String(line?.recipeText || '').trim();
-  const ingredientNameLabel = prettifyDisplayText(baseName);
+  const linkedRecipeLabel = displayParts.nameText || String(line?.recipeText || '').trim();
+  const ingredientNameLabel = prettifyDisplayText(displayParts.nameText);
 
   if (hasLinkedRecipe) {
     // clickable link only for the linked recipe label
@@ -932,91 +785,39 @@ function renderIngredient(line) {
       openLinkedRecipe(linkedRecipeId);
     });
 
-    let leadText = '';
-    if (isNumericQty && quantityForDisplay !== '') {
-      const numericVal = parseFloat(quantityForDisplay);
-      const unitText = getUnitDisplay(line.unit || '', numericVal);
-      const amountUnitText =
-        sizeValue && unitText
-          ? `${sizeValue} ${unitText}`
-          : sizeValue || unitText;
-      leadText = [qtyDisplay, amountUnitText].filter(Boolean).join(' ');
-    } else if (quantityForDisplay) {
-      const amountUnitText =
-        sizeValue && line.unit
-          ? `${sizeValue} ${line.unit}`
-          : sizeValue || line.unit || '';
-      leadText = [quantityForDisplay, amountUnitText].filter(Boolean).join(' ');
-    } else {
-      leadText =
-        sizeValue && line.unit
-          ? `${sizeValue} ${line.unit}`
-          : sizeValue || line.unit || '';
-    }
-    if (leadText) {
+    if (displayParts.leadText) {
       textSpan.appendChild(
-        document.createTextNode(`${prettifyDisplayText(leadText)} `)
+        document.createTextNode(`${prettifyDisplayText(displayParts.leadText)} `)
       );
     }
 
     textSpan.appendChild(link);
 
-    if (line.prepNotes) {
+    if (displayParts.prepText) {
       textSpan.appendChild(
-        document.createTextNode(`, ${prettifyDisplayText(line.prepNotes)}`)
+        document.createTextNode(`, ${prettifyDisplayText(displayParts.prepText)}`)
       );
     }
 
-    if (line.substitutes && line.substitutes.length > 0) {
-      const subsText = line.substitutes.map((sub) => {
-        const subBase = sub.variant
-          ? `${sub.variant} ${sub.name}`.trim()
-          : sub.name;
-        return [sub.quantity, sub.unit, subBase].filter(Boolean).join(' ');
-      });
+    if (displayParts.substituteTexts.length > 0) {
       textSpan.appendChild(
         document.createTextNode(
-          ` or ${prettifyDisplayText(subsText.join(' or '))}`
+          ` or ${prettifyDisplayText(displayParts.substituteTexts.join(' or '))}`
         )
       );
     }
 
-    if (line.parentheticalNote || line.isOptional) {
-      const bits = [];
-      if (line.parentheticalNote) bits.push(line.parentheticalNote);
-      if (line.isOptional) bits.push('optional');
+    if (displayParts.parentheticalText) {
       textSpan.appendChild(
         document.createTextNode(
-          ` (${prettifyDisplayText(bits.join(', '))})`
+          ` (${prettifyDisplayText(displayParts.parentheticalText)})`
         )
       );
     }
   } else {
-    let leadText = '';
-    if (isNumericQty && quantityForDisplay !== '') {
-      const numericVal = parseFloat(quantityForDisplay);
-      const unitText = getUnitDisplay(line.unit || '', numericVal);
-      const amountUnitText =
-        sizeValue && unitText
-          ? `${sizeValue} ${unitText}`
-          : sizeValue || unitText;
-      leadText = [qtyDisplay, amountUnitText].filter(Boolean).join(' ');
-    } else if (quantityForDisplay) {
-      const amountUnitText =
-        sizeValue && line.unit
-          ? `${sizeValue} ${line.unit}`
-          : sizeValue || line.unit || '';
-      leadText = [quantityForDisplay, amountUnitText].filter(Boolean).join(' ');
-    } else {
-      leadText =
-        sizeValue && line.unit
-          ? `${sizeValue} ${line.unit}`
-          : sizeValue || line.unit || '';
-    }
-
-    if (leadText) {
+    if (displayParts.leadText) {
       textSpan.appendChild(
-        document.createTextNode(`${prettifyDisplayText(leadText)} `)
+        document.createTextNode(`${prettifyDisplayText(displayParts.leadText)} `)
       );
     }
 
@@ -1024,33 +825,24 @@ function renderIngredient(line) {
       textSpan.appendChild(buildIngredientMasterLink(ingredientNameLabel, line));
     }
 
-    if (line.prepNotes) {
+    if (displayParts.prepText) {
       textSpan.appendChild(
-        document.createTextNode(`, ${prettifyDisplayText(line.prepNotes)}`)
+        document.createTextNode(`, ${prettifyDisplayText(displayParts.prepText)}`)
       );
     }
 
-    if (line.substitutes && line.substitutes.length > 0) {
-      const subsText = line.substitutes.map((sub) => {
-        const subBase = sub.variant
-          ? `${sub.variant} ${sub.name}`.trim()
-          : sub.name;
-        return [sub.quantity, sub.unit, subBase].filter(Boolean).join(' ');
-      });
+    if (displayParts.substituteTexts.length > 0) {
       textSpan.appendChild(
         document.createTextNode(
-          ` or ${prettifyDisplayText(subsText.join(' or '))}`
+          ` or ${prettifyDisplayText(displayParts.substituteTexts.join(' or '))}`
         )
       );
     }
 
-    if (line.parentheticalNote || line.isOptional) {
-      const bits = [];
-      if (line.parentheticalNote) bits.push(line.parentheticalNote);
-      if (line.isOptional) bits.push('optional');
+    if (displayParts.parentheticalText) {
       textSpan.appendChild(
         document.createTextNode(
-          ` (${prettifyDisplayText(bits.join(', '))})`
+          ` (${prettifyDisplayText(displayParts.parentheticalText)})`
         )
       );
     }
