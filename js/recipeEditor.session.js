@@ -8,6 +8,22 @@ window._hasPendingEdit = false; // enables Cancel as soon as typing starts
 // Captures the original recipe state when a recipe is first rendered or reloaded from DB.
 window.originalRecipeSnapshot = null;
 
+function recipeEditorIsWebMode() {
+  try {
+    if (
+      window.forceWebMode &&
+      typeof window.forceWebMode.isEnabled === 'function'
+    ) {
+      return !!window.forceWebMode.isEnabled();
+    }
+  } catch (_) {}
+  try {
+    return document.body?.dataset?.forceWebMode === 'on';
+  } catch (_) {
+    return false;
+  }
+}
+
 // --- Display / selection helpers shared across editor ---
 
 function enableSave() {
@@ -50,8 +66,14 @@ function wireRecipeEditorAppBarButtons() {
   window._recipeEditorSaveBtn = document.getElementById('appBarSaveBtn');
 
   if (window._recipeEditorCancelBtn)
-    window._recipeEditorCancelBtn.disabled = true;
+    window._recipeEditorCancelBtn.disabled = recipeEditorIsWebMode();
   if (window._recipeEditorSaveBtn) window._recipeEditorSaveBtn.disabled = true;
+  if (
+    recipeEditorIsWebMode() &&
+    typeof window.recipeWebModeSyncAppBar === 'function'
+  ) {
+    window.recipeWebModeSyncAppBar();
+  }
 }
 
 if (typeof waitForAppBarReady === 'function') {
@@ -61,6 +83,7 @@ if (typeof waitForAppBarReady === 'function') {
 }
 
 function recipeEditorGetIsDirty() {
+  if (recipeEditorIsWebMode()) return false;
   return !!isDirty;
 }
 
@@ -80,6 +103,7 @@ window.recipeEditorResetDirty = recipeEditorResetDirty;
 let recipeEditorExitPromptInFlight = false;
 
 function markDirty() {
+  if (recipeEditorIsWebMode()) return;
   if (!isDirty) {
     isDirty = true;
 

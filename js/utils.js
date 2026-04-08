@@ -1,5 +1,13 @@
 // Utility functions
 
+window.favoriteEatsSessionKeys = window.favoriteEatsSessionKeys || {
+  shoppingNavTargetId: 'favoriteEats:shopping-nav-target-id',
+  shoppingNavTargetName: 'favoriteEats:shopping-nav-target-name',
+};
+window.favoriteEatsStorageKeys = window.favoriteEatsStorageKeys || {
+  recipeWebServings: 'favoriteEats:recipe-web-servings:v1',
+};
+
 function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
   const mount = document.getElementById('appBarMount');
   const start =
@@ -101,6 +109,10 @@ function initAppBar(options = {}) {
 
     showSearch = true,
     showAdd = true,
+    showCancel = true,
+    showSave = true,
+    cancelText = 'Cancel',
+    saveText = 'Save',
     onMenu = null,
     onAdd = null,
 
@@ -203,11 +215,13 @@ function initAppBar(options = {}) {
 
     if (addBtn) addBtn.style.display = 'none';
     if (cancelBtn) {
-      cancelBtn.style.display = '';
+      cancelBtn.style.display = showCancel ? '' : 'none';
+      cancelBtn.textContent = cancelText || 'Cancel';
       if (onCancel) cancelBtn.onclick = onCancel;
     }
     if (saveBtn) {
-      saveBtn.style.display = '';
+      saveBtn.style.display = showSave ? '' : 'none';
+      saveBtn.textContent = saveText || 'Save';
       if (onSave) saveBtn.onclick = onSave;
     }
   }

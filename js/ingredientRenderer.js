@@ -190,7 +190,8 @@ function getContentEditableSelectionOffsets(el) {
 function renderIngredientHeading(row) {
   const div = document.createElement('div');
   div.className = 'ingredient-subsection-heading-line';
-  div.tabIndex = 0;
+  const webMode = isIngredientRecipeWebModeActive();
+  div.tabIndex = webMode ? -1 : 0;
   if (row && row.headingId != null) {
     div.dataset.headingId = String(row.headingId);
   }
@@ -221,6 +222,10 @@ function renderIngredientHeading(row) {
   }
 
   div.appendChild(text);
+
+  if (webMode) {
+    return div;
+  }
 
   const handleMaybeDelete = (e) => {
     if (!e) return false;
@@ -676,6 +681,46 @@ function navigateToShoppingItemEditor(selection) {
   navigate();
 }
 
+function isIngredientRecipeWebModeActive() {
+  try {
+    if (
+      window.forceWebMode &&
+      typeof window.forceWebMode.isEnabled === 'function'
+    ) {
+      return !!window.forceWebMode.isEnabled();
+    }
+  } catch (_) {}
+  try {
+    return document.body?.dataset?.forceWebMode === 'on';
+  } catch (_) {
+    return false;
+  }
+}
+
+function navigateToShoppingListTarget(rawName) {
+  const name = String(rawName || '').trim();
+  const match = findShoppingItemMatchByName(name);
+  try {
+    if (match && Number.isFinite(Number(match.id)) && Number(match.id) > 0) {
+      sessionStorage.setItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetId,
+        String(Math.trunc(Number(match.id)))
+      );
+      sessionStorage.setItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetName,
+        String(match.name || name).trim()
+      );
+    } else if (name) {
+      sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetId);
+      sessionStorage.setItem(window.favoriteEatsSessionKeys.shoppingNavTargetName, name);
+    } else {
+      sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetId);
+      sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetName);
+    }
+  } catch (_) {}
+  window.location.href = 'shopping.html';
+}
+
 function isIngredientMasterLinkActive(linkEl, e) {
   if (!(linkEl instanceof HTMLElement)) return false;
   if (!linkEl.classList.contains('ingredient-master-link')) return false;
@@ -686,16 +731,22 @@ function isIngredientMasterLinkActive(linkEl, e) {
 
 function buildIngredientMasterLink(label, line) {
   const link = document.createElement('a');
-  link.href = '#';
-  link.className = 'ingredient-master-link';
+  const webMode = isIngredientRecipeWebModeActive();
+  link.href = webMode ? 'shopping.html' : '#';
+  link.className = webMode ? 'ingredient-shopping-link' : 'ingredient-master-link';
   link.textContent = label;
-  link.tabIndex = -1;
+  link.tabIndex = webMode ? 0 : -1;
 
   link.addEventListener('click', (e) => {
     if (!e) return;
     e.preventDefault();
-    if (!isIngredientMasterLinkActive(link, e)) return;
+    if (!webMode && !isIngredientMasterLinkActive(link, e)) return;
     e.stopPropagation();
+
+    if (webMode) {
+      navigateToShoppingListTarget(line && line.name);
+      return;
+    }
 
     const match = findShoppingItemMatchByName(line && line.name);
     if (match) {
@@ -726,7 +777,8 @@ function renderIngredient(line) {
 
   const div = document.createElement('div');
   div.className = 'ingredient-line';
-  div.tabIndex = 0;
+  const webMode = isIngredientRecipeWebModeActive();
+  div.tabIndex = webMode ? -1 : 0;
   if (line && line.rimId != null) {
     div.dataset.rimId = String(line.rimId);
   }
@@ -858,6 +910,10 @@ function renderIngredient(line) {
     div.appendChild(orPrefix);
   }
   div.appendChild(textSpan);
+
+  if (webMode) {
+    return div;
+  }
 
   // Existing ingredient rows: click → open multi-field editor (update mode)
   const handleMaybeDelete = (e) => {
