@@ -1,6 +1,32 @@
 (function () {
+  const STEPPER_EPSILON = 1e-9;
+
   function normalizeKey(rawKey) {
     return String(rawKey || '').trim();
+  }
+
+  function getNextStepQty(currentQty, delta, options = {}) {
+    const numeric = Number(currentQty);
+    const stepDelta = Number(delta);
+    const min = Number(options.min ?? 0);
+    const hasMax = Number.isFinite(Number(options.max));
+    const max = hasMax ? Number(options.max) : Infinity;
+    const epsilon = Number(options.epsilon);
+    const threshold = Number.isFinite(epsilon) ? Math.abs(epsilon) : STEPPER_EPSILON;
+    const isFractional = (value) => Math.abs(value - Math.round(value)) > threshold;
+    const clamp = (value) => Math.max(min, Math.min(max, value));
+
+    if (!Number.isFinite(numeric)) {
+      return clamp(stepDelta > 0 ? 1 : 0);
+    }
+
+    if (stepDelta > 0 && isFractional(numeric)) {
+      return clamp(Math.ceil(numeric));
+    }
+    if (stepDelta < 0 && isFractional(numeric)) {
+      return clamp(Math.floor(numeric));
+    }
+    return clamp(numeric + stepDelta);
   }
 
   function createStepperDOM(options = {}) {
@@ -192,6 +218,7 @@
   window.listRowStepper = {
     createStepperDOM,
     syncRowVisuals,
+    getNextStepQty,
     createController,
   };
 })();

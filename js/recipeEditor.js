@@ -142,12 +142,22 @@ function isRecipeWebModeActive() {
   }
 }
 
+function getRecipeWebServingsApi() {
+  return window.favoriteEatsRecipeWebServings || {};
+}
+
 function getRecipeModelId(recipe) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.getRecipeModelId === 'function') {
+    return api.getRecipeModelId(recipe, { fallbackRecipeId: window.recipeId });
+  }
   const raw = Number(recipe?.id ?? window.recipeId);
   return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : null;
 }
 
 function loadRecipeWebServingsMap() {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.loadMap === 'function') return api.loadMap();
   try {
     const raw = localStorage.getItem(window.favoriteEatsStorageKeys.recipeWebServings);
     if (!raw) return {};
@@ -159,9 +169,14 @@ function loadRecipeWebServingsMap() {
 }
 
 function persistRecipeWebServingsMap(nextMap) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.persistMap === 'function') {
+    api.persistMap(nextMap);
+    return;
+  }
   try {
     localStorage.setItem(
-        window.favoriteEatsStorageKeys.recipeWebServings,
+      window.favoriteEatsStorageKeys.recipeWebServings,
       JSON.stringify(
         nextMap && typeof nextMap === 'object' && !Array.isArray(nextMap)
           ? nextMap
@@ -172,74 +187,183 @@ function persistRecipeWebServingsMap(nextMap) {
 }
 
 function getRecipeBaseServingsDefault(recipe) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.getBaseDefault === 'function') return api.getBaseDefault(recipe);
   if (!recipe) return null;
-  if (recipe._webModeBaseServingsDefaultInitialized) {
-    return recipe._webModeBaseServingsDefault;
-  }
-  let base = recipe.servingsDefault;
-  if (
-    (base === null || base === undefined || base === '') &&
-    recipe.servings &&
-    recipe.servings.default != null
-  ) {
-    base = recipe.servings.default;
-  }
-  const numeric = Number(base);
-  recipe._webModeBaseServingsDefault =
-    Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
-  recipe._webModeBaseServingsDefaultInitialized = true;
-  return recipe._webModeBaseServingsDefault;
-}
-
-function getRecipeWebServingsBounds(recipe) {
-  const baseDefault = getRecipeBaseServingsDefault(recipe);
-  if (!Number.isFinite(Number(baseDefault)) || Number(baseDefault) <= 0) {
-    return null;
-  }
-  const servingsObj =
-    recipe && recipe.servings && typeof recipe.servings === 'object'
-      ? recipe.servings
-      : {};
-  const rawMin = Number(servingsObj.min);
-  const rawMax = Number(servingsObj.max);
-  const min =
-    Number.isFinite(rawMin) && rawMin > 0
-      ? Math.min(Math.round(rawMin), baseDefault)
-      : baseDefault;
-  const max =
-    Number.isFinite(rawMax) && rawMax > 0
-      ? Math.max(Math.round(rawMax), baseDefault)
-      : baseDefault;
-  return {
-    baseDefault,
-    min,
-    max,
-    canAdjust: max > min,
-  };
-}
-
-function getRecipeWebServingsStoredValue(recipe) {
-  const recipeId = getRecipeModelId(recipe);
-  if (recipeId == null) return null;
-  const raw = loadRecipeWebServingsMap()[String(recipeId)];
-  const numeric = Number(raw);
+  const numeric = Number(recipe.servingsDefault);
   return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
 }
 
+function getRecipeWebServingsBounds(recipe) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.getBounds === 'function') return api.getBounds(recipe);
+  return null;
+}
+
+function getRecipeWebServingsMultiplier(recipe) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.getMultiplier === 'function') {
+    return api.getMultiplier(recipe, {
+      fallbackRecipeId: window.recipeId,
+      scrubInvalid: true,
+    });
+  }
+  return 1;
+}
+
+function parseIngredientQuantityRangeForDisplay(line) {
+  const min = Number(line?.quantityMin);
+  const max = Number(line?.quantityMax);
+  const hasMin = Number.isFinite(min) && min > 0;
+  const hasMax = Number.isFinite(max) && max > 0;
+  if (hasMin || hasMax) {
+    return {
+      quantityMin: hasMin ? min : hasMax ? max : null,
+      quantityMax: hasMax ? max : hasMin ? min : null,
+      quantityIsApprox: !!line?.quantityIsApprox,
+    };
+  }
+
+  try {
+    if (typeof window.parseIngredientQuantityDescriptor === 'function') {
+      const parsed = window.parseIngredientQuantityDescriptor(line?.quantity);
+      const parsedMin = Number(parsed?.quantityMin);
+      const parsedMax = Number(parsed?.quantityMax);
+      const parsedMinOk = Number.isFinite(parsedMin) && parsedMin > 0;
+      const parsedMaxOk = Number.isFinite(parsedMax) && parsedMax > 0;
+      if (parsedMinOk || parsedMaxOk) {
+        return {
+          quantityMin: parsedMinOk ? parsedMin : parsedMaxOk ? parsedMax : null,
+          quantityMax: parsedMaxOk ? parsedMax : parsedMinOk ? parsedMin : null,
+          quantityIsApprox: !!parsed?.quantityIsApprox,
+        };
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof parseNumericQuantityValue === 'function') {
+      const scalar = Number(parseNumericQuantityValue(line?.quantity));
+      if (Number.isFinite(scalar) && scalar > 0) {
+        return {
+          quantityMin: scalar,
+          quantityMax: scalar,
+          quantityIsApprox: !!line?.quantityIsApprox,
+        };
+      }
+    }
+  } catch (_) {}
+
+  const fallbackScalar = Number(String(line?.quantity == null ? '' : line.quantity).trim());
+  if (Number.isFinite(fallbackScalar) && fallbackScalar > 0) {
+    return {
+      quantityMin: fallbackScalar,
+      quantityMax: fallbackScalar,
+      quantityIsApprox: !!line?.quantityIsApprox,
+    };
+  }
+  return null;
+}
+
+function scaleIngredientForRecipeWebServingsDisplay(line, recipe) {
+  if (!line || line.rowType === 'heading') return line;
+  const multiplier = getRecipeWebServingsMultiplier(recipe);
+  if (!Number.isFinite(multiplier) || multiplier <= 0 || Math.abs(multiplier - 1) < 1e-9) {
+    return line;
+  }
+
+  const parsed = parseIngredientQuantityRangeForDisplay(line);
+  if (!parsed) return line;
+
+  const normalizeQty = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    if (typeof window.normalizeActionableQuantity === 'function') {
+      const normalized = window.normalizeActionableQuantity(numeric, line?.unit || '');
+      if (Number.isFinite(Number(normalized)) && Number(normalized) > 0) {
+        return Number(normalized);
+      }
+    }
+    return Math.round(numeric * 100) / 100;
+  };
+  const scaledMin = normalizeQty(parsed.quantityMin * multiplier);
+  const scaledMax = normalizeQty(parsed.quantityMax * multiplier);
+  if (
+    !Number.isFinite(scaledMin) ||
+    scaledMin <= 0 ||
+    !Number.isFinite(scaledMax) ||
+    scaledMax <= 0
+  ) {
+    return line;
+  }
+
+  return {
+    ...line,
+    quantityMin: scaledMin,
+    quantityMax: scaledMax,
+    quantityIsApprox: !!parsed.quantityIsApprox,
+  };
+}
+
+function roundRecipeWebServingsValue(rawValue) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.roundValue === 'function') return api.roundValue(rawValue);
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.round(numeric * 2) / 2;
+}
+
+function clampRecipeWebServingsValue(rawValue, bounds) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.clampValue === 'function') return api.clampValue(rawValue, bounds);
+  if (!bounds) return null;
+  const rounded = roundRecipeWebServingsValue(rawValue);
+  if (rounded == null) return null;
+  return Math.max(bounds.min, Math.min(bounds.max, rounded));
+}
+
+function formatRecipeWebServingsDisplay(rawValue) {
+  const normalized = roundRecipeWebServingsValue(rawValue);
+  if (normalized == null) return '';
+  if (Number.isInteger(normalized)) return String(normalized);
+  if (typeof decimalToFractionDisplay === 'function') {
+    return decimalToFractionDisplay(normalized, [2]);
+  }
+  return String(normalized);
+}
+
+function getRecipeWebServingsStoredValue(recipe) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.getStoredValue === 'function') {
+    return api.getStoredValue(recipe, {
+      fallbackRecipeId: window.recipeId,
+      scrubInvalid: true,
+    });
+  }
+  const recipeId = getRecipeModelId(recipe);
+  if (recipeId == null) return null;
+  const raw = loadRecipeWebServingsMap()[String(recipeId)];
+  const bounds = getRecipeWebServingsBounds(recipe);
+  if (!bounds) return null;
+  return clampRecipeWebServingsValue(raw, bounds);
+}
+
 function setRecipeWebServingsStoredValue(recipe, nextValue) {
+  const api = getRecipeWebServingsApi();
+  if (typeof api.setStoredValue === 'function') {
+    api.setStoredValue(recipe, nextValue, { fallbackRecipeId: window.recipeId });
+    return;
+  }
   const recipeId = getRecipeModelId(recipe);
   if (recipeId == null) return;
   const bounds = getRecipeWebServingsBounds(recipe);
   if (!bounds) return;
   const map = loadRecipeWebServingsMap();
-  const numeric = Number(nextValue);
-  if (!Number.isFinite(numeric) || numeric <= 0 || Math.round(numeric) === bounds.baseDefault) {
+  const next = clampRecipeWebServingsValue(nextValue, bounds);
+  if (next == null || next === bounds.baseDefault) {
     delete map[String(recipeId)];
   } else {
-    map[String(recipeId)] = Math.max(
-      bounds.min,
-      Math.min(bounds.max, Math.round(numeric))
-    );
+    map[String(recipeId)] = next;
   }
   persistRecipeWebServingsMap(map);
 }
@@ -248,7 +372,8 @@ function applyRecipeWebServingsToModel(recipe, nextValue, { persist = true } = {
   if (!recipe) return null;
   const bounds = getRecipeWebServingsBounds(recipe);
   if (!bounds) return null;
-  const next = Math.max(bounds.min, Math.min(bounds.max, Math.round(Number(nextValue))));
+  const next = clampRecipeWebServingsValue(nextValue, bounds);
+  if (next == null) return null;
   if (!recipe.servings || typeof recipe.servings !== 'object') {
     recipe.servings = {
       default: bounds.baseDefault,
@@ -281,7 +406,10 @@ function primeRecipeWebModeServings(recipe) {
 function recipeWebModeCanResetServings(recipe) {
   const bounds = getRecipeWebServingsBounds(recipe);
   if (!bounds) return false;
-  return Number(window.recipeData?.servingsDefault ?? recipe?.servingsDefault) !== bounds.baseDefault;
+  const current = roundRecipeWebServingsValue(
+    window.recipeData?.servingsDefault ?? recipe?.servingsDefault
+  );
+  return current != null && current !== bounds.baseDefault;
 }
 
 function resetRecipeWebModeServings(recipe = window.recipeData) {
@@ -289,6 +417,9 @@ function resetRecipeWebModeServings(recipe = window.recipeData) {
   if (!bounds) return;
   applyRecipeWebServingsToModel(recipe, bounds.baseDefault);
   renderServingsRow(recipe);
+  if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+    window.recipeEditorRerenderIngredientsFromModel();
+  }
 }
 
 function navigateToShoppingListTarget(rawName, resolver) {
@@ -651,7 +782,7 @@ function rerenderIngredientsSectionFromModel() {
           el.appendChild(span);
         }
       } else if (typeof renderIngredient === 'function') {
-        el = renderIngredient(row);
+        el = renderIngredient(scaleIngredientForRecipeWebServingsDisplay(row, recipe));
       }
       if (el) ingredientsSection.appendChild(el);
     });
@@ -858,7 +989,12 @@ function rerenderYouWillNeedFromModel() {
     ? recipe.sections.flatMap((s) => s.ingredients || [])
     : [];
 
-  const allIngredients = normalizeYwnIngredientRows(allRows);
+  const allIngredientsBase = normalizeYwnIngredientRows(allRows);
+  const allIngredients = isRecipeWebModeActive()
+    ? allIngredientsBase.map((ing) =>
+        scaleIngredientForRecipeWebServingsDisplay(ing, recipe)
+      )
+    : allIngredientsBase;
 
   if (allIngredients.length === 0) {
     const line = document.createElement('div');
@@ -2424,16 +2560,21 @@ function servingsHasData(recipe) {
   if (!recipe) return false;
 
   let v = recipe.servingsDefault;
+  const servingsObj =
+    recipe.servings && typeof recipe.servings === 'object'
+      ? recipe.servings
+      : null;
 
   // Fallback to nested servings.default if top-level isn't populated
   if (v === null || v === undefined || v === '') {
-    if (recipe.servings && recipe.servings.default != null) {
-      v = recipe.servings.default;
+    if (servingsObj && servingsObj.default != null) {
+      v = servingsObj.default;
       recipe.servingsDefault = v; // keep model in sync
     }
   }
 
-  return v !== null && v !== undefined && v !== '';
+  if (v !== null && v !== undefined && v !== '') return true;
+  return servingsObj?.min != null || servingsObj?.max != null;
 }
 
 function updateServingsVisibility(recipe) {
@@ -2475,59 +2616,144 @@ function renderServingsRow(recipe, container) {
 
     const field = document.createElement('div');
     field.className = 'row-field servings-web-field';
+    const displayServings =
+      roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
+    const subtitle = document.createElement('span');
+    subtitle.className = 'servings-web-subtitle';
+    const subtitlePrefix = document.createElement('span');
+    subtitlePrefix.className = 'servings-web-subtitle-prefix';
+    subtitlePrefix.textContent = 'Serves ';
+    const subtitleValue = document.createElement('button');
+    subtitleValue.type = 'button';
+    subtitleValue.className = 'servings-web-value';
+    subtitleValue.setAttribute('aria-label', 'Edit servings');
+    subtitleValue.textContent = formatRecipeWebServingsDisplay(displayServings);
+    subtitle.appendChild(subtitlePrefix);
+    subtitle.appendChild(subtitleValue);
 
-    const pill = document.createElement('span');
-    pill.className = 'field-pill';
-    pill.textContent = 'Servings';
-
-    const picker = document.createElement('div');
-    picker.className = 'servings-picker';
-
-    const minusBtn = document.createElement('button');
-    minusBtn.type = 'button';
-    minusBtn.className = 'servings-picker-btn';
-    minusBtn.setAttribute('aria-label', 'Decrease servings');
-    minusBtn.disabled = !bounds.canAdjust || recipeModel.servingsDefault <= bounds.min;
-    minusBtn.innerHTML =
-      '<span class="material-symbols-outlined" aria-hidden="true">remove</span>';
-
-    const value = document.createElement('span');
-    value.className = 'servings-picker-value';
-    value.textContent = String(recipeModel.servingsDefault ?? bounds.baseDefault);
-
-    const plusBtn = document.createElement('button');
-    plusBtn.type = 'button';
-    plusBtn.className = 'servings-picker-btn';
-    plusBtn.setAttribute('aria-label', 'Increase servings');
-    plusBtn.disabled = !bounds.canAdjust || recipeModel.servingsDefault >= bounds.max;
-    plusBtn.innerHTML =
-      '<span class="material-symbols-outlined" aria-hidden="true">add</span>';
+    const { stepper: picker, minusBtn, qtySpan: value, plusBtn } =
+      window.listRowStepper.createStepperDOM({
+        decreaseLabel: 'Decrease servings',
+        increaseLabel: 'Increase servings',
+      });
+    picker.classList.add('servings-picker', 'servings-picker--inline');
+    value.remove();
+    picker.style.display = '';
+    minusBtn.disabled = !bounds.canAdjust || displayServings <= bounds.min;
+    plusBtn.disabled = !bounds.canAdjust || displayServings >= bounds.max;
 
     minusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      const currentServings =
+        roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
+      const nextCandidate =
+        window.listRowStepper &&
+        typeof window.listRowStepper.getNextStepQty === 'function'
+          ? window.listRowStepper.getNextStepQty(currentServings, -1, {
+              min: bounds.min,
+              max: bounds.max,
+            })
+          : currentServings - 1;
       const next = applyRecipeWebServingsToModel(
         recipeModel,
-        Number(recipeModel.servingsDefault || bounds.baseDefault) - 1
+        nextCandidate
       );
-      if (next != null) renderServingsRow(recipeModel, container);
+      if (next != null) {
+        renderServingsRow(recipeModel, container);
+        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+          window.recipeEditorRerenderIngredientsFromModel();
+        }
+      }
     });
 
     plusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      const currentServings =
+        roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
+      const nextCandidate =
+        window.listRowStepper &&
+        typeof window.listRowStepper.getNextStepQty === 'function'
+          ? window.listRowStepper.getNextStepQty(currentServings, 1, {
+              min: bounds.min,
+              max: bounds.max,
+            })
+          : currentServings + 1;
       const next = applyRecipeWebServingsToModel(
         recipeModel,
-        Number(recipeModel.servingsDefault || bounds.baseDefault) + 1
+        nextCandidate
       );
-      if (next != null) renderServingsRow(recipeModel, container);
+      if (next != null) {
+        renderServingsRow(recipeModel, container);
+        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+          window.recipeEditorRerenderIngredientsFromModel();
+        }
+      }
     });
 
-    picker.appendChild(minusBtn);
-    picker.appendChild(value);
-    picker.appendChild(plusBtn);
+    const startInlineServingsEdit = () => {
+      if (!subtitle.isConnected) return;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'servings-web-value-input';
+      input.inputMode = 'decimal';
+      input.setAttribute('aria-label', 'Servings value');
+      input.value = Number.isInteger(displayServings)
+        ? String(displayServings)
+        : String(displayServings);
+      subtitle.replaceChild(input, subtitleValue);
+      input.focus();
+      input.select();
 
-    field.appendChild(pill);
+      let cancelled = false;
+      const fallbackValue = displayServings;
+      const parseInput = (raw) => {
+        const text = String(raw == null ? '' : raw).trim();
+        if (!text) return null;
+        if (typeof parseNumericQuantityValue === 'function') {
+          const parsed = parseNumericQuantityValue(text);
+          if (parsed != null) return Number(parsed);
+        }
+        const numeric = Number(text);
+        return Number.isFinite(numeric) ? numeric : null;
+      };
+      const commit = () => {
+        const parsed = parseInput(input.value);
+        const candidate = parsed == null ? fallbackValue : parsed;
+        const rounded = roundRecipeWebServingsValue(candidate);
+        const next = applyRecipeWebServingsToModel(recipeModel, rounded);
+        renderServingsRow(recipeModel, container);
+        if (next != null && typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+          window.recipeEditorRerenderIngredientsFromModel();
+        }
+        return next;
+      };
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelled = true;
+          renderServingsRow(recipeModel, container);
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        if (cancelled) return;
+        commit();
+      });
+    };
+
+    subtitleValue.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startInlineServingsEdit();
+    });
+
+    field.appendChild(subtitle);
     field.appendChild(picker);
     row.appendChild(field);
     try {
@@ -2570,6 +2796,27 @@ function renderServingsRow(recipe, container) {
     // Rest mode: plain subtitle text, no pill
     if (hasData && recipeModel.servingsDefault != null) {
       field.textContent = `Serves ${recipeModel.servingsDefault}`;
+    } else if (
+      hasData &&
+      recipeModel.servings &&
+      (recipeModel.servings.min != null || recipeModel.servings.max != null)
+    ) {
+      const minText =
+        recipeModel.servings.min != null
+          ? formatRecipeWebServingsDisplay(recipeModel.servings.min)
+          : '';
+      const maxText =
+        recipeModel.servings.max != null
+          ? formatRecipeWebServingsDisplay(recipeModel.servings.max)
+          : '';
+      field.textContent =
+        minText && maxText
+          ? `Servings ${minText}-${maxText}`
+          : minText
+          ? `Servings ${minText}`
+          : maxText
+          ? `Servings ${maxText}`
+          : 'Servings';
     } else {
       field.textContent = 'Servings';
     }
@@ -2651,7 +2898,10 @@ function renderServingsRow(recipe, container) {
     maxInput.value = maxVal != null ? String(maxVal) : '';
 
     // Start with range (min/max) hidden if there is no default yet
-    let rangeVisible = defaultVal != null && _servingsIsValidNumber(defaultVal);
+    let rangeVisible =
+      (defaultVal != null && _servingsIsValidNumber(defaultVal)) ||
+      minVal != null ||
+      maxVal != null;
 
     const showRangeInputs = () => {
       if (rangeVisible) return;
@@ -2714,7 +2964,7 @@ function renderServingsRow(recipe, container) {
       const toNum = (v) =>
         v == null || v === '' || !_servingsIsValidNumber(v)
           ? null
-          : Math.round(Number(v));
+          : roundRecipeWebServingsValue(v);
 
       const dNum = Math.round(Number(d));
       recipeModel.servingsDefault = dNum;
@@ -2845,7 +3095,7 @@ function renderServingsRow(recipe, container) {
       }
 
       if (_servingsIsValidNumber(raw)) {
-        recipeModel.servings[key] = Math.round(Number(raw));
+        recipeModel.servings[key] = roundRecipeWebServingsValue(raw);
       } else {
         const current = recipeModel.servings[key];
         inputEl.value = current != null ? String(current) : '';
@@ -2862,7 +3112,7 @@ function renderServingsRow(recipe, container) {
         if (raw === '') {
           recipeModel.servings[key] = null;
         } else if (_servingsIsValidNumber(raw)) {
-          recipeModel.servings[key] = Math.round(Number(raw));
+          recipeModel.servings[key] = roundRecipeWebServingsValue(raw);
         }
 
         if (typeof markDirty === 'function') {

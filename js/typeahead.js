@@ -880,6 +880,7 @@
     dropdownGap,
     matchAnchorWidth,
     pickOnEnterWhenQueryEmpty,
+    openOnArrowDownWhenClosed,
     minWidth,
     maxWidth,
     placement,
@@ -899,6 +900,7 @@
       dropdownGap,
       matchAnchorWidth,
       pickOnEnterWhenQueryEmpty,
+      openOnArrowDownWhenClosed,
       minWidth,
       maxWidth,
       placement,
@@ -981,7 +983,7 @@
       }
       if (!dropdown.isOpen || dropdown.anchorInput !== inputEl) {
         // Allow ArrowDown to explicitly open the dropdown while focused.
-        if (e.key === 'ArrowDown') {
+        if (e.key === 'ArrowDown' && cfg.openOnArrowDownWhenClosed !== false) {
           e.preventDefault();
           e.stopPropagation();
           dropdown.open(inputEl, cfg);

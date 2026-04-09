@@ -8,6 +8,182 @@ window.favoriteEatsStorageKeys = window.favoriteEatsStorageKeys || {
   recipeWebServings: 'favoriteEats:recipe-web-servings:v1',
 };
 
+// --- Recipe web servings helpers (tests extract this block) ---
+function getRecipeWebServingsModelId(recipe, { fallbackRecipeId = null } = {}) {
+  const raw =
+    recipe && typeof recipe === 'object' && recipe.id != null
+      ? Number(recipe.id)
+      : Number(fallbackRecipeId);
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : null;
+}
+
+function loadRecipeWebServingsMapShared() {
+  try {
+    const raw = localStorage.getItem(window.favoriteEatsStorageKeys.recipeWebServings);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function persistRecipeWebServingsMapShared(nextMap) {
+  try {
+    localStorage.setItem(
+      window.favoriteEatsStorageKeys.recipeWebServings,
+      JSON.stringify(
+        nextMap && typeof nextMap === 'object' && !Array.isArray(nextMap)
+          ? nextMap
+          : {}
+      )
+    );
+  } catch (_) {}
+}
+
+function roundRecipeWebServingsValueShared(rawValue) {
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.round(numeric * 2) / 2;
+}
+
+function getRecipeBaseServingsDefaultShared(recipe) {
+  if (!recipe || typeof recipe !== 'object') return null;
+  if (recipe._webModeBaseServingsDefaultInitialized) {
+    return recipe._webModeBaseServingsDefault;
+  }
+  let base = recipe.servingsDefault;
+  if (
+    (base === null || base === undefined || base === '') &&
+    recipe.servings &&
+    typeof recipe.servings === 'object' &&
+    recipe.servings.default != null
+  ) {
+    base = recipe.servings.default;
+  }
+  const numeric = Number(base);
+  recipe._webModeBaseServingsDefault =
+    Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
+  recipe._webModeBaseServingsDefaultInitialized = true;
+  return recipe._webModeBaseServingsDefault;
+}
+
+function getRecipeWebServingsBoundsShared(recipe) {
+  const baseDefault = getRecipeBaseServingsDefaultShared(recipe);
+  if (!Number.isFinite(Number(baseDefault)) || Number(baseDefault) <= 0) {
+    return null;
+  }
+  const servingsObj =
+    recipe && recipe.servings && typeof recipe.servings === 'object'
+      ? recipe.servings
+      : {};
+  const rawMin = roundRecipeWebServingsValueShared(servingsObj.min);
+  const rawMax = roundRecipeWebServingsValueShared(servingsObj.max);
+  const min = rawMin != null ? Math.min(rawMin, baseDefault) : baseDefault;
+  const max = rawMax != null ? Math.max(rawMax, baseDefault) : baseDefault;
+  return {
+    baseDefault,
+    min,
+    max,
+    canAdjust: max > min,
+  };
+}
+
+function clampRecipeWebServingsValueShared(rawValue, bounds) {
+  if (!bounds) return null;
+  const rounded = roundRecipeWebServingsValueShared(rawValue);
+  if (rounded == null) return null;
+  return Math.max(bounds.min, Math.min(bounds.max, rounded));
+}
+
+function getRecipeWebServingsStoredValueShared(
+  recipe,
+  { fallbackRecipeId = null, scrubInvalid = false } = {}
+) {
+  const recipeId = getRecipeWebServingsModelId(recipe, { fallbackRecipeId });
+  if (recipeId == null) return null;
+  const bounds = getRecipeWebServingsBoundsShared(recipe);
+  if (!bounds) return null;
+  const storageKey = String(recipeId);
+  const map = loadRecipeWebServingsMapShared();
+  const raw = map[storageKey];
+  const next = clampRecipeWebServingsValueShared(raw, bounds);
+
+  if (scrubInvalid) {
+    const hasStoredValue = Object.prototype.hasOwnProperty.call(map, storageKey);
+    if (next == null || next === bounds.baseDefault) {
+      if (hasStoredValue) {
+        delete map[storageKey];
+        persistRecipeWebServingsMapShared(map);
+      }
+    } else if (!hasStoredValue || Number(raw) !== next) {
+      map[storageKey] = next;
+      persistRecipeWebServingsMapShared(map);
+    }
+  }
+
+  return next;
+}
+
+function setRecipeWebServingsStoredValueShared(recipe, nextValue, { fallbackRecipeId = null } = {}) {
+  const recipeId = getRecipeWebServingsModelId(recipe, { fallbackRecipeId });
+  if (recipeId == null) return;
+  const bounds = getRecipeWebServingsBoundsShared(recipe);
+  if (!bounds) return;
+  const map = loadRecipeWebServingsMapShared();
+  const next = clampRecipeWebServingsValueShared(nextValue, bounds);
+  if (next == null || next === bounds.baseDefault) {
+    delete map[String(recipeId)];
+  } else {
+    map[String(recipeId)] = next;
+  }
+  persistRecipeWebServingsMapShared(map);
+}
+
+function getRecipeEffectiveServingsShared(
+  recipe,
+  { fallbackRecipeId = null, scrubInvalid = false } = {}
+) {
+  const bounds = getRecipeWebServingsBoundsShared(recipe);
+  if (!bounds) return null;
+  const stored = getRecipeWebServingsStoredValueShared(recipe, {
+    fallbackRecipeId,
+    scrubInvalid,
+  });
+  return Number.isFinite(Number(stored)) && stored != null ? stored : bounds.baseDefault;
+}
+
+function getRecipeWebServingsMultiplierShared(
+  recipe,
+  { fallbackRecipeId = null, scrubInvalid = false } = {}
+) {
+  const bounds = getRecipeWebServingsBoundsShared(recipe);
+  if (!bounds || !Number.isFinite(Number(bounds.baseDefault)) || Number(bounds.baseDefault) <= 0) {
+    return 1;
+  }
+  const current = getRecipeEffectiveServingsShared(recipe, {
+    fallbackRecipeId,
+    scrubInvalid,
+  });
+  const multiplier = Number(current) / Number(bounds.baseDefault);
+  return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+}
+
+window.favoriteEatsRecipeWebServings = window.favoriteEatsRecipeWebServings || Object.freeze({
+  getRecipeModelId: getRecipeWebServingsModelId,
+  loadMap: loadRecipeWebServingsMapShared,
+  persistMap: persistRecipeWebServingsMapShared,
+  roundValue: roundRecipeWebServingsValueShared,
+  getBaseDefault: getRecipeBaseServingsDefaultShared,
+  getBounds: getRecipeWebServingsBoundsShared,
+  clampValue: clampRecipeWebServingsValueShared,
+  getStoredValue: getRecipeWebServingsStoredValueShared,
+  setStoredValue: setRecipeWebServingsStoredValueShared,
+  getEffectiveServings: getRecipeEffectiveServingsShared,
+  getMultiplier: getRecipeWebServingsMultiplierShared,
+});
+// --- End recipe web servings helpers ---
+
 function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
   const mount = document.getElementById('appBarMount');
   const start =
@@ -357,6 +533,91 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   return isNegative && rendered !== '0' ? `-${rendered}` : rendered;
 }
 
+function getActionableQuantityFractionPolicy(unitText) {
+  const normalizedUnit = String(unitText || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ');
+
+  if (!normalizedUnit) {
+    return { denominators: [2, 4], allowThirds: false };
+  }
+
+  if (
+    normalizedUnit === 'tsp' ||
+    normalizedUnit === 'teaspoon' ||
+    normalizedUnit === 'teaspoons' ||
+    normalizedUnit === 'tbsp' ||
+    normalizedUnit === 'tablespoon' ||
+    normalizedUnit === 'tablespoons' ||
+    normalizedUnit === 'cup' ||
+    normalizedUnit === 'cups'
+  ) {
+    return { denominators: [2, 4, 8], allowThirds: true };
+  }
+
+  if (
+    normalizedUnit === 'oz' ||
+    normalizedUnit === 'ounce' ||
+    normalizedUnit === 'ounces' ||
+    normalizedUnit === 'lb' ||
+    normalizedUnit === 'lbs' ||
+    normalizedUnit === 'pound' ||
+    normalizedUnit === 'pounds'
+  ) {
+    return { denominators: [2, 4], allowThirds: false };
+  }
+
+  return null;
+}
+
+function normalizeActionableQuantity(value, unitText = '') {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+
+  const policy = getActionableQuantityFractionPolicy(unitText);
+  if (!policy) {
+    return Number(numeric.toFixed(2));
+  }
+
+  const abs = Math.abs(numeric);
+  const whole = Math.floor(abs);
+  const fraction = abs - whole;
+  let best = null;
+
+  const registerCandidate = (candidateValue, denominatorWeight) => {
+    const err = Math.abs(abs - candidateValue);
+    if (
+      best == null ||
+      err < best.err - 1e-12 ||
+      (Math.abs(err - best.err) <= 1e-12 && denominatorWeight < best.den)
+    ) {
+      best = {
+        value: candidateValue,
+        err,
+        den: denominatorWeight,
+      };
+    }
+  };
+
+  (Array.isArray(policy.denominators) ? policy.denominators : []).forEach((den) => {
+    const normalizedDen = Number(den);
+    if (!Number.isInteger(normalizedDen) || normalizedDen <= 0) return;
+    const num = Math.round(fraction * normalizedDen);
+    registerCandidate(whole + num / normalizedDen, normalizedDen);
+  });
+
+  if (policy.allowThirds) {
+    const thirdNum = Math.round(fraction * 3);
+    registerCandidate(whole + thirdNum / 3, 3);
+  }
+
+  if (!best) return Number(numeric.toFixed(2));
+  const rounded = Number(best.value.toFixed(6));
+  return Number.isFinite(rounded) && rounded > 0 ? rounded : Number(numeric.toFixed(2));
+}
+
 /**
  * Prettify display-only free text (fractions, ranges, ellipsis, smart quotes).
  * This is intentionally presentational and should not be used for persisted values.
@@ -471,6 +732,9 @@ function prettifyDisplayText(rawText) {
 
 if (typeof window !== 'undefined' && !window.prettifyDisplayText) {
   window.prettifyDisplayText = prettifyDisplayText;
+}
+if (typeof window !== 'undefined' && !window.normalizeActionableQuantity) {
+  window.normalizeActionableQuantity = normalizeActionableQuantity;
 }
 
 // --- Global Undo (single-slot, toast-based) ---

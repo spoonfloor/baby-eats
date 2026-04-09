@@ -621,6 +621,49 @@ body.recipes-page[data-force-web-mode='on']
   color: var(--theme-primary);
 }
 
+body.stores-page[data-force-web-mode='on'] #storesList li:not(.list-section-label) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+body.stores-page #storesList .shopping-list-row-label {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.stores-page #storesList .shopping-list-row-icon {
+  display: none;
+  flex: 0 0 auto;
+  margin-left: auto;
+  pointer-events: none;
+}
+
+body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-icon {
+  display: inline-block;
+  font-size: 32px;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.4);
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 32;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon {
+  color: var(--theme-primary);
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.shopping-row-checked:not(.list-section-label) {
+  color: var(--theme-primary);
+}
+
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
   li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon {
@@ -649,6 +692,37 @@ body.shopping-page[data-force-web-mode='on']
   #shoppingList
   li.shopping-row-checked:not(.list-section-label) {
   color: var(--theme-primary);
+}
+
+@keyframes shopping-nav-target-pulse {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  15%,
+  55% {
+    background-color: rgb(var(--theme-primary-rgb) / 0.16);
+  }
+  32%,
+  72% {
+    background-color: transparent;
+  }
+}
+
+body.shopping-page[data-force-web-mode='on']
+  #shoppingList
+  li.shopping-nav-target:not(.list-section-label) {
+  animation: shopping-nav-target-pulse 1200ms ease-out 1;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.shopping-page[data-force-web-mode='on']
+    #shoppingList
+    li.shopping-nav-target:not(.list-section-label) {
+    animation: none;
+    background-color: rgb(var(--theme-primary-rgb) / 0.16);
+  }
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -763,7 +837,26 @@ body.shopping-page[data-force-web-mode='on']
   background-color: hsl(270, 0%, 96%);
 }
 
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.is-selected:not(.list-section-label) {
+  background-color: rgb(var(--theme-primary-rgb) / 0.16);
+  border-radius: 8px;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.is-selected:hover:not(.list-section-label) {
+  background-color: rgb(var(--theme-primary-rgb) / 0.24);
+}
+
 .list-view li:hover:not(.is-selected) {
+  background-color: hsl(270, 0%, 96%);
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li:hover:not(.is-selected):not(.list-section-label) {
   background-color: hsl(270, 0%, 96%);
 }
 
@@ -782,6 +875,144 @@ body.shopping-page[data-force-web-mode='on']
   background-color: transparent;
 }
 
+body.shopping-list-page #shoppingListOutput.list-view {
+  padding-bottom: calc(var(--page-top-gap) + 1rem);
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section--store,
+body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted {
+  margin-top: 0.75rem;
+  color: var(--theme-primary);
+  font-size: 13px;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section--store:first-child,
+body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted:first-child {
+  margin-top: 0;
+}
+
+body.shopping-list-page .shopping-list-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+body.shopping-list-page .shopping-list-controls__reset {
+  height: 38px;
+  padding: 0 1rem;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section--aisle,
+body.shopping-list-page #shoppingListOutput .shopping-list-section--completed {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 13px;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__icon {
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.72;
+  font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 20;
+  transition: transform 120ms ease;
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-section-toggle[aria-expanded='true']
+  .shopping-list-section-toggle__icon {
+  transform: rotate(180deg);
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__label {
+  line-height: 1.2;
+}
+
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.58);
+  padding: 0;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  flex: 0 0 auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox .material-symbols-outlined {
+  font-size: 24px;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 24;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-text-wrap {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-text,
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: var(--ingredients-line-height);
+  text-align: left;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-text {
+  cursor: text;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-input:focus {
+  outline: none;
+}
+
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--checked {
+  color: rgba(0, 0, 0, 0.48);
+}
+
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--checked .shopping-list-doc-checkbox {
+  color: rgba(0, 0, 0, 0.48);
+}
+
 .top-level-empty-state {
   color: var(--theme-primary);
   text-transform: none;
@@ -792,6 +1023,14 @@ body.shopping-page[data-force-web-mode='on']
   letter-spacing: 0;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
+}
+
+.top-level-empty-state > p {
+  margin: 0;
+}
+
+.top-level-empty-state > p + p {
+  margin-top: 0.75em;
 }
 
 .list-view.top-level-kbd-nav li:hover:not(.is-selected) {
@@ -1506,6 +1745,8 @@ body.ingredient-insert-blank-active
 /* Section headers → first content */
 .section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
 .section-header + .ingredient-insert-zone + .ingredient-line,
+#ingredientsSection > .section-header + .ingredient-subsection-heading-line,
+#ingredientsSection > .section-header + .ingredient-line,
 #stepsSection .section-header + .instruction-line.numbered {
   margin-top: var(--space-section-header-to-content);
 }
@@ -2082,48 +2323,94 @@ h1.nav-text {
   color: var(--subtitle);
 }
 
-.servings-line--web .row-field {
+.servings-line.servings-line--web .row-field {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 24px;
 }
 
-.servings-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.servings-line--web .servings-web-subtitle {
+  color: var(--subtitle);
 }
 
-.servings-picker-btn {
-  appearance: none;
-  -webkit-appearance: none;
+.servings-line--web .servings-web-value {
   border: 0;
   background: transparent;
   padding: 0;
-  width: 28px;
-  height: 28px;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: text;
+}
+
+.servings-line--web .servings-web-value-input {
+  width: 4ch;
+  min-width: 3ch;
+  border: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  padding: 0;
+}
+
+.servings-line--web .servings-web-value-input:focus {
+  outline: none;
+  border-bottom-color: rgba(0, 0, 0, 0.45);
+}
+
+.servings-line--web .shopping-list-row-stepper {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+}
+
+.servings-line--web .shopping-stepper-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background-color: hsl(270, 0%, 96%);
+  padding: 0;
+  margin: 0;
+  min-width: 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--theme-primary);
   cursor: pointer;
+  color: var(--subtitle);
+  line-height: 1;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.servings-picker-btn[disabled] {
+.servings-line--web .shopping-stepper-btn:hover:not([disabled]) {
+  background-color: hsl(270, 0%, 92%);
+}
+
+.servings-line--web .shopping-stepper-btn[disabled] {
+  background-color: hsl(270, 0%, 97%);
   color: rgba(0, 0, 0, 0.22);
   cursor: default;
 }
 
-.servings-picker-btn .material-symbols-outlined {
-  font-size: 22px;
+.servings-line--web .shopping-stepper-btn .material-symbols-outlined {
+  font-size: 18px;
   line-height: 1;
-  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 22;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
 }
 
-.servings-picker-value {
-  min-width: 2ch;
-  text-align: center;
-  color: var(--subtitle);
+.servings-line--web .shopping-stepper-qty {
+  display: none;
 }
 
 .recipe-tags-section {
@@ -2663,6 +2950,20 @@ body.recipe-editor-page .recipe-tags-editor-field {
 .ingredient-line a:hover {
   text-decoration: underline;
   color: var(--theme-secondary);
+}
+
+#ingredientsSection .ingredient-shopping-link,
+#ingredientsSection .ingredient-shopping-link:visited,
+.you-will-need-card .ingredient-shopping-link,
+.you-will-need-card .ingredient-shopping-link:visited {
+  color: var(--font-color-near-black);
+  text-decoration: none;
+}
+
+#ingredientsSection .ingredient-shopping-link:hover,
+#ingredientsSection .ingredient-shopping-link:focus-visible {
+  color: var(--theme-secondary);
+  text-decoration: underline;
 }
 
 /* Master links are reveal-only in modifier mode; suppress generic anchor hover affordance. */
