@@ -4252,9 +4252,10 @@ async function loadShoppingPage() {
     { id: 'none', label: 'no location' },
   ];
   const shoppingFilterChipDefsAll = [
+    { id: 'food', label: 'food', kind: 'flag' },
+    { id: 'not food', label: 'not food', kind: 'flag' },
     { id: 'for recipes', label: 'from recipes', kind: 'flag' },
     { id: 'selected', label: 'all selections', kind: 'flag' },
-    { id: 'not food', label: 'not food', kind: 'flag' },
     { id: 'recent', label: 'recent', kind: 'sort' },
     { id: 'hidden', label: 'hidden', kind: 'flag' },
     { id: 'removed', label: 'removed', kind: 'flag' },
@@ -4262,7 +4263,9 @@ async function loadShoppingPage() {
     { id: 'no recipe', label: 'no recipe', kind: 'usage' },
     { id: 'no aisle', label: 'no aisle', kind: 'usage' },
   ];
-  const shoppingFilterChipDefsWeb = shoppingFilterChipDefsAll.slice(0, 3);
+  const shoppingFilterChipDefsWeb = shoppingFilterChipDefsAll.filter((chipDef) =>
+    ['food', 'not food', 'for recipes'].includes(String(chipDef?.id || '').toLowerCase())
+  );
   const activeFilterChips = new Set();
   const selectedShoppingNames = new Set();
   const shoppingQuantities = new Map();
@@ -4661,6 +4664,10 @@ async function loadShoppingPage() {
         }
         if (knownIds.has(id)) activeFilterChips.add(id);
       });
+      if (activeFilterChips.has('food') && activeFilterChips.has('not food')) {
+        activeFilterChips.delete('not food');
+        persistShoppingChipState();
+      }
     } catch (_) {}
   };
 
@@ -4682,6 +4689,9 @@ async function loadShoppingPage() {
       }
       if (item && item.isHidden) {
         counts.set('hidden', (counts.get('hidden') || 0) + 1);
+      }
+      if (item && item.isFood === true) {
+        counts.set('food', (counts.get('food') || 0) + 1);
       }
       if (item && item.isFood === false) {
         counts.set('not food', (counts.get('not food') || 0) + 1);
@@ -4736,12 +4746,17 @@ async function loadShoppingPage() {
         const count = Number(shoppingChipCounts.get(key) || 0);
         if (count <= 0) return;
         const isSelectedFamilyChip = key === 'selected' || key === 'for recipes';
+        const isFoodFamilyChip = key === 'food' || key === 'not food';
         if (activeFilterChips.has(key)) {
           activeFilterChips.delete(key);
         } else {
           if (isSelectedFamilyChip) {
             activeFilterChips.delete('selected');
             activeFilterChips.delete('for recipes');
+          }
+          if (isFoodFamilyChip) {
+            activeFilterChips.delete('food');
+            activeFilterChips.delete('not food');
           }
           activeFilterChips.add(key);
         }
@@ -4780,6 +4795,7 @@ async function loadShoppingPage() {
 
   const getFilteredShoppingRows = () => {
     const query = (searchInput?.value || '').trim().toLowerCase();
+    const foodOnly = activeFilterChips.has('food');
     const selectedOnly = activeFilterChips.has('selected');
     const recipeOnly = activeFilterChips.has('for recipes');
     const recentFirst = activeFilterChips.has('recent');
@@ -4804,7 +4820,11 @@ async function loadShoppingPage() {
       const matchesHidden = hiddenOnly
         ? item.isHidden === true
         : item.isHidden !== true;
-      const matchesFood = notFoodOnly ? item.isFood === false : true;
+      const matchesFood = foodOnly
+        ? item.isFood === true
+        : notFoodOnly
+          ? item.isFood === false
+          : true;
       const locationId = normalizeLocationForChip(item?.locationAtHome);
       const matchesLocation =
         activeLocationIds.length === 0 || activeLocationIds.includes(locationId);

@@ -60,6 +60,11 @@
   --app-bar-height: 64px;
   --page-top-gap: 48px;
   --top-filter-chip-page-top-gap: 64px;
+  --top-level-list-edge-gap: 12px;
+  --top-level-list-row-padding-y: 0.5rem;
+  --top-level-list-row-padding-x: 0.75rem;
+  --top-filter-chip-gap-from-anchor: 8px;
+  --top-filter-chip-gap-from-appbar: 8px;
   --page-content-width: 574px;
 
   --header-font-size: 16px;
@@ -144,9 +149,16 @@
   --app-filter-chip-gap: 12px;
   --app-filter-chip-padding-x: 20px;
   --app-filter-chip-rail-padding-inline: 20px;
+  --app-filter-chip-rail-padding-block: 1px;
+  --top-filter-chip-rail-height: calc(
+    var(--app-filter-chip-height) + (var(--app-filter-chip-rail-padding-block) * 2)
+  );
+  --top-filter-chip-rail-stack-height: calc(
+    var(--top-filter-chip-gap-from-appbar) + var(--top-filter-chip-rail-height)
+  );
   --app-filter-chip-bg: var(--pill-bg);
   --app-filter-chip-fg: var(--theme-primary);
-  --app-filter-chip-active-bg: var(--theme-secondary);
+  --app-filter-chip-active-bg: var(--theme-primary);
   --app-filter-chip-active-fg: #fff;
   --shopping-filter-chip-font-size: var(--ingredient-editor-control-font-size);
   --shopping-filter-chip-font-weight: var(--body-font-weight);
@@ -156,7 +168,7 @@
   --shopping-filter-chip-border: rgb(var(--theme-primary-rgb) / 0.25);
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
-  --shopping-filter-chip-active-bg: var(--theme-secondary);
+  --shopping-filter-chip-active-bg: var(--theme-primary);
   --shopping-filter-chip-active-fg: #fff;
 
   /* --- Insert affordance positioning --- */
@@ -188,10 +200,10 @@ body[data-force-web-mode='on'] {
   --shopping-filter-chip-border: rgb(var(--theme-primary-rgb) / 0.25);
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
-  --shopping-filter-chip-active-bg: var(--theme-secondary);
+  --shopping-filter-chip-active-bg: var(--theme-primary);
   --app-filter-chip-bg: var(--pill-bg);
   --app-filter-chip-fg: var(--theme-primary);
-  --app-filter-chip-active-bg: var(--theme-secondary);
+  --app-filter-chip-active-bg: var(--theme-primary);
 }
 
 /* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
@@ -267,6 +279,26 @@ body[data-force-web-mode='on'] {
 
 body.has-top-filter-chip-rail {
   --page-top-gap: var(--top-filter-chip-page-top-gap);
+}
+
+body.recipes-page .page-main,
+body.shopping-page .page-main,
+body.stores-page .page-main,
+body.tags-page .page-main,
+body.sizes-page .page-main,
+body.units-page .page-main,
+body.shopping-list-page .page-main {
+  padding-top: var(--app-bar-height);
+}
+
+body.has-top-filter-chip-rail.recipes-page .page-main,
+body.has-top-filter-chip-rail.shopping-page .page-main,
+body.has-top-filter-chip-rail.stores-page .page-main,
+body.has-top-filter-chip-rail.tags-page .page-main,
+body.has-top-filter-chip-rail.sizes-page .page-main,
+body.has-top-filter-chip-rail.units-page .page-main,
+body.has-top-filter-chip-rail.shopping-list-page .page-main {
+  padding-top: calc(var(--app-bar-height) + var(--top-filter-chip-rail-stack-height));
 }
 
 /* Prevent a white flash before the app-bar fragment injects on navigation.
@@ -349,11 +381,7 @@ body.has-top-filter-chip-rail {
 }
 
 .app-filter-chip.is-active:hover {
-  background: color-mix(
-    in srgb,
-    var(--app-filter-chip-active-bg) 92%,
-    #000 8%
-  );
+  background: var(--app-filter-chip-active-bg);
 }
 
 .app-filter-chip:focus-visible {
@@ -890,10 +918,6 @@ body.stores-page[data-force-web-mode='on']
 
 .list-view li.list-section-label:hover {
   background-color: transparent;
-}
-
-body.shopping-list-page #shoppingListOutput.list-view {
-  padding-bottom: calc(var(--page-top-gap) + 1rem);
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-section--store,
@@ -1971,21 +1995,28 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 }
 
 body.recipes-page .list-view.list-page,
-body.shopping-page .list-view.list-page {
-  /* Shared top-list spacing below the fixed filter chip rail. */
-  padding-top: 10px;
-  /* Keep comfortable breathing room after the final row when scrolled to bottom. */
-  padding-bottom: 40px;
+body.shopping-page .list-view.list-page,
+body.stores-page .list-view.list-page,
+body.tags-page .list-view.list-page,
+body.sizes-page .list-view.list-page,
+body.units-page .list-view.list-page,
+body.shopping-list-page .list-view.list-page {
+  /* One shared breathing-space token for first and last list rows. */
+  padding-top: var(--top-level-list-edge-gap);
+  padding-bottom: var(--top-level-list-edge-gap);
 }
 
 .list-page li {
   cursor: pointer;
-  padding: 0.5rem 0.75rem;
   border-radius: 8px;
   /* Polished truncation */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+body:not(.shopping-list-page) .list-page li {
+  padding: var(--top-level-list-row-padding-y) var(--top-level-list-row-padding-x);
 }
 
 .list-page li:hover:not(.is-selected) {
@@ -2170,7 +2201,7 @@ body.shopping-page .list-view.list-page {
   gap: var(--app-filter-chip-gap);
   min-width: 100%;
   white-space: nowrap;
-  padding: 1px var(--app-filter-chip-rail-padding-inline);
+  padding: var(--app-filter-chip-rail-padding-block) var(--app-filter-chip-rail-padding-inline);
   box-sizing: border-box;
 }
 
@@ -3166,16 +3197,12 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-padding-x: 10px;
     --shopping-filter-chip-gap: 6px;
+    --top-level-list-row-padding-x: 0.5rem;
   }
 
   .list-view.list-page {
     padding-left: 6px;
     padding-right: 6px;
-  }
-
-  .list-page li {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
   }
 
   .app-bar-wrapper {
@@ -3189,6 +3216,7 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-padding-x: 8px;
     --app-bar-gap: 8px;
+    --top-level-list-row-padding-x: 0.4rem;
   }
 
   .list-view.list-page {
@@ -3196,9 +3224,7 @@ body.ingredient-master-link-mode
     padding-right: 2px;
   }
 
-  .list-page li {
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
+  body:not(.shopping-list-page) .list-page li {
     border-radius: 4px;
   }
 
@@ -3213,6 +3239,7 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-gap: 4px;
     --shopping-filter-chip-padding-x: 6px;
+    --top-level-list-row-padding-x: 0.35rem;
   }
 
   .list-view.list-page {
@@ -3220,9 +3247,7 @@ body.ingredient-master-link-mode
     padding-right: 0;
   }
 
-  .list-page li {
-    padding-left: 0.35rem;
-    padding-right: 0.35rem;
+  body:not(.shopping-list-page) .list-page li {
     border-radius: 0;
   }
 

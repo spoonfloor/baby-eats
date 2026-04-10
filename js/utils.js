@@ -2510,14 +2510,54 @@ function mountTopFilterChipRail(opts = {}) {
   const anchorEl = opts?.anchorEl;
   if (!(anchorEl instanceof HTMLElement)) return null;
 
+  const readRootPxVar = (varName, fallback) => {
+    try {
+      const root = document.documentElement;
+      if (!(root instanceof HTMLElement)) return fallback;
+      const raw = getComputedStyle(root).getPropertyValue(varName);
+      const parsed = Number.parseFloat(String(raw || '').trim());
+      return Number.isFinite(parsed) ? parsed : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  };
+  const syncRailStackHeightVar = () => {
+    try {
+      const root = document.documentElement;
+      if (!(root instanceof HTMLElement)) return;
+      const appBarBottom = Number(
+        document.querySelector('.app-bar-wrapper')?.getBoundingClientRect?.().bottom || 0,
+      );
+      const docks = Array.from(document.querySelectorAll('.list-filter-chip-dock'));
+      if (!docks.length || !Number.isFinite(appBarBottom) || appBarBottom <= 0) {
+        root.style.removeProperty('--top-filter-chip-rail-stack-height');
+        return;
+      }
+      let maxBottom = appBarBottom;
+      docks.forEach((dockEl) => {
+        if (!(dockEl instanceof HTMLElement)) return;
+        if (!document.body.contains(dockEl)) return;
+        const rect = dockEl.getBoundingClientRect();
+        if (!rect || rect.height <= 0) return;
+        maxBottom = Math.max(maxBottom, rect.bottom);
+      });
+      const stackHeight = Math.max(0, Math.round(maxBottom - appBarBottom));
+      if (stackHeight > 0) {
+        root.style.setProperty('--top-filter-chip-rail-stack-height', `${stackHeight}px`);
+      } else {
+        root.style.removeProperty('--top-filter-chip-rail-stack-height');
+      }
+    } catch (_) {}
+  };
+
   const dockId = String(opts?.dockId || 'topFilterChipDock').trim();
   const removeOnDestroy = opts?.removeOnDestroy !== false;
   const gapFromAnchorPx = Number.isFinite(opts?.gapFromAnchorPx)
     ? Number(opts.gapFromAnchorPx)
-    : 8;
+    : readRootPxVar('--top-filter-chip-gap-from-anchor', 8);
   const gapFromAppBarPx = Number.isFinite(opts?.gapFromAppBarPx)
     ? Number(opts.gapFromAppBarPx)
-    : 8;
+    : readRootPxVar('--top-filter-chip-gap-from-appbar', 8);
 
   let dock = dockId ? document.getElementById(dockId) : null;
   if (!dock) {
@@ -2571,6 +2611,7 @@ function mountTopFilterChipRail(opts = {}) {
     dock.style.removeProperty('right');
     dock.style.removeProperty('width');
     dock.style.top = `${Math.round(safeTop)}px`;
+    syncRailStackHeightVar();
   };
 
   let _syncRafId = 0;
@@ -2626,6 +2667,7 @@ function mountTopFilterChipRail(opts = {}) {
       if (removeOnDestroy && dock?.parentNode) {
         dock.parentNode.removeChild(dock);
       }
+      syncRailStackHeightVar();
     },
   };
 }
