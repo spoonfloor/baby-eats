@@ -61,6 +61,28 @@ function getIngredientDeprecatedFlagFromDb(db, whereClause, lookupName = '') {
   return false;
 }
 
+function getCanonicalIngredientNameFromDb(db, rawName = '') {
+  const typed = String(rawName || '').trim();
+  if (!typed || !db || typeof db.exec !== 'function') return typed;
+  try {
+    const q = db.exec(
+      `
+      SELECT name
+      FROM ingredients
+      WHERE lower(trim(name)) = lower(trim(?))
+      ORDER BY ID
+      LIMIT 1;
+      `,
+      [typed]
+    );
+    if (Array.isArray(q) && q.length && Array.isArray(q[0].values) && q[0].values.length) {
+      const canonical = String(q[0].values[0][0] || '').trim();
+      if (canonical) return canonical;
+    }
+  } catch (_) {}
+  return typed;
+}
+
 function attachIngredientInputAutosize(input) {
   if (!input) return;
 
@@ -1930,6 +1952,11 @@ function openIngredientEditRow({
     }
 
     const nameTrimmed = (fields.name || '').trim();
+    const dbForCanonicalName = window.dbInstance;
+    const canonicalName =
+      !recipeLinkState.isRecipe && nameTrimmed
+        ? getCanonicalIngredientNameFromDb(dbForCanonicalName, nameTrimmed)
+        : nameTrimmed;
 
     const parseQtyScalar = (raw) => {
       const t = String(raw || '').trim();
@@ -2050,7 +2077,7 @@ function openIngredientEditRow({
         quantityMax,
         quantityIsApprox,
         unit: normalizedUnit,
-        name: nameTrimmed,
+        name: canonicalName,
         size: fields.size || '',
         variant: fields.var || '',
         prepNotes: fields.prep || '',
@@ -2060,7 +2087,7 @@ function openIngredientEditRow({
         isRecipe: recipeLinkState.isRecipe,
         linkedRecipeId: recipeLinkState.linkedRecipeId,
         linkedRecipeTitle: recipeLinkState.linkedRecipeTitle || '',
-        recipeText: recipeLinkState.isRecipe ? nameTrimmed : '',
+        recipeText: recipeLinkState.isRecipe ? nameTrimmed : canonicalName,
         substitutes: [],
         locationAtHome: '',
         clientId: `tmp-ing-${Date.now()}-${Math.random()
@@ -2078,7 +2105,7 @@ function openIngredientEditRow({
       try {
         const db = window.dbInstance;
         if (db) {
-          const nameSafe = nameTrimmed.replace(/'/g, "''");
+          const nameSafe = canonicalName.replace(/'/g, "''");
           const whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
           
           const q = db.exec(
@@ -2098,7 +2125,7 @@ function openIngredientEditRow({
           ingredient.isDeprecated = getIngredientDeprecatedFlagFromDb(
             db,
             whereClause,
-            nameTrimmed,
+            canonicalName,
           );
         }
       } catch (err) {
@@ -2180,7 +2207,7 @@ function openIngredientEditRow({
       modelRef.quantityMax = quantityMax;
       modelRef.quantityIsApprox = quantityIsApprox;
       modelRef.unit = normalizedUnit;
-      modelRef.name = nameTrimmed;
+      modelRef.name = canonicalName;
       modelRef.size = fields.size || '';
       modelRef.variant = fields.var || '';
       modelRef.prepNotes = fields.prep || '';
@@ -2190,7 +2217,7 @@ function openIngredientEditRow({
       modelRef.isRecipe = recipeLinkState.isRecipe;
       modelRef.linkedRecipeId = recipeLinkState.linkedRecipeId;
       modelRef.linkedRecipeTitle = recipeLinkState.linkedRecipeTitle || '';
-      modelRef.recipeText = recipeLinkState.isRecipe ? nameTrimmed : '';
+      modelRef.recipeText = recipeLinkState.isRecipe ? nameTrimmed : canonicalName;
       if (!modelRef.clientId) {
         modelRef.clientId =
           modelRef.rimId != null
@@ -2219,7 +2246,7 @@ function openIngredientEditRow({
       try {
         const db = window.dbInstance;
         if (db) {
-          const nameSafe = nameTrimmed.replace(/'/g, "''");
+          const nameSafe = canonicalName.replace(/'/g, "''");
           const whereClause = `LOWER(name) = LOWER('${nameSafe}')`;
           
           const q = db.exec(
@@ -2239,7 +2266,7 @@ function openIngredientEditRow({
           modelRef.isDeprecated = getIngredientDeprecatedFlagFromDb(
             db,
             whereClause,
-            nameTrimmed,
+            canonicalName,
           );
         }
       } catch (err) {
@@ -2557,16 +2584,30 @@ function openIngredientPasteRow({ parent, replaceEl, insertAtIndex }) {
       return Number.isFinite(numeric) ? numeric : null;
     };
 
+    const dbForCanonicalNames = window.dbInstance;
+    const canonicalNameCache = new Map();
+    const resolveCanonicalPastedName = (typedName, isRecipe) => {
+      const name = String(typedName || '').trim();
+      if (!name || isRecipe) return name;
+      const key = name.toLowerCase();
+      if (canonicalNameCache.has(key)) return canonicalNameCache.get(key);
+      const canonical = getCanonicalIngredientNameFromDb(dbForCanonicalNames, name);
+      canonicalNameCache.set(key, canonical);
+      return canonical;
+    };
+
     return (Array.isArray(parsed) ? parsed : [])
       .map((row, idx) => {
         if (!row || !String(row.name || '').trim()) return null;
+        const typedName = String(row.name || '').trim();
+        const canonicalName = resolveCanonicalPastedName(typedName, !!row.isRecipe);
         return {
           quantity: row.quantity != null ? row.quantity : '',
           quantityMin: toFiniteNumberOrNull(row.quantityMin),
           quantityMax: toFiniteNumberOrNull(row.quantityMax),
           quantityIsApprox: !!row.quantityIsApprox,
           unit: row.unit || '',
-          name: String(row.name || '').trim(),
+          name: canonicalName,
           size: row.size || '',
           variant: row.variant || '',
           prepNotes: row.prepNotes || '',

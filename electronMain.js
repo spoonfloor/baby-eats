@@ -2,14 +2,20 @@
 
 // Electron main process — handles app lifecycle and real file I/O.
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { ensureGoogleDocsAccessToken } = require('./googleDocsAuth');
+const { exportShoppingListToGoogleDocs } = require('./googleDocsExport');
 
 // 🔧 Adjustable constants
 
 let ACTIVE_DB_PATH = null;
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
+let APP_CONFIG = {
+  lastDb: null,
+  googleDocsAuth: null,
+};
 
 const MAX_BACKUPS = 8;
 
@@ -107,8 +113,14 @@ function loadConfig() {
   try {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
     const json = JSON.parse(raw);
-    if (json && typeof json.lastDb === 'string' && fs.existsSync(json.lastDb)) {
-      ACTIVE_DB_PATH = json.lastDb;
+    if (json && typeof json === 'object') {
+      APP_CONFIG = {
+        ...APP_CONFIG,
+        ...json,
+      };
+    }
+    if (typeof APP_CONFIG.lastDb === 'string' && fs.existsSync(APP_CONFIG.lastDb)) {
+      ACTIVE_DB_PATH = APP_CONFIG.lastDb;
     }
   } catch (_) {
     // no config yet or unreadable; ignore
@@ -117,14 +129,23 @@ function loadConfig() {
 
 function saveConfig() {
   try {
+    APP_CONFIG.lastDb = ACTIVE_DB_PATH || null;
     fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
-    fs.writeFileSync(
-      CONFIG_FILE,
-      JSON.stringify({ lastDb: ACTIVE_DB_PATH }, null, 2)
-    );
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(APP_CONFIG, null, 2));
   } catch (err) {
     console.warn('⚠️ Could not persist config:', err.message);
   }
+}
+
+function getGoogleDocsAuthConfig() {
+  return APP_CONFIG.googleDocsAuth && typeof APP_CONFIG.googleDocsAuth === 'object'
+    ? APP_CONFIG.googleDocsAuth
+    : null;
+}
+
+function setGoogleDocsAuthConfig(nextAuth) {
+  APP_CONFIG.googleDocsAuth = nextAuth && typeof nextAuth === 'object' ? nextAuth : null;
+  saveConfig();
 }
 
 // --- File I/O helpers ---
@@ -229,6 +250,45 @@ ipcMain.handle('getEnv', async () => ({
   appPath: app.getAppPath(),
   userData: app.getPath('userData'),
 }));
+
+ipcMain.handle('googleDocsExportShoppingList', async (event, payload = null) => {
+  try {
+    const accessToken = await ensureGoogleDocsAccessToken({
+      appPath: app.getAppPath(),
+      userDataPath: app.getPath('userData'),
+      persistedAuth: getGoogleDocsAuthConfig(),
+      onAuthChanged: (nextAuth) => {
+        setGoogleDocsAuthConfig(nextAuth);
+      },
+      openExternal: (url) => shell.openExternal(url),
+    });
+
+    const exportResult = await exportShoppingListToGoogleDocs({
+      accessToken,
+      payload,
+    });
+
+    if (String(exportResult?.url || '').trim()) {
+      try {
+        await shell.openExternal(exportResult.url);
+      } catch (openErr) {
+        console.warn('⚠️ Could not open exported Google Doc automatically:', openErr);
+      }
+    }
+
+    return {
+      ok: true,
+      ...exportResult,
+    };
+  } catch (err) {
+    console.error('❌ Google Docs export failed:', err);
+    return {
+      ok: false,
+      code: String(err?.code || 'google_docs_export_failed'),
+      message: String(err?.userMessage || err?.message || 'Could not export shopping list.'),
+    };
+  }
+});
 
 // --- App startup ---
 

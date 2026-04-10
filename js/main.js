@@ -100,11 +100,6 @@ function attachSecretGalleryShortcut(addBtn) {
 }
 
 const FORCE_WEB_MODE_STORAGE_KEY = 'favoriteEatsForceWebMode';
-const FORCE_WEB_MODE_MENU_ENABLED = true;
-
-function isForceWebModeMenuEnabled() {
-  return FORCE_WEB_MODE_MENU_ENABLED;
-}
 
 function isForceWebModeEnabled() {
   try {
@@ -225,6 +220,57 @@ function wireTypeToAppBarSearch(searchInput) {
   };
 
   document.addEventListener('keydown', onKeyDown, true);
+}
+
+function wireAppBarSearch(searchInput, options = {}) {
+  if (!(searchInput instanceof HTMLInputElement)) return null;
+
+  const {
+    clearBtn = document.getElementById('appBarSearchClear'),
+    onQueryChange = null,
+    normalizeQuery = (value) => String(value || '').trim(),
+    enableTypeToSearch = true,
+  } = options;
+
+  if (enableTypeToSearch) wireTypeToAppBarSearch(searchInput);
+
+  const syncClearBtn = () => {
+    if (!(clearBtn instanceof HTMLElement)) return;
+    clearBtn.style.display = searchInput.value ? 'inline' : 'none';
+  };
+
+  const emitQueryChange = () => {
+    syncClearBtn();
+    if (typeof onQueryChange === 'function') {
+      onQueryChange(normalizeQuery(searchInput.value), searchInput.value);
+    }
+  };
+
+  syncClearBtn();
+  searchInput.addEventListener('input', emitQueryChange);
+
+  if (clearBtn instanceof HTMLElement) {
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      emitQueryChange();
+      searchInput.focus();
+    });
+  }
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      searchInput.blur();
+    }
+  });
+
+  return {
+    clearBtn,
+    syncClearBtn,
+    emitQueryChange,
+  };
 }
 
 function renderTopLevelEmptyState(listEl, message) {
@@ -675,18 +721,18 @@ function getShoppingListMeasuredDisplayFromBase(family, baseQuantity) {
 }
 
 function getShoppingListIngredientLabel(name, variantName = '') {
-  const fallback = getShoppingPlanSelectionLabel({ name, variantName });
-  if (typeof window === 'undefined') return fallback;
-  if (typeof window.getIngredientDisplayCoreParts !== 'function') return fallback;
-  try {
-    const parts = window.getIngredientDisplayCoreParts({
-      name,
-      variant: variantName,
-    });
-    return String(parts?.nameText || '').trim() || fallback;
-  } catch (_) {
-    return fallback;
-  }
+  const displayFields = getShoppingListDisplayFields(name, variantName);
+  const fallbackVariant =
+    String(variantName || '').trim() &&
+    String(variantName || '').trim().toLowerCase() !== 'default' &&
+    !isShoppingListSizeVariant(variantName)
+      ? variantName
+      : '';
+  const fallback = [String(fallbackVariant || '').trim(), String(name || '').trim()]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return displayFields.displayName || fallback;
 }
 
 function formatShoppingListIngredientText(line) {
@@ -712,15 +758,187 @@ function formatShoppingListIngredientText(line) {
   return pieces.join(' ').trim();
 }
 
-function getShoppingListBucketLeadText(bucket) {
+const SHOPPING_LIST_SIZE_VARIANT_TOKENS = Object.freeze(
+  new Set([
+    'small',
+    'medium',
+    'large',
+    'extra-small',
+    'extra small',
+    'x-small',
+    'x small',
+    'extra-large',
+    'extra large',
+    'x-large',
+    'x large',
+    'xlarge',
+    'jumbo',
+    'mini',
+  ])
+);
+
+const SHOPPING_LIST_SINGULAR_UNIT_TOKENS = Object.freeze(
+  new Set([
+    'tsp',
+    'tbsp',
+    'cup',
+    'fl oz',
+    'oz',
+    'lb',
+    'pt',
+    'qt',
+    'gal',
+    'ml',
+    'l',
+    'g',
+    'kg',
+    'can',
+    'bag',
+    'box',
+    'carton',
+    'package',
+    'packet',
+    'bottle',
+    'jar',
+    'container',
+    'stick',
+    'loaf',
+  ])
+);
+
+function formatShoppingListDisplayQuantity(quantity) {
+  const numeric = Number(quantity);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '';
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.decimalToFractionDisplay === 'function'
+  ) {
+    try {
+      const formatted = window.decimalToFractionDisplay(numeric);
+      if (formatted) return String(formatted).trim();
+    } catch (_) {}
+  }
+  return formatShoppingPlanQuantity(numeric);
+}
+
+function isShoppingListSizeVariant(variantText) {
+  const normalized = String(variantText || '')
+    .trim()
+    .toLowerCase();
+  return normalized ? SHOPPING_LIST_SIZE_VARIANT_TOKENS.has(normalized) : false;
+}
+
+function getShoppingListDisplayFields(name, variantName = '') {
+  const resolvedName = String(name || '').trim();
+  const resolvedVariant = String(variantName || '').trim();
+  const normalizedVariant = resolvedVariant.toLowerCase();
+  const nameVariant =
+    resolvedVariant &&
+    normalizedVariant !== 'default' &&
+    !isShoppingListSizeVariant(resolvedVariant)
+      ? resolvedVariant
+      : '';
+  const quantitySizePrefix =
+    resolvedVariant &&
+    normalizedVariant !== 'default' &&
+    isShoppingListSizeVariant(resolvedVariant)
+      ? resolvedVariant
+      : '';
+
+  let displayName = '';
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.getIngredientDisplayCoreParts === 'function'
+  ) {
+    try {
+      displayName = String(
+        window.getIngredientDisplayCoreParts({
+          name: resolvedName,
+          variant: nameVariant,
+        })?.nameText || ''
+      ).trim();
+    } catch (_) {}
+  }
+  if (!displayName) {
+    displayName = [nameVariant, resolvedName].filter(Boolean).join(' ').trim();
+  }
+
+  return {
+    displayName,
+    quantitySizePrefix,
+  };
+}
+
+function mergeShoppingListSizeText(prefix, sizeText = '') {
+  return [String(prefix || '').trim(), String(sizeText || '').trim()]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
+function shouldUseShoppingListSingularUnit(unitText) {
+  const normalizedUnit = normalizeShoppingListUnit(unitText);
+  return normalizedUnit ? SHOPPING_LIST_SINGULAR_UNIT_TOKENS.has(normalizedUnit) : false;
+}
+
+function formatShoppingListAmountLeadText({ quantity = '', size = '', unit = '' } = {}) {
+  const normalizedUnit = normalizeShoppingListUnit(unit);
+  if (shouldUseShoppingListSingularUnit(normalizedUnit)) {
+    const quantityText = formatShoppingListDisplayQuantity(quantity);
+    return [quantityText, String(size || '').trim(), normalizedUnit]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+  }
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.getIngredientDisplayCoreParts === 'function'
+  ) {
+    try {
+      return String(
+        window.getIngredientDisplayCoreParts({
+          quantity,
+          size,
+          unit,
+          name: '',
+          variant: '',
+        })?.leadText || ''
+      ).trim();
+    } catch (_) {}
+  }
+  const quantityText = formatShoppingListDisplayQuantity(quantity);
+  return [quantityText, String(size || '').trim(), String(unit || '').trim()]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
+function getShoppingListBucketSortPriority(bucket) {
+  if (!bucket || typeof bucket !== 'object') return 99;
+  if (
+    bucket.kind === 'selected' ||
+    bucket.kind === 'unspecified' ||
+    bucket.kind === 'count'
+  ) {
+    return 0;
+  }
+  return 1;
+}
+
+function getShoppingListBucketLeadText(bucket, options = {}) {
   if (!bucket || typeof bucket !== 'object') return '';
+  const quantitySizePrefix = String(options.quantitySizePrefix || '').trim();
   if (bucket.kind === 'selected') {
-    const quantity = formatShoppingPlanQuantity(bucket.quantity);
-    return quantity ? `${quantity}x` : '';
+    return formatShoppingListAmountLeadText({
+      quantity: bucket.quantity,
+      size: quantitySizePrefix,
+    });
   }
   if (bucket.kind === 'unspecified') {
-    const quantity = formatShoppingPlanQuantity(bucket.quantity);
-    return quantity ? `${quantity} unspecified` : '';
+    return formatShoppingListAmountLeadText({
+      quantity: bucket.quantity,
+      size: quantitySizePrefix,
+    });
   }
   if (bucket.kind === 'measured') {
     const display = getShoppingListMeasuredDisplayFromBase(
@@ -728,101 +946,43 @@ function getShoppingListBucketLeadText(bucket) {
       bucket.baseQuantity
     );
     if (!display) return '';
-    if (
-      typeof window !== 'undefined' &&
-      typeof window.getIngredientDisplayCoreParts === 'function'
-    ) {
-      try {
-        const parts = window.getIngredientDisplayCoreParts({
-          quantity: display.quantity,
-          unit: display.unit,
-          size: '',
-          name: '',
-          variant: '',
-        });
-        return String(parts?.leadText || '').trim();
-      } catch (_) {}
-    }
-    const quantity = formatShoppingPlanQuantity(display.quantity);
-    return [quantity, display.unit].filter(Boolean).join(' ').trim();
+    return formatShoppingListAmountLeadText({
+      quantity: display.quantity,
+      size: quantitySizePrefix,
+      unit: display.unit,
+    });
   }
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.getIngredientDisplayCoreParts === 'function'
-  ) {
-    try {
-      const parts = window.getIngredientDisplayCoreParts({
-        quantity: bucket.quantity,
-        unit: bucket.unit || '',
-        size: bucket.size || '',
-        name: '',
-        variant: '',
-      });
-      return String(parts?.leadText || '').trim();
-    } catch (_) {}
-  }
-  return [
-    String(bucket.quantity ?? '').trim(),
-    String(bucket.size || '').trim(),
-    String(bucket.unit || '').trim(),
-  ]
+  return formatShoppingListAmountLeadText({
+    quantity: bucket.quantity,
+    size: mergeShoppingListSizeText(quantitySizePrefix, bucket.size || ''),
+    unit: bucket.unit || '',
+  });
+}
+
+function formatShoppingListDisplayDetailText({ variantName = '', buckets = [] } = {}) {
+  const displayFields = getShoppingListDisplayFields('', variantName);
+  const list = Array.isArray(buckets) ? buckets.filter(Boolean) : [];
+  if (!list.length) return '';
+  return list
+    .slice()
+    .sort((a, b) => getShoppingListBucketSortPriority(a) - getShoppingListBucketSortPriority(b))
+    .map((bucket) =>
+      getShoppingListBucketLeadText(bucket, {
+        quantitySizePrefix: displayFields.quantitySizePrefix,
+      })
+    )
     .filter(Boolean)
-    .join(' ')
-    .trim();
+    .join(' + ');
 }
 
 function formatShoppingListDisplayRow({ label = '', name = '', variantName = '', buckets = [] } = {}) {
-  const resolvedLabel = String(label || '').trim() || getShoppingListIngredientLabel(name, variantName);
-  const list = Array.isArray(buckets) ? buckets.filter(Boolean) : [];
+  const displayFields = getShoppingListDisplayFields(name, variantName);
+  const resolvedLabel =
+    String(label || '').trim() || displayFields.displayName || getShoppingListIngredientLabel(name, variantName);
   if (!resolvedLabel) return '';
-  if (!list.length) return resolvedLabel;
-
-  if (list.length === 1) {
-    const bucket = list[0];
-    if (bucket.kind === 'selected') {
-      const quantity = formatShoppingPlanQuantity(bucket.quantity);
-      return quantity ? `${resolvedLabel} ${quantity}x` : resolvedLabel;
-    }
-    if (bucket.kind === 'unspecified') {
-      const quantity = Number(bucket.quantity || 0);
-      if (Number.isFinite(quantity) && quantity > 1 + 1e-9) {
-        return `${resolvedLabel} (${formatShoppingPlanQuantity(quantity)} unspecified)`;
-      }
-      return resolvedLabel;
-    }
-    if (bucket.kind === 'measured') {
-      const display = getShoppingListMeasuredDisplayFromBase(
-        bucket.family,
-        bucket.baseQuantity
-      );
-      if (display) {
-        return (
-          formatShoppingListIngredientText({
-            quantity: display.quantity,
-            unit: display.unit,
-            size: '',
-            name,
-            variant: variantName,
-          }) || resolvedLabel
-        );
-      }
-    }
-    return (
-      formatShoppingListIngredientText({
-        quantity: bucket.quantity,
-        unit: bucket.unit || '',
-        size: bucket.size || '',
-        name,
-        variant: variantName,
-      }) || resolvedLabel
-    );
-  }
-
-  const detailParts = list
-    .map((bucket) => getShoppingListBucketLeadText(bucket))
-    .filter(Boolean);
-  if (!detailParts.length) return resolvedLabel;
-  return `${resolvedLabel} (${detailParts.join(', ')})`;
+  const detailText = formatShoppingListDisplayDetailText({ variantName, buckets });
+  if (!detailText) return resolvedLabel;
+  return `${resolvedLabel} (${detailText})`;
 }
 
 if (typeof window !== 'undefined') {
@@ -834,6 +994,7 @@ if (typeof window !== 'undefined') {
     getShoppingListMeasuredDisplayFromBase,
     getShoppingListIngredientLabel,
     getShoppingListBucketLeadText,
+    formatShoppingListDisplayDetailText,
     formatShoppingListDisplayRow,
   };
 }
@@ -1466,14 +1627,139 @@ function getRecipeIngredientShoppingCount(line) {
   return null;
 }
 
-function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
-  if (!db || typeof db.exec !== 'function') return [];
+const SHOPPING_PLAN_LINKED_RECIPE_MAX_DEPTH = 2;
+
+function loadShoppingPlanRecipeFromDB(db, recipeId) {
   if (
+    !db ||
+    typeof db.exec !== 'function' ||
     !window.bridge ||
     typeof window.bridge.loadRecipeFromDB !== 'function'
   ) {
-    return [];
+    return null;
   }
+  try {
+    return window.bridge.loadRecipeFromDB(db, recipeId);
+  } catch (_) {
+    return null;
+  }
+}
+
+function getRecipeServingsMultiplierForShoppingPlan(recipeId, recipe) {
+  const recipeDefaultServings = Number(
+    recipe?.servings?.default != null
+      ? recipe.servings.default
+      : recipe?.servingsDefault
+  );
+  const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
+  if (
+    Number.isFinite(recipeDefaultServings) &&
+    recipeDefaultServings > 0 &&
+    Number.isFinite(selectedServings) &&
+    selectedServings > 0
+  ) {
+    return selectedServings / recipeDefaultServings;
+  }
+  return 1;
+}
+
+function walkExpandedShoppingPlanIngredientLines(
+  db,
+  recipe,
+  {
+    recipeId = null,
+    recipeTitle = '',
+    outerRecipeMultiplier = 1,
+    linkDepth = 0,
+    ancestorRecipeIds = null,
+  } = {},
+  visit,
+) {
+  if (
+    !db ||
+    typeof db.exec !== 'function' ||
+    !recipe ||
+    !Array.isArray(recipe.sections) ||
+    typeof visit !== 'function'
+  ) {
+    return;
+  }
+
+  const normalizedRecipeId = Math.trunc(Number(recipeId));
+  const normalizedRecipeTitle = String(recipeTitle || '').trim();
+  const normalizedOuterMultiplier = Number(outerRecipeMultiplier);
+  const normalizedLinkDepth = Math.max(0, Math.trunc(Number(linkDepth) || 0));
+  if (!Number.isFinite(normalizedOuterMultiplier) || normalizedOuterMultiplier <= 0) {
+    return;
+  }
+
+  const nextAncestors =
+    ancestorRecipeIds instanceof Set ? new Set(ancestorRecipeIds) : new Set();
+  if (Number.isFinite(normalizedRecipeId) && normalizedRecipeId > 0) {
+    nextAncestors.add(normalizedRecipeId);
+  }
+
+  const servingsMultiplier = getRecipeServingsMultiplierForShoppingPlan(
+    normalizedRecipeId,
+    recipe
+  );
+
+  recipe.sections.forEach((section) => {
+    const ingredients = Array.isArray(section?.ingredients)
+      ? section.ingredients
+      : [];
+    ingredients.forEach((line) => {
+      if (!line || line.rowType === 'heading' || line.isAlt) return;
+
+      const linkedRecipeId = Math.trunc(Number(line.linkedRecipeId));
+      if (line.isRecipe) {
+        if (
+          !Number.isFinite(linkedRecipeId) ||
+          linkedRecipeId <= 0 ||
+          normalizedLinkDepth >= SHOPPING_PLAN_LINKED_RECIPE_MAX_DEPTH ||
+          nextAncestors.has(linkedRecipeId)
+        ) {
+          return;
+        }
+
+        const linkedRecipe = loadShoppingPlanRecipeFromDB(db, linkedRecipeId);
+        if (!linkedRecipe || !Array.isArray(linkedRecipe.sections)) return;
+
+        const linkQuantity = getRecipeIngredientShoppingCount(line);
+        const normalizedLinkQuantity =
+          Number.isFinite(linkQuantity) && linkQuantity > 0 ? linkQuantity : 1;
+
+        walkExpandedShoppingPlanIngredientLines(
+          db,
+          linkedRecipe,
+          {
+            recipeId: linkedRecipeId,
+            recipeTitle: String(linkedRecipe?.title || '').trim(),
+            outerRecipeMultiplier:
+              normalizedOuterMultiplier * servingsMultiplier * normalizedLinkQuantity,
+            linkDepth: normalizedLinkDepth + 1,
+            ancestorRecipeIds: nextAncestors,
+          },
+          visit
+        );
+        return;
+      }
+
+      visit(line, {
+        recipeId:
+          Number.isFinite(normalizedRecipeId) && normalizedRecipeId > 0
+            ? normalizedRecipeId
+            : null,
+        recipeTitle: normalizedRecipeTitle,
+        recipeCount: normalizedOuterMultiplier,
+        servingsMultiplier,
+      });
+    });
+  });
+}
+
+function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
+  if (!db || typeof db.exec !== 'function') return [];
   const aggregate = new Map();
 
   Object.values(getShoppingPlanRecipeSelections()).forEach((selection) => {
@@ -1482,35 +1768,19 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
     if (!Number.isFinite(recipeId) || recipeId <= 0) return;
     if (!Number.isFinite(recipeCount) || recipeCount <= 0) return;
 
-    let recipe = null;
-    try {
-      recipe = window.bridge.loadRecipeFromDB(db, recipeId);
-    } catch (_) {
-      recipe = null;
-    }
+    const recipe = loadShoppingPlanRecipeFromDB(db, recipeId);
     if (!recipe || !Array.isArray(recipe.sections)) return;
-    const recipeDefaultServings = Number(
-      recipe?.servings?.default != null
-        ? recipe.servings.default
-        : recipe?.servingsDefault
-    );
-    const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
-    const servingsMultiplier =
-      Number.isFinite(recipeDefaultServings) &&
-      recipeDefaultServings > 0 &&
-      Number.isFinite(selectedServings) &&
-      selectedServings > 0
-        ? selectedServings / recipeDefaultServings
-        : 1;
 
-    recipe.sections.forEach((section) => {
-      const ingredients = Array.isArray(section?.ingredients)
-        ? section.ingredients
-        : [];
-      ingredients.forEach((line) => {
-        if (!line || line.rowType === 'heading' || line.isAlt || line.isRecipe) {
-          return;
-        }
+    walkExpandedShoppingPlanIngredientLines(
+      db,
+      recipe,
+      {
+        recipeId,
+        recipeTitle: String(recipe?.title || '').trim(),
+        outerRecipeMultiplier: recipeCount,
+        linkDepth: 0,
+      },
+      (line, { recipeCount: expandedRecipeCount = 0, servingsMultiplier = 1 } = {}) => {
         const name = String(line.name || '').trim();
         if (!name) return;
         const variantName = String(line.variant || '').trim();
@@ -1535,7 +1805,7 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
         ) {
           return;
         }
-        const nextQuantity = scaledPerRecipeQuantity * recipeCount;
+        const nextQuantity = scaledPerRecipeQuantity * expandedRecipeCount;
         const existing = aggregate.get(key);
         if (existing) {
           existing.quantity += nextQuantity;
@@ -1548,8 +1818,8 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
           label: getShoppingPlanSelectionLabel({ name, variantName }),
           quantity: nextQuantity,
         });
-      });
-    });
+      }
+    );
   });
 
   return Array.from(aggregate.values());
@@ -1585,6 +1855,13 @@ function orderShoppingListSelectedStoreIds(storeOrder, selectedStoreIds) {
 }
 
 function compareShoppingListAssignmentCandidates(a, b) {
+  const variantRankA = Number(a?.variantRank);
+  const variantRankB = Number(b?.variantRank);
+  const normalizedVariantRankA = Number.isFinite(variantRankA) ? variantRankA : -1;
+  const normalizedVariantRankB = Number.isFinite(variantRankB) ? variantRankB : -1;
+  if (normalizedVariantRankA !== normalizedVariantRankB) {
+    return normalizedVariantRankA - normalizedVariantRankB;
+  }
   const aisleSortA = Number(a?.aisleSortOrder);
   const aisleSortB = Number(b?.aisleSortOrder);
   const normalizedAisleSortA = Number.isFinite(aisleSortA) ? aisleSortA : 999999;
@@ -1642,7 +1919,7 @@ function getShoppingListVariantAssignmentKey(name, variantName = '') {
 
 function mergeShoppingListAssignmentCandidates(...candidateLists) {
   const merged = [];
-  const seen = new Set();
+  const seen = new Map();
   candidateLists.forEach((list) => {
     (Array.isArray(list) ? list : []).forEach((candidate) => {
       if (!candidate || typeof candidate !== 'object') return;
@@ -1653,12 +1930,52 @@ function mergeShoppingListAssignmentCandidates(...candidateLists) {
         Number.isFinite(storeId) && storeId > 0 && Number.isFinite(aisleId) && aisleId > 0
           ? `${storeId}:${aisleId}`
           : `${storeId}:${aisleId}:${aisleLabel.toLowerCase()}`;
-      if (seen.has(dedupeKey)) return;
-      seen.add(dedupeKey);
+      if (seen.has(dedupeKey)) {
+        const existingIndex = seen.get(dedupeKey);
+        const existingCandidate = merged[existingIndex];
+        if (
+          compareShoppingListAssignmentCandidates(candidate, existingCandidate) < 0
+        ) {
+          merged[existingIndex] = candidate;
+        }
+        return;
+      }
+      seen.set(dedupeKey, merged.length);
       merged.push(candidate);
     });
   });
   return merged;
+}
+
+function buildOrderedVariantAssignmentCandidates(
+  name,
+  {
+    variantAssignmentMap = null,
+    variantOrderMap = null,
+  } = {},
+) {
+  const hasGetter = (value) => !!value && typeof value.get === 'function';
+  const nameKey = String(name || '').trim().toLowerCase();
+  if (!nameKey || !hasGetter(variantAssignmentMap) || !hasGetter(variantOrderMap)) {
+    return [];
+  }
+  const orderedVariants = Array.isArray(variantOrderMap.get(nameKey))
+    ? variantOrderMap.get(nameKey)
+    : [];
+  if (!orderedVariants.length) return [];
+  const rankedCandidates = [];
+  orderedVariants.forEach((variantName, variantRank) => {
+    const assignmentKey = getShoppingListVariantAssignmentKey(nameKey, variantName);
+    if (!assignmentKey) return;
+    const variantCandidates = variantAssignmentMap.get(assignmentKey) || [];
+    variantCandidates.forEach((candidate) => {
+      rankedCandidates.push({
+        ...candidate,
+        variantRank,
+      });
+    });
+  });
+  return mergeShoppingListAssignmentCandidates(rankedCandidates);
 }
 
 function getShoppingListAssignmentCandidates(
@@ -1667,12 +1984,14 @@ function getShoppingListAssignmentCandidates(
     baseAssignmentMap = null,
     variantAssignmentMap = null,
     variantAnyAssignmentMap = null,
+    variantOrderMap = null,
   } = {},
 ) {
   const hasGetter = (value) => !!value && typeof value.get === 'function';
   const nameKey = String(row?.name || '').trim().toLowerCase();
-  const variantAssignmentKey = row?.variantName
-    ? getShoppingListVariantAssignmentKey(row.name, row.variantName)
+  const variantName = String(row?.variantName || '').trim();
+  const variantAssignmentKey = variantName
+    ? getShoppingListVariantAssignmentKey(row.name, variantName)
     : '';
   const exactVariantCandidates =
     variantAssignmentKey && hasGetter(variantAssignmentMap)
@@ -1681,6 +2000,15 @@ function getShoppingListAssignmentCandidates(
   if (exactVariantCandidates.length) return exactVariantCandidates;
   const baseCandidates =
     nameKey && hasGetter(baseAssignmentMap) ? baseAssignmentMap.get(nameKey) || [] : [];
+  if (!variantName && baseCandidates.length) return baseCandidates;
+  const orderedVariantCandidates =
+    !variantName && nameKey
+      ? buildOrderedVariantAssignmentCandidates(nameKey, {
+          variantAssignmentMap,
+          variantOrderMap,
+        })
+      : [];
+  if (orderedVariantCandidates.length) return orderedVariantCandidates;
   const anyVariantCandidates =
     nameKey && hasGetter(variantAnyAssignmentMap)
       ? variantAnyAssignmentMap.get(nameKey) || []
@@ -1725,16 +2053,29 @@ function buildGroupedShoppingListRows(items, options = {}) {
       unlistedItems.push(item);
       return;
     }
+    const incomingSort = Number.isFinite(Number(chosenAssignment.aisleSortOrder))
+      ? Number(chosenAssignment.aisleSortOrder)
+      : 999999;
     if (!storeGroup.aisles.has(aisleId)) {
       storeGroup.aisles.set(aisleId, {
         aisleId,
         aisleLabel:
           String(chosenAssignment.aisleLabel || '').trim() || `Aisle ${aisleId}`,
-        aisleSortOrder: Number.isFinite(Number(chosenAssignment.aisleSortOrder))
-          ? Number(chosenAssignment.aisleSortOrder)
-          : 999999,
+        aisleSortOrder: incomingSort,
         items: [],
       });
+    } else {
+      const bucket = storeGroup.aisles.get(aisleId);
+      const curSort = bucket.aisleSortOrder;
+      const curPlaceholder = !Number.isFinite(curSort) || curSort >= 999999;
+      const incomingPlaceholder = !Number.isFinite(incomingSort) || incomingSort >= 999999;
+      const preferIncoming =
+        incomingSort < curSort || (curPlaceholder && !incomingPlaceholder);
+      if (preferIncoming) {
+        bucket.aisleSortOrder = incomingSort;
+        bucket.aisleLabel =
+          String(chosenAssignment.aisleLabel || '').trim() || `Aisle ${aisleId}`;
+      }
     }
     storeGroup.aisles.get(aisleId).items.push(item);
   });
@@ -1753,6 +2094,7 @@ function buildGroupedShoppingListRows(items, options = {}) {
       key: `section:store:${storeId}`,
       rowType: 'section',
       sectionKind: 'store',
+      storeId,
       text: String(store?.label || '').trim() || `Store ${storeId}`,
       className: 'shopping-list-section shopping-list-section--store',
     });
@@ -1764,6 +2106,9 @@ function buildGroupedShoppingListRows(items, options = {}) {
         key: `section:aisle:${storeId}:${aisle.aisleId}`,
         rowType: 'section',
         sectionKind: 'aisle',
+        storeId,
+        aisleId: aisle.aisleId,
+        aisleSortOrder: aisle.aisleSortOrder,
         text: aisle.aisleLabel,
         className: 'shopping-list-section shopping-list-section--aisle',
       });
@@ -1804,6 +2149,7 @@ if (typeof window !== 'undefined') {
     chooseShoppingListAssignment,
     getShoppingListVariantAssignmentKey,
     mergeShoppingListAssignmentCandidates,
+    buildOrderedVariantAssignmentCandidates,
     getShoppingListAssignmentCandidates,
     buildGroupedShoppingListRows,
   };
@@ -1837,20 +2183,22 @@ function getShoppingPlanSelectionRows(options = {}) {
         label: getShoppingListIngredientLabel(resolvedName, resolvedVariantName),
         buckets: new Map(),
         bucketOrder: [],
+        contributionSources: new Map(),
+        contributionSourceOrder: [],
       });
     }
     return aggregate.get(key);
   };
-  const addBucket = (row, bucket) => {
-    if (!row || !bucket || typeof bucket !== 'object') return;
+  const addBucketToTarget = (target, bucket) => {
+    if (!target || !bucket || typeof bucket !== 'object') return;
     const bucketKey = String(bucket.key || '').trim();
     if (!bucketKey) return;
-    if (!row.buckets.has(bucketKey)) {
-      row.bucketOrder.push(bucketKey);
-      row.buckets.set(bucketKey, { ...bucket });
+    if (!target.buckets.has(bucketKey)) {
+      target.bucketOrder.push(bucketKey);
+      target.buckets.set(bucketKey, { ...bucket });
       return;
     }
-    const existing = row.buckets.get(bucketKey);
+    const existing = target.buckets.get(bucketKey);
     if (!existing) return;
     if (bucket.kind === 'measured') {
       existing.baseQuantity = Number(
@@ -1862,6 +2210,37 @@ function getShoppingPlanSelectionRows(options = {}) {
       (Number(existing.quantity || 0) + Number(bucket.quantity || 0)).toFixed(4)
     );
   };
+  const ensureContributionSource = (row, source = {}) => {
+    if (!row || typeof row !== 'object') return null;
+    const sourceType = String(source.sourceType || '').trim() || 'recipe';
+    const sourceKey =
+      sourceType === 'manual'
+        ? 'manual:selected'
+        : `recipe:${Math.trunc(Number(source.recipeId || 0))}`;
+    if (!sourceKey) return null;
+    if (!row.contributionSources.has(sourceKey)) {
+      row.contributionSourceOrder.push(sourceKey);
+      row.contributionSources.set(sourceKey, {
+        sourceType,
+        sourceKey,
+        recipeId:
+          sourceType === 'recipe' && Number.isFinite(Number(source.recipeId))
+            ? Math.trunc(Number(source.recipeId))
+            : null,
+        title: String(source.title || '').trim(),
+        buckets: new Map(),
+        bucketOrder: [],
+      });
+    }
+    return row.contributionSources.get(sourceKey) || null;
+  };
+  const getContributionSortValue = (buckets) =>
+    (Array.isArray(buckets) ? buckets : []).reduce((sum, bucket) => {
+      if (bucket?.kind === 'measured') {
+        return sum + Math.max(0, Number(bucket.baseQuantity || 0));
+      }
+      return sum + Math.max(0, Number(bucket?.quantity || 0));
+    }, 0);
   const addSelectedItemBucket = (entry) => {
     const name = String(entry?.name || '').trim();
     const variantName = String(entry?.variantName || '').trim();
@@ -1869,13 +2248,22 @@ function getShoppingPlanSelectionRows(options = {}) {
     if (!name || !Number.isFinite(quantity) || quantity <= 1e-9) return;
     const row = ensureRow({ name, variantName });
     if (!row) return;
-    addBucket(row, {
+    const bucket = {
       key: 'selected',
       kind: 'selected',
       quantity,
+    };
+    addBucketToTarget(row, bucket);
+    const source = ensureContributionSource(row, {
+      sourceType: 'manual',
+      title: 'Directly added',
     });
+    addBucketToTarget(source, bucket);
   };
-  const addRecipeIngredientBucket = (line, { recipeCount = 0, servingsMultiplier = 1 } = {}) => {
+  const addRecipeIngredientBucket = (
+    line,
+    { recipeId = null, recipeTitle = '', recipeCount = 0, servingsMultiplier = 1 } = {},
+  ) => {
     if (!line || typeof line !== 'object') return;
     if (line.rowType === 'heading' || line.isAlt || line.isRecipe) return;
     const name = String(line.name || '').trim();
@@ -1885,14 +2273,21 @@ function getShoppingPlanSelectionRows(options = {}) {
     if (!row) return;
     const recipeMultiplier = Number(recipeCount);
     if (!Number.isFinite(recipeMultiplier) || recipeMultiplier <= 0) return;
+    const source = ensureContributionSource(row, {
+      sourceType: 'recipe',
+      recipeId,
+      title: recipeTitle,
+    });
 
     const ingredientCount = getRecipeIngredientShoppingCount(line);
     if (!Number.isFinite(ingredientCount) || ingredientCount <= 0) {
-      addBucket(row, {
+      const bucket = {
         key: 'unspecified',
         kind: 'unspecified',
         quantity: recipeMultiplier,
-      });
+      };
+      addBucketToTarget(row, bucket);
+      addBucketToTarget(source, bucket);
       return;
     }
 
@@ -1919,33 +2314,39 @@ function getShoppingPlanSelectionRows(options = {}) {
       normalizedUnit
     );
     if (measured) {
-      addBucket(row, {
+      const bucket = {
         key: `measured:${measured.family}`,
         kind: 'measured',
         family: measured.family,
         baseQuantity: measured.baseQuantity,
-      });
+      };
+      addBucketToTarget(row, bucket);
+      addBucketToTarget(source, bucket);
       return;
     }
 
     if (normalizedUnit || size) {
-      addBucket(row, {
+      const bucket = {
         key: `exact:${normalizedUnit}|${size.toLowerCase()}`,
         kind: 'exact',
         quantity: nextQuantity,
         unit: normalizedUnit,
         size,
-      });
+      };
+      addBucketToTarget(row, bucket);
+      addBucketToTarget(source, bucket);
       return;
     }
 
-    addBucket(row, {
+    const bucket = {
       key: 'count',
       kind: 'count',
       quantity: nextQuantity,
       unit: '',
       size: '',
-    });
+    };
+    addBucketToTarget(row, bucket);
+    addBucketToTarget(source, bucket);
   };
 
   Object.values(getShoppingPlanItemSelections()).forEach(addSelectedItemBucket);
@@ -1962,39 +2363,20 @@ function getShoppingPlanSelectionRows(options = {}) {
       if (!Number.isFinite(recipeId) || recipeId <= 0) return;
       if (!Number.isFinite(recipeCount) || recipeCount <= 0) return;
 
-      let recipe = null;
-      try {
-        recipe = window.bridge.loadRecipeFromDB(db, recipeId);
-      } catch (_) {
-        recipe = null;
-      }
+      const recipe = loadShoppingPlanRecipeFromDB(db, recipeId);
       if (!recipe || !Array.isArray(recipe.sections)) return;
 
-      const recipeDefaultServings = Number(
-        recipe?.servings?.default != null
-          ? recipe.servings.default
-          : recipe?.servingsDefault
+      walkExpandedShoppingPlanIngredientLines(
+        db,
+        recipe,
+        {
+          recipeId,
+          recipeTitle: String(recipe?.title || '').trim(),
+          outerRecipeMultiplier: recipeCount,
+          linkDepth: 0,
+        },
+        addRecipeIngredientBucket
       );
-      const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
-      const servingsMultiplier =
-        Number.isFinite(recipeDefaultServings) &&
-        recipeDefaultServings > 0 &&
-        Number.isFinite(selectedServings) &&
-        selectedServings > 0
-          ? selectedServings / recipeDefaultServings
-          : 1;
-
-      recipe.sections.forEach((section) => {
-        const ingredients = Array.isArray(section?.ingredients)
-          ? section.ingredients
-          : [];
-        ingredients.forEach((line) =>
-          addRecipeIngredientBucket(line, {
-            recipeCount,
-            servingsMultiplier,
-          })
-        );
-      });
     });
   }
 
@@ -2014,12 +2396,56 @@ function getShoppingPlanSelectionRows(options = {}) {
         name: row.name,
         variantName: row.variantName,
         label: row.label,
+        detailText: formatShoppingListDisplayDetailText({
+          variantName: row.variantName,
+          buckets,
+        }),
         text: formatShoppingListDisplayRow({
           label: row.label,
           name: row.name,
           variantName: row.variantName,
           buckets,
         }),
+        contributionRows: row.contributionSourceOrder
+          .map((sourceKey) => row.contributionSources.get(sourceKey))
+          .filter(Boolean)
+          .map((source) => {
+            const sourceBuckets = source.bucketOrder
+              .map((bucketKey) => source.buckets.get(bucketKey))
+              .filter(Boolean)
+              .filter((bucket) => {
+                if (bucket.kind === 'measured') {
+                  return Number(bucket.baseQuantity || 0) > 1e-9;
+                }
+                return Number(bucket.quantity || 0) > 1e-9;
+              });
+            const detailText = formatShoppingListDisplayDetailText({
+              variantName: row.variantName,
+              buckets: sourceBuckets,
+            });
+            if (!detailText) return null;
+            return {
+              sourceType: source.sourceType,
+              sourceKey: source.sourceKey,
+              recipeId: source.recipeId,
+              title:
+                String(source.title || '').trim() ||
+                (source.sourceType === 'manual' ? 'Directly added' : 'Recipe'),
+              detailText,
+              sortValue: getContributionSortValue(sourceBuckets),
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => {
+            if (a.sourceType !== b.sourceType) {
+              return a.sourceType === 'recipe' ? -1 : 1;
+            }
+            const sortDelta = Number(b.sortValue || 0) - Number(a.sortValue || 0);
+            if (Math.abs(sortDelta) > 1e-9) return sortDelta;
+            return String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+              sensitivity: 'base',
+            });
+          }),
       };
     })
     .filter((entry) => String(entry.text || '').trim());
@@ -2047,6 +2473,7 @@ function getShoppingPlanSelectionRows(options = {}) {
   const baseAssignmentMap = new Map();
   const variantAssignmentMap = new Map();
   const variantAnyAssignmentMap = new Map();
+  const variantOrderMap = new Map();
 
   if (
     db &&
@@ -2094,14 +2521,6 @@ function getShoppingPlanSelectionRows(options = {}) {
           .filter(Boolean),
       ),
     ];
-    const uniqueVariantKeys = [
-      ...new Set(
-        rows
-          .map((row) => String(row?.variantName || '').trim().toLowerCase())
-          .filter(Boolean),
-      ),
-    ];
-
     if (effectiveStoreIds.length && uniqueNameKeys.length) {
       const effectiveStorePh = effectiveStoreIds.map(() => '?').join(',');
       const namePh = uniqueNameKeys.map(() => '?').join(',');
@@ -2158,6 +2577,39 @@ function getShoppingPlanSelectionRows(options = {}) {
         tableExists('ingredient_variant_store_location')
       ) {
         try {
+          const variantOrderQ = db.exec(
+            `
+              SELECT
+                lower(trim(i.name)) AS name_key,
+                lower(trim(v.variant)) AS variant_key
+              FROM ingredient_variants v
+              JOIN ingredients i ON i.ID = v.ingredient_id
+              WHERE lower(trim(i.name)) IN (${namePh})
+              ORDER BY
+                lower(trim(i.name)) ASC,
+                COALESCE(v.sort_order, 999999) ASC,
+                COALESCE(v.id, 999999) ASC;
+            `,
+            uniqueNameKeys,
+          );
+          if (
+            Array.isArray(variantOrderQ) &&
+            variantOrderQ.length &&
+            Array.isArray(variantOrderQ[0].values)
+          ) {
+            variantOrderQ[0].values.forEach(([nameKey, variantKey]) => {
+              const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
+              const variantKeyNormalized = String(variantKey || '').trim().toLowerCase();
+              if (!nameKeyNormalized || !variantKeyNormalized) return;
+              if (!variantOrderMap.has(nameKeyNormalized)) {
+                variantOrderMap.set(nameKeyNormalized, []);
+              }
+              variantOrderMap.get(nameKeyNormalized).push(variantKeyNormalized);
+            });
+          }
+        } catch (_) {}
+
+        try {
           const variantAnyQ = db.exec(
             `
               SELECT DISTINCT
@@ -2207,78 +2659,73 @@ function getShoppingPlanSelectionRows(options = {}) {
             );
           }
         } catch (_) {}
-
-        if (uniqueVariantKeys.length) {
-          const variantPh = uniqueVariantKeys.map(() => '?').join(',');
-          try {
-            const variantQ = db.exec(
-              `
-                SELECT DISTINCT
-                  lower(trim(i.name)) AS name_key,
-                  lower(trim(v.variant)) AS variant_key,
-                  sl.store_id,
-                  sl.ID AS aisle_id,
-                  COALESCE(sl.name, '') AS aisle_name,
-                  COALESCE(sl.sort_order, 999999) AS aisle_sort_order
-                FROM ingredient_variant_store_location ivsl
-                JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
-                JOIN ingredients i ON i.ID = v.ingredient_id
-                JOIN store_locations sl ON sl.ID = ivsl.store_location_id
-                WHERE sl.store_id IN (${effectiveStorePh})
-                  AND lower(trim(i.name)) IN (${namePh})
-                  AND lower(trim(v.variant)) IN (${variantPh});
-              `,
-              [...effectiveStoreIds, ...uniqueNameKeys, ...uniqueVariantKeys],
+        try {
+          const variantQ = db.exec(
+            `
+              SELECT DISTINCT
+                lower(trim(i.name)) AS name_key,
+                lower(trim(v.variant)) AS variant_key,
+                sl.store_id,
+                sl.ID AS aisle_id,
+                COALESCE(sl.name, '') AS aisle_name,
+                COALESCE(sl.sort_order, 999999) AS aisle_sort_order
+              FROM ingredient_variant_store_location ivsl
+              JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
+              JOIN ingredients i ON i.ID = v.ingredient_id
+              JOIN store_locations sl ON sl.ID = ivsl.store_location_id
+              WHERE sl.store_id IN (${effectiveStorePh})
+                AND lower(trim(i.name)) IN (${namePh});
+            `,
+            [...effectiveStoreIds, ...uniqueNameKeys],
+          );
+          if (
+            Array.isArray(variantQ) &&
+            variantQ.length &&
+            Array.isArray(variantQ[0].values)
+          ) {
+            variantQ[0].values.forEach(
+              ([
+                nameKey,
+                variantKey,
+                storeIdRaw,
+                aisleIdRaw,
+                aisleName,
+                aisleSortOrder,
+              ]) => {
+                const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
+                const variantKeyNormalized = String(variantKey || '')
+                  .trim()
+                  .toLowerCase();
+                const storeId = Math.trunc(Number(storeIdRaw));
+                const aisleId = Math.trunc(Number(aisleIdRaw));
+                if (
+                  !nameKeyNormalized ||
+                  !variantKeyNormalized ||
+                  !Number.isFinite(storeId) ||
+                  !Number.isFinite(aisleId)
+                ) {
+                  return;
+                }
+                const assignmentKey = getShoppingListVariantAssignmentKey(
+                  nameKeyNormalized,
+                  variantKeyNormalized,
+                );
+                if (!assignmentKey) return;
+                if (!variantAssignmentMap.has(assignmentKey)) {
+                  variantAssignmentMap.set(assignmentKey, []);
+                }
+                variantAssignmentMap.get(assignmentKey).push({
+                  storeId,
+                  aisleId,
+                  aisleLabel: String(aisleName || '').trim() || `Aisle ${aisleId}`,
+                  aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
+                    ? Number(aisleSortOrder)
+                    : 999999,
+                });
+              },
             );
-            if (
-              Array.isArray(variantQ) &&
-              variantQ.length &&
-              Array.isArray(variantQ[0].values)
-            ) {
-              variantQ[0].values.forEach(
-                ([
-                  nameKey,
-                  variantKey,
-                  storeIdRaw,
-                  aisleIdRaw,
-                  aisleName,
-                  aisleSortOrder,
-                ]) => {
-                  const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
-                  const variantKeyNormalized = String(variantKey || '')
-                    .trim()
-                    .toLowerCase();
-                  const storeId = Math.trunc(Number(storeIdRaw));
-                  const aisleId = Math.trunc(Number(aisleIdRaw));
-                  if (
-                    !nameKeyNormalized ||
-                    !variantKeyNormalized ||
-                    !Number.isFinite(storeId) ||
-                    !Number.isFinite(aisleId)
-                  ) {
-                    return;
-                  }
-                  const assignmentKey = getShoppingPlanAggregateKey(
-                    nameKeyNormalized,
-                    variantKeyNormalized,
-                  );
-                  if (!assignmentKey) return;
-                  if (!variantAssignmentMap.has(assignmentKey)) {
-                    variantAssignmentMap.set(assignmentKey, []);
-                  }
-                  variantAssignmentMap.get(assignmentKey).push({
-                    storeId,
-                    aisleId,
-                    aisleLabel: String(aisleName || '').trim() || `Aisle ${aisleId}`,
-                    aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
-                      ? Number(aisleSortOrder)
-                      : 999999,
-                  });
-                },
-              );
-            }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
     }
   }
@@ -2290,6 +2737,7 @@ function getShoppingPlanSelectionRows(options = {}) {
         baseAssignmentMap,
         variantAssignmentMap,
         variantAnyAssignmentMap,
+        variantOrderMap,
       }),
     };
   });
@@ -2818,7 +3266,14 @@ async function loadRecipesPage() {
   // Keyboard selection + Enter activation for list rows.
   const listNav = enableTopLevelListKeyboardNav(list);
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
+  const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: (query) => {
+      searchQuery = String(query || '').toLowerCase();
+      rerenderFilteredRecipes();
+    },
+  });
   const recipeFilterChipRail =
     typeof window.mountTopFilterChipRail === 'function' && searchInput
       ? window.mountTopFilterChipRail({
@@ -3285,39 +3740,6 @@ async function loadRecipesPage() {
     }
   }
 
-  // --- Search bar logic with clear button ---
-
-  const clearBtn = document.getElementById('appBarSearchClear');
-
-  if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-
-    // Filter recipes as user types
-    searchInput.addEventListener('input', () => {
-      clearBtn.style.display = searchInput.value ? 'inline' : 'none';
-      searchQuery = searchInput.value.trim().toLowerCase();
-      rerenderFilteredRecipes();
-    });
-
-    // Clear input on × click and restore full list
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      clearBtn.style.display = 'none';
-      searchQuery = '';
-      rerenderFilteredRecipes();
-      searchInput.focus();
-    });
-
-    // Prevent Enter from doing anything weird
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
-    });
-  }
 }
 
 // --- Shopping / Units / Stores loaders (v0 stubs) ---
@@ -3336,8 +3758,13 @@ async function loadShoppingPage() {
   initBottomNav();
 
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
   const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: () => {
+      applyShoppingFilters();
+    },
+  });
   const addBtn = document.getElementById('appBarAddBtn');
   const listRowStepper = window.listRowStepper;
 
@@ -3510,6 +3937,10 @@ async function loadShoppingPage() {
   const hasIsDeprecatedCol = tableHasColumn('ingredients', 'is_deprecated');
   const hasIsHiddenCol = tableHasColumn('ingredients', 'is_hidden');
   const hasIsFoodCol = tableHasColumn('ingredients', 'is_food');
+  const hasLemmaCol = tableHasColumn('ingredients', 'lemma');
+  const hasPluralByDefaultCol = tableHasColumn('ingredients', 'plural_by_default');
+  const hasIsMassNounCol = tableHasColumn('ingredients', 'is_mass_noun');
+  const hasPluralOverrideCol = tableHasColumn('ingredients', 'plural_override');
   const hasLegacyHideCol = tableHasColumn(
     'ingredients',
     'hide_from_shopping_list',
@@ -3522,6 +3953,14 @@ async function loadShoppingPage() {
   const homeExpr = `COALESCE(i.location_at_home, '')`;
   const isFoodExpr = hasIsFoodCol ? 'COALESCE(i.is_food, 1)' : '1';
   const isHiddenExpr = hasIsHiddenCol ? 'COALESCE(i.is_hidden, 0)' : '0';
+  const lemmaExpr = hasLemmaCol ? "COALESCE(i.lemma, '')" : "''";
+  const pluralByDefaultExpr = hasPluralByDefaultCol
+    ? 'COALESCE(i.plural_by_default, 0)'
+    : '0';
+  const isMassNounExpr = hasIsMassNounCol ? 'COALESCE(i.is_mass_noun, 0)' : '0';
+  const pluralOverrideExpr = hasPluralOverrideCol
+    ? "COALESCE(i.plural_override, '')"
+    : "''";
   const baseSelectSql = hasVariantTable
     ? `
       SELECT i.ID,
@@ -3530,7 +3969,11 @@ async function loadShoppingPage() {
              ${deprecatedExpr} AS is_deprecated,
              ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS location_at_home,
-             ${isFoodExpr} AS is_food
+             ${isFoodExpr} AS is_food,
+             ${lemmaExpr} AS lemma,
+             ${pluralByDefaultExpr} AS plural_by_default,
+             ${isMassNounExpr} AS is_mass_noun,
+             ${pluralOverrideExpr} AS plural_override
       FROM ingredients i
       LEFT JOIN ingredient_variants v ON v.ingredient_id = i.ID
     `
@@ -3541,7 +3984,11 @@ async function loadShoppingPage() {
              ${deprecatedExpr} AS is_deprecated,
              ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS location_at_home,
-             ${isFoodExpr} AS is_food
+             ${isFoodExpr} AS is_food,
+             ${lemmaExpr} AS lemma,
+             ${pluralByDefaultExpr} AS plural_by_default,
+             ${isMassNounExpr} AS is_mass_noun,
+             ${pluralOverrideExpr} AS plural_override
       FROM ingredients i
     `;
 
@@ -3561,7 +4008,19 @@ async function loadShoppingPage() {
   let shoppingRows = [];
   if (result.length > 0) {
     const rawRows = result[0].values.map(
-      ([id, name, variant, isDeprecated, isHidden, locationAtHome, isFood]) => ({
+      ([
+        id,
+        name,
+        variant,
+        isDeprecated,
+        isHidden,
+        locationAtHome,
+        isFood,
+        lemma,
+        pluralByDefault,
+        isMassNoun,
+        pluralOverride,
+      ]) => ({
         id,
         name,
         variant: variant || '',
@@ -3569,6 +4028,10 @@ async function loadShoppingPage() {
         isHidden: Number(isHidden || 0) === 1,
         locationAtHome: String(locationAtHome || ''),
         isFood: Number(isFood ?? 1) === 1,
+        lemma: String(lemma || '').trim(),
+        pluralByDefault: Number(pluralByDefault || 0) === 1,
+        isMassNoun: Number(isMassNoun || 0) === 1,
+        pluralOverride: String(pluralOverride || '').trim(),
       }),
     );
 
@@ -3589,6 +4052,10 @@ async function loadShoppingPage() {
           _hiddenFlags: [],
           _homeLocations: [],
           _foodFlags: [],
+          _lemmas: [],
+          _pluralByDefaultFlags: [],
+          _isMassNounFlags: [],
+          _pluralOverrides: [],
         });
       }
 
@@ -3603,6 +4070,10 @@ async function loadShoppingPage() {
       byName.get(key)._hiddenFlags.push(!!row.isHidden);
       byName.get(key)._homeLocations.push(String(row.locationAtHome || ''));
       byName.get(key)._foodFlags.push(row.isFood !== false);
+      byName.get(key)._lemmas.push(String(row.lemma || '').trim());
+      byName.get(key)._pluralByDefaultFlags.push(!!row.pluralByDefault);
+      byName.get(key)._isMassNounFlags.push(!!row.isMassNoun);
+      byName.get(key)._pluralOverrides.push(String(row.pluralOverride || '').trim());
     });
 
     // Dedupe variants, then flatten into an array.
@@ -3650,10 +4121,32 @@ async function loadShoppingPage() {
         Array.isArray(item._foodFlags) && item._foodFlags.length > 0
           ? item._foodFlags.some(Boolean)
           : true;
+      item.lemma =
+        Array.isArray(item._lemmas) && item._lemmas.length > 0
+          ? String(item._lemmas.find((value) => String(value || '').trim()) || '').trim()
+          : '';
+      item.pluralByDefault =
+        Array.isArray(item._pluralByDefaultFlags) && item._pluralByDefaultFlags.length > 0
+          ? item._pluralByDefaultFlags.some(Boolean)
+          : false;
+      item.isMassNoun =
+        Array.isArray(item._isMassNounFlags) && item._isMassNounFlags.length > 0
+          ? item._isMassNounFlags.some(Boolean)
+          : false;
+      item.pluralOverride =
+        Array.isArray(item._pluralOverrides) && item._pluralOverrides.length > 0
+          ? String(
+              item._pluralOverrides.find((value) => String(value || '').trim()) || '',
+            ).trim()
+          : '';
       delete item._deprecatedFlags;
       delete item._hiddenFlags;
       delete item._homeLocations;
       delete item._foodFlags;
+      delete item._lemmas;
+      delete item._pluralByDefaultFlags;
+      delete item._isMassNounFlags;
+      delete item._pluralOverrides;
 
       return item;
     });
@@ -3797,6 +4290,18 @@ async function loadShoppingPage() {
   const getShoppingSelectionKey = (rawName) =>
     String(rawName || '').trim().toLowerCase();
   const isShoppingWebSelectMode = () => isForceWebModeEnabled();
+  // On macOS, Ctrl+primary click can emit a contextmenu event.
+  // Treat that gesture like a normal click in shopping web mode.
+  const isCtrlPrimaryContextMenuGesture = (event) =>
+    !!(
+      event &&
+      event.type === 'contextmenu' &&
+      event.ctrlKey &&
+      Number(event.button) === 0 &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    );
   const getActiveShoppingFilterChipDefs = () =>
     isShoppingWebSelectMode() ? shoppingFilterChipDefsWeb : shoppingFilterChipDefsAll;
   const SHOPPING_QTY_EPSILON = 1e-9;
@@ -4159,12 +4664,7 @@ async function loadShoppingPage() {
     } catch (_) {}
   };
 
-  const normalizeLocationForChip = (raw) => {
-    const v = String(raw || '').trim().toLowerCase();
-    if (!v || v === 'measures') return 'none';
-    const known = shoppingLocationChipDefs.some((c) => c.id === v);
-    return known ? v : 'none';
-  };
+  const normalizeLocationForChip = (raw) => normalizeShoppingHomeLocationId(raw);
 
   const recomputeShoppingChipCounts = () => {
     const counts = new Map();
@@ -4350,8 +4850,6 @@ async function loadShoppingPage() {
   };
 
   const applyShoppingFilters = () => {
-    const query = (searchInput?.value || '').trim();
-    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
     renderShoppingList(getFilteredShoppingRows());
   };
 
@@ -4584,6 +5082,30 @@ async function loadShoppingPage() {
     return true;
   }
 
+  // --- Shopping item label helpers (tests extract this block) ---
+  function getShoppingItemDisplayName(item) {
+    const fallbackName = String(item?.name || '').trim();
+    if (!fallbackName) return '';
+    if (typeof window?.getIngredientNounDisplay !== 'function') return fallbackName;
+
+    const displayName = window.getIngredientNounDisplay({
+      name: fallbackName,
+      lemma: String(item?.lemma || '').trim(),
+      pluralByDefault: !!item?.pluralByDefault,
+      isMassNoun: !!item?.isMassNoun,
+      pluralOverride: String(item?.pluralOverride || '').trim(),
+    });
+
+    return String(displayName || '').trim() || fallbackName;
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__shoppingItemLabelHelpers = {
+      getShoppingItemDisplayName,
+    };
+  }
+  // --- End shopping item label helpers ---
+
   function renderShoppingList(rows) {
     list.innerHTML = '';
     const items = Array.isArray(rows) ? rows : [];
@@ -4746,6 +5268,7 @@ async function loadShoppingPage() {
     items.forEach((item) => {
       const li = document.createElement('li');
       const baseName = String(item?.name || '').trim();
+      const displayName = getShoppingItemDisplayName(item);
       const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
       const webSelectMode = isShoppingWebSelectMode();
       if (Number.isFinite(Number(item?.id)) && Number(item.id) > 0) {
@@ -4762,7 +5285,7 @@ async function loadShoppingPage() {
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'shopping-list-row-label';
-        labelSpan.textContent = baseName;
+        labelSpan.textContent = displayName;
 
         const badge = document.createElement('span');
         badge.className = 'shopping-list-row-badge';
@@ -4785,7 +5308,7 @@ async function loadShoppingPage() {
           li.classList.toggle('shopping-row-checked', totalQty > 0);
 
           if (expanded) {
-            labelSpan.textContent = `${baseName} \u25B4`;
+            labelSpan.textContent = `${displayName} \u25B4`;
             if (totalQty > 0) {
               badge.textContent = `${totalQty}x`;
               badge.style.visibility = 'visible';
@@ -4804,7 +5327,7 @@ async function loadShoppingPage() {
             requestAnimationFrame(() => {
               try {
                 const qtyMap = getVariantQtyMap(baseName, item.variants);
-                const nextText = buildLineToFit(li, baseName, item.variants, qtyMap);
+                const nextText = buildLineToFit(li, displayName, item.variants, qtyMap);
                 labelSpan.textContent = `${nextText} \u25BE`;
               } catch (_) {}
             });
@@ -4914,8 +5437,6 @@ async function loadShoppingPage() {
           });
 
           childLi.addEventListener('click', (event) => {
-            const wantsRemove = event.ctrlKey || event.metaKey;
-            if (wantsRemove) return;
             if (!isShoppingWebSelectMode()) return;
             if (expandedVariantChildSteppers.has(varKey)) {
               expandedVariantChildSteppers.delete(varKey);
@@ -4935,7 +5456,8 @@ async function loadShoppingPage() {
 
         li.addEventListener('click', (event) => {
           const wantsRemove = event.ctrlKey || event.metaKey;
-          if (wantsRemove) {
+          const webSelectMode = isShoppingWebSelectMode();
+          if (wantsRemove && !webSelectMode) {
             event.preventDefault();
             event.stopPropagation();
             void (async () => {
@@ -4946,7 +5468,7 @@ async function loadShoppingPage() {
             })();
             return;
           }
-          if (isShoppingWebSelectMode()) {
+          if (webSelectMode) {
             toggleExpansion();
             return;
           }
@@ -4967,6 +5489,7 @@ async function loadShoppingPage() {
         li.addEventListener('contextmenu', (event) => {
           event.preventDefault();
           if (isShoppingWebSelectMode()) {
+            if (isCtrlPrimaryContextMenuGesture(event)) return;
             li.classList.toggle('shopping-row-flagged');
             return;
           }
@@ -4981,7 +5504,7 @@ async function loadShoppingPage() {
         list.appendChild(li);
         childRows.forEach((child) => list.appendChild(child));
         syncParentVisuals();
-        li.title = `${baseName}\n\nAll variants: ${item.variants.join(', ')}`;
+        li.title = `${displayName}\n\nAll variants: ${item.variants.join(', ')}`;
 
         return; // next item
       }
@@ -4989,7 +5512,7 @@ async function loadShoppingPage() {
       // ── Simple row (no variants, or non-web-mode) ──
       const labelSpan = document.createElement('span');
       labelSpan.className = 'shopping-list-row-label';
-      labelSpan.textContent = baseName;
+      labelSpan.textContent = displayName;
       const icon = document.createElement('span');
       icon.className = 'material-symbols-outlined shopping-list-row-icon';
       icon.textContent = 'add_box';
@@ -5055,7 +5578,8 @@ async function loadShoppingPage() {
 
       li.addEventListener('click', (event) => {
         const wantsRemove = event.ctrlKey || event.metaKey;
-        if (wantsRemove) {
+        const webSelectMode = isShoppingWebSelectMode();
+        if (wantsRemove && !webSelectMode) {
           event.preventDefault();
           event.stopPropagation();
           void (async () => {
@@ -5067,7 +5591,7 @@ async function loadShoppingPage() {
           return;
         }
 
-        if (isShoppingWebSelectMode()) {
+        if (webSelectMode) {
           const hadExpandedVariants = collapseExpandedVariantRows();
           // If this click only served to collapse an expanded variant group,
           // do not also auto-expand a simple-row stepper at qty 0.
@@ -5087,6 +5611,7 @@ async function loadShoppingPage() {
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
         if (isShoppingWebSelectMode()) {
+          if (isCtrlPrimaryContextMenuGesture(event)) return;
           li.classList.toggle('shopping-row-flagged');
           return;
         }
@@ -5107,9 +5632,9 @@ async function loadShoppingPage() {
               const qtyMap = isShoppingWebSelectMode()
                 ? getVariantQtyMap(baseName, item.variants)
                 : null;
-              const nextText = buildLineToFit(li, baseName, item.variants, qtyMap);
+              const nextText = buildLineToFit(li, displayName, item.variants, qtyMap);
               labelSpan.textContent = nextText;
-              li.title = `${baseName}\n\nAll variants: ${item.variants.join(', ')}`;
+              li.title = `${displayName}\n\nAll variants: ${item.variants.join(', ')}`;
             } catch (_) {}
           });
         } catch (_) {}
@@ -5126,29 +5651,6 @@ async function loadShoppingPage() {
   applyShoppingFilters();
   restoreShoppingScrollAfterReload();
   scrollToShoppingNavTarget(pendingShoppingNavTarget);
-
-  // Search + chips: filter by name/variant text and active chip states.
-  if (searchInput && clearBtn) {
-    searchInput.addEventListener('input', () => {
-      applyShoppingFilters();
-    });
-
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      applyShoppingFilters();
-      searchInput.focus();
-    });
-
-    // Prevent Enter from doing anything weird
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
-    });
-  }
 
   // Recipes-style Add: popup → Cancel does nothing → Create inserts + opens editor
   async function openCreateShoppingItemDialog() {
@@ -5307,8 +5809,8 @@ async function loadShoppingPage() {
 }
 
 // --- Shopping list checklist helpers (tests extract this block) ---
-const SHOPPING_LIST_DOC_STORAGE_KEY = 'favoriteEats:shopping-list-doc:v1';
-const SHOPPING_LIST_DOC_VERSION = 2;
+const SHOPPING_LIST_DOC_STORAGE_KEY = 'favoriteEats:shopping-list-doc:v2';
+const SHOPPING_LIST_DOC_VERSION = 3;
 
 function createShoppingListChecklistRowId() {
   const stamp = Date.now().toString(36);
@@ -5329,6 +5831,11 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
   const text = String(source.text || '').trim();
   if (!text) return null;
   const rawOrder = Number(source.order);
+  const rawStoreId = Math.trunc(Number(source.storeId));
+  const rawAisleId = Math.trunc(Number(source.aisleId));
+  const rawAisleSortOrder = Number(source.aisleSortOrder);
+  const hasExplicitAisleSortOrder =
+    source.aisleSortOrder != null && String(source.aisleSortOrder).trim() !== '';
   const sourceKey = String(source.sourceKey || '').trim();
   const sourceText = String(source.sourceText || '').trim();
   const sourceStoreLabel = String(source.sourceStoreLabel || '').trim();
@@ -5345,7 +5852,13 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
     text,
     checked: !!source.checked,
     storeLabel: String(source.storeLabel || '').trim(),
+    storeId: Number.isFinite(rawStoreId) && rawStoreId > 0 ? rawStoreId : null,
     bucketLabel: String(source.bucketLabel || '').trim(),
+    aisleId: Number.isFinite(rawAisleId) && rawAisleId > 0 ? rawAisleId : null,
+    aisleSortOrder:
+      hasExplicitAisleSortOrder && Number.isFinite(rawAisleSortOrder)
+        ? rawAisleSortOrder
+        : null,
     sourceKey,
     sourceText: sourceKey ? sourceText || text : '',
     sourceStoreLabel: sourceKey
@@ -5354,7 +5867,9 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
     sourceBucketLabel: sourceKey
       ? sourceBucketLabel || String(source.bucketLabel || '').trim()
       : '',
-    userEdited: sourceKey ? (hasExplicitUserEdited ? !!source.userEdited : inferredUserEdited) : false,
+    userEdited: sourceKey
+      ? (hasExplicitUserEdited ? !!source.userEdited || inferredUserEdited : inferredUserEdited)
+      : false,
     order: Number.isFinite(rawOrder) ? rawOrder : fallbackOrder,
   };
 }
@@ -5447,27 +5962,41 @@ function buildShoppingListDocFromPlanRows(rows) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   const docRows = [];
   let currentStoreLabel = '';
+  let currentStoreId = null;
   let currentBucketLabel = '';
+  let currentAisleId = null;
+  let currentAisleSortOrder = null;
 
   sourceRows.forEach((row) => {
     if (!row || typeof row !== 'object') return;
     const rowType = String(row.rowType || '').trim();
     const text = String(row.text || row.label || '').trim();
     const className = String(row.className || '').trim();
+    const rowStoreId = Math.trunc(Number(row.storeId));
+    const rowAisleId = Math.trunc(Number(row.aisleId));
+    const rowAisleSortOrder = Number(row.aisleSortOrder);
 
     if (rowType === 'section') {
       if (!text) return;
       if (className.includes('shopping-list-section--store')) {
         currentStoreLabel = text;
+        currentStoreId = Number.isFinite(rowStoreId) && rowStoreId > 0 ? rowStoreId : null;
         currentBucketLabel = '';
+        currentAisleId = null;
+        currentAisleSortOrder = null;
         return;
       }
       if (className.includes('shopping-list-section--unlisted')) {
         currentStoreLabel = '';
+        currentStoreId = null;
         currentBucketLabel = text;
+        currentAisleId = null;
+        currentAisleSortOrder = null;
         return;
       }
       currentBucketLabel = text;
+      currentAisleId = Number.isFinite(rowAisleId) && rowAisleId > 0 ? rowAisleId : null;
+      currentAisleSortOrder = Number.isFinite(rowAisleSortOrder) ? rowAisleSortOrder : null;
       return;
     }
 
@@ -5477,7 +6006,10 @@ function buildShoppingListDocFromPlanRows(rows) {
       text,
       checked: false,
       storeLabel: currentStoreLabel,
+      storeId: currentStoreId,
       bucketLabel: currentBucketLabel,
+      aisleId: currentAisleId,
+      aisleSortOrder: currentAisleSortOrder,
       sourceKey: String(row.key || '').trim(),
       sourceText: text,
       sourceStoreLabel: currentStoreLabel,
@@ -5543,8 +6075,12 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
         currentText: String(storedRow.text || '').trim(),
         previousGeneratedText: String(storedRow.sourceText || '').trim(),
         nextGeneratedText: String(generatedRow.sourceText || '').trim(),
+        nextGeneratedDisplayText: String(generatedRow.text || '').trim(),
         nextStoreLabel: String(generatedRow.sourceStoreLabel || '').trim(),
         nextBucketLabel: String(generatedRow.sourceBucketLabel || '').trim(),
+        nextStoreId: generatedRow.storeId,
+        nextAisleId: generatedRow.aisleId,
+        nextAisleSortOrder: generatedRow.aisleSortOrder,
       });
       return;
     }
@@ -5554,7 +6090,10 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
       text: hasUserOverride ? String(storedRow.text || '').trim() : String(generatedRow.text || '').trim(),
       checked: !!storedRow.checked,
       storeLabel: String(generatedRow.storeLabel || '').trim(),
+      storeId: generatedRow.storeId,
       bucketLabel: String(generatedRow.bucketLabel || '').trim(),
+      aisleId: generatedRow.aisleId,
+      aisleSortOrder: generatedRow.aisleSortOrder,
       sourceKey,
       sourceText: String(generatedRow.sourceText || '').trim(),
       sourceStoreLabel: String(generatedRow.sourceStoreLabel || '').trim(),
@@ -5575,6 +6114,7 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
       currentText: String(storedRow.text || '').trim(),
       previousGeneratedText: String(storedRow.sourceText || '').trim(),
       nextGeneratedText: '',
+      nextGeneratedDisplayText: '',
       nextStoreLabel: '',
       nextBucketLabel: '',
     });
@@ -5629,6 +6169,9 @@ function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
   const nextGeneratedText = String(conflict?.nextGeneratedText || '').trim();
   const nextStoreLabel = String(conflict?.nextStoreLabel || '').trim();
   const nextBucketLabel = String(conflict?.nextBucketLabel || '').trim();
+  const nextStoreId = Math.trunc(Number(conflict?.nextStoreId));
+  const nextAisleId = Math.trunc(Number(conflict?.nextAisleId));
+  const nextAisleSortOrder = Number(conflict?.nextAisleSortOrder);
   if (!nextGeneratedText) return normalizedDoc;
 
   if (mode === 'replace') {
@@ -5636,7 +6179,10 @@ function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
       ...row,
       text: nextGeneratedText,
       storeLabel: nextStoreLabel,
+      storeId: Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
       bucketLabel: nextBucketLabel,
+      aisleId: Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
+      aisleSortOrder: Number.isFinite(nextAisleSortOrder) ? nextAisleSortOrder : null,
       sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
       sourceText: nextGeneratedText,
       sourceStoreLabel: nextStoreLabel,
@@ -5647,7 +6193,10 @@ function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
     rows[rowIndex] = {
       ...row,
       storeLabel: nextStoreLabel,
+      storeId: Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
       bucketLabel: nextBucketLabel,
+      aisleId: Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
+      aisleSortOrder: Number.isFinite(nextAisleSortOrder) ? nextAisleSortOrder : null,
       sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
       sourceText: nextGeneratedText,
       sourceStoreLabel: nextStoreLabel,
@@ -5678,6 +6227,246 @@ function shoppingListCompletedCollapseKey(storeLabel) {
   return `completed\x00${String(storeLabel || '')}`;
 }
 
+function toShoppingListAisleTitleCase(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  return normalized.replace(/\b([a-z])/g, (match) => match.toUpperCase());
+}
+
+function normalizeShoppingListBucketKey(bucketLabel) {
+  return String(bucketLabel || '').trim().toLowerCase();
+}
+
+function getShoppingListDocBucketKey(row) {
+  const aisleId = Math.trunc(Number(row?.aisleId));
+  if (Number.isFinite(aisleId) && aisleId > 0) {
+    return `aisle:${aisleId}`;
+  }
+  return `label:${normalizeShoppingListBucketKey(row?.bucketLabel)}`;
+}
+
+function getShoppingListBucketDescriptors(rows) {
+  const buckets = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+    const key = getShoppingListDocBucketKey(row);
+    const label = String(row?.bucketLabel || '').trim();
+    const aisleId = Math.trunc(Number(row?.aisleId));
+    const rawSortOrder = Number(row?.aisleSortOrder);
+    const hasExplicitSortOrder =
+      row?.aisleSortOrder != null && String(row.aisleSortOrder).trim() !== '';
+    const sortOrder =
+      hasExplicitSortOrder && Number.isFinite(rawSortOrder) ? rawSortOrder : 999999;
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        key,
+        label,
+        sortOrder,
+        aisleId: Number.isFinite(aisleId) && aisleId > 0 ? aisleId : null,
+        firstIndex: index,
+      });
+      return;
+    }
+    const bucket = buckets.get(key);
+    if (!bucket.label && label) {
+      bucket.label = label;
+    }
+    if (sortOrder < bucket.sortOrder) {
+      bucket.sortOrder = sortOrder;
+    }
+    if (
+      Number.isFinite(aisleId) &&
+      aisleId > 0 &&
+      (!Number.isFinite(bucket.aisleId) || bucket.aisleId == null || aisleId < bucket.aisleId)
+    ) {
+      bucket.aisleId = aisleId;
+    }
+  });
+  return Array.from(buckets.values()).sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+    const aisleIdA = Number.isFinite(a.aisleId) ? a.aisleId : 999999;
+    const aisleIdB = Number.isFinite(b.aisleId) ? b.aisleId : 999999;
+    if (aisleIdA !== aisleIdB) {
+      return aisleIdA - aisleIdB;
+    }
+    const hasExplicitOrderA =
+      (Number.isFinite(a.sortOrder) && a.sortOrder < 999999) || Number.isFinite(a.aisleId);
+    const hasExplicitOrderB =
+      (Number.isFinite(b.sortOrder) && b.sortOrder < 999999) || Number.isFinite(b.aisleId);
+    if (!hasExplicitOrderA && !hasExplicitOrderB) {
+      return a.firstIndex - b.firstIndex;
+    }
+    const labelDelta = String(a.label || '').localeCompare(String(b.label || ''), undefined, {
+      sensitivity: 'base',
+    });
+    if (labelDelta !== 0) {
+      return labelDelta;
+    }
+    return a.firstIndex - b.firstIndex;
+  });
+}
+
+function formatShoppingListPlainText(docRows) {
+  const rows = normalizeShoppingListDoc({ rows: docRows })
+    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  if (!rows.length) return '';
+
+  const storeOrder = [];
+  const seenStores = new Set();
+  rows.forEach((row) => {
+    const key = String(row?.storeLabel || '');
+    if (seenStores.has(key)) return;
+    seenStores.add(key);
+    storeOrder.push(key);
+  });
+
+  const lines = [];
+  storeOrder.forEach((storeLabel) => {
+    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    if (!storeRows.length) return;
+    if (lines.length) lines.push('');
+    const normalizedStoreLabel = String(storeLabel || '').trim();
+    lines.push((normalizedStoreLabel || 'Unlisted').toUpperCase());
+
+    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
+    const soleUnlistedPseudo =
+      !normalizedStoreLabel &&
+      bucketDescriptors.length === 1 &&
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+
+    bucketDescriptors.forEach((bucket) => {
+      const bucketLabel = String(bucket?.label || '').trim();
+      const normalizedBucketLabel = bucketLabel;
+      if (
+        normalizedBucketLabel &&
+        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted')
+      ) {
+        lines.push(toShoppingListAisleTitleCase(normalizedBucketLabel));
+      }
+      storeRows
+        .filter((row) => getShoppingListDocBucketKey(row) === bucket.key)
+        .forEach((row) => {
+          lines.push(`- ${String(row?.text || '').trim()}`);
+        });
+    });
+  });
+
+  return lines.join('\n');
+}
+
+function formatShoppingListHtml(docRows) {
+  const rows = normalizeShoppingListDoc({ rows: docRows })
+    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  if (!rows.length) return '';
+
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const storeOrder = [];
+  const seenStores = new Set();
+  rows.forEach((row) => {
+    const key = String(row?.storeLabel || '');
+    if (seenStores.has(key)) return;
+    seenStores.add(key);
+    storeOrder.push(key);
+  });
+
+  const blocks = [];
+  storeOrder.forEach((storeLabel) => {
+    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    if (!storeRows.length) return;
+    if (blocks.length) blocks.push('<br>');
+
+    const normalizedStoreLabel = String(storeLabel || '').trim();
+    blocks.push(`<p>${escapeHtml((normalizedStoreLabel || 'Unlisted').toUpperCase())}</p>`);
+
+    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
+    const soleUnlistedPseudo =
+      !normalizedStoreLabel &&
+      bucketDescriptors.length === 1 &&
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+
+    bucketDescriptors.forEach((bucket) => {
+      const bucketLabel = String(bucket?.label || '').trim();
+      const normalizedBucketLabel = bucketLabel;
+      const shouldShowBucketLabel =
+        normalizedBucketLabel &&
+        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted');
+      if (shouldShowBucketLabel) {
+        blocks.push(`<p>${escapeHtml(toShoppingListAisleTitleCase(normalizedBucketLabel))}</p>`);
+      }
+      const bucketItems = storeRows.filter((row) => getShoppingListDocBucketKey(row) === bucket.key);
+      if (!bucketItems.length) return;
+      blocks.push('<ul>');
+      bucketItems.forEach((row) => {
+        blocks.push(`<li>${escapeHtml(String(row?.text || '').trim())}</li>`);
+      });
+      blocks.push('</ul>');
+    });
+  });
+
+  return blocks.join('');
+}
+
+function buildShoppingListExportPayload(docRows, options = {}) {
+  const rows = normalizeShoppingListDoc({ rows: docRows })
+    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  const title = String(options?.title || '').trim() || 'Shopping List';
+  if (!rows.length) {
+    return { title, stores: [] };
+  }
+
+  const storeOrder = [];
+  const seenStores = new Set();
+  rows.forEach((row) => {
+    const key = String(row?.storeLabel || '');
+    if (seenStores.has(key)) return;
+    seenStores.add(key);
+    storeOrder.push(key);
+  });
+
+  const stores = [];
+  storeOrder.forEach((storeLabel) => {
+    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    if (!storeRows.length) return;
+
+    const normalizedStoreLabel = String(storeLabel || '').trim();
+    const storeEntry = {
+      label: (normalizedStoreLabel || 'Unlisted').toUpperCase(),
+      aisles: [],
+    };
+
+    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
+    const soleUnlistedPseudo =
+      !normalizedStoreLabel &&
+      bucketDescriptors.length === 1 &&
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+
+    bucketDescriptors.forEach((bucket) => {
+      const bucketRows = storeRows.filter((row) => getShoppingListDocBucketKey(row) === bucket.key);
+      if (!bucketRows.length) return;
+      const normalizedBucketLabel = String(bucket?.label || '').trim();
+      const shouldShowBucketLabel =
+        normalizedBucketLabel &&
+        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted');
+      storeEntry.aisles.push({
+        label: shouldShowBucketLabel ? toShoppingListAisleTitleCase(normalizedBucketLabel) : '',
+        items: bucketRows.map((row) => String(row?.text || '').trim()).filter(Boolean),
+      });
+    });
+
+    if (storeEntry.aisles.length) {
+      stores.push(storeEntry);
+    }
+  });
+
+  return { title, stores };
+}
+
 function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) {
   const collapsed = new Set(
     collapsedKeys == null
@@ -5693,7 +6482,11 @@ function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) 
   displayRows.forEach((row) => {
     if (row?.rowType === 'section') {
       const boundary = String(row.collapseBoundary || '').trim();
-      if (boundary === 'store' || boundary === 'pseudo-unlisted-root') {
+      if (
+        boundary === 'store' ||
+        boundary === 'pseudo-unlisted-root' ||
+        boundary === 'home'
+      ) {
         const key = String(row.sectionCollapseKey || '');
         topCollapsed = !!(key && collapsed.has(key));
         aisleCollapsed = false;
@@ -5741,55 +6534,99 @@ function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) 
   return out;
 }
 
-function getShoppingListChecklistDisplayRows(docRows) {
-  const rows = normalizeShoppingListDoc({ rows: docRows }).rows;
+const SHOPPING_LIST_HOME_LOCATION_DEFS = [
+  { id: 'fridge', label: 'fridge' },
+  { id: 'freezer', label: 'freezer' },
+  { id: 'above fridge', label: 'above fridge' },
+  { id: 'pantry', label: 'pantry' },
+  { id: 'cereal cabinet', label: 'cereal cabinet' },
+  { id: 'spices', label: 'spices' },
+  { id: 'fruit stand', label: 'fruit stand' },
+  { id: 'coffee bar', label: 'coffee bar' },
+  { id: 'none', label: 'no location' },
+];
+const SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP = '\x00';
+
+function normalizeShoppingHomeLocationId(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  if (!value || value === 'measures') return 'none';
+  return SHOPPING_LIST_HOME_LOCATION_DEFS.some((entry) => entry.id === value)
+    ? value
+    : 'none';
+}
+
+function getShoppingListSourceBaseKey(sourceKey) {
+  const normalized = String(sourceKey || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const sepIndex = normalized.indexOf(SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP);
+  return sepIndex === -1 ? normalized : normalized.slice(0, sepIndex);
+}
+
+function shoppingListHomeCollapseKey(locationId) {
+  return `home:${normalizeShoppingHomeLocationId(locationId)}`;
+}
+
+function shoppingListHomeCompletedCollapseKey() {
+  return 'completed:home';
+}
+
+function shoppingListRowMatchesSearch(row, query) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return String(row?.text || '').toLowerCase().includes(normalizedQuery);
+}
+
+function createShoppingListDisplayItemRow(row, extra = {}) {
+  return {
+    rowType: 'item',
+    id: row.id,
+    text: row.text,
+    checked: !!row.checked,
+    className: 'shopping-list-group-item shopping-list-doc-item',
+    sourceKey: String(row.sourceKey || '').trim(),
+    sourceText: String(row.sourceText || '').trim(),
+    userEdited: !!row.userEdited,
+    ...extra,
+  };
+}
+
+function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
+  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const isSearchActive = !!normalizedQuery;
+  const visibleRows = isSearchActive
+    ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
+    : rows;
   const out = [];
-  const normalizeBucketKey = (bucketLabel) =>
-    String(bucketLabel || '').trim().toLowerCase();
 
   const storeOrder = [];
   const seenStores = new Set();
-  rows.forEach((row) => {
+  visibleRows.forEach((row) => {
     const key = String(row.storeLabel || '');
     if (seenStores.has(key)) return;
     seenStores.add(key);
     storeOrder.push(key);
   });
 
-  const pushItemRows = (items) => {
+  const pushItemRows = (items, extra = {}) => {
     items.forEach((row) => {
-      out.push({
-        rowType: 'item',
-        id: row.id,
-        text: row.text,
-        checked: !!row.checked,
-        className: 'shopping-list-group-item shopping-list-doc-item',
-      });
+      out.push(createShoppingListDisplayItemRow(row, extra));
     });
   };
 
   storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter((row) => String(row.storeLabel || '') === storeLabel);
+    const storeRows = visibleRows.filter((row) => String(row.storeLabel || '') === storeLabel);
     if (!storeRows.length) return;
 
     const activeRows = storeRows.filter((row) => !row.checked);
     const completedRows = storeRows.filter((row) => row.checked);
-
-    const bucketOrder = [];
-    const seenBuckets = new Set();
-    const rememberBucket = (row) => {
-      const key = normalizeBucketKey(row.bucketLabel);
-      if (seenBuckets.has(key)) return;
-      seenBuckets.add(key);
-      bucketOrder.push(String(row?.bucketLabel || '').trim());
-    };
-    activeRows.forEach(rememberBucket);
-    completedRows.forEach(rememberBucket);
+    const bucketDescriptors = getShoppingListBucketDescriptors([
+      ...(isSearchActive ? activeRows : [...activeRows, ...completedRows]),
+    ]);
 
     const soleUnlistedPseudo =
       !storeLabel &&
-      bucketOrder.length === 1 &&
-      normalizeBucketKey(bucketOrder[0]) === 'unlisted';
+      bucketDescriptors.length === 1 &&
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
 
     if (storeLabel) {
       out.push({
@@ -5812,16 +6649,16 @@ function getShoppingListChecklistDisplayRows(docRows) {
       });
     }
 
-    const pushBucket = (bucketLabel, items) => {
+    const pushBucket = (bucket, items) => {
       const list = Array.isArray(items) ? items : [];
-      const label = String(bucketLabel || '').trim();
+      const label = String(bucket?.label || '').trim();
       if (!label) {
         if (!list.length) return;
         pushItemRows(list);
         return;
       }
       if (!storeLabel) {
-        if (soleUnlistedPseudo && label.toLowerCase() === 'unlisted') {
+        if (soleUnlistedPseudo && normalizeShoppingListBucketKey(label) === 'unlisted') {
           if (!list.length) return;
           pushItemRows(list);
           return;
@@ -5830,7 +6667,7 @@ function getShoppingListChecklistDisplayRows(docRows) {
           rowType: 'section',
           text: label,
           className:
-            label.toLowerCase() === 'unlisted'
+            normalizeShoppingListBucketKey(label) === 'unlisted'
               ? 'shopping-list-section--unlisted'
               : 'shopping-list-section--aisle',
           collapseBoundary: 'plain-aisle',
@@ -5850,11 +6687,11 @@ function getShoppingListChecklistDisplayRows(docRows) {
       pushItemRows(list);
     };
 
-    bucketOrder.forEach((bucketLabel) => {
+    bucketDescriptors.forEach((bucket) => {
       pushBucket(
-        bucketLabel,
+        bucket,
         activeRows.filter(
-          (row) => normalizeBucketKey(row.bucketLabel) === normalizeBucketKey(bucketLabel),
+          (row) => getShoppingListDocBucketKey(row) === bucket.key,
         ),
       );
     });
@@ -5871,19 +6708,105 @@ function getShoppingListChecklistDisplayRows(docRows) {
         collapsible: true,
       });
       completedRows.forEach((row) => {
-        out.push({
-          rowType: 'item',
-          id: row.id,
-          text: row.text,
-          checked: !!row.checked,
-          className: 'shopping-list-group-item shopping-list-doc-item',
-          completedSectionKey,
-        });
+        out.push(
+          createShoppingListDisplayItemRow(row, {
+            completedSectionKey,
+          }),
+        );
       });
     }
   });
 
   return out;
+}
+
+function getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) {
+  const sourceKey = String(row?.sourceKey || '').trim().toLowerCase();
+  const lookup =
+    homeLocationBySourceKey instanceof Map
+      ? homeLocationBySourceKey
+      : new Map(Object.entries(homeLocationBySourceKey || {}));
+  if (sourceKey && lookup.has(sourceKey)) {
+    return normalizeShoppingHomeLocationId(lookup.get(sourceKey));
+  }
+  const baseKey = getShoppingListSourceBaseKey(sourceKey);
+  if (baseKey && lookup.has(baseKey)) {
+    return normalizeShoppingHomeLocationId(lookup.get(baseKey));
+  }
+  return 'none';
+}
+
+function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
+  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const visibleRows = normalizedQuery
+    ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
+    : rows;
+  const out = [];
+  const activeRows = visibleRows.filter((row) => !row.checked);
+  const completedRows = visibleRows.filter((row) => row.checked);
+  const homeLocationBySourceKey =
+    options?.homeLocationBySourceKey instanceof Map
+      ? options.homeLocationBySourceKey
+      : new Map(Object.entries(options?.homeLocationBySourceKey || {}));
+
+  SHOPPING_LIST_HOME_LOCATION_DEFS.forEach((locationDef) => {
+    const locationRows = activeRows.filter(
+      (row) =>
+        getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) === locationDef.id,
+    );
+    if (!locationRows.length) return;
+    out.push({
+      rowType: 'section',
+      text: locationDef.label,
+      className: 'shopping-list-section--store',
+      sectionCollapseKey: shoppingListHomeCollapseKey(locationDef.id),
+      collapseBoundary: 'home',
+      collapsible: true,
+    });
+    locationRows.forEach((row) => {
+      out.push(
+        createShoppingListDisplayItemRow(row, {
+          homeLocationId: locationDef.id,
+          homeLocationLabel: locationDef.label,
+        }),
+      );
+    });
+  });
+
+  if (completedRows.length) {
+    const completedSectionKey = shoppingListHomeCompletedCollapseKey();
+    out.push({
+      rowType: 'section',
+      text: 'Completed',
+      className: 'shopping-list-section--completed',
+      sectionKey: completedSectionKey,
+      sectionCollapseKey: completedSectionKey,
+      collapseBoundary: 'completed',
+      collapsible: true,
+    });
+    completedRows.forEach((row) => {
+      out.push(
+        createShoppingListDisplayItemRow(row, {
+          completedSectionKey,
+          homeLocationId: getShoppingListHomeLocationIdForRow(
+            row,
+            homeLocationBySourceKey,
+          ),
+        }),
+      );
+    });
+  }
+
+  return out;
+}
+
+function getShoppingListChecklistDisplayRows(docRows, options = {}) {
+  const rows = normalizeShoppingListDoc({ rows: docRows }).rows;
+  const mode = String(options?.mode || 'stores').trim().toLowerCase();
+  if (mode === 'home') {
+    return buildShoppingListChecklistHomeDisplayRows(rows, options);
+  }
+  return buildShoppingListChecklistStoreDisplayRows(rows, options);
 }
 
 if (typeof window !== 'undefined') {
@@ -5894,11 +6817,17 @@ if (typeof window !== 'undefined') {
     buildShoppingListDocFromPlanRows,
     mergeShoppingListDocWithGenerated,
     resolveShoppingListDocConflict,
+    formatShoppingListPlainText,
+    formatShoppingListHtml,
+    buildShoppingListExportPayload,
     getShoppingListChecklistDisplayRows,
     filterShoppingListChecklistRowsForCollapse,
+    normalizeShoppingHomeLocationId,
+    getShoppingListSourceBaseKey,
     shoppingListCompletedCollapseKey,
     shoppingListStoreCollapseKey,
     shoppingListAisleCollapseKey,
+    shoppingListHomeCollapseKey,
     shoppingListPseudoUnlistedCollapseKey,
   };
 }
@@ -5907,11 +6836,12 @@ if (typeof window !== 'undefined') {
 async function loadShoppingListPage() {
   const list = document.getElementById('shoppingListOutput');
   const shoppingListWebMode = isForceWebModeEnabled();
+  const shoppingListExportEnabled = false;
 
   initAppBar({
     mode: 'list',
     titleText: 'Shopping List',
-    showSearch: false,
+    showSearch: true,
     showAdd: shoppingListWebMode,
   });
 
@@ -5921,6 +6851,9 @@ async function loadShoppingListPage() {
   initBottomNav();
 
   if (!list) return;
+
+  const searchInput = document.getElementById('appBarSearchInput');
+  const clearBtn = document.getElementById('appBarSearchClear');
 
   const isElectron = !!window.electronAPI;
   let db = window.dbInstance;
@@ -5977,13 +6910,26 @@ async function loadShoppingListPage() {
     ? initialShoppingListSync.conflicts.slice()
     : [];
   let editingRowId = '';
+  let exportBtn = null;
+  let webCopyBtn = null;
+  let webExportBtn = null;
   let resetBtn = null;
   let webResetBtn = null;
   let resolvingSourceConflicts = false;
+  let exportingShoppingList = false;
   const pendingCheckTimers = new Map();
   const pendingCheckedRowIds = new Set();
   const collapsedShoppingListSections = new Set();
+  const expandedShoppingListContributionRows = new Set();
   const CHECK_MOVE_DELAY_MS = 260;
+  const shoppingListViewChipDefs = [
+    { id: 'stores', label: 'Stores' },
+    { id: 'home', label: 'Home' },
+  ];
+  let shoppingListViewMode = 'stores';
+  let shoppingListFilterChipRail = null;
+  let shoppingListHomeLocationCacheKey = '';
+  let shoppingListHomeLocationBySourceKey = new Map();
 
   const toResetComparableRows = (doc) =>
     normalizeShoppingListDoc(doc).rows.map((row, index) => ({
@@ -6012,6 +6958,28 @@ async function loadShoppingListPage() {
     syncBtn(webResetBtn);
   };
 
+  const syncShoppingListCopyButtonState = () => {
+    const shouldDisable = !formatShoppingListPlainText(shoppingListDoc?.rows).trim();
+    if (!(webCopyBtn instanceof HTMLButtonElement)) return;
+    webCopyBtn.disabled = shouldDisable;
+    webCopyBtn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
+  };
+
+  const syncShoppingListExportButtonState = () => {
+    if (!shoppingListExportEnabled) return;
+    const hasItems = buildShoppingListExportPayload(shoppingListDoc?.rows).stores.length > 0;
+    const isAvailable = !!window.electronAPI?.googleDocsExportShoppingList;
+    const shouldDisable = !hasItems || !isAvailable || exportingShoppingList;
+    const syncBtn = (btn) => {
+      if (!(btn instanceof HTMLButtonElement)) return;
+      btn.disabled = shouldDisable;
+      btn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
+      btn.textContent = exportingShoppingList ? 'Exporting...' : 'Export';
+    };
+    syncBtn(exportBtn);
+    syncBtn(webExportBtn);
+  };
+
   const cancelPendingCheck = (rowId) => {
     const normalizedId = String(rowId || '');
     const timerId = pendingCheckTimers.get(normalizedId);
@@ -6036,6 +7004,10 @@ async function loadShoppingListPage() {
     const nextText = String(nextRowDraft.text || '').trim();
     if (!nextText) return;
     nextRowDraft.text = nextText;
+    if (String(nextRowDraft.sourceKey || '').trim()) {
+      const sourceText = String(nextRowDraft.sourceText || '').trim();
+      nextRowDraft.userEdited = !!sourceText && nextText !== sourceText;
+    }
     const nextRows = currentRows.slice();
     nextRows[rowIndex] = nextRowDraft;
     shoppingListDoc = persistShoppingListDoc({
@@ -6061,27 +7033,40 @@ async function loadShoppingListPage() {
     }
   };
 
-  const buildShoppingListConflictDialog = (conflict) => {
-    const currentText = String(conflict?.currentText || '').trim();
-    const nextGeneratedText = String(conflict?.nextGeneratedText || '').trim();
-    if (String(conflict?.kind || '').trim() === 'remove') {
-      return {
-        title: 'Keep edited item?',
-        message: currentText
-          ? `You edited "${currentText}", but it is no longer in the shopping plan. Remove it from the shopping list, or keep your edited item as-is?`
-          : 'This edited item is no longer in the shopping plan. Remove it from the shopping list, or keep your edited item as-is?',
-        confirmText: 'Remove Item',
-        cancelText: 'Keep Mine',
-      };
+  const buildShoppingListConflictDialog = (conflicts) => {
+    const list = Array.isArray(conflicts) ? conflicts.filter(Boolean) : [];
+    const count = list.length;
+    const singular = count === 1;
+    const title = `Review changes (${count})`;
+    const body = singular
+      ? 'An item you edited has been updated.'
+      : 'Some items you edited have been updated.';
+    const previewLimit = 3;
+    const previewLines = [];
+    list.slice(0, previewLimit).forEach((conflict, index) => {
+      const currentText = String(conflict?.currentText || '').trim() || '(empty)';
+      const nextGeneratedText = String(conflict?.nextGeneratedText || '').trim();
+      const nextGeneratedDisplayText = String(
+        conflict?.nextGeneratedDisplayText || nextGeneratedText,
+      ).trim();
+      const updateText =
+        nextGeneratedDisplayText ||
+        (String(conflict?.kind || '').trim() === 'remove'
+          ? '(removed from shopping plan)'
+          : '(empty)');
+      previewLines.push(`Edit:    ${currentText}`);
+      previewLines.push(`Update:  ${updateText}`);
+      if (index < Math.min(previewLimit, count) - 1) previewLines.push('');
+    });
+    if (count > previewLimit) {
+      previewLines.push('');
+      previewLines.push(`+ ${count - previewLimit} more updates`);
     }
     return {
-      title: 'Use updated item?',
-      message:
-        currentText && nextGeneratedText
-          ? `The shopping plan now wants "${nextGeneratedText}", but you changed this line to "${currentText}". Replace your edited line with the updated one, or keep your edit without applying the update?`
-          : 'This line changed in the shopping plan after you edited it. Replace your edited line with the updated one, or keep your edit without applying the update?',
-      confirmText: 'Use Update',
-      cancelText: 'Keep Mine',
+      title,
+      message: [body, '', ...previewLines].join('\n').trim(),
+      confirmText: singular ? 'Use update' : 'Use updates',
+      cancelText: 'Keep my edits',
     };
   };
 
@@ -6090,17 +7075,19 @@ async function loadShoppingListPage() {
     if (!pendingSourceConflicts.length) return;
     resolvingSourceConflicts = true;
     try {
-      while (pendingSourceConflicts.length) {
-        const conflict = pendingSourceConflicts.shift();
-        if (!conflict || typeof conflict !== 'object') continue;
-        const rowStillExists = Array.isArray(shoppingListDoc?.rows)
+      const conflictsToResolve = pendingSourceConflicts.filter((conflict) => {
+        if (!conflict || typeof conflict !== 'object') return false;
+        return Array.isArray(shoppingListDoc?.rows)
           ? shoppingListDoc.rows.some(
               (row) => String(row?.id || '') === String(conflict?.rowId || ''),
             )
           : false;
-        if (!rowStillExists) continue;
-        const dialog = buildShoppingListConflictDialog(conflict);
-        const useUpdate = await uiConfirm(dialog);
+      });
+      pendingSourceConflicts = [];
+      if (!conflictsToResolve.length) return;
+      const dialog = buildShoppingListConflictDialog(conflictsToResolve);
+      const useUpdate = await uiConfirm(dialog);
+      conflictsToResolve.forEach((conflict) => {
         shoppingListDoc = persistShoppingListDoc(
           resolveShoppingListDocConflict(
             shoppingListDoc,
@@ -6108,38 +7095,161 @@ async function loadShoppingListPage() {
             useUpdate ? 'replace' : 'keep',
           ),
         );
-        editingRowId = '';
-        renderChecklist();
-      }
+      });
+      editingRowId = '';
+      renderChecklist();
     } finally {
       resolvingSourceConflicts = false;
     }
   };
 
+  const rerenderShoppingListFilterChips = () => {
+    const chipMountEl = shoppingListFilterChipRail?.trackEl;
+    if (!(chipMountEl instanceof HTMLElement)) return;
+    if (typeof window.renderFilterChipList !== 'function') return;
+    window.renderFilterChipList({
+      mountEl: chipMountEl,
+      chips: shoppingListViewChipDefs,
+      activeChipIds: new Set([shoppingListViewMode]),
+      onToggle: (chipId) => {
+        const nextMode = chipId === 'home' ? 'home' : 'stores';
+        if (nextMode === shoppingListViewMode) return;
+        shoppingListViewMode = nextMode;
+        collapsedShoppingListSections.clear();
+        rerenderShoppingListFilterChips();
+        renderChecklist();
+      },
+      chipClassName: 'app-filter-chip',
+    });
+  };
+
+  const mountShoppingListFilterChips = () => {
+    if (!(searchInput instanceof HTMLInputElement)) return;
+    if (typeof window.mountTopFilterChipRail !== 'function') return;
+    shoppingListFilterChipRail = window.mountTopFilterChipRail({
+      anchorEl: searchInput,
+      dockId: 'shoppingListFilterChipDock',
+    });
+    rerenderShoppingListFilterChips();
+    shoppingListFilterChipRail?.sync?.();
+  };
+
+  const getShoppingListHomeLocationMap = () => {
+    const normalizedRows = normalizeShoppingListDoc(shoppingListDoc).rows;
+    const sourceKeys = Array.from(
+      new Set(
+        normalizedRows
+          .map((row) => String(row?.sourceKey || '').trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    const signature = sourceKeys.join('|');
+    if (signature === shoppingListHomeLocationCacheKey) {
+      return shoppingListHomeLocationBySourceKey;
+    }
+
+    const nextMap = new Map(sourceKeys.map((sourceKey) => [sourceKey, 'none']));
+    const baseNameKeys = Array.from(
+      new Set(sourceKeys.map((sourceKey) => getShoppingListSourceBaseKey(sourceKey)).filter(Boolean)),
+    );
+
+    if (baseNameKeys.length && db && typeof db.exec === 'function') {
+      try {
+        const placeholders = baseNameKeys.map(() => '?').join(',');
+        const result = db.exec(
+          `
+            SELECT lower(trim(name)) AS name_key,
+                   COALESCE(location_at_home, '') AS location_at_home
+              FROM ingredients
+             WHERE lower(trim(name)) IN (${placeholders})
+             ORDER BY ID ASC;
+          `,
+          baseNameKeys,
+        );
+        const locationByNameKey = new Map();
+        if (Array.isArray(result) && result.length && Array.isArray(result[0].values)) {
+          result[0].values.forEach(([nameKey, rawLocation]) => {
+            const normalizedNameKey = String(nameKey || '').trim().toLowerCase();
+            if (!normalizedNameKey || locationByNameKey.has(normalizedNameKey)) return;
+            locationByNameKey.set(
+              normalizedNameKey,
+              normalizeShoppingHomeLocationId(rawLocation),
+            );
+          });
+        }
+        sourceKeys.forEach((sourceKey) => {
+          const baseKey = getShoppingListSourceBaseKey(sourceKey);
+          if (!baseKey) return;
+          nextMap.set(
+            sourceKey,
+            normalizeShoppingHomeLocationId(locationByNameKey.get(baseKey) || 'none'),
+          );
+        });
+      } catch (_) {}
+    }
+
+    shoppingListHomeLocationCacheKey = signature;
+    shoppingListHomeLocationBySourceKey = nextMap;
+    return shoppingListHomeLocationBySourceKey;
+  };
+
+  if (searchInput instanceof HTMLInputElement) {
+    wireAppBarSearch(searchInput, {
+      clearBtn,
+      onQueryChange: () => {
+        renderChecklist();
+      },
+      normalizeQuery: (value) => String(value || '').trim(),
+    });
+  }
+
   const renderChecklist = () => {
-    const displayRows = getShoppingListChecklistDisplayRows(shoppingListDoc?.rows || []);
+    const searchQuery = String(searchInput?.value || '').trim();
+    const isSearchActive = !!searchQuery;
+    const displayRows = getShoppingListChecklistDisplayRows(shoppingListDoc?.rows || [], {
+      mode: shoppingListViewMode,
+      searchQuery,
+      homeLocationBySourceKey: getShoppingListHomeLocationMap(),
+    });
+    const planRowsByKey = new Map(
+      getShoppingPlanSelectionRows({ db })
+        .filter((row) => String(row?.key || '').trim())
+        .map((row) => [String(row.key || '').trim(), row]),
+    );
+    const shoppingNavKeys =
+      window.favoriteEatsSessionKeys && typeof window.favoriteEatsSessionKeys === 'object'
+        ? window.favoriteEatsSessionKeys
+        : {
+            shoppingNavTargetId: 'favoriteEats:shopping-nav-target-id',
+            shoppingNavTargetName: 'favoriteEats:shopping-nav-target-name',
+          };
     list.innerHTML = '';
 
     if (!displayRows.length) {
-      renderTopLevelEmptyState(list, [
-        'No shopping list yet.',
-        'Select some shopping items or recipes.',
-      ]);
+      if (isSearchActive) {
+        renderTopLevelEmptyState(list, 'No matching items.');
+      } else {
+        renderTopLevelEmptyState(list, [
+          'No shopping list yet.',
+          'Select some shopping items or recipes.',
+        ]);
+      }
       listNav?.syncAfterRender?.();
+      syncShoppingListResetButtonState();
+      syncShoppingListCopyButtonState();
       return;
     }
 
-    const visibleRows = filterShoppingListChecklistRowsForCollapse(
-      displayRows,
-      collapsedShoppingListSections,
-    );
+    const visibleRows = isSearchActive
+      ? displayRows
+      : filterShoppingListChecklistRowsForCollapse(displayRows, collapsedShoppingListSections);
 
     visibleRows.forEach((row) => {
       const li = document.createElement('li');
       if (row?.rowType === 'section') {
         li.className = `list-section-label ${String(row?.className || '').trim()}`.trim();
         const sectionToggleKey = String(row?.sectionCollapseKey || '').trim();
-        const isCollapsible = !!row.collapsible && !!sectionToggleKey;
+        const isCollapsible = !isSearchActive && !!row.collapsible && !!sectionToggleKey;
         if (isCollapsible) {
           const toggleBtn = document.createElement('button');
           toggleBtn.type = 'button';
@@ -6182,6 +7292,17 @@ async function loadShoppingListPage() {
       li.dataset.shoppingListRowId = String(row?.id || '');
       const isPendingChecked = pendingCheckedRowIds.has(String(row?.id || ''));
       li.classList.toggle('shopping-list-doc-item--checked', !!row?.checked || isPendingChecked);
+      const sourceKey = String(row?.sourceKey || '').trim();
+      const planRow =
+        sourceKey && !row?.userEdited ? planRowsByKey.get(sourceKey) || null : null;
+      const contributionRows = Array.isArray(planRow?.contributionRows)
+        ? planRow.contributionRows.filter(Boolean)
+        : [];
+      const hasRecipeContributions = contributionRows.some(
+        (entry) => String(entry?.sourceType || '') === 'recipe',
+      );
+      const supportsExpansion = !!sourceKey && !!planRow && hasRecipeContributions;
+      const isExpanded = supportsExpansion && expandedShoppingListContributionRows.has(sourceKey);
 
       const checkbox = document.createElement('button');
       checkbox.type = 'button';
@@ -6278,22 +7399,135 @@ async function loadShoppingListPage() {
         input.addEventListener('blur', () => finishEditing('commit'));
         textWrap.appendChild(input);
       } else {
-        const textBtn = document.createElement('button');
-        textBtn.type = 'button';
-        textBtn.className = 'shopping-list-doc-text';
-        textBtn.textContent = String(row?.text || '').trim();
-        textBtn.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          editingRowId = row.id;
-          renderChecklist();
-        });
-        textWrap.appendChild(textBtn);
+        const headline = document.createElement('div');
+        headline.className = 'shopping-list-doc-headline';
+
+        if (planRow) {
+          const ingredientLink = document.createElement('a');
+          ingredientLink.href = 'shopping.html';
+          ingredientLink.className = 'shopping-list-doc-link';
+          ingredientLink.textContent =
+            String(planRow?.label || '').trim() || String(row?.text || '').trim();
+          ingredientLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+              sessionStorage.removeItem(shoppingNavKeys.shoppingNavTargetId);
+              sessionStorage.setItem(
+                shoppingNavKeys.shoppingNavTargetName,
+                String(planRow?.name || '').trim() || String(planRow?.label || '').trim(),
+              );
+            } catch (_) {}
+            window.location.href = 'shopping.html';
+          });
+          headline.appendChild(ingredientLink);
+
+          const detailText = String(planRow?.detailText || '').trim();
+          if (detailText) {
+            const amountBtn = document.createElement('button');
+            amountBtn.type = 'button';
+            amountBtn.className = 'shopping-list-doc-text shopping-list-doc-text--amount';
+            amountBtn.textContent = `(${detailText})`;
+            amountBtn.addEventListener('click', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              editingRowId = row.id;
+              renderChecklist();
+            });
+            headline.appendChild(amountBtn);
+          }
+        } else {
+          const textBtn = document.createElement('button');
+          textBtn.type = 'button';
+          textBtn.className = 'shopping-list-doc-text';
+          textBtn.textContent = String(row?.text || '').trim();
+          textBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            editingRowId = row.id;
+            renderChecklist();
+          });
+          headline.appendChild(textBtn);
+        }
+
+        if (supportsExpansion) {
+          const toggleBtn = document.createElement('button');
+          toggleBtn.type = 'button';
+          toggleBtn.className = 'shopping-list-doc-expand';
+          toggleBtn.setAttribute('aria-label', isExpanded ? 'Collapse recipe details' : 'Expand recipe details');
+          toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+          toggleBtn.textContent = isExpanded ? '\u25B4' : '\u25BE';
+          toggleBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (expandedShoppingListContributionRows.has(sourceKey)) {
+              expandedShoppingListContributionRows.delete(sourceKey);
+            } else {
+              expandedShoppingListContributionRows.add(sourceKey);
+            }
+            renderChecklist();
+          });
+          headline.appendChild(toggleBtn);
+        }
+
+        textWrap.appendChild(headline);
       }
 
       li.appendChild(checkbox);
       li.appendChild(textWrap);
       list.appendChild(li);
+
+      if (isExpanded) {
+        const hasRecipeContributionRows = contributionRows.some(
+          (entry) => String(entry?.sourceType || '') === 'recipe',
+        );
+        if (hasRecipeContributionRows) {
+          const contextLi = document.createElement('li');
+          contextLi.className = 'shopping-list-doc-contribution-context-item';
+          const contextText = document.createElement('span');
+          contextText.className = 'shopping-list-doc-contribution-context-pill';
+          contextText.textContent = 'Recipes';
+          contextLi.appendChild(contextText);
+          list.appendChild(contextLi);
+        }
+        contributionRows.forEach((entry) => {
+          const childLi = document.createElement('li');
+          childLi.className = 'shopping-list-doc-contribution-item';
+          const textWrapChild = document.createElement('div');
+          textWrapChild.className = 'shopping-list-doc-contribution-text-wrap';
+
+          if (String(entry?.sourceType || '') === 'recipe') {
+            const recipeLink = document.createElement('a');
+            recipeLink.href = 'recipeEditor.html';
+            recipeLink.className = 'shopping-list-doc-contribution-link';
+            recipeLink.textContent = String(entry?.title || '').trim() || 'Recipe';
+            recipeLink.addEventListener('click', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (typeof window.openRecipe === 'function') {
+                window.openRecipe(entry.recipeId);
+                return;
+              }
+              sessionStorage.setItem('selectedRecipeId', String(entry.recipeId || ''));
+              window.location.href = 'recipeEditor.html';
+            });
+            textWrapChild.appendChild(recipeLink);
+          } else {
+            const label = document.createElement('span');
+            label.className = 'shopping-list-doc-contribution-label';
+            label.textContent = String(entry?.title || '').trim() || 'Directly added';
+            textWrapChild.appendChild(label);
+          }
+
+          const detail = document.createElement('span');
+          detail.className = 'shopping-list-doc-contribution-detail';
+          detail.textContent = `(${String(entry?.detailText || '').trim()})`;
+          textWrapChild.appendChild(detail);
+
+          childLi.appendChild(textWrapChild);
+          list.appendChild(childLi);
+        });
+      }
     });
 
     listNav?.syncAfterRender?.();
@@ -6309,6 +7543,8 @@ async function loadShoppingListPage() {
       });
     }
     syncShoppingListResetButtonState();
+    syncShoppingListCopyButtonState();
+    shoppingListFilterChipRail?.sync?.();
   };
 
   const handleShoppingListReset = async () => {
@@ -6339,11 +7575,108 @@ async function loadShoppingListPage() {
     });
   };
 
+  const handleShoppingListCopy = async () => {
+    const plainText = formatShoppingListPlainText(shoppingListDoc?.rows);
+    const htmlText = formatShoppingListHtml(shoppingListDoc?.rows);
+    if (!plainText.trim()) {
+      syncShoppingListCopyButtonState();
+      uiToast('No unchecked shopping items to copy.');
+      return;
+    }
+    const canWritePlainText = typeof navigator?.clipboard?.writeText === 'function';
+    const canWriteRich =
+      typeof navigator?.clipboard?.write === 'function' &&
+      typeof ClipboardItem === 'function' &&
+      typeof Blob === 'function';
+    if (!canWritePlainText && !canWriteRich) {
+      uiToast('Clipboard is unavailable on this device.');
+      return;
+    }
+    try {
+      if (canWriteRich) {
+        const item = new ClipboardItem({
+          'text/plain': new Blob([plainText], { type: 'text/plain' }),
+          'text/html': new Blob([htmlText], { type: 'text/html' }),
+        });
+        await navigator.clipboard.write([item]);
+      } else if (canWritePlainText) {
+        await navigator.clipboard.writeText(plainText);
+      }
+      uiToast('Shopping list copied.');
+    } catch (err) {
+      if (canWritePlainText) {
+        try {
+          await navigator.clipboard.writeText(plainText);
+          uiToast('Shopping list copied.');
+          return;
+        } catch (fallbackErr) {
+          console.error('❌ Failed to copy shopping list:', err);
+          console.error('❌ Failed plain text clipboard fallback:', fallbackErr);
+        }
+      } else {
+        console.error('❌ Failed to copy shopping list:', err);
+      }
+      uiToast('Could not copy shopping list.');
+    }
+  };
+
+  const handleShoppingListExport = async () => {
+    if (!shoppingListExportEnabled) return;
+    const exportPayload = buildShoppingListExportPayload(shoppingListDoc?.rows);
+    if (!exportPayload.stores.length) {
+      syncShoppingListExportButtonState();
+      uiToast('No unchecked shopping items to export.');
+      return;
+    }
+    if (!window.electronAPI?.googleDocsExportShoppingList) {
+      uiToast('Google Docs export is only available in the desktop app.');
+      return;
+    }
+    const confirmed = await uiConfirm({
+      title: 'Export shopping list?',
+      message: 'Create a Google Doc checklist from your unchecked shopping items.',
+      confirmText: 'Export',
+      cancelText: 'Cancel',
+    });
+    if (!confirmed) return;
+
+    exportingShoppingList = true;
+    syncShoppingListExportButtonState();
+    try {
+      const result = await window.electronAPI.googleDocsExportShoppingList(exportPayload);
+      if (result?.ok) {
+        uiToast('Shopping list exported to Google Docs.');
+        return;
+      }
+      uiToast(String(result?.message || 'Could not export shopping list.'));
+    } catch (err) {
+      console.error('❌ Failed to export shopping list:', err);
+      uiToast('Could not export shopping list.');
+    } finally {
+      exportingShoppingList = false;
+      syncShoppingListExportButtonState();
+    }
+  };
+
   if (!shoppingListWebMode && controls) {
     controls.innerHTML = '';
+    if (
+      shoppingListExportEnabled &&
+      isElectron &&
+      window.electronAPI?.googleDocsExportShoppingList
+    ) {
+      exportBtn = document.createElement('button');
+      exportBtn.type = 'button';
+      exportBtn.className = 'button shopping-list-controls__action';
+      exportBtn.textContent = 'Export';
+      controls.appendChild(exportBtn);
+      exportBtn.addEventListener('click', () => {
+        void handleShoppingListExport();
+      });
+    }
     resetBtn = document.createElement('button');
     resetBtn.type = 'button';
-    resetBtn.className = 'button shopping-list-controls__reset';
+    resetBtn.className = 'button shopping-list-controls__action shopping-list-controls__reset';
     resetBtn.textContent = 'Reset List';
     controls.appendChild(resetBtn);
     resetBtn.addEventListener('click', () => {
@@ -6354,6 +7687,43 @@ async function loadShoppingListPage() {
   if (shoppingListWebMode) {
     const addBtn = document.getElementById('appBarAddBtn');
     if (addBtn instanceof HTMLButtonElement) {
+      const actions = addBtn.parentElement;
+      if (actions instanceof HTMLElement) {
+        if (
+          shoppingListExportEnabled &&
+          isElectron &&
+          window.electronAPI?.googleDocsExportShoppingList
+        ) {
+          const existingWebExportBtn = document.getElementById('appBarExportBtn');
+          if (existingWebExportBtn instanceof HTMLButtonElement) {
+            webExportBtn = existingWebExportBtn;
+          } else {
+            webExportBtn = document.createElement('button');
+            webExportBtn.type = 'button';
+            webExportBtn.id = 'appBarExportBtn';
+            webExportBtn.className = 'button';
+            actions.insertBefore(webExportBtn, addBtn);
+          }
+          webExportBtn.textContent = 'Export';
+          webExportBtn.addEventListener('click', () => {
+            void handleShoppingListExport();
+          });
+        }
+        const existingWebCopyBtn = document.getElementById('appBarCopyBtn');
+        if (existingWebCopyBtn instanceof HTMLButtonElement) {
+          webCopyBtn = existingWebCopyBtn;
+        } else {
+          webCopyBtn = document.createElement('button');
+          webCopyBtn.type = 'button';
+          webCopyBtn.id = 'appBarCopyBtn';
+          webCopyBtn.className = 'button';
+          actions.insertBefore(webCopyBtn, addBtn);
+        }
+        webCopyBtn.textContent = 'Copy';
+        webCopyBtn.addEventListener('click', () => {
+          void handleShoppingListCopy();
+        });
+      }
       webResetBtn = addBtn;
       webResetBtn.textContent = 'Reset';
       attachSecretGalleryShortcut(webResetBtn);
@@ -6363,7 +7733,10 @@ async function loadShoppingListPage() {
     }
   }
 
+  mountShoppingListFilterChips();
   renderChecklist();
+  syncShoppingListCopyButtonState();
+  syncShoppingListExportButtonState();
   void resolvePendingSourceConflicts();
 }
 
@@ -8364,8 +9737,13 @@ async function loadUnitsPage() {
   initBottomNav();
 
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
   const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: () => {
+      applyUnitFilters();
+    },
+  });
   const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
@@ -8681,8 +10059,6 @@ async function loadUnitsPage() {
   }
 
   const applyUnitFilters = () => {
-    const query = (searchInput?.value || '').trim();
-    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
     renderUnitsList({ units: getFilteredUnits() });
   };
 
@@ -8790,28 +10166,6 @@ async function loadUnitsPage() {
     });
   }
 
-  // Search: filter by code/name/category (case-insensitive)
-  if (searchInput && clearBtn) {
-    searchInput.addEventListener('input', () => {
-      applyUnitFilters();
-    });
-
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      applyUnitFilters();
-      searchInput.focus();
-    });
-
-    // Prevent Enter from doing anything weird
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
-    });
-  }
 }
 
 async function loadTagsPage() {
@@ -8830,8 +10184,13 @@ async function loadTagsPage() {
   initBottomNav();
 
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
   const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: () => {
+      renderTags(applyTagSearchFilter(tagRows));
+    },
+  });
   const addBtn = document.getElementById('appBarAddBtn');
 
   const listNav = enableTopLevelListKeyboardNav(list);
@@ -9020,28 +10379,6 @@ async function loadTagsPage() {
   if (addBtn) {
     addBtn.addEventListener('click', () => {
       void openCreateTagDialog();
-    });
-  }
-
-  if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-    searchInput.addEventListener('input', () => {
-      clearBtn.style.display = searchInput.value ? 'inline' : 'none';
-      renderTags(applyTagSearchFilter(tagRows));
-    });
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      clearBtn.style.display = 'none';
-      renderTags(tagRows);
-      searchInput.focus();
-    });
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
     });
   }
 
@@ -9252,8 +10589,13 @@ async function loadSizesPage() {
   initBottomNav();
 
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
   const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: () => {
+      applySizeFilters();
+    },
+  });
   const addBtn = document.getElementById('appBarAddBtn');
 
   const listNav = enableTopLevelListKeyboardNav(list);
@@ -9720,31 +11062,7 @@ async function loadSizesPage() {
     });
   }
 
-  if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-    searchInput.addEventListener('input', () => {
-      clearBtn.style.display = searchInput.value ? 'inline' : 'none';
-      applySizeFilters();
-    });
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      clearBtn.style.display = 'none';
-      applySizeFilters();
-      searchInput.focus();
-    });
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
-    });
-  }
-
   const applySizeFilters = () => {
-    const query = (searchInput?.value || '').trim();
-    if (clearBtn) clearBtn.style.display = query ? 'inline' : 'none';
     renderSizes(applySizeSearchFilter(sizeRows));
   };
 
@@ -9950,8 +11268,18 @@ async function loadStoresPage() {
   initBottomNav();
 
   const searchInput = document.getElementById('appBarSearchInput');
-  wireTypeToAppBarSearch(searchInput);
   const clearBtn = document.getElementById('appBarSearchClear');
+  wireAppBarSearch(searchInput, {
+    clearBtn,
+    onQueryChange: (query) => {
+      const selectedStoreId = getSelectedVisibleStoreId();
+      searchQuery = String(query || '').toLowerCase();
+      rerenderFilteredStores({
+        selectedStoreId,
+        clearSelectionWhenMissing: true,
+      });
+    },
+  });
   const addBtn = document.getElementById('appBarAddBtn');
 
   if (!list) return;
@@ -10044,7 +11372,10 @@ async function loadStoresPage() {
     });
     return orderedRows;
   };
-  storeRows = orderStoreRowsFromPlan(storeRows);
+  const shouldUseStorePlanOrder = !isElectron;
+  if (shouldUseStorePlanOrder) {
+    storeRows = orderStoreRowsFromPlan(storeRows);
+  }
   const getExistingStoreIds = () =>
     new Set(
       storeRows
@@ -10071,26 +11402,51 @@ async function loadStoresPage() {
   };
   const canResetStoreSelections = () =>
     checkedStoreIds.size > 0 || !isAtDefaultStoreOrder();
+  let searchQuery = '';
+  const isStoreWebSelectMode = () => isForceWebModeEnabled();
   const syncStoresResetButtonState = () => {
     if (!(addBtn instanceof HTMLButtonElement)) return;
+    if (!isStoreWebSelectMode()) {
+      addBtn.disabled = false;
+      addBtn.setAttribute('aria-disabled', 'false');
+      return;
+    }
     const canReset = canResetStoreSelections();
     addBtn.disabled = !canReset;
     addBtn.setAttribute('aria-disabled', canReset ? 'false' : 'true');
   };
-  let searchQuery = '';
-  const isStoreWebSelectMode = () => isForceWebModeEnabled();
   const persistCurrentStoreOrder = () =>
-    setShoppingPlanStoreOrder(
-      storeRows
-        .map((row) => Math.trunc(Number(row?.id)))
-        .filter((storeId) => Number.isFinite(storeId) && storeId > 0),
-    );
+    shouldUseStorePlanOrder
+      ? setShoppingPlanStoreOrder(
+          storeRows
+            .map((row) => Math.trunc(Number(row?.id)))
+            .filter((storeId) => Number.isFinite(storeId) && storeId > 0),
+        )
+      : undefined;
   const persistCheckedStoreSelections = () =>
     setShoppingPlanSelectedStoreIds(
       Array.from(checkedStoreIds).filter((storeId) =>
         getExistingStoreIds().has(storeId),
       ),
     );
+  const persistStoresDb = async (reasonLabel) => {
+    try {
+      const binaryArray = db.export();
+      if (isElectron) {
+        const ok = await window.electronAPI.saveDB(binaryArray);
+        if (ok === false) throw new Error('Failed to save DB.');
+      } else {
+        localStorage.setItem(
+          'favoriteEatsDb',
+          JSON.stringify(Array.from(binaryArray)),
+        );
+      }
+      return true;
+    } catch (err) {
+      console.error(`❌ Failed to persist DB after ${reasonLabel}:`, err);
+      return false;
+    }
+  };
   persistCurrentStoreOrder();
   persistCheckedStoreSelections();
 
@@ -10194,20 +11550,10 @@ async function loadStoresPage() {
           return false;
         }
 
-        // Persist
-        try {
-          const binaryArray = db.export();
-          const isElectronEnv = !!window.electronAPI;
-          if (isElectronEnv) {
-            window.electronAPI.saveDB(binaryArray);
-          } else {
-            localStorage.setItem(
-              'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray)),
-            );
-          }
-        } catch (err) {
-          console.error('❌ Failed to persist DB after deleting store:', err);
+        const persisted = await persistStoresDb('deleting store');
+        if (!persisted) {
+          uiToast('Failed to save database after deleting store.');
+          return false;
         }
 
         storeRows = storeRows.filter((row) => Number(row?.id) !== Number(storeId));
@@ -10231,7 +11577,8 @@ async function loadStoresPage() {
 
       li.addEventListener('click', (event) => {
         const wantsDelete = event.ctrlKey || event.metaKey;
-        if (wantsDelete) {
+        const webSelectMode = isStoreWebSelectMode();
+        if (wantsDelete && !webSelectMode) {
           event.preventDefault();
           event.stopPropagation();
           const label = storeLabel || 'Store';
@@ -10242,7 +11589,7 @@ async function loadStoresPage() {
           return;
         }
 
-        if (isStoreWebSelectMode()) {
+        if (webSelectMode) {
           return;
         }
 
@@ -10256,6 +11603,9 @@ async function loadStoresPage() {
 
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
+        if (isStoreWebSelectMode()) {
+          return;
+        }
         const label = storeLabel || 'Store';
         void (async () => {
           const ok = await deleteStoreDeep(Number(store.id), label);
@@ -10312,7 +11662,94 @@ async function loadStoresPage() {
     syncStoresResetButtonState();
   };
 
+  let isOpeningStoreDialog = false;
+  const normalizeStoreField = (value) =>
+    String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  const openCreateStoreDialog = async () => {
+    if (isOpeningStoreDialog) return;
+    if (!window.ui) {
+      uiToast('UI not ready yet.');
+      return;
+    }
+    isOpeningStoreDialog = true;
+    if (addBtn instanceof HTMLButtonElement) {
+      addBtn.disabled = true;
+      addBtn.setAttribute('aria-disabled', 'true');
+    }
+    try {
+      const vals = await window.ui.form({
+        title: 'New store',
+        fields: [
+          {
+            key: 'chain',
+            label: 'Name',
+            value: '',
+            required: true,
+            normalize: normalizeStoreField,
+          },
+          {
+            key: 'location',
+            label: 'Location (optional)',
+            value: '',
+            required: false,
+            normalize: normalizeStoreField,
+          },
+        ],
+        confirmText: 'Create',
+        cancelText: 'Cancel',
+        validate: (value) => {
+          if (!normalizeStoreField(value?.chain)) return 'Chain is required.';
+          return '';
+        },
+      });
+      if (!vals) return;
+
+      const chain = normalizeStoreField(vals.chain);
+      const location = normalizeStoreField(vals.location);
+      if (!chain) return;
+
+      let newStoreId = null;
+      try {
+        db.run('INSERT INTO stores (chain_name, location_name) VALUES (?, ?);', [
+          chain,
+          location,
+        ]);
+        const idQ = db.exec('SELECT last_insert_rowid();');
+        newStoreId =
+          idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
+        if (!Number.isFinite(newStoreId) || newStoreId <= 0) {
+          uiToast('Failed to create store. See console for details.');
+          return;
+        }
+        const persisted = await persistStoresDb('creating store');
+        if (!persisted) {
+          try {
+            db.run('DELETE FROM stores WHERE ID = ?;', [newStoreId]);
+          } catch (_) {}
+          uiToast('Failed to save database after creating store.');
+          return;
+        }
+      } catch (err) {
+        console.error('❌ Failed to create store:', err);
+        uiToast('Failed to create store. See console for details.');
+        return;
+      }
+
+      sessionStorage.setItem('selectedStoreId', String(newStoreId));
+      sessionStorage.removeItem('selectedStoreIsNew');
+      sessionStorage.setItem('selectedStoreChain', chain);
+      sessionStorage.setItem('selectedStoreLocation', location);
+      window.location.href = 'storeEditor.html';
+    } finally {
+      isOpeningStoreDialog = false;
+      syncStoresResetButtonState();
+    }
+  };
+
   const moveSelectedStoreRow = (delta) => {
+    if (!shouldUseStorePlanOrder) return false;
     const items = getFilteredStoreRows();
     const selectedIdx = Number(listNav?.getSelectedIdx?.() ?? -1);
     if (!Number.isFinite(selectedIdx) || selectedIdx < 0 || selectedIdx >= items.length) {
@@ -10352,54 +11789,24 @@ async function loadStoresPage() {
     return true;
   };
 
-  // Search: filter by chain and location (case-insensitive)
-  if (searchInput && clearBtn) {
-    clearBtn.style.display = 'none';
-
-    searchInput.addEventListener('input', () => {
-      const selectedStoreId = getSelectedVisibleStoreId();
-      searchQuery = searchInput.value.trim().toLowerCase();
-      clearBtn.style.display = searchQuery ? 'inline' : 'none';
-      rerenderFilteredStores({
-        selectedStoreId,
-        clearSelectionWhenMissing: true,
-      });
-    });
-
-    clearBtn.addEventListener('click', () => {
-      const selectedStoreId = getSelectedVisibleStoreId();
-      searchInput.value = '';
-      clearBtn.style.display = 'none';
-      searchQuery = '';
-      rerenderFilteredStores({
-        selectedStoreId,
-        clearSelectionWhenMissing: true,
-      });
-      searchInput.focus();
-    });
-
-    // Prevent Enter from doing anything weird
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        searchInput.blur();
-      }
-    });
-  }
-
   if (addBtn) {
-    addBtn.textContent = 'Reset';
-    addBtn.addEventListener('click', () => {
-      if (!canResetStoreSelections()) return;
-      storeRows = defaultStoreRows.slice();
-      checkedStoreIds.clear();
-      setShoppingPlanStoreOrder([]);
-      setShoppingPlanSelectedStoreIds([]);
-      listNav?.setSelectedIdx?.(-1, { source: null });
-      rerenderFilteredStores({ clearSelectionWhenMissing: true });
-    });
+    if (isStoreWebSelectMode()) {
+      addBtn.textContent = 'Reset';
+      addBtn.addEventListener('click', () => {
+        if (!canResetStoreSelections()) return;
+        storeRows = defaultStoreRows.slice();
+        checkedStoreIds.clear();
+        setShoppingPlanStoreOrder([]);
+        setShoppingPlanSelectedStoreIds([]);
+        listNav?.setSelectedIdx?.(-1, { source: null });
+        rerenderFilteredStores({ clearSelectionWhenMissing: true });
+      });
+    } else {
+      addBtn.textContent = 'Add';
+      addBtn.addEventListener('click', () => {
+        void openCreateStoreDialog();
+      });
+    }
     syncStoresResetButtonState();
   }
 }
@@ -11015,7 +12422,7 @@ function loadStoreEditorPage() {
       ? `<div id="storeLocationSubtitle" class="unit-abbreviation-line"></div>`
       : `<div id="storeLocationSubtitle" class="unit-abbreviation-line" style="display:none" aria-hidden="true"></div>`;
 
-    initAppBar({ mode: 'editor', titleText });
+    initAppBar({ mode: 'editor', titleText, showSearch: hasPersistedStore });
 
     const aislesBlock = hasPersistedStore
       ? `
@@ -11176,6 +12583,80 @@ function loadStoreEditorPage() {
       const cta = document.getElementById('storeAddAisleCtaEmpty');
       if (!cta) return;
       cta.hidden = aisleRows.length > 0;
+    };
+
+    let storeEditorSearchQuery = '';
+    const normalizeStoreEditorSearchQuery = (value) =>
+      String(value || '').trim().toLowerCase();
+    const lineMatchesStoreEditorSearch = (line, query) => {
+      const q = normalizeStoreEditorSearchQuery(query);
+      if (!q) return true;
+      return String(line || '').toLowerCase().includes(q);
+    };
+    const getStoreEditorFilteredLines = (aid, query) => {
+      const q = normalizeStoreEditorSearchQuery(query);
+      const lines = Array.isArray(aisleItemsByAisle.get(aid))
+        ? aisleItemsByAisle.get(aid)
+        : [];
+      if (!q) return [...lines];
+      return lines.filter((line) => lineMatchesStoreEditorSearch(line, q));
+    };
+    const aisleMatchesStoreEditorSearch = (aisleName, aid, query) => {
+      const q = normalizeStoreEditorSearchQuery(query);
+      if (!q) return true;
+      if (String(aisleName || '').toLowerCase().includes(q)) return true;
+      return getStoreEditorFilteredLines(aid, q).length > 0;
+    };
+    const applyStoreEditorSearch = (query = storeEditorSearchQuery) => {
+      storeEditorSearchQuery = normalizeStoreEditorSearchQuery(query);
+      const isSearchActive = !!storeEditorSearchQuery;
+      if (isSearchActive) closeActiveVariantPicker({ commit: true });
+      document.body.classList.toggle('store-editor-search-active', isSearchActive);
+
+      const list = document.getElementById('storeAislesList');
+      if (!list) return;
+      const slotEls = Array.from(list.querySelectorAll(`.${STORE_AISLE_SLOT_CLASS}`));
+      slotEls.forEach((slotEl) => {
+        const cardEl = slotEl.querySelector('.store-aisle-card');
+        const aid = Number(cardEl?.dataset?.aisleId);
+        const aisle = aisleRows.find((row) => row.id === aid);
+        const showSlot = aisle
+          ? aisleMatchesStoreEditorSearch(aisle.name, aisle.id, storeEditorSearchQuery)
+          : !isSearchActive;
+        slotEl.hidden = !showSlot;
+        slotEl.setAttribute('aria-hidden', showSlot ? 'false' : 'true');
+
+        if (!(cardEl instanceof HTMLElement)) return;
+        cardEl.classList.toggle('store-aisle-card--search-active', isSearchActive);
+
+        const itemsFieldEl = cardEl.querySelector('.store-aisle-items-field');
+        if (itemsFieldEl instanceof HTMLElement) {
+          itemsFieldEl.classList.toggle(
+            'store-aisle-items-field--search-active',
+            isSearchActive,
+          );
+        }
+
+        const resultsEl = cardEl.querySelector('.store-aisle-search-results');
+        if (!(resultsEl instanceof HTMLElement)) return;
+
+        const matchingLines =
+          aisle && isSearchActive
+            ? getStoreEditorFilteredLines(aisle.id, storeEditorSearchQuery)
+            : [];
+        resultsEl.innerHTML = '';
+        matchingLines.forEach((line) => {
+          const lineEl = document.createElement('div');
+          lineEl.className = 'store-aisle-search-line';
+          lineEl.textContent = String(line || '');
+          resultsEl.appendChild(lineEl);
+        });
+        resultsEl.hidden = !(isSearchActive && matchingLines.length > 0);
+        resultsEl.setAttribute(
+          'aria-hidden',
+          resultsEl.hidden ? 'true' : 'false',
+        );
+      });
     };
 
 
@@ -11976,6 +13457,14 @@ function loadStoreEditorPage() {
                 textarea.value = before + canonical + after;
                 return { caretPos: ctx.lineStart + canonical.length };
               },
+              allowSuggestionsWhenQueryEmpty: (textarea) => {
+                const ctx = getLineTypeaheadContext(textarea);
+                return (
+                  ctx.mode === 'variant' &&
+                  !ctx.query &&
+                  getVariantPoolForBaseName(ctx.baseName).length > 0
+                );
+              },
               closeOnEmptyQuery: true,
               openOnlyWhenQueryNonEmpty: true,
               // Avoid suggestion flicker when pasting a whole list.
@@ -12134,6 +13623,13 @@ function loadStoreEditorPage() {
           }, 0);
         });
 
+        const filteredResults = document.createElement('div');
+        filteredResults.className = 'store-aisle-search-results';
+        filteredResults.hidden = true;
+        filteredResults.setAttribute('aria-hidden', 'true');
+        filteredResults.setAttribute('aria-label', 'Matching aisle items');
+        itemsField.appendChild(filteredResults);
+
         itemsField.appendChild(ta);
         card.appendChild(itemsField);
 
@@ -12152,6 +13648,7 @@ function loadStoreEditorPage() {
         list.appendChild(slot);
       });
       syncEmptyStateAisleCta();
+      applyStoreEditorSearch(storeEditorSearchQuery);
     };
 
     const runAddAisle = async (insertAfterIndex) => {
@@ -12602,6 +14099,17 @@ function loadStoreEditorPage() {
     }
 
     await waitForAppBarReady();
+    if (hasPersistedStore) {
+      const storeEditorSearchInput = document.getElementById('appBarSearchInput');
+      const storeEditorSearchClearBtn = document.getElementById('appBarSearchClear');
+      wireAppBarSearch(storeEditorSearchInput, {
+        clearBtn: storeEditorSearchClearBtn,
+        onQueryChange: (query) => {
+          applyStoreEditorSearch(query);
+        },
+        normalizeQuery: normalizeStoreEditorSearchQuery,
+      });
+    }
     const pageCtl = wireChildEditorPage({
       backBtn: document.getElementById('appBarBackBtn'),
       cancelBtn: document.getElementById('appBarCancelBtn'),
@@ -12827,65 +14335,26 @@ function initBottomNav() {
 
   const menuButton = document.getElementById('appBarMenuBtn');
   const titleToggle = document.getElementById('appBarTitle');
+  let menuClickCount = 0;
+  let menuClickResetTimer = null;
+  const MENU_TRIPLE_CLICK_WINDOW_MS = 500;
 
-  let forceWebModeButton = null;
-  let forceWebModeModifierActive = false;
-
-  const syncForceWebModeButton = () => {
-    if (!(forceWebModeButton instanceof HTMLButtonElement)) return;
-    const enabled = isForceWebModeEnabled();
-    forceWebModeButton.textContent = 'Web mode';
-    forceWebModeButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    forceWebModeButton.classList.toggle('bottom-nav-pill--active', enabled);
-    forceWebModeButton.dataset.forceWebMode = enabled ? 'on' : 'off';
-  };
-
-  if (pillRow instanceof HTMLElement && isForceWebModeMenuEnabled()) {
-    forceWebModeButton = document.createElement('button');
-    forceWebModeButton.type = 'button';
-    forceWebModeButton.hidden = true;
-    forceWebModeButton.className =
-      'bottom-nav-pill bottom-nav-pill--force-web-mode';
-    syncForceWebModeButton();
-    forceWebModeButton.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const next = !isForceWebModeEnabled();
-      setForceWebModeEnabled(next);
-      const nextPages = getTopLevelPageOrder();
-      const currentPage = String(activeTab || detectPageIdFromBody() || '').trim().toLowerCase();
-      const targetPage = nextPages.includes(currentPage) ? currentPage : 'recipes';
-      window.location.href = getTopLevelPageHref(targetPage);
-    });
-    pillRow.appendChild(forceWebModeButton);
-  }
-
-  const setForceWebModeToggleVisible = (visible) => {
-    if (!(forceWebModeButton instanceof HTMLButtonElement)) return;
-    forceWebModeButton.hidden = !visible;
-    if (visible) syncForceWebModeButton();
+  const toggleForceWebModeFromMenu = () => {
+    const next = !isForceWebModeEnabled();
+    setForceWebModeEnabled(next);
+    const nextPages = getTopLevelPageOrder();
+    const currentPage = String(activeTab || detectPageIdFromBody() || '').trim().toLowerCase();
+    const targetPage = nextPages.includes(currentPage) ? currentPage : 'recipes';
+    window.location.href = getTopLevelPageHref(targetPage);
   };
 
   const isNavOpen = () => !nav.classList.contains('bottom-nav--hidden');
 
-  const shouldRevealForceWebModeToggle = () =>
-    !!(
-      isForceWebModeEnabled() ||
-      (forceWebModeModifierActive && isForceWebModeMenuEnabled())
-    );
-
-  const syncForceWebModeToggleVisibility = () => {
-    if (!isNavOpen()) return;
-    setForceWebModeToggleVisible(shouldRevealForceWebModeToggle());
-  };
-
   const closeNav = () => {
     nav.classList.add('bottom-nav--hidden');
-    setForceWebModeToggleVisible(false);
   };
 
   const openNav = () => {
-    setForceWebModeToggleVisible(shouldRevealForceWebModeToggle());
     nav.classList.remove('bottom-nav--hidden');
   };
 
@@ -12900,6 +14369,25 @@ function initBottomNav() {
   // Menu icon toggles bottom nav visibility on list pages.
   if (menuButton) {
     menuButton.addEventListener('click', () => {
+      menuClickCount += 1;
+      if (menuClickResetTimer) {
+        window.clearTimeout(menuClickResetTimer);
+      }
+      menuClickResetTimer = window.setTimeout(() => {
+        menuClickCount = 0;
+        menuClickResetTimer = null;
+      }, MENU_TRIPLE_CLICK_WINDOW_MS);
+
+      if (menuClickCount >= 3) {
+        menuClickCount = 0;
+        if (menuClickResetTimer) {
+          window.clearTimeout(menuClickResetTimer);
+          menuClickResetTimer = null;
+        }
+        toggleForceWebModeFromMenu();
+        return;
+      }
+
       toggleNavVisibility();
     });
   }
@@ -12910,26 +14398,6 @@ function initBottomNav() {
       toggleNavVisibility();
     });
   }
-
-  document.addEventListener('keydown', (event) => {
-    const next = !!event?.altKey;
-    if (next === forceWebModeModifierActive) return;
-    forceWebModeModifierActive = next;
-    syncForceWebModeToggleVisibility();
-  });
-
-  document.addEventListener('keyup', (event) => {
-    const next = !!event?.altKey;
-    if (next === forceWebModeModifierActive) return;
-    forceWebModeModifierActive = next;
-    syncForceWebModeToggleVisibility();
-  });
-
-  window.addEventListener('blur', () => {
-    if (!forceWebModeModifierActive) return;
-    forceWebModeModifierActive = false;
-    syncForceWebModeToggleVisibility();
-  });
 
   // Click-outside / blur-to-dismiss behavior.
   document.addEventListener('click', (event) => {

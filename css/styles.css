@@ -59,6 +59,7 @@
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
   --page-top-gap: 48px;
+  --top-filter-chip-page-top-gap: 64px;
   --page-content-width: 574px;
 
   --header-font-size: 16px;
@@ -137,6 +138,16 @@
   /* App bar */
   --app-bar-title-size: 18px;
   --app-bar-gap: 12px;
+  --app-filter-chip-font-size: 15px;
+  --app-filter-chip-font-weight: var(--body-font-weight);
+  --app-filter-chip-height: 40px;
+  --app-filter-chip-gap: 12px;
+  --app-filter-chip-padding-x: 20px;
+  --app-filter-chip-rail-padding-inline: 20px;
+  --app-filter-chip-bg: var(--pill-bg);
+  --app-filter-chip-fg: var(--theme-primary);
+  --app-filter-chip-active-bg: var(--theme-secondary);
+  --app-filter-chip-active-fg: #fff;
   --shopping-filter-chip-font-size: var(--ingredient-editor-control-font-size);
   --shopping-filter-chip-font-weight: var(--body-font-weight);
   --shopping-filter-chip-height: 30px;
@@ -147,7 +158,6 @@
   --shopping-filter-chip-fg: var(--theme-primary);
   --shopping-filter-chip-active-bg: var(--theme-secondary);
   --shopping-filter-chip-active-fg: #fff;
-  --shopping-filter-chip-track-padding-start: 0px;
 
   /* --- Insert affordance positioning --- */
   --ing-insert-icon-size: 20px;
@@ -179,6 +189,9 @@ body[data-force-web-mode='on'] {
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
   --shopping-filter-chip-active-bg: var(--theme-secondary);
+  --app-filter-chip-bg: var(--pill-bg);
+  --app-filter-chip-fg: var(--theme-primary);
+  --app-filter-chip-active-bg: var(--theme-secondary);
 }
 
 /* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
@@ -252,6 +265,10 @@ body[data-force-web-mode='on'] {
   padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
 }
 
+body.has-top-filter-chip-rail {
+  --page-top-gap: var(--top-filter-chip-page-top-gap);
+}
+
 /* Prevent a white flash before the app-bar fragment injects on navigation.
    IMPORTANT: the real app bar is position:fixed, so the mount must NOT take up
    layout space (otherwise we double-count height with .page-main padding-top). */
@@ -301,13 +318,13 @@ body[data-force-web-mode='on'] {
   appearance: none;
   border: none;
   border-radius: 9999px;
-  background: var(--shopping-filter-chip-bg);
-  color: var(--shopping-filter-chip-fg);
-  height: var(--shopping-filter-chip-height);
-  padding: 0 var(--shopping-filter-chip-padding-x);
+  background: var(--app-filter-chip-bg);
+  color: var(--app-filter-chip-fg);
+  height: var(--app-filter-chip-height);
+  padding: 0 var(--app-filter-chip-padding-x);
   font-family: var(--main-font);
-  font-size: var(--shopping-filter-chip-font-size);
-  font-weight: var(--shopping-filter-chip-font-weight);
+  font-size: var(--app-filter-chip-font-size);
+  font-weight: var(--app-filter-chip-font-weight);
   line-height: 1;
   cursor: pointer;
 }
@@ -319,22 +336,22 @@ body[data-force-web-mode='on'] {
 }
 
 .app-filter-chip.is-active {
-  background: var(--shopping-filter-chip-active-bg);
-  color: var(--shopping-filter-chip-active-fg);
+  background: var(--app-filter-chip-active-bg);
+  color: var(--app-filter-chip-active-fg);
 }
 
 .app-filter-chip:hover {
   background: color-mix(
     in srgb,
-    var(--shopping-filter-chip-bg) 90%,
-    var(--shopping-filter-chip-active-bg) 10%
+    var(--app-filter-chip-bg) 90%,
+    var(--app-filter-chip-active-bg) 10%
   );
 }
 
 .app-filter-chip.is-active:hover {
   background: color-mix(
     in srgb,
-    var(--shopping-filter-chip-active-bg) 92%,
+    var(--app-filter-chip-active-bg) 92%,
     #000 8%
   );
 }
@@ -2132,30 +2149,29 @@ body.shopping-page .list-view.list-page {
 .list-filter-chip-dock {
   position: fixed;
   z-index: var(--z-filter-chip-rail);
-  pointer-events: none;
-}
-
-.list-filter-chip-viewport {
-  width: 100%;
+  left: 0;
+  right: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
   pointer-events: auto;
+  overscroll-behavior-x: contain;
+  box-sizing: border-box;
 }
 
-.list-filter-chip-viewport::-webkit-scrollbar {
+.list-filter-chip-dock::-webkit-scrollbar {
   display: none;
 }
 
 .list-filter-chip-track {
   display: inline-flex;
   align-items: center;
-  gap: var(--shopping-filter-chip-gap);
+  gap: var(--app-filter-chip-gap);
   min-width: 100%;
   white-space: nowrap;
-  padding: 1px 0;
-  padding-left: var(--shopping-filter-chip-track-padding-start);
+  padding: 1px var(--app-filter-chip-rail-padding-inline);
+  box-sizing: border-box;
 }
 
 /* .recipe-list-wrapper {
@@ -3150,7 +3166,6 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-padding-x: 10px;
     --shopping-filter-chip-gap: 6px;
-    --shopping-filter-chip-track-padding-start: 0px;
   }
 
   .list-view.list-page {

@@ -5,7 +5,7 @@
   if (typeof window === 'undefined') return;
 
   // Blur-time near-match correction for ingredient name/unit/variant (Levenshtein vs pool).
-  const INGREDIENT_BLUR_NORMALIZATION_ENABLED = false;
+  const INGREDIENT_BLUR_NORMALIZATION_ENABLED = true;
 
   // --- Global per-session exemption set for normalization ("Undo" exempts exact raw string)
   const normalizationExemptions = new Set();
@@ -165,6 +165,44 @@
 
     if (!best || tie) return null;
     return best;
+  }
+
+  function findCaseInsensitiveExactPoolMatch(input, pool) {
+    const s = norm(input);
+    if (!s) return null;
+    const sLower = lower(s);
+    for (const cand of pool || []) {
+      const c = norm(cand);
+      if (!c) continue;
+      if (lower(c) === sLower) return c;
+    }
+    return null;
+  }
+
+  function applyBlurNormalization(inputEl, raw, next, messagePrefix) {
+    const from = norm(raw);
+    const to = norm(next);
+    if (!from || !to || from === to) return;
+
+    inputEl.value = to;
+    try {
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (_) {}
+
+    showUndoToast({
+      message: `${messagePrefix} “${from}” → “${to}”`,
+      onUndo: () => {
+        normalizationExemptions.add(from);
+        inputEl.value = from;
+        try {
+          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (_) {}
+        try {
+          inputEl.focus();
+          if (typeof inputEl.select === 'function') inputEl.select();
+        } catch (_) {}
+      },
+    });
   }
 
   // --- Pool helpers (DB-backed)
@@ -341,7 +379,15 @@
       const el = this.ensureEl();
       const anchor = this.anchorInput;
       const query = this.getQuery();
-      if (this.config && this.config.closeOnEmptyQuery && !query) {
+      let allowEmptyQuery = false;
+      try {
+        allowEmptyQuery =
+          !query &&
+          this.config &&
+          typeof this.config.allowSuggestionsWhenQueryEmpty === 'function' &&
+          !!this.config.allowSuggestionsWhenQueryEmpty(anchor, query);
+      } catch (_) {}
+      if (this.config && this.config.closeOnEmptyQuery && !query && !allowEmptyQuery) {
         this.close();
         return;
       }
@@ -824,43 +870,27 @@
   ) {
     const raw = norm(inputEl.value);
     if (!raw) return;
-    if (raw.length < 3) return;
     if (normalizationExemptions.has(raw)) return;
 
     const pool = await poolProvider();
     if (!Array.isArray(pool) || pool.length === 0) return;
 
-    // Never normalize if the exact value already exists in the pool (case-insensitive).
-    const rawLower = lower(raw);
-    const hasExact = pool.some((v) => lower(v) === rawLower);
-    if (hasExact) return;
+    // If there is an exact case-insensitive match, canonicalize to pool casing.
+    const exact = findCaseInsensitiveExactPoolMatch(raw, pool);
+    if (exact) {
+      applyBlurNormalization(inputEl, raw, exact, 'Normalized');
+      return;
+    }
+
+    // Near-match typo correction follows v1 minimum length gate.
+    if (raw.length < 3) return;
 
     const best =
       mode === 'unit'
         ? findBestNearMatchForUnit(raw, pool)
         : findBestNearMatch(raw, pool);
     if (!best) return;
-
-    // Apply normalization
-    inputEl.value = best;
-    try {
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-    } catch (_) {}
-
-    showUndoToast({
-      message: `Corrected “${raw}” → “${best}”`,
-      onUndo: () => {
-        normalizationExemptions.add(raw);
-        inputEl.value = raw;
-        try {
-          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-        } catch (_) {}
-        try {
-          inputEl.focus();
-          if (typeof inputEl.select === 'function') inputEl.select();
-        } catch (_) {}
-      },
-    });
+    applyBlurNormalization(inputEl, raw, best, 'Corrected');
   }
 
   // --- Attachment helpers
@@ -881,6 +911,7 @@
     matchAnchorWidth,
     pickOnEnterWhenQueryEmpty,
     openOnArrowDownWhenClosed,
+    allowSuggestionsWhenQueryEmpty,
     minWidth,
     maxWidth,
     placement,
@@ -901,6 +932,7 @@
       matchAnchorWidth,
       pickOnEnterWhenQueryEmpty,
       openOnArrowDownWhenClosed,
+      allowSuggestionsWhenQueryEmpty,
       minWidth,
       maxWidth,
       placement,
@@ -959,7 +991,15 @@
                 ? norm(cfg.getQuery(inputEl))
                 : norm(inputEl.value);
           } catch (_) {}
-          if (!q) return;
+          let allowEmptyQuery = false;
+          try {
+            allowEmptyQuery =
+              !q &&
+              cfg &&
+              typeof cfg.allowSuggestionsWhenQueryEmpty === 'function' &&
+              !!cfg.allowSuggestionsWhenQueryEmpty(inputEl, q);
+          } catch (_) {}
+          if (!q && !allowEmptyQuery) return;
         }
         dropdown.open(inputEl, cfg);
         return;

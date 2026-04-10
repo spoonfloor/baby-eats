@@ -54,11 +54,28 @@ function run() {
   const helpers = loadHelpers();
 
   const doc = helpers.buildShoppingListDocFromPlanRows([
-    { rowType: 'section', text: 'Store A', className: 'shopping-list-section--store' },
-    { rowType: 'section', text: 'Produce', className: 'shopping-list-section--aisle' },
+    {
+      rowType: 'section',
+      text: 'Store A',
+      className: 'shopping-list-section--store',
+      storeId: 10,
+    },
+    {
+      rowType: 'section',
+      text: 'Produce',
+      className: 'shopping-list-section--aisle',
+      aisleId: 110,
+      aisleSortOrder: 6,
+    },
     { rowType: 'item', text: '3 avocados', className: 'shopping-list-group-item' },
     { rowType: 'item', text: '2 limes', className: 'shopping-list-group-item' },
-    { rowType: 'section', text: 'Aisle 2', className: 'shopping-list-section--aisle' },
+    {
+      rowType: 'section',
+      text: 'Aisle 2',
+      className: 'shopping-list-section--aisle',
+      aisleId: 120,
+      aisleSortOrder: 2,
+    },
     { rowType: 'item', text: 'chips', className: 'shopping-list-group-item' },
     { rowType: 'section', text: 'Unlisted', className: 'shopping-list-section--unlisted' },
     { rowType: 'item', text: 'paper towels', className: 'shopping-list-group-item' },
@@ -69,7 +86,10 @@ function run() {
       text: row.text,
       checked: row.checked,
       storeLabel: row.storeLabel,
+      storeId: row.storeId,
       bucketLabel: row.bucketLabel,
+      aisleId: row.aisleId,
+      aisleSortOrder: row.aisleSortOrder,
       sourceKey: row.sourceKey,
       sourceText: row.sourceText,
       userEdited: row.userEdited,
@@ -80,7 +100,10 @@ function run() {
         text: '3 avocados',
         checked: false,
         storeLabel: 'Store A',
+        storeId: 10,
         bucketLabel: 'Produce',
+        aisleId: 110,
+        aisleSortOrder: 6,
         sourceKey: '',
         sourceText: '',
         userEdited: false,
@@ -90,7 +113,10 @@ function run() {
         text: '2 limes',
         checked: false,
         storeLabel: 'Store A',
+        storeId: 10,
         bucketLabel: 'Produce',
+        aisleId: 110,
+        aisleSortOrder: 6,
         sourceKey: '',
         sourceText: '',
         userEdited: false,
@@ -100,7 +126,10 @@ function run() {
         text: 'chips',
         checked: false,
         storeLabel: 'Store A',
+        storeId: 10,
         bucketLabel: 'Aisle 2',
+        aisleId: 120,
+        aisleSortOrder: 2,
         sourceKey: '',
         sourceText: '',
         userEdited: false,
@@ -110,7 +139,10 @@ function run() {
         text: 'paper towels',
         checked: false,
         storeLabel: '',
+        storeId: null,
         bucketLabel: 'Unlisted',
+        aisleId: null,
+        aisleSortOrder: null,
         sourceKey: '',
         sourceText: '',
         userEdited: false,
@@ -213,8 +245,12 @@ function run() {
         currentText: 'bar baz qux',
         previousGeneratedText: 'foo (1 cup)',
         nextGeneratedText: 'foo (2 cups)',
+        nextGeneratedDisplayText: 'foo (2 cups)',
         nextStoreLabel: 'Store A',
         nextBucketLabel: 'Produce',
+        nextStoreId: null,
+        nextAisleId: null,
+        nextAisleSortOrder: null,
       },
     ],
     'manually edited generated rows should surface a per-line update conflict',
@@ -336,6 +372,7 @@ function run() {
         currentText: 'party chips',
         previousGeneratedText: 'chips',
         nextGeneratedText: '',
+        nextGeneratedDisplayText: '',
         nextStoreLabel: '',
         nextBucketLabel: '',
       },
@@ -367,10 +404,125 @@ function run() {
     'accepting a source removal should only delete the affected line',
   );
 
+  const preservedManualEdit = helpers.mergeShoppingListDocWithGenerated(
+    {
+      version: 2,
+      rows: [
+        {
+          id: 'foo-row',
+          text: '1 goo',
+          checked: false,
+          storeLabel: 'Store A',
+          bucketLabel: 'Produce',
+          sourceKey: 'foo',
+          sourceText: '1 foo',
+          sourceStoreLabel: 'Store A',
+          sourceBucketLabel: 'Produce',
+          userEdited: false,
+          order: 0,
+        },
+        {
+          id: 'bar-row',
+          text: '1 bar',
+          checked: false,
+          storeLabel: 'Store A',
+          bucketLabel: 'Produce',
+          sourceKey: 'bar',
+          sourceText: '1 bar',
+          sourceStoreLabel: 'Store A',
+          sourceBucketLabel: 'Produce',
+          userEdited: false,
+          order: 1,
+        },
+      ],
+    },
+    helpers.buildShoppingListDocFromPlanRows([
+      { rowType: 'section', text: 'Store A', className: 'shopping-list-section--store' },
+      { rowType: 'section', text: 'Produce', className: 'shopping-list-section--aisle' },
+      {
+        rowType: 'item',
+        key: 'foo',
+        text: '1 foo',
+        className: 'shopping-list-group-item',
+      },
+      {
+        rowType: 'item',
+        key: 'bar',
+        text: '2 bar',
+        className: 'shopping-list-group-item',
+      },
+    ]),
+  );
+
+  assertJsonEqual(
+    preservedManualEdit.conflicts,
+    [],
+    'unchanged generated rows should not conflict when only a different row changed',
+  );
+
+  assertJsonEqual(
+    preservedManualEdit.doc.rows.map((row) => ({
+      id: row.id,
+      text: row.text,
+      sourceKey: row.sourceKey,
+      sourceText: row.sourceText,
+      userEdited: row.userEdited,
+    })),
+    [
+      {
+        id: 'foo-row',
+        text: '1 goo',
+        sourceKey: 'foo',
+        sourceText: '1 foo',
+        userEdited: true,
+      },
+      {
+        id: 'bar-row',
+        text: '2 bar',
+        sourceKey: 'bar',
+        sourceText: '2 bar',
+        userEdited: false,
+      },
+    ],
+    'manual text edits should survive unrelated generated updates while changed source rows refresh',
+  );
+
   const displayRows = helpers.getShoppingListChecklistDisplayRows([
-    { id: 'a', text: '3 avocados', checked: false, storeLabel: 'Store A', bucketLabel: 'Produce', order: 0 },
-    { id: 'b', text: '2 limes', checked: true, storeLabel: 'Store A', bucketLabel: 'Produce', order: 1 },
-    { id: 'c', text: 'chips', checked: false, storeLabel: 'Store A', bucketLabel: 'Aisle 2', order: 2 },
+    {
+      id: 'a',
+      text: '3 avocados',
+      checked: false,
+      storeLabel: 'Store A',
+      bucketLabel: 'Produce',
+      aisleId: 110,
+      aisleSortOrder: 6,
+      sourceKey: 'avocado',
+      sourceText: '3 avocados',
+      order: 0,
+    },
+    {
+      id: 'b',
+      text: '2 limes',
+      checked: true,
+      storeLabel: 'Store A',
+      bucketLabel: 'Produce',
+      aisleId: 110,
+      aisleSortOrder: 6,
+      sourceKey: 'lime',
+      sourceText: '2 limes',
+      userEdited: true,
+      order: 1,
+    },
+    {
+      id: 'c',
+      text: 'chips',
+      checked: false,
+      storeLabel: 'Store A',
+      bucketLabel: 'Aisle 2',
+      aisleId: 120,
+      aisleSortOrder: 2,
+      order: 2,
+    },
     { id: 'd', text: 'paper towels', checked: true, storeLabel: '', bucketLabel: 'Unlisted', order: 3 },
   ]);
 
@@ -390,18 +542,6 @@ function run() {
       },
       {
         rowType: 'section',
-        text: 'Produce',
-        checked: false,
-        className: 'shopping-list-section--aisle',
-      },
-      {
-        rowType: 'item',
-        text: '3 avocados',
-        checked: false,
-        className: 'shopping-list-group-item shopping-list-doc-item',
-      },
-      {
-        rowType: 'section',
         text: 'Aisle 2',
         checked: false,
         className: 'shopping-list-section--aisle',
@@ -409,6 +549,18 @@ function run() {
       {
         rowType: 'item',
         text: 'chips',
+        checked: false,
+        className: 'shopping-list-group-item shopping-list-doc-item',
+      },
+      {
+        rowType: 'section',
+        text: 'Produce',
+        checked: false,
+        className: 'shopping-list-section--aisle',
+      },
+      {
+        rowType: 'item',
+        text: '3 avocados',
         checked: false,
         className: 'shopping-list-group-item shopping-list-doc-item',
       },
@@ -444,7 +596,45 @@ function run() {
         className: 'shopping-list-group-item shopping-list-doc-item',
       },
     ],
-    'checked items should move into a completed bucket within each store grouping; empty aisle/unlisted headers stay visible',
+    'checked items should move into a completed bucket within each store grouping while aisle sections follow aisle sort order',
+  );
+
+  assertJsonEqual(
+    displayRows
+      .filter((row) => row.rowType === 'item')
+      .map((row) => ({
+        text: row.text,
+        sourceKey: row.sourceKey || '',
+        sourceText: row.sourceText || '',
+        userEdited: !!row.userEdited,
+      })),
+    [
+      {
+        text: 'chips',
+        sourceKey: '',
+        sourceText: '',
+        userEdited: false,
+      },
+      {
+        text: '3 avocados',
+        sourceKey: 'avocado',
+        sourceText: '3 avocados',
+        userEdited: false,
+      },
+      {
+        text: '2 limes',
+        sourceKey: 'lime',
+        sourceText: '2 limes',
+        userEdited: true,
+      },
+      {
+        text: 'paper towels',
+        sourceKey: '',
+        sourceText: '',
+        userEdited: false,
+      },
+    ],
+    'display rows should retain source metadata so source-backed items can render links and drilldowns',
   );
 
   const namedAisleCompletedOnlyRows = helpers.getShoppingListChecklistDisplayRows([
@@ -523,9 +713,9 @@ function run() {
     produceAisleCollapsed.map((row) => row.text),
     [
       'Store A',
-      'Produce',
       'Aisle 2',
       'chips',
+      'Produce',
       'Completed',
       '2 limes',
       'Unlisted',
@@ -543,16 +733,338 @@ function run() {
     pseudoCompletedCollapsed.map((row) => row.text),
     [
       'Store A',
-      'Produce',
-      '3 avocados',
       'Aisle 2',
       'chips',
+      'Produce',
+      '3 avocados',
       'Completed',
       '2 limes',
       'Unlisted',
       'Completed',
     ],
     'collapsing pseudo-unlisted completed should hide completed items but keep the completed header',
+  );
+
+  const homeDisplayRows = helpers.getShoppingListChecklistDisplayRows(
+    [
+      {
+        id: 'h1',
+        text: '3 avocados',
+        checked: false,
+        storeLabel: 'Store A',
+        bucketLabel: 'Produce',
+        sourceKey: 'avocado',
+        sourceText: '3 avocados',
+        order: 0,
+      },
+      {
+        id: 'h2',
+        text: '2 limes',
+        checked: true,
+        storeLabel: 'Store A',
+        bucketLabel: 'Produce',
+        sourceKey: 'lime',
+        sourceText: '2 limes',
+        order: 1,
+      },
+      {
+        id: 'h3',
+        text: 'paper towels',
+        checked: false,
+        storeLabel: '',
+        bucketLabel: 'Unlisted',
+        order: 2,
+      },
+    ],
+    {
+      mode: 'home',
+      homeLocationBySourceKey: {
+        avocado: 'fridge',
+        lime: 'fruit stand',
+      },
+    },
+  );
+
+  assertJsonEqual(
+    homeDisplayRows.map((row) => ({
+      rowType: row.rowType,
+      text: row.text,
+      checked: !!row.checked,
+      className: row.className,
+    })),
+    [
+      {
+        rowType: 'section',
+        text: 'fridge',
+        checked: false,
+        className: 'shopping-list-section--store',
+      },
+      {
+        rowType: 'item',
+        text: '3 avocados',
+        checked: false,
+        className: 'shopping-list-group-item shopping-list-doc-item',
+      },
+      {
+        rowType: 'section',
+        text: 'no location',
+        checked: false,
+        className: 'shopping-list-section--store',
+      },
+      {
+        rowType: 'item',
+        text: 'paper towels',
+        checked: false,
+        className: 'shopping-list-group-item shopping-list-doc-item',
+      },
+      {
+        rowType: 'section',
+        text: 'Completed',
+        checked: false,
+        className: 'shopping-list-section--completed',
+      },
+      {
+        rowType: 'item',
+        text: '2 limes',
+        checked: true,
+        className: 'shopping-list-group-item shopping-list-doc-item',
+      },
+    ],
+    'home mode should group active items by normalized home location and keep completed rows in a single trailing section',
+  );
+
+  const fridgeCollapsed = helpers.filterShoppingListChecklistRowsForCollapse(
+    homeDisplayRows,
+    new Set([helpers.shoppingListHomeCollapseKey('fridge')]),
+  );
+  assertJsonEqual(
+    fridgeCollapsed.map((row) => row.text),
+    ['fridge', 'no location', 'paper towels', 'Completed', '2 limes'],
+    'collapsing a home section should hide only that home bucket items',
+  );
+
+  const storeSearchRows = helpers.getShoppingListChecklistDisplayRows(
+    [
+      {
+        id: 's1',
+        text: 'foo (1)',
+        checked: false,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 1',
+        aisleId: 1,
+        aisleSortOrder: 1,
+        order: 0,
+      },
+      {
+        id: 's2',
+        text: 'bar (1)',
+        checked: false,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 1',
+        aisleId: 1,
+        aisleSortOrder: 1,
+        order: 1,
+      },
+      {
+        id: 's3',
+        text: 'baz qux (1)',
+        checked: false,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 2',
+        aisleId: 2,
+        aisleSortOrder: 2,
+        order: 2,
+      },
+    ],
+    {
+      mode: 'stores',
+      searchQuery: 'f',
+    },
+  );
+
+  assertJsonEqual(
+    storeSearchRows.map((row) => row.text),
+    ['Store 1', 'Aisle 1', 'foo (1)'],
+    'stores mode search should keep only matching items and prune empty aisles and stores',
+  );
+
+  const homeSearchRows = helpers.getShoppingListChecklistDisplayRows(
+    [
+      {
+        id: 'hs1',
+        text: 'foo (1)',
+        checked: false,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 1',
+        sourceKey: 'foo',
+        sourceText: 'foo (1)',
+        order: 0,
+      },
+      {
+        id: 'hs2',
+        text: 'bar (1)',
+        checked: false,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 1',
+        sourceKey: 'bar',
+        sourceText: 'bar (1)',
+        order: 1,
+      },
+      {
+        id: 'hs3',
+        text: 'frozen peas (1)',
+        checked: true,
+        storeLabel: 'Store 1',
+        bucketLabel: 'Aisle 2',
+        sourceKey: 'peas',
+        sourceText: 'frozen peas (1)',
+        order: 2,
+      },
+    ],
+    {
+      mode: 'home',
+      searchQuery: 'fo',
+      homeLocationBySourceKey: {
+        foo: 'fridge',
+        bar: 'pantry',
+        peas: 'freezer',
+      },
+    },
+  );
+
+  assertJsonEqual(
+    homeSearchRows.map((row) => row.text),
+    ['fridge', 'foo (1)'],
+    'home mode search should work against the active home grouping and prune empty sections including completed',
+  );
+
+  const clipboardRows = [
+    {
+      id: '1',
+      text: 'Bananas (n)',
+      checked: false,
+      storeLabel: 'Safeway',
+      bucketLabel: 'nuts & dried fruit',
+      aisleId: 6,
+      aisleSortOrder: 6,
+      order: 0,
+    },
+    {
+      id: '2',
+      text: 'Cilantro (n)',
+      checked: false,
+      storeLabel: 'Safeway',
+      bucketLabel: 'nuts & dried fruit',
+      aisleId: 6,
+      aisleSortOrder: 6,
+      order: 1,
+    },
+    {
+      id: '3',
+      text: 'Greek yogurt (n)',
+      checked: false,
+      storeLabel: 'Safeway',
+      bucketLabel: 'dairy',
+      aisleId: 2,
+      aisleSortOrder: 2,
+      order: 2,
+    },
+    {
+      id: '4',
+      text: 'Already done',
+      checked: true,
+      storeLabel: 'Safeway',
+      bucketLabel: 'dairy',
+      aisleId: 2,
+      aisleSortOrder: 2,
+      order: 3,
+    },
+    {
+      id: '5',
+      text: 'baby spinach',
+      checked: false,
+      storeLabel: 'whole foods',
+      bucketLabel: 'produce',
+      aisleId: 1,
+      aisleSortOrder: 1,
+      order: 4,
+    },
+  ];
+  const plainText = helpers.formatShoppingListPlainText(clipboardRows);
+  assertJsonEqual(
+    plainText,
+    [
+      'SAFEWAY',
+      'Dairy',
+      '- Greek yogurt (n)',
+      'Nuts & Dried Fruit',
+      '- Bananas (n)',
+      '- Cilantro (n)',
+      '',
+      'WHOLE FOODS',
+      'Produce',
+      '- baby spinach',
+    ].join('\n'),
+    'plain text formatter should use uppercase stores, title-case aisles, and preserve item casing',
+  );
+
+  const htmlText = helpers.formatShoppingListHtml(clipboardRows);
+  const expectedHtmlFragments = [
+    '<p>SAFEWAY</p>',
+    '<p>Dairy</p>',
+    '<li>Greek yogurt (n)</li>',
+    '<p>Nuts &amp; Dried Fruit</p>',
+    '<li>Bananas (n)</li>',
+    '<li>Cilantro (n)</li>',
+    '<p>WHOLE FOODS</p>',
+    '<p>Produce</p>',
+    '<li>baby spinach</li>',
+  ];
+  expectedHtmlFragments.forEach((fragment) => {
+    if (!htmlText.includes(fragment)) {
+      throw new Error(`Expected html clipboard output to include "${fragment}".`);
+    }
+  });
+  if (htmlText.includes('Already done')) {
+    throw new Error('html clipboard formatter should omit checked items.');
+  }
+  if (htmlText.indexOf('SAFEWAY') > htmlText.indexOf('WHOLE FOODS')) {
+    throw new Error('html clipboard formatter should keep store ordering stable.');
+  }
+
+  const exportPayload = helpers.buildShoppingListExportPayload(clipboardRows, {
+    title: 'Weekly Shopping',
+  });
+  assertJsonEqual(
+    exportPayload,
+    {
+      title: 'Weekly Shopping',
+      stores: [
+        {
+          label: 'SAFEWAY',
+          aisles: [
+            {
+              label: 'Dairy',
+              items: ['Greek yogurt (n)'],
+            },
+            {
+              label: 'Nuts & Dried Fruit',
+              items: ['Bananas (n)', 'Cilantro (n)'],
+            },
+          ],
+        },
+        {
+          label: 'WHOLE FOODS',
+          aisles: [
+            {
+              label: 'Produce',
+              items: ['baby spinach'],
+            },
+          ],
+        },
+      ],
+    },
+    'export payload should preserve grouping and exclude checked items',
   );
 
   console.log('Shopping list checklist tests passed.');

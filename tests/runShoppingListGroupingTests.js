@@ -84,12 +84,16 @@ function run() {
             helpers.getShoppingListVariantAssignmentKey('foo', 'bar'),
             [{ storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 }],
           ],
+          [
+            helpers.getShoppingListVariantAssignmentKey('foo', 'baz'),
+            [{ storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 }],
+          ],
         ]),
+        variantOrderMap: new Map([['foo', ['bar', 'baz']]]),
         variantAnyAssignmentMap: new Map([
           [
             'foo',
             [
-              { storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 },
               { storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 },
               { storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 },
             ],
@@ -98,10 +102,22 @@ function run() {
       }
     ),
     [
-      { storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 },
-      { storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 },
+      {
+        storeId: 1,
+        aisleId: 11,
+        aisleLabel: 'Aisle 1',
+        aisleSortOrder: 1,
+        variantRank: 0,
+      },
+      {
+        storeId: 1,
+        aisleId: 12,
+        aisleLabel: 'Aisle 2',
+        aisleSortOrder: 2,
+        variantRank: 1,
+      },
     ],
-    'bare items should match any variant aisle once per aisle'
+    'bare items should follow ordered variant aisles before falling back to any-variant matches'
   );
 
   assertJsonEqual(
@@ -124,6 +140,29 @@ function run() {
     ),
     [{ storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 }],
     'explicit variant rows should keep exact variant assignments'
+  );
+
+  assertJsonEqual(
+    helpers.getShoppingListAssignmentCandidates(
+      { name: 'foo', variantName: '' },
+      {
+        baseAssignmentMap: new Map([
+          ['foo', [{ storeId: 1, aisleId: 99, aisleLabel: 'Base', aisleSortOrder: 99 }]],
+        ]),
+        variantAssignmentMap: new Map([
+          [
+            helpers.getShoppingListVariantAssignmentKey('foo', 'bar'),
+            [{ storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 }],
+          ],
+        ]),
+        variantOrderMap: new Map([['foo', ['bar']]]),
+        variantAnyAssignmentMap: new Map([
+          ['foo', [{ storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 }]],
+        ]),
+      }
+    ),
+    [{ storeId: 1, aisleId: 99, aisleLabel: 'Base', aisleSortOrder: 99 }],
+    'bare items should keep explicit base assignments ahead of variant-derived aisles'
   );
 
   const rows = helpers.buildGroupedShoppingListRows(
@@ -203,22 +242,32 @@ function run() {
         key: 'foo',
         label: 'foo',
         text: 'foo',
-        assignmentCandidates: helpers.getShoppingListAssignmentCandidates(
-          { name: 'foo', variantName: '' },
-          {
-            baseAssignmentMap: new Map(),
-            variantAssignmentMap: new Map(),
-            variantAnyAssignmentMap: new Map([
+        assignmentCandidates: helpers.getShoppingListAssignmentCandidates({
+          name: 'foo',
+          variantName: '',
+        }, {
+          baseAssignmentMap: new Map(),
+          variantAssignmentMap: new Map([
+            [
+              helpers.getShoppingListVariantAssignmentKey('foo', 'bar'),
+              [{ storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 }],
+            ],
+            [
+              helpers.getShoppingListVariantAssignmentKey('foo', 'baz'),
+              [{ storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 }],
+            ],
+          ]),
+          variantOrderMap: new Map([['foo', ['bar', 'baz']]]),
+          variantAnyAssignmentMap: new Map([
+            [
+              'foo',
               [
-                'foo',
-                [
-                  { storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 },
-                  { storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 },
-                ],
+                { storeId: 1, aisleId: 11, aisleLabel: 'Aisle 1', aisleSortOrder: 1 },
+                { storeId: 1, aisleId: 12, aisleLabel: 'Aisle 2', aisleSortOrder: 2 },
               ],
-            ]),
-          }
-        ),
+            ],
+          ]),
+        }),
       },
     ],
     {
@@ -231,10 +280,56 @@ function run() {
     bareVariantRows.map((row) => [row.rowType, row.text]),
     [
       ['section', 'STORE 1'],
-      ['section', 'Aisle 1'],
+      ['section', 'Aisle 2'],
       ['item', 'foo'],
     ],
-    'bare items matched by variants should render once in the first matching aisle'
+    'bare items matched by variants should render in the first ordered variant aisle'
+  );
+
+  const mergedAisleMetaRows = helpers.buildGroupedShoppingListRows(
+    [
+      {
+        key: 'late',
+        label: 'late',
+        text: 'late',
+        assignmentCandidates: [
+          { storeId: 1, aisleId: 11, aisleLabel: 'Dairy', aisleSortOrder: 999999 },
+        ],
+      },
+      {
+        key: 'early',
+        label: 'early',
+        text: 'early',
+        assignmentCandidates: [
+          { storeId: 1, aisleId: 11, aisleLabel: 'Dairy', aisleSortOrder: 1 },
+        ],
+      },
+      {
+        key: 'mid',
+        label: 'mid',
+        text: 'mid',
+        assignmentCandidates: [
+          { storeId: 1, aisleId: 12, aisleLabel: 'Bakery', aisleSortOrder: 2 },
+        ],
+      },
+    ],
+    {
+      selectedStores: [{ id: 1, label: 'STORE 1' }],
+      unlistedLabel: 'UNLISTED',
+    }
+  );
+
+  assertJsonEqual(
+    mergedAisleMetaRows.map((row) => [row.rowType, row.text]),
+    [
+      ['section', 'STORE 1'],
+      ['section', 'Dairy'],
+      ['item', 'early'],
+      ['item', 'late'],
+      ['section', 'Bakery'],
+      ['item', 'mid'],
+    ],
+    'aisle sort order should use the best metadata when the first item had a placeholder sort'
   );
 
   console.log('Shopping list grouping tests passed.');

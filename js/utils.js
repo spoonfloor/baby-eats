@@ -2518,12 +2518,6 @@ function mountTopFilterChipRail(opts = {}) {
   const gapFromAppBarPx = Number.isFinite(opts?.gapFromAppBarPx)
     ? Number(opts.gapFromAppBarPx)
     : 8;
-  const comfortableWidthPx = Number.isFinite(opts?.comfortableWidthPx)
-    ? Number(opts.comfortableWidthPx)
-    : 600;
-  const edgeToEdgeWidthPx = Number.isFinite(opts?.edgeToEdgeWidthPx)
-    ? Number(opts.edgeToEdgeWidthPx)
-    : 360;
 
   let dock = dockId ? document.getElementById(dockId) : null;
   if (!dock) {
@@ -2535,22 +2529,32 @@ function mountTopFilterChipRail(opts = {}) {
     dock.classList.add('list-filter-chip-dock');
   }
 
-  let viewport = dock.querySelector('.list-filter-chip-viewport');
-  if (!(viewport instanceof HTMLElement)) {
-    viewport = document.createElement('div');
-    viewport.className = 'list-filter-chip-viewport';
-    dock.appendChild(viewport);
-  }
-
   let track = dock.querySelector('.list-filter-chip-track');
   if (!(track instanceof HTMLElement)) {
     track = document.createElement('div');
     track.className = 'list-filter-chip-track';
-    viewport.appendChild(track);
+    dock.appendChild(track);
+  } else if (track.parentElement !== dock) {
+    dock.appendChild(track);
   }
 
-  const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
-  const lerp = (start, end, amount) => start + (end - start) * amount;
+  dock.querySelectorAll('.list-filter-chip-viewport').forEach((el) => {
+    try {
+      el.remove();
+    } catch (_) {}
+  });
+
+  const bodyEl =
+    document.body instanceof HTMLBodyElement ? document.body : null;
+  const bodyRailCountKey = 'topFilterChipRailCount';
+  if (bodyEl) {
+    const currentCount = Math.max(
+      0,
+      Number.parseInt(bodyEl.dataset?.[bodyRailCountKey] || '0', 10) || 0,
+    );
+    bodyEl.dataset[bodyRailCountKey] = String(currentCount + 1);
+    bodyEl.classList.add('has-top-filter-chip-rail');
+  }
 
   const sync = () => {
     if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
@@ -2563,23 +2567,9 @@ function mountTopFilterChipRail(opts = {}) {
       ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
       : rect.bottom + gapFromAnchorPx;
 
-    const docEl =
-      document.documentElement instanceof HTMLElement
-        ? document.documentElement
-        : null;
-    const vw = window.innerWidth || docEl?.clientWidth || 0;
-    const alignedLeft = Number(rect.left) || 0;
-    const alignedRight = Number(rect.right) || alignedLeft + (Number(rect.width) || 0);
-    const fullyRelaxedLeft = 0;
-    const fullyRelaxedRight = vw;
-    const widthDenominator = Math.max(1, comfortableWidthPx - edgeToEdgeWidthPx);
-    const blend = clamp01((comfortableWidthPx - rect.width) / widthDenominator);
-    const dockLeft = lerp(alignedLeft, fullyRelaxedLeft, blend);
-    const dockRight = lerp(alignedRight, fullyRelaxedRight, blend);
-    const dockWidth = Math.max(0, dockRight - dockLeft);
-
-    dock.style.left = `${Math.round(dockLeft)}px`;
-    dock.style.width = `${Math.round(dockWidth)}px`;
+    dock.style.removeProperty('left');
+    dock.style.removeProperty('right');
+    dock.style.removeProperty('width');
     dock.style.top = `${Math.round(safeTop)}px`;
   };
 
@@ -2591,21 +2581,47 @@ function mountTopFilterChipRail(opts = {}) {
       sync();
     });
   };
+  const resizeObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => scheduleSync())
+      : null;
+  if (resizeObserver) {
+    resizeObserver.observe(anchorEl);
+    const appBarEl = document.querySelector('.app-bar-wrapper');
+    if (appBarEl instanceof HTMLElement) resizeObserver.observe(appBarEl);
+  }
   window.addEventListener('resize', scheduleSync);
   window.addEventListener('scroll', scheduleSync, { passive: true });
   scheduleSync();
 
+  let destroyed = false;
   return {
     dockEl: dock,
-    viewportEl: viewport,
+    viewportEl: dock,
     trackEl: track,
     sync: scheduleSync,
     destroy() {
+      if (destroyed) return;
+      destroyed = true;
       window.removeEventListener('resize', scheduleSync);
       window.removeEventListener('scroll', scheduleSync);
+      if (resizeObserver) resizeObserver.disconnect();
       if (_syncRafId) {
         cancelAnimationFrame(_syncRafId);
         _syncRafId = 0;
+      }
+      if (bodyEl) {
+        const currentCount = Math.max(
+          0,
+          Number.parseInt(bodyEl.dataset?.[bodyRailCountKey] || '0', 10) || 0,
+        );
+        const nextCount = Math.max(0, currentCount - 1);
+        if (nextCount > 0) {
+          bodyEl.dataset[bodyRailCountKey] = String(nextCount);
+        } else {
+          delete bodyEl.dataset[bodyRailCountKey];
+          bodyEl.classList.remove('has-top-filter-chip-rail');
+        }
       }
       if (removeOnDestroy && dock?.parentNode) {
         dock.parentNode.removeChild(dock);

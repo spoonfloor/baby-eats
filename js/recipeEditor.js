@@ -190,8 +190,7 @@ function getRecipeBaseServingsDefault(recipe) {
   const api = getRecipeWebServingsApi();
   if (typeof api.getBaseDefault === 'function') return api.getBaseDefault(recipe);
   if (!recipe) return null;
-  const numeric = Number(recipe.servingsDefault);
-  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
+  return roundRecipeWebServingsValue(recipe.servingsDefault);
 }
 
 function getRecipeWebServingsBounds(recipe) {
@@ -2535,12 +2534,6 @@ function renderRecipe(recipe) {
 
 // --- Servings helpers (rest-mode text + basic edit-mode structure) ---
 
-// One-shot flag: when true, entering servings edit mode should NOT steal focus
-// from the title (used when the title editor triggers servings edit).
-if (typeof window._servingsEditSkipFocusOnce === 'undefined') {
-  window._servingsEditSkipFocusOnce = false;
-}
-
 // Remember last valid committed value so blur/enter can revert invalid edits
 if (typeof window._servingsLastValid === 'undefined') {
   window._servingsLastValid = null;
@@ -2552,11 +2545,31 @@ if (typeof window._servingsSkipCommitOnce === 'undefined') {
 }
 
 function _servingsIsValidNumber(raw) {
-  const n = Number(raw);
+  const n = _servingsParseNumber(raw);
   return Number.isFinite(n) && n > 0;
 }
 
-function servingsHasData(recipe) {
+function _servingsParseNumber(raw) {
+  const text = String(raw == null ? '' : raw).trim();
+  if (!text) return null;
+  if (typeof parseNumericQuantityValue === 'function') {
+    const parsed = parseNumericQuantityValue(text);
+    if (parsed != null) {
+      const n = Number(parsed);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function _servingsFormatInputValue(rawValue) {
+  const n = _servingsParseNumber(rawValue);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return formatRecipeWebServingsDisplay(n);
+}
+
+function servingsHasDefaultValue(recipe) {
   if (!recipe) return false;
 
   let v = recipe.servingsDefault;
@@ -2569,19 +2582,21 @@ function servingsHasData(recipe) {
   if (v === null || v === undefined || v === '') {
     if (servingsObj && servingsObj.default != null) {
       v = servingsObj.default;
-      recipe.servingsDefault = v; // keep model in sync
+      const parsed = _servingsParseNumber(v);
+      if (parsed != null && parsed > 0) {
+        recipe.servingsDefault = parsed; // keep model in sync
+      }
     }
   }
 
-  if (v !== null && v !== undefined && v !== '') return true;
-  return servingsObj?.min != null || servingsObj?.max != null;
+  return _servingsIsValidNumber(v);
 }
 
 function updateServingsVisibility(recipe) {
   const row = document.getElementById('servingsRow');
   if (!row) return;
   const model = recipe || window.recipeData || recipe;
-  const hasData = servingsHasData(model);
+  const hasDefaultValue = servingsHasDefaultValue(model);
   const isTitleEditing = !!window.isTitleEditing;
   const isServingsEditing = !!window.isServingsEditing;
 
@@ -2590,7 +2605,7 @@ function updateServingsVisibility(recipe) {
 
   // - OR when the title is in edit mode
   // - OR while the servings row itself is actively editing
-  const shouldShow = hasData || isTitleEditing || isServingsEditing;
+  const shouldShow = hasDefaultValue || isTitleEditing || isServingsEditing;
 
   row.style.display = shouldShow ? '' : 'none';
 }
@@ -2768,12 +2783,12 @@ function renderServingsRow(recipe, container) {
     window.isServingsEditing = false;
   }
 
-  const hasData = servingsHasData(recipeModel);
+  const hasDefaultValue = servingsHasDefaultValue(recipeModel);
   const isTitleEditing = !!window.isTitleEditing;
 
-  // If there is no servings data yet, but the title is in edit mode,
+  // If there is no default servings value yet, but the title is in edit mode,
   // go straight into servings edit instead of showing the old "Servings:" stub.
-  if (!window.isServingsEditing && !hasData && isTitleEditing) {
+  if (!window.isServingsEditing && !hasDefaultValue && isTitleEditing) {
     window.isServingsEditing = true;
   }
 
@@ -2794,29 +2809,8 @@ function renderServingsRow(recipe, container) {
 
   if (!window.isServingsEditing) {
     // Rest mode: plain subtitle text, no pill
-    if (hasData && recipeModel.servingsDefault != null) {
-      field.textContent = `Serves ${recipeModel.servingsDefault}`;
-    } else if (
-      hasData &&
-      recipeModel.servings &&
-      (recipeModel.servings.min != null || recipeModel.servings.max != null)
-    ) {
-      const minText =
-        recipeModel.servings.min != null
-          ? formatRecipeWebServingsDisplay(recipeModel.servings.min)
-          : '';
-      const maxText =
-        recipeModel.servings.max != null
-          ? formatRecipeWebServingsDisplay(recipeModel.servings.max)
-          : '';
-      field.textContent =
-        minText && maxText
-          ? `Servings ${minText}-${maxText}`
-          : minText
-          ? `Servings ${minText}`
-          : maxText
-          ? `Servings ${maxText}`
-          : 'Servings';
+    if (hasDefaultValue && recipeModel.servingsDefault != null) {
+      field.textContent = `Serves ${formatRecipeWebServingsDisplay(recipeModel.servingsDefault)}`;
     } else {
       field.textContent = 'Servings';
     }
@@ -2875,7 +2869,7 @@ function renderServingsRow(recipe, container) {
     const defaultInput = document.createElement('input');
     defaultInput.type = 'text';
     defaultInput.className = 'servings-input';
-    defaultInput.value = defaultVal != null ? String(defaultVal) : '';
+    defaultInput.value = defaultVal != null ? _servingsFormatInputValue(defaultVal) : '';
 
     // --- Min input ---
     const minLabel = document.createElement('span');
@@ -2885,7 +2879,7 @@ function renderServingsRow(recipe, container) {
     const minInput = document.createElement('input');
     minInput.type = 'text';
     minInput.className = 'servings-input';
-    minInput.value = minVal != null ? String(minVal) : '';
+    minInput.value = minVal != null ? _servingsFormatInputValue(minVal) : '';
 
     // --- Max input ---
     const maxLabel = document.createElement('span');
@@ -2895,13 +2889,10 @@ function renderServingsRow(recipe, container) {
     const maxInput = document.createElement('input');
     maxInput.type = 'text';
     maxInput.className = 'servings-input';
-    maxInput.value = maxVal != null ? String(maxVal) : '';
+    maxInput.value = maxVal != null ? _servingsFormatInputValue(maxVal) : '';
 
     // Start with range (min/max) hidden if there is no default yet
-    let rangeVisible =
-      (defaultVal != null && _servingsIsValidNumber(defaultVal)) ||
-      minVal != null ||
-      maxVal != null;
+    let rangeVisible = defaultVal != null && _servingsIsValidNumber(defaultVal);
 
     const showRangeInputs = () => {
       if (rangeVisible) return;
@@ -2962,40 +2953,44 @@ function renderServingsRow(recipe, container) {
       }
 
       const toNum = (v) =>
-        v == null || v === '' || !_servingsIsValidNumber(v)
+        v == null || v === ''
           ? null
-          : roundRecipeWebServingsValue(v);
+          : _servingsIsValidNumber(v)
+          ? roundRecipeWebServingsValue(_servingsParseNumber(v))
+          : null;
 
-      const dNum = Math.round(Number(d));
-      recipeModel.servingsDefault = dNum;
-      recipeModel.servings.default = dNum;
+      let dNum = roundRecipeWebServingsValue(_servingsParseNumber(d));
+      if (dNum == null) return;
 
       let mn = toNum(recipeModel.servings.min);
       let mx = toNum(recipeModel.servings.max);
 
-      if (mn != null && mn > dNum) mn = dNum;
-      if (mx != null && mx < dNum) mx = dNum;
+      // Keep min/max internally consistent first.
+      if (mn != null && mx != null && mn > mx) {
+        mx = mn;
+      }
+
+      // Then keep default inside the explicit range when one exists.
+      if (mn != null && dNum < mn) dNum = mn;
+      if (mx != null && dNum > mx) dNum = mx;
+
+      recipeModel.servingsDefault = dNum;
+      recipeModel.servings.default = dNum;
+      window._servingsLastValid = dNum;
 
       recipeModel.servings.min = mn;
       recipeModel.servings.max = mx;
 
       // Reflect normalized values into the inputs
-      if (defaultInput) defaultInput.value = String(dNum);
-      if (minInput) minInput.value = mn != null ? String(mn) : '';
-      if (maxInput) maxInput.value = mx != null ? String(mx) : '';
+      if (defaultInput) defaultInput.value = _servingsFormatInputValue(dNum);
+      if (minInput) minInput.value = mn != null ? _servingsFormatInputValue(mn) : '';
+      if (maxInput) maxInput.value = mx != null ? _servingsFormatInputValue(mx) : '';
     };
 
-    const skipAutoFocus =
-      typeof window !== 'undefined' && window._servingsEditSkipFocusOnce;
-
-    if (skipAutoFocus) {
-      window._servingsEditSkipFocusOnce = false;
-    } else {
-      setTimeout(() => {
-        defaultInput.focus();
-        defaultInput.select();
-      }, 0);
-    }
+    setTimeout(() => {
+      defaultInput.focus();
+      defaultInput.select();
+    }, 0);
 
     // --- Default: live-commit semantics ---
     defaultInput.addEventListener('input', () => {
@@ -3006,7 +3001,8 @@ function renderServingsRow(recipe, container) {
         recipeModel.servingsDefault = null;
         recipeModel.servings.default = null;
       } else if (_servingsIsValidNumber(raw)) {
-        const n = Math.round(Number(raw));
+        const n = roundRecipeWebServingsValue(_servingsParseNumber(raw));
+        if (n == null) return;
         recipeModel.servingsDefault = n;
         recipeModel.servings.default = n;
         window._servingsLastValid = n;
@@ -3052,7 +3048,8 @@ function renderServingsRow(recipe, container) {
         recipeModel.servingsDefault = null;
         recipeModel.servings.default = null;
       } else if (_servingsIsValidNumber(raw)) {
-        const n = Math.round(Number(raw));
+        const n = roundRecipeWebServingsValue(_servingsParseNumber(raw));
+        if (n == null) return;
         recipeModel.servingsDefault = n;
         recipeModel.servings.default = n;
         window._servingsLastValid = n;
@@ -3095,10 +3092,10 @@ function renderServingsRow(recipe, container) {
       }
 
       if (_servingsIsValidNumber(raw)) {
-        recipeModel.servings[key] = roundRecipeWebServingsValue(raw);
+        recipeModel.servings[key] = roundRecipeWebServingsValue(_servingsParseNumber(raw));
       } else {
         const current = recipeModel.servings[key];
-        inputEl.value = current != null ? String(current) : '';
+        inputEl.value = current != null ? _servingsFormatInputValue(current) : '';
       }
 
       normalizeServingsTriple();
@@ -3112,7 +3109,7 @@ function renderServingsRow(recipe, container) {
         if (raw === '') {
           recipeModel.servings[key] = null;
         } else if (_servingsIsValidNumber(raw)) {
-          recipeModel.servings[key] = roundRecipeWebServingsValue(raw);
+          recipeModel.servings[key] = roundRecipeWebServingsValue(_servingsParseNumber(raw));
         }
 
         if (typeof markDirty === 'function') {
@@ -3143,7 +3140,7 @@ function renderServingsRow(recipe, container) {
           e.preventDefault();
           const current =
             recipeModel.servings && recipeModel.servings[key] != null
-              ? String(recipeModel.servings[key])
+              ? _servingsFormatInputValue(recipeModel.servings[key])
               : '';
           inputEl.value = current;
           inputEl.blur();
@@ -3600,13 +3597,10 @@ function attachTitleEditor(titleEl) {
     // away from the title (caret stays where the user clicked).
 
     if (
-      typeof servingsHasData === 'function' &&
-      !servingsHasData(window.recipeData)
+      typeof servingsHasDefaultValue === 'function' &&
+      !servingsHasDefaultValue(window.recipeData)
     ) {
       window.isServingsEditing = true;
-
-      // Tell servings row to enter edit mode without focusing the input.
-      window._servingsEditSkipFocusOnce = true;
 
       if (typeof renderServingsRow === 'function') {
         renderServingsRow(window.recipeData);
@@ -3688,9 +3682,9 @@ function attachTitleEditor(titleEl) {
 
       const shouldCollapseServings =
         !goingIntoServings &&
-        typeof servingsHasData === 'function' &&
+        typeof servingsHasDefaultValue === 'function' &&
         window.recipeData &&
-        !servingsHasData(window.recipeData);
+        !servingsHasDefaultValue(window.recipeData);
 
       // Finish title edit first so isTitleEditing is false before we touch servings.
       commit();
