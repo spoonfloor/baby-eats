@@ -68,6 +68,18 @@
     return { stepper, minusBtn, qtySpan, plusBtn };
   }
 
+  function formatStepperQtyLabel(rawQty) {
+    const qty = Number(rawQty);
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.formatShoppingQtyForDisplay === 'function'
+    ) {
+      return window.formatShoppingQtyForDisplay(qty);
+    }
+    if (!Number.isFinite(qty) || qty <= 0) return '0';
+    return String(Number(qty.toFixed(2)));
+  }
+
   function syncRowVisuals(rowEl, options = {}) {
     if (!(rowEl instanceof HTMLElement)) return;
 
@@ -88,7 +100,7 @@
     const badge = rowEl.querySelector('.shopping-list-row-badge');
     const qtyEl = stepper?.querySelector('.shopping-stepper-qty');
 
-    if (qtyEl) qtyEl.textContent = String(qty);
+    if (qtyEl) qtyEl.textContent = formatStepperQtyLabel(qty);
 
     if (!enabled) {
       if (icon) icon.style.display = '';
@@ -109,7 +121,7 @@
       if (stepper) stepper.style.display = 'none';
       if (badge) {
         badge.style.display = 'inline-block';
-        badge.textContent = `${qty}x`;
+        badge.textContent = `${formatStepperQtyLabel(qty)}x`;
       }
       return;
     }

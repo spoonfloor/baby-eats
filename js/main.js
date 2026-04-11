@@ -1087,6 +1087,114 @@ if (typeof window !== 'undefined') {
 }
 // --- End shopping list amount helpers ---
 
+// --- Shopping browse labeling helpers (tests extract this block) ---
+function normalizeShoppingBrowseLocationId(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  return !value || value === 'measures' ? 'none' : value;
+}
+
+function getShoppingBrowseVariantHomeRows(item) {
+  const rows = Array.isArray(item?.variantHomeLocations) ? item.variantHomeLocations : [];
+  const out = [];
+  const byKey = new Map();
+  rows.forEach((entry) => {
+    const variant = String(entry?.variant || '').trim();
+    if (!variant) return;
+    const rowKey = variant.toLowerCase();
+    const normalizedHome = normalizeShoppingBrowseLocationId(entry?.homeLocation);
+    const existing = byKey.get(rowKey);
+    if (existing) {
+      if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
+        existing.homeLocation = normalizedHome;
+      }
+      return;
+    }
+    const nextRow = { variant, homeLocation: normalizedHome };
+    byKey.set(rowKey, nextRow);
+    out.push(nextRow);
+  });
+  return out;
+}
+
+function getShoppingBrowseLocationIds(item) {
+  const ids = [];
+  const seen = new Set();
+  const pushId = (rawId) => {
+    const normalizedId = normalizeShoppingBrowseLocationId(rawId);
+    if (seen.has(normalizedId)) return;
+    seen.add(normalizedId);
+    ids.push(normalizedId);
+  };
+  pushId(item?.locationAtHome);
+  getShoppingBrowseVariantHomeRows(item).forEach((entry) => pushId(entry.homeLocation));
+  return ids;
+}
+
+function getShoppingBrowseMatchInfo(item, options = {}) {
+  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const normalizedLocationIds = Array.from(
+    new Set(
+      (Array.isArray(options?.locationIds) ? options.locationIds : [])
+        .map((value) => normalizeShoppingBrowseLocationId(value))
+        .filter(Boolean),
+    ),
+  );
+  const hasQuery = !!normalizedQuery;
+  const hasLocationFilters = normalizedLocationIds.length > 0;
+  if (!hasQuery && !hasLocationFilters) {
+    return {
+      baseMatched: false,
+      matchedVariantNames: [],
+      variantNameToShow: '',
+    };
+  }
+
+  const baseName = String(item?.name || '').trim().toLowerCase();
+  const baseLocationId = normalizeShoppingBrowseLocationId(item?.locationAtHome);
+  const baseMatched =
+    (!hasQuery || baseName.includes(normalizedQuery)) &&
+    (!hasLocationFilters || normalizedLocationIds.includes(baseLocationId));
+
+  const matchedVariantNames = getShoppingBrowseVariantHomeRows(item)
+    .filter((entry) => {
+      const variantName = String(entry?.variant || '').trim().toLowerCase();
+      if (!variantName) return false;
+      const searchMatches = !hasQuery || variantName.includes(normalizedQuery);
+      const locationMatches =
+        !hasLocationFilters ||
+        normalizedLocationIds.includes(normalizeShoppingBrowseLocationId(entry?.homeLocation));
+      return searchMatches && locationMatches;
+    })
+    .map((entry) => String(entry.variant || '').trim())
+    .filter(Boolean);
+
+  return {
+    baseMatched,
+    matchedVariantNames,
+    variantNameToShow: !baseMatched && matchedVariantNames.length === 1 ? matchedVariantNames[0] : '',
+  };
+}
+
+function formatShoppingBrowseItemLabel(baseLabel, item, options = {}) {
+  const resolvedBaseLabel = String(baseLabel || '').trim() || String(item?.name || '').trim();
+  if (!resolvedBaseLabel) return '';
+  const matchInfo = getShoppingBrowseMatchInfo(item, options);
+  return matchInfo.variantNameToShow
+    ? `${resolvedBaseLabel} (${matchInfo.variantNameToShow})`
+    : resolvedBaseLabel;
+}
+
+if (typeof window !== 'undefined') {
+  window.__shoppingBrowseLabelHelpers = {
+    normalizeShoppingBrowseLocationId,
+    getShoppingBrowseVariantHomeRows,
+    getShoppingBrowseLocationIds,
+    getShoppingBrowseMatchInfo,
+    formatShoppingBrowseItemLabel,
+  };
+}
+// --- End shopping browse labeling helpers ---
+
 function tableHasColumnInMain(db, tableName, colName) {
   if (!db || !tableName || !colName) return false;
   try {
@@ -1303,6 +1411,17 @@ function ensureIngredientBaseVariantsInMain(db) {
     ingredientRows.forEach(([ingredientIdRaw, legacyHomeRaw]) => {
       const ingredientId = Number(ingredientIdRaw);
       if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+      const clearLegacyHomeIfNeeded = () => {
+        if (!hasLegacyHomeLocation || legacyHome === 'none') return false;
+        db.run(
+          `UPDATE ingredients
+              SET location_at_home = 'none'
+            WHERE ID = ?
+              AND COALESCE(location_at_home, 'none') != 'none';`,
+          [ingredientId],
+        );
+        return true;
+      };
 
       const baseQ = db.exec(
         `SELECT id,
@@ -1344,7 +1463,7 @@ function ensureIngredientBaseVariantsInMain(db) {
           `INSERT INTO ingredient_variants (${insertCols.join(', ')}) VALUES (${placeholders});`,
           insertVals,
         );
-        changedCount += 1;
+        changedCount += clearLegacyHomeIfNeeded() ? 2 : 1;
         return;
       }
 
@@ -1367,13 +1486,16 @@ function ensureIngredientBaseVariantsInMain(db) {
         sets.push('home_location = ?');
         vals.push(nextHome);
       }
-      if (!sets.length) return;
+      const legacyCleared = clearLegacyHomeIfNeeded();
+      if (!sets.length && !legacyCleared) return;
 
-      db.run(`UPDATE ingredient_variants SET ${sets.join(', ')} WHERE id = ?;`, [
-        ...vals,
-        baseId,
-      ]);
-      changedCount += 1;
+      if (sets.length) {
+        db.run(`UPDATE ingredient_variants SET ${sets.join(', ')} WHERE id = ?;`, [
+          ...vals,
+          baseId,
+        ]);
+      }
+      changedCount += legacyCleared ? 2 : 1;
     });
 
     if (txStarted) {
@@ -1979,6 +2101,7 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
 }
 
 // --- Shopping list grouping helpers (tests extract this block) ---
+const SHOPPING_LIST_GROUPING_BASE_VARIANT_NAME = 'default';
 function orderShoppingListSelectedStoreIds(storeOrder, selectedStoreIds) {
   const normalizedStoreOrder = Array.isArray(storeOrder) ? storeOrder : [];
   const normalizedSelectedStoreIds = Array.isArray(selectedStoreIds)
@@ -2066,7 +2189,10 @@ function getShoppingListVariantAssignmentKey(name, variantName = '') {
     .trim()
     .toLowerCase();
   if (!normalizedName) return '';
-  if (!normalizedVariant || normalizedVariant === INGREDIENT_BASE_VARIANT_NAME)
+  if (
+    !normalizedVariant ||
+    normalizedVariant === SHOPPING_LIST_GROUPING_BASE_VARIANT_NAME
+  )
     return normalizedName;
   return `${normalizedName}\x00${normalizedVariant}`;
 }
@@ -4124,6 +4250,9 @@ async function loadShoppingPage() {
          iv_base.id ASC
        LIMIT 1)`
     : "'none'";
+  const variantHomeExpr = hasVariantHomeLocationCol
+    ? "COALESCE(v.home_location, 'none')"
+    : homeExpr;
   const isFoodExpr = hasIsFoodCol ? 'COALESCE(i.is_food, 1)' : '1';
   const isHiddenExpr = hasIsHiddenCol ? 'COALESCE(i.is_hidden, 0)' : '0';
   const lemmaExpr = hasLemmaCol ? "COALESCE(i.lemma, '')" : "''";
@@ -4142,6 +4271,7 @@ async function loadShoppingPage() {
              ${deprecatedExpr} AS is_deprecated,
              ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS home_location,
+             ${variantHomeExpr} AS variant_home_location,
              ${isFoodExpr} AS is_food,
              ${lemmaExpr} AS lemma,
              ${pluralByDefaultExpr} AS plural_by_default,
@@ -4157,6 +4287,7 @@ async function loadShoppingPage() {
              ${deprecatedExpr} AS is_deprecated,
              ${isHiddenExpr} AS is_hidden,
              ${homeExpr} AS home_location,
+             ${homeExpr} AS variant_home_location,
              ${isFoodExpr} AS is_food,
              ${lemmaExpr} AS lemma,
              ${pluralByDefaultExpr} AS plural_by_default,
@@ -4188,6 +4319,7 @@ async function loadShoppingPage() {
         isDeprecated,
         isHidden,
         locationAtHome,
+        variantLocationAtHome,
         isFood,
         lemma,
         pluralByDefault,
@@ -4200,6 +4332,7 @@ async function loadShoppingPage() {
         isDeprecated: Number(isDeprecated || 0) === 1,
         isHidden: Number(isHidden || 0) === 1,
         locationAtHome: String(locationAtHome || ''),
+        variantLocationAtHome: String(variantLocationAtHome || ''),
         isFood: Number(isFood ?? 1) === 1,
         lemma: String(lemma || '').trim(),
         pluralByDefault: Number(pluralByDefault || 0) === 1,
@@ -4224,6 +4357,7 @@ async function loadShoppingPage() {
           _deprecatedFlags: [],
           _hiddenFlags: [],
           _homeLocations: [],
+          _variantHomeLocations: [],
           _foodFlags: [],
           _lemmas: [],
           _pluralByDefaultFlags: [],
@@ -4234,6 +4368,10 @@ async function loadShoppingPage() {
 
       if (row.variant) {
         byName.get(key).variants.push(row.variant);
+        byName.get(key)._variantHomeLocations.push({
+          variant: row.variant,
+          homeLocation: String(row.variantLocationAtHome || ''),
+        });
       }
       byName.get(key).recentSortId = Math.max(
         Number(byName.get(key).recentSortId) || 0,
@@ -4277,6 +4415,32 @@ async function loadShoppingPage() {
       } else {
         item.variants = [];
       }
+      if (Array.isArray(item._variantHomeLocations) && item._variantHomeLocations.length > 0) {
+        const seenVariantHomes = new Map();
+        item._variantHomeLocations.forEach((entry) => {
+          const variantName = String(entry?.variant || '').trim();
+          if (!variantName) return;
+          const variantKey = variantName.toLowerCase();
+          const normalizedHomeLocation = normalizeShoppingHomeLocationId(entry?.homeLocation || 'none');
+          const existing = seenVariantHomes.get(variantKey);
+          if (existing) {
+            if (existing.homeLocation === 'none' && normalizedHomeLocation !== 'none') {
+              existing.homeLocation = normalizedHomeLocation;
+            }
+            return;
+          }
+          const nextEntry = {
+            variant: variantName,
+            homeLocation: normalizedHomeLocation,
+          };
+          seenVariantHomes.set(variantKey, nextEntry);
+        });
+        item.variantHomeLocations = item.variants
+          .map((variantName) => seenVariantHomes.get(String(variantName || '').trim().toLowerCase()))
+          .filter(Boolean);
+      } else {
+        item.variantHomeLocations = [];
+      }
 
       item.isDeprecated =
         Array.isArray(item._deprecatedFlags) && item._deprecatedFlags.length > 0
@@ -4315,6 +4479,7 @@ async function loadShoppingPage() {
       delete item._deprecatedFlags;
       delete item._hiddenFlags;
       delete item._homeLocations;
+      delete item._variantHomeLocations;
       delete item._foodFlags;
       delete item._lemmas;
       delete item._pluralByDefaultFlags;
@@ -4877,6 +5042,8 @@ async function loadShoppingPage() {
   };
 
   const normalizeLocationForChip = (raw) => normalizeShoppingHomeLocationId(raw);
+  const getShoppingRowLocationIdsForBrowse = (item) =>
+    getShoppingBrowseLocationIds(item).map((locationId) => normalizeLocationForChip(locationId));
 
   const recomputeShoppingChipCounts = () => {
     const counts = new Map();
@@ -4905,8 +5072,9 @@ async function loadShoppingPage() {
       if (item && item.isFood === false) {
         counts.set('not food', (counts.get('not food') || 0) + 1);
       }
-      const locId = normalizeLocationForChip(item?.locationAtHome);
-      counts.set(locId, (counts.get(locId) || 0) + 1);
+      getShoppingRowLocationIdsForBrowse(item).forEach((locId) => {
+        counts.set(locId, (counts.get(locId) || 0) + 1);
+      });
       if (Number(item?.recipeUseCount || 0) <= 0) {
         counts.set('no recipe', (counts.get('no recipe') || 0) + 1);
       }
@@ -4964,9 +5132,11 @@ async function loadShoppingPage() {
         : notFoodOnly
           ? item?.isFood === false
           : true;
-      const locationId = normalizeLocationForChip(item?.locationAtHome);
       const matchesLocation =
-        activeLocationIds.length === 0 || activeLocationIds.includes(locationId);
+        activeLocationIds.length === 0 ||
+        getShoppingRowLocationIdsForBrowse(item).some((locationId) =>
+          activeLocationIds.includes(locationId),
+        );
       const matchesNoRecipe = noRecipeOnly ? Number(item?.recipeUseCount || 0) <= 0 : true;
       const matchesNoAisle = noAisleOnly ? Number(item?.aisleUseCount || 0) <= 0 : true;
       const matchesSelected = selectedOnly
@@ -5607,17 +5777,30 @@ async function loadShoppingPage() {
       if (qty > 0 || isExpanded) {
         if (icon) icon.style.display = 'none';
         if (stepper) stepper.style.display = '';
-        if (qtyEl) qtyEl.textContent = String(qty);
+        if (qtyEl) {
+          qtyEl.textContent =
+            typeof window.formatShoppingQtyForDisplay === 'function'
+              ? window.formatShoppingQtyForDisplay(qty)
+              : String(qty);
+        }
       } else {
         if (icon) icon.style.display = '';
         if (stepper) stepper.style.display = 'none';
       }
     };
 
+    const getShoppingBrowseDisplayName = (item) =>
+      formatShoppingBrowseItemLabel(getShoppingItemDisplayName(item), item, {
+        searchQuery: searchInput?.value || '',
+        locationIds: getActiveShoppingLocationFilterIds(),
+      });
+
     items.forEach((item) => {
       const li = document.createElement('li');
       const baseName = String(item?.name || '').trim();
-      const displayName = getShoppingItemDisplayName(item);
+      const baseDisplayName = getShoppingItemDisplayName(item);
+      const displayName = getShoppingBrowseDisplayName(item);
+      const hasVariantDisplayHint = displayName !== baseDisplayName;
       const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
       const webSelectMode = isShoppingWebSelectMode();
       if (Number.isFinite(Number(item?.id)) && Number(item.id) > 0) {
@@ -5659,7 +5842,11 @@ async function loadShoppingPage() {
           if (expanded) {
             labelSpan.textContent = `${displayName} \u25B4`;
             if (totalQty > 0) {
-              badge.textContent = `${totalQty}x`;
+              const label =
+                typeof window.formatShoppingQtyForDisplay === 'function'
+                  ? window.formatShoppingQtyForDisplay(totalQty)
+                  : String(totalQty);
+              badge.textContent = `${label}x`;
               badge.style.visibility = 'visible';
             } else {
               badge.textContent = '';
@@ -5667,7 +5854,11 @@ async function loadShoppingPage() {
             }
           } else {
             if (totalQty > 0) {
-              badge.textContent = `${totalQty}x`;
+              const label =
+                typeof window.formatShoppingQtyForDisplay === 'function'
+                  ? window.formatShoppingQtyForDisplay(totalQty)
+                  : String(totalQty);
+              badge.textContent = `${label}x`;
               badge.style.visibility = 'visible';
             } else {
               badge.textContent = '';
@@ -5675,8 +5866,12 @@ async function loadShoppingPage() {
             }
             requestAnimationFrame(() => {
               try {
+                if (hasVariantDisplayHint) {
+                  labelSpan.textContent = `${displayName} \u25BE`;
+                  return;
+                }
                 const qtyMap = getVariantQtyMap(baseName, item.variants);
-                const nextText = buildLineToFit(li, displayName, item.variants, qtyMap);
+                const nextText = buildLineToFit(li, baseDisplayName, item.variants, qtyMap);
                 labelSpan.textContent = `${nextText} \u25BE`;
               } catch (_) {}
             });
@@ -5978,10 +6173,15 @@ async function loadShoppingPage() {
         try {
           requestAnimationFrame(() => {
             try {
+              if (hasVariantDisplayHint) {
+                labelSpan.textContent = displayName;
+                li.title = `${displayName}\n\nAll variants: ${item.variants.join(', ')}`;
+                return;
+              }
               const qtyMap = isShoppingWebSelectMode()
                 ? getVariantQtyMap(baseName, item.variants)
                 : null;
-              const nextText = buildLineToFit(li, displayName, item.variants, qtyMap);
+              const nextText = buildLineToFit(li, baseDisplayName, item.variants, qtyMap);
               labelSpan.textContent = nextText;
               li.title = `${displayName}\n\nAll variants: ${item.variants.join(', ')}`;
             } catch (_) {}
@@ -6910,6 +7110,95 @@ function normalizeShoppingHomeLocationId(raw) {
     : 'none';
 }
 
+function normalizeIngredientVariantRows(rows, options = {}) {
+  const fallbackBaseHome = normalizeShoppingHomeLocationId(options?.fallbackBaseHome || 'none');
+  const namedRows = [];
+  const namedRowsByKey = new Map();
+  let baseRow = null;
+
+  (Array.isArray(rows) ? rows : []).forEach((rawRow) => {
+    const row = rawRow && typeof rawRow === 'object' ? rawRow : {};
+    const isBase = !!row.isBase || isIngredientBaseVariantName(row.value);
+    const normalizedHome = normalizeShoppingHomeLocationId(
+      row.homeLocation != null
+        ? row.homeLocation
+        : row.home != null
+          ? row.home
+          : isBase
+            ? fallbackBaseHome
+            : 'none',
+    );
+
+    if (isBase) {
+      if (!baseRow) {
+        baseRow = {
+          isBase: true,
+          value: '',
+          homeLocation: normalizedHome,
+        };
+      } else if (baseRow.homeLocation === 'none' && normalizedHome !== 'none') {
+        baseRow.homeLocation = normalizedHome;
+      }
+      return;
+    }
+
+    const normalizedValue = normalizeNamedIngredientVariant(row.value);
+    if (!normalizedValue) return;
+    const rowKey = normalizedValue.toLowerCase();
+    const existing = namedRowsByKey.get(rowKey);
+    if (existing) {
+      if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
+        existing.homeLocation = normalizedHome;
+      }
+      return;
+    }
+
+    const normalizedRow = {
+      isBase: false,
+      value: normalizedValue,
+      homeLocation: normalizedHome,
+    };
+    namedRowsByKey.set(rowKey, normalizedRow);
+    namedRows.push(normalizedRow);
+  });
+
+  return [baseRow || { isBase: true, value: '', homeLocation: fallbackBaseHome }, ...namedRows];
+}
+
+function serializeIngredientVariantRows(rows, options = {}) {
+  try {
+    return JSON.stringify(normalizeIngredientVariantRows(rows, options));
+  } catch (_) {
+    return JSON.stringify(
+      normalizeIngredientVariantRows([], {
+        fallbackBaseHome: options?.fallbackBaseHome || 'none',
+      }),
+    );
+  }
+}
+
+function parseIngredientVariantRowsSerialized(rawValue, options = {}) {
+  const fallbackBaseHome = normalizeShoppingHomeLocationId(options?.fallbackBaseHome || 'none');
+  const serialized = String(rawValue || '').trim();
+  if (!serialized) {
+    return normalizeIngredientVariantRows([], { fallbackBaseHome });
+  }
+
+  try {
+    const parsed = JSON.parse(serialized);
+    if (Array.isArray(parsed)) {
+      return normalizeIngredientVariantRows(parsed, { fallbackBaseHome });
+    }
+  } catch (_) {}
+
+  return normalizeIngredientVariantRows(
+    serialized
+      .split('\n')
+      .map((value) => ({ isBase: false, value, homeLocation: 'none' })),
+    { fallbackBaseHome },
+  );
+}
+
 function getShoppingListSourceBaseKey(sourceKey) {
   const normalized = String(sourceKey || '').trim().toLowerCase();
   if (!normalized) return '';
@@ -7514,42 +7803,52 @@ async function loadShoppingListPage() {
         const result = db.exec(
           `
             SELECT lower(trim(i.name)) AS name_key,
-                   (SELECT COALESCE(iv_base.home_location, 'none')
-                      FROM ingredient_variants iv_base
-                     WHERE iv_base.ingredient_id = i.ID
-                       AND ${getIngredientBaseVariantWhereSql('iv_base.variant')}
-                     ORDER BY
-                       CASE
-                         WHEN lower(trim(COALESCE(iv_base.variant, ''))) = '${INGREDIENT_BASE_VARIANT_NAME}'
-                           THEN 0
-                         ELSE 1
-                       END,
-                       iv_base.id ASC
-                     LIMIT 1) AS home_location
+                   COALESCE(iv.variant, '') AS variant_name,
+                   COALESCE(iv.home_location, 'none') AS home_location
               FROM ingredients i
+              LEFT JOIN ingredient_variants iv ON iv.ingredient_id = i.ID
              WHERE lower(trim(i.name)) IN (${placeholders})
-             ORDER BY i.ID ASC;
+             ORDER BY
+               i.ID ASC,
+               COALESCE(iv.sort_order, 999999) ASC,
+               COALESCE(iv.id, 999999) ASC;
           `,
           baseNameKeys,
         );
-        const locationByNameKey = new Map();
+        const locationBySourceKey = new Map();
         if (Array.isArray(result) && result.length && Array.isArray(result[0].values)) {
-          result[0].values.forEach(([nameKey, rawLocation]) => {
+          result[0].values.forEach(([nameKey, variantName, rawLocation]) => {
             const normalizedNameKey = String(nameKey || '').trim().toLowerCase();
-            if (!normalizedNameKey || locationByNameKey.has(normalizedNameKey)) return;
-            locationByNameKey.set(
-              normalizedNameKey,
-              normalizeShoppingHomeLocationId(rawLocation),
-            );
+            if (!normalizedNameKey) return;
+            const normalizedVariant = normalizeNamedIngredientVariant(variantName).toLowerCase();
+            const sourceKey = normalizedVariant
+              ? `${normalizedNameKey}${SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP}${normalizedVariant}`
+              : normalizedNameKey;
+            const normalizedLocation = normalizeShoppingHomeLocationId(rawLocation);
+            if (!locationBySourceKey.has(sourceKey)) {
+              locationBySourceKey.set(sourceKey, normalizedLocation);
+              return;
+            }
+            if (
+              locationBySourceKey.get(sourceKey) === 'none' &&
+              normalizedLocation !== 'none'
+            ) {
+              locationBySourceKey.set(sourceKey, normalizedLocation);
+            }
           });
         }
         sourceKeys.forEach((sourceKey) => {
-          const baseKey = getShoppingListSourceBaseKey(sourceKey);
+          const normalizedSourceKey = String(sourceKey || '').trim().toLowerCase();
+          if (normalizedSourceKey && locationBySourceKey.has(normalizedSourceKey)) {
+            nextMap.set(
+              sourceKey,
+              normalizeShoppingHomeLocationId(locationBySourceKey.get(normalizedSourceKey)),
+            );
+            return;
+          }
+          const baseKey = getShoppingListSourceBaseKey(normalizedSourceKey);
           if (!baseKey) return;
-          nextMap.set(
-            sourceKey,
-            normalizeShoppingHomeLocationId(locationByNameKey.get(baseKey) || 'none'),
-          );
+          nextMap.set(sourceKey, normalizeShoppingHomeLocationId(locationBySourceKey.get(baseKey)));
         });
       } catch (_) {}
     }
@@ -7582,6 +7881,11 @@ async function loadShoppingListPage() {
         .filter((row) => String(row?.key || '').trim())
         .map((row) => [String(row.key || '').trim(), row]),
     );
+    const planRowKeysSample = [...planRowsByKey.keys()].slice(0, 8);
+    console.log('[shopping list checklist] planRowsByKey', {
+      size: planRowsByKey.size,
+      sampleKeys: planRowKeysSample,
+    });
     const shoppingNavKeys =
       window.favoriteEatsSessionKeys && typeof window.favoriteEatsSessionKeys === 'object'
         ? window.favoriteEatsSessionKeys
@@ -7607,6 +7911,9 @@ async function loadShoppingListPage() {
     const visibleRows = isSearchActive
       ? displayRows
       : filterShoppingListChecklistRowsForCollapse(displayRows, collapsedShoppingListSections);
+
+    let shoppingListChecklistItemDebugCount = 0;
+    const SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX = 12;
 
     visibleRows.forEach((row) => {
       const li = document.createElement('li');
@@ -7657,8 +7964,7 @@ async function loadShoppingListPage() {
       const isPendingChecked = pendingCheckedRowIds.has(String(row?.id || ''));
       li.classList.toggle('shopping-list-doc-item--checked', !!row?.checked || isPendingChecked);
       const sourceKey = String(row?.sourceKey || '').trim();
-      const planRow =
-        sourceKey && !row?.userEdited ? planRowsByKey.get(sourceKey) || null : null;
+      const planRow = sourceKey ? planRowsByKey.get(sourceKey) || null : null;
       const contributionRows = Array.isArray(planRow?.contributionRows)
         ? planRow.contributionRows.filter(Boolean)
         : [];
@@ -7666,6 +7972,24 @@ async function loadShoppingListPage() {
         (entry) => String(entry?.sourceType || '') === 'recipe',
       );
       const supportsExpansion = !!sourceKey && !!planRow && hasRecipeContributions;
+      if (shoppingListChecklistItemDebugCount < SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
+        shoppingListChecklistItemDebugCount += 1;
+        console.log('[shopping list checklist] row', {
+          sourceKey: JSON.stringify(sourceKey),
+          planRow: !!planRow,
+          hasRecipeContributions,
+          supportsExpansion,
+          rowTextSample: String(row?.text || '').trim().slice(0, 80),
+        });
+      } else if (shoppingListChecklistItemDebugCount === SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
+        shoppingListChecklistItemDebugCount += 1;
+        const totalItems = visibleRows.filter((r) => r?.rowType !== 'section').length;
+        if (totalItems > SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
+          console.log(
+            `[shopping list checklist] … ${totalItems - SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX} more item rows (omit per-row debug)`,
+          );
+        }
+      }
       const isExpanded = supportsExpansion && expandedShoppingListContributionRows.has(sourceKey);
 
       const checkbox = document.createElement('button');
@@ -7766,7 +8090,7 @@ async function loadShoppingListPage() {
         const headline = document.createElement('div');
         headline.className = 'shopping-list-doc-headline';
 
-        if (planRow) {
+        if (planRow && !row?.userEdited) {
           const ingredientLink = document.createElement('a');
           ingredientLink.href = 'shopping.html';
           ingredientLink.className = 'shopping-list-doc-link';
@@ -8702,33 +9026,23 @@ function loadShoppingItemEditorPage() {
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleText || ''}</h1>
     <div class="shopping-item-editor-card" aria-label="Shopping item">
-      <div class="shopping-item-field">
-        <div class="shopping-item-label">Variants</div>
-        <input id="shoppingItemVariantsHiddenInput" type="hidden" />
+      <div class="shopping-item-field shopping-item-variant-field">
+        <div class="shopping-item-label">Variant</div>
+        <input id="shoppingItemVariantRowsHiddenInput" type="hidden" />
         <div
           id="shoppingItemVariantEditor"
           class="shopping-item-variant-editor"
           aria-label="Item variants"
         >
-          <div class="shopping-item-variant-header" aria-hidden="true">
-            <span>Variant</span>
-          </div>
           <div
             id="shoppingItemVariantRows"
             class="shopping-item-variant-rows"
             role="group"
             aria-label="Variant rows"
           ></div>
-          <button
-            id="shoppingItemAddVariantBtn"
-            class="shopping-item-add-row-btn"
-            type="button"
-          >
-            Add variant
-          </button>
         </div>
         <div class="shopping-item-help">
-          Base item is always present. Home location below applies to Base item for now.
+          Base item is always present. Named variants are optional.
         </div>
       </div>
 
@@ -8750,16 +9064,6 @@ function loadShoppingItemEditorPage() {
           placeholder="e.g. 12oz can"
           wrap="off"
         ></textarea>
-      </div>
-
-      <div class="shopping-item-field">
-        <div class="shopping-item-label">Base item home location</div>
-        <input
-          id="shoppingItemHomeInput"
-          class="shopping-item-input"
-          type="text"
-          placeholder="e.g. fridge, freezer, pantry"
-        />
       </div>
 
       <div class="shopping-item-status">
@@ -8840,177 +9144,728 @@ function loadShoppingItemEditorPage() {
     </div>
   `;
 
-  const variantHiddenInput = document.getElementById('shoppingItemVariantsHiddenInput');
+  const variantRowsHiddenInput = document.getElementById('shoppingItemVariantRowsHiddenInput');
   const variantRowsEl = document.getElementById('shoppingItemVariantRows');
-  const addVariantBtn = document.getElementById('shoppingItemAddVariantBtn');
+  const editorTitleEl = document.getElementById('childEditorTitle');
   let variantRowsDraft = [];
   let variantRowsBaselineSignature = '';
   let refreshVariantEditorDirty = () => {};
+  let pendingVariantCellFocus = null;
+  let variantActionDialogOpen = false;
 
   const getVariantRowsSignature = (rows) =>
-    (Array.isArray(rows) ? rows : [])
+    normalizeIngredientVariantRows(Array.isArray(rows) ? rows : [])
       .map((row) => {
-        if (row?.isBase) return 'base';
-        return `variant:${String(row?.value || '')}`;
+        const homeLocation = normalizeShoppingHomeLocationId(row?.homeLocation || 'none');
+        if (row?.isBase) return `base:${homeLocation}`;
+        return `variant:${String(row?.value || '')}:${homeLocation}`;
       })
       .join('\n');
 
-  const getNamedVariantValuesFromRows = (rows) =>
+  const getNamedVariantRowsFromDraft = (rows) =>
     (Array.isArray(rows) ? rows : [])
       .filter((row) => row && !row.isBase)
-      .map((row) => String(row.value || '').trim())
-      .filter(Boolean);
+      .map((row) => ({
+        isBase: false,
+        value: normalizeNamedIngredientVariant(row.value),
+        homeLocation: normalizeShoppingHomeLocationId(row.homeLocation || 'none'),
+      }))
+      .filter((row) => row.value);
+
+  const getVariantRowsForEditing = (rows) => normalizeIngredientVariantRows(rows);
+  const ensureBaseVariantRowPresent = () => {
+    if (variantRowsDraft[0]?.isBase) return;
+    const existingBaseRow = variantRowsDraft.find((row) => row?.isBase);
+    const baseHomeLocation = normalizeShoppingHomeLocationId(
+      existingBaseRow?.homeLocation || 'none',
+    );
+    variantRowsDraft = [
+      { isBase: true, value: '', homeLocation: baseHomeLocation },
+      ...variantRowsDraft.filter((row) => row && !row.isBase),
+    ];
+  };
+  const homeLocationDefsForEditor = SHOPPING_LIST_HOME_LOCATION_DEFS.filter(
+    (locationDef) => normalizeShoppingHomeLocationId(locationDef?.id || 'none') !== 'none',
+  );
+  const homeLocationLabelById = new Map();
+  const homeLocationIdByLookupKey = new Map();
+  homeLocationDefsForEditor.forEach((locationDef) => {
+    const normalizedId = normalizeShoppingHomeLocationId(locationDef?.id || 'none');
+    if (normalizedId === 'none') return;
+    const label = String(locationDef?.label || normalizedId).trim() || normalizedId;
+    homeLocationLabelById.set(normalizedId, label);
+    homeLocationIdByLookupKey.set(normalizedId, normalizedId);
+    homeLocationIdByLookupKey.set(label.toLowerCase(), normalizedId);
+  });
+
+  const getCurrentItemNameForBaseRow = () => {
+    const raw = String(editorTitleEl?.textContent || titleText || storedName || 'item').trim();
+    return raw || 'item';
+  };
+
+  const getHomeLocationDisplayText = (homeLocationId) => {
+    const normalizedId = normalizeShoppingHomeLocationId(homeLocationId || 'none');
+    if (normalizedId === 'none') return '';
+    return homeLocationLabelById.get(normalizedId) || normalizedId;
+  };
+
+  const resolveHomeLocationIdFromInput = (rawValue) => {
+    const normalized = String(rawValue || '').trim().toLowerCase();
+    if (!normalized) return 'none';
+    return homeLocationIdByLookupKey.get(normalized) || '';
+  };
 
   const syncVariantHiddenInput = ({ emit = false } = {}) => {
-    if (!variantHiddenInput) return;
-    variantHiddenInput.value = getNamedVariantValuesFromRows(variantRowsDraft).join('\n');
-    if (!emit) return;
+    if (!variantRowsHiddenInput) return;
+    const nextValue = serializeIngredientVariantRows(variantRowsDraft);
+    const previousValue = String(variantRowsHiddenInput.value || '');
+    variantRowsHiddenInput.value = nextValue;
+    if (!emit || nextValue === previousValue) return;
     try {
-      variantHiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-      variantHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      variantRowsHiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+      variantRowsHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (_) {}
     refreshVariantEditorDirty();
   };
 
-  const moveVariantFocusToIndex = (index) => {
-    if (!variantRowsEl) return;
-    const inputs = Array.from(
-      variantRowsEl.querySelectorAll('.shopping-item-variant-name-input'),
-    );
-    const target = inputs[Math.max(0, Math.min(inputs.length - 1, index))];
-    if (!target) return;
-    try {
-      target.focus();
-      target.select();
-    } catch (_) {}
+  const setPendingVariantCellFocus = (rowIndex, column, options = {}) => {
+    pendingVariantCellFocus = {
+      rowIndex: Math.max(0, Number(rowIndex) || 0),
+      column: column === 'home' ? 'home' : 'variant',
+      caretAtStart: options?.caretAtStart !== false,
+      openTypeahead: !!options?.openTypeahead,
+    };
   };
 
-  const renderVariantRows = ({ focusIndex = null } = {}) => {
+  const removeEmptyNamedVariantRows = () => {
+    const baseRow =
+      variantRowsDraft.find((row) => row?.isBase) || {
+        isBase: true,
+        value: '',
+        homeLocation: 'none',
+      };
+    const namedRows = variantRowsDraft
+      .filter((row) => row && !row.isBase)
+      .filter((row) => String(row?.value || '').trim())
+      .map((row) => ({
+        isBase: false,
+        value: String(row?.value || ''),
+        homeLocation: normalizeShoppingHomeLocationId(row?.homeLocation || 'none'),
+      }));
+    variantRowsDraft = [
+      {
+        isBase: true,
+        value: '',
+        homeLocation: normalizeShoppingHomeLocationId(baseRow.homeLocation || 'none'),
+      },
+      ...namedRows,
+    ];
+  };
+
+  const ensureNamedVariantRowAt = (rowIndex) => {
+    ensureBaseVariantRowPresent();
+    const desiredIndex = Math.max(1, Number(rowIndex) || 1);
+    while (variantRowsDraft.length <= desiredIndex) {
+      variantRowsDraft.push({
+        isBase: false,
+        value: '',
+        homeLocation: 'none',
+      });
+    }
+    syncVariantHiddenInput({ emit: true });
+    return desiredIndex;
+  };
+
+  const insertPastedVariantRowsAt = (rowIndex, rawText) => {
+    const normalizedText = String(rawText || '').replace(/\r\n?/g, '\n');
+    if (!normalizedText.includes('\n')) return false;
+    const targetIndex = Math.max(1, Number(rowIndex) || 1);
+    const currentRow =
+      variantRowsDraft[targetIndex] && !variantRowsDraft[targetIndex].isBase
+        ? variantRowsDraft[targetIndex]
+        : { isBase: false, value: '', homeLocation: 'none' };
+    const existingKeys = new Set(
+      variantRowsDraft
+        .filter((row, index) => index !== targetIndex && row && !row.isBase)
+        .map((row) => normalizeNamedIngredientVariant(row.value).toLowerCase())
+        .filter(Boolean),
+    );
+    const pastedKeys = new Set();
+    const nextRows = [];
+    let skippedDuplicateCount = 0;
+    let skippedReservedCount = 0;
+
+    normalizedText
+      .split('\n')
+      .map((value) => String(value || '').trim())
+      .forEach((value) => {
+        if (!value) return;
+        if (isReservedIngredientVariantName(value)) {
+          skippedReservedCount += 1;
+          return;
+        }
+        const normalizedValue = normalizeNamedIngredientVariant(value);
+        if (!normalizedValue) {
+          skippedReservedCount += 1;
+          return;
+        }
+        const rowKey = normalizedValue.toLowerCase();
+        if (existingKeys.has(rowKey) || pastedKeys.has(rowKey)) {
+          skippedDuplicateCount += 1;
+          return;
+        }
+        pastedKeys.add(rowKey);
+        nextRows.push({
+          isBase: false,
+          value: normalizedValue,
+          homeLocation:
+            nextRows.length === 0
+              ? normalizeShoppingHomeLocationId(currentRow.homeLocation || 'none')
+              : 'none',
+        });
+      });
+
+    if (!nextRows.length) {
+      uiToast('No new variants to add.');
+      return true;
+    }
+
+    if (variantRowsDraft[targetIndex] && !variantRowsDraft[targetIndex].isBase) {
+      variantRowsDraft.splice(targetIndex, 1, ...nextRows);
+    } else {
+      variantRowsDraft.splice(targetIndex, 0, ...nextRows);
+    }
+    removeEmptyNamedVariantRows();
+    syncVariantHiddenInput({ emit: true });
+    renderVariantRows({
+      focusCell: {
+        rowIndex: targetIndex,
+        column: 'variant',
+        caretAtStart: true,
+      },
+    });
+
+    const detailBits = [];
+    if (skippedDuplicateCount > 0) {
+      detailBits.push(
+        `${skippedDuplicateCount} duplicate${skippedDuplicateCount === 1 ? '' : 's'} skipped`,
+      );
+    }
+    if (skippedReservedCount > 0) {
+      detailBits.push(
+        `${skippedReservedCount} reserved name${skippedReservedCount === 1 ? '' : 's'} skipped`,
+      );
+    }
+    uiToast(
+      detailBits.length
+        ? `Added ${nextRows.length} variant${nextRows.length === 1 ? '' : 's'}; ${detailBits.join(', ')}.`
+        : `Added ${nextRows.length} variant${nextRows.length === 1 ? '' : 's'}.`,
+    );
+    return true;
+  };
+
+  const moveVariantRow = (rowIndex, delta) => {
+    const currentIndex = Number(rowIndex);
+    if (!Number.isFinite(currentIndex) || currentIndex <= 0) return false;
+    const targetIndex = currentIndex + Number(delta || 0);
+    if (targetIndex <= 0 || targetIndex >= variantRowsDraft.length) return false;
+    const currentRow = variantRowsDraft[currentIndex];
+    const targetRow = variantRowsDraft[targetIndex];
+    if (!currentRow || currentRow.isBase || !targetRow || targetRow.isBase) return false;
+    variantRowsDraft.splice(currentIndex, 1);
+    variantRowsDraft.splice(targetIndex, 0, currentRow);
+    syncVariantHiddenInput({ emit: true });
+    return true;
+  };
+
+  const openVariantRowActions = async (rowIndex) => {
+    const normalizedIndex = Number(rowIndex);
+    const row = variantRowsDraft[normalizedIndex];
+    if (!row || variantActionDialogOpen) return;
+    variantActionDialogOpen = true;
+    try {
+      if (row.isBase) {
+        if (normalizeShoppingHomeLocationId(row.homeLocation || 'none') === 'none') return;
+        const ok = await uiConfirm({
+          title: 'Clear home location',
+          message: `Clear the home location for Base item (${getCurrentItemNameForBaseRow()})?`,
+          confirmText: 'Clear',
+          cancelText: 'Cancel',
+        });
+        if (!ok) return;
+        row.homeLocation = 'none';
+        syncVariantHiddenInput({ emit: true });
+        renderVariantRows({ focusCell: { rowIndex: 0, column: 'home', caretAtStart: true } });
+        return;
+      }
+
+      const variantLabel = normalizeNamedIngredientVariant(row.value) || 'variant';
+      if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
+        const choice = await window.ui.dialogThreeChoice({
+          title: variantLabel,
+          message: 'Choose an action for this row.',
+          fixText: 'Cancel',
+          discardText: 'Clear location',
+          createText: 'Delete variant',
+          dismissChoice: 'fix',
+        });
+        if (choice === 'discard') {
+          row.homeLocation = 'none';
+          syncVariantHiddenInput({ emit: true });
+          renderVariantRows({
+            focusCell: { rowIndex: normalizedIndex, column: 'home', caretAtStart: true },
+          });
+          return;
+        }
+        if (choice === 'create') {
+          variantRowsDraft.splice(normalizedIndex, 1);
+          removeEmptyNamedVariantRows();
+          syncVariantHiddenInput({ emit: true });
+          renderVariantRows({
+            focusCell: {
+              rowIndex: Math.max(1, normalizedIndex - 1),
+              column: 'variant',
+              caretAtStart: true,
+            },
+          });
+        }
+        return;
+      }
+
+      const deleteVariant = await uiConfirm({
+        title: 'Delete variant',
+        message: `Delete "${variantLabel}" and its home location?`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true,
+      });
+      if (deleteVariant) {
+        variantRowsDraft.splice(normalizedIndex, 1);
+        removeEmptyNamedVariantRows();
+        syncVariantHiddenInput({ emit: true });
+        renderVariantRows({
+          focusCell: {
+            rowIndex: Math.max(1, normalizedIndex - 1),
+            column: 'variant',
+            caretAtStart: true,
+          },
+        });
+      }
+    } finally {
+      variantActionDialogOpen = false;
+    }
+  };
+
+  const handleVariantCellContextAction = (event, rowIndex) => {
+    const isCtrlClick = !!(event && event.type === 'click' && event.ctrlKey);
+    const isCtrlContextMenu = !!(
+      event &&
+      event.type === 'contextmenu' &&
+      event.ctrlKey &&
+      Number(event.button) === 0
+    );
+    if (!isCtrlClick && !isCtrlContextMenu) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void openVariantRowActions(rowIndex);
+  };
+
+  const applyPendingVariantCellFocus = () => {
+    if (!variantRowsEl || !pendingVariantCellFocus) return;
+    const { rowIndex, column, caretAtStart, openTypeahead } = pendingVariantCellFocus;
+    pendingVariantCellFocus = null;
+    requestAnimationFrame(() => {
+      const selector =
+        column === 'home'
+          ? `.shopping-item-variant-home-input[data-row-index="${rowIndex}"]`
+          : `.shopping-item-variant-name-input[data-row-index="${rowIndex}"]`;
+      const target =
+        variantRowsEl.querySelector(selector) ||
+        variantRowsEl.querySelector(
+          column === 'home'
+            ? '.shopping-item-variant-home-input[data-row-index]'
+            : '.shopping-item-variant-name-input[data-row-index]',
+        );
+      if (!(target instanceof HTMLInputElement)) return;
+      try {
+        target.focus();
+        const caretIndex = caretAtStart ? 0 : target.value.length;
+        target.setSelectionRange(caretIndex, caretIndex);
+        if (openTypeahead) {
+          target.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              key: 'ArrowDown',
+              bubbles: true,
+            }),
+          );
+        }
+      } catch (_) {}
+    });
+  };
+
+  const renderVariantRows = ({ focusCell = null } = {}) => {
     if (!variantRowsEl) return;
+    ensureBaseVariantRowPresent();
+    if (focusCell && Number.isFinite(Number(focusCell.rowIndex))) {
+      setPendingVariantCellFocus(focusCell.rowIndex, focusCell.column, focusCell);
+    }
     variantRowsEl.innerHTML = '';
+    const gridEl = document.createElement('div');
+    gridEl.className = 'shopping-item-variant-grid';
+
+    const headerRowEl = document.createElement('div');
+    headerRowEl.className = 'shopping-item-variant-grid-row shopping-item-variant-grid-row--header';
+    headerRowEl.setAttribute('aria-hidden', 'true');
+
+    const nameHeaderEl = document.createElement('div');
+    nameHeaderEl.className = 'shopping-item-variant-header-cell';
+    nameHeaderEl.textContent = 'Name';
+
+    const homeHeaderEl = document.createElement('div');
+    homeHeaderEl.className = 'shopping-item-variant-header-cell';
+    homeHeaderEl.textContent = 'Home location';
+
+    headerRowEl.appendChild(nameHeaderEl);
+    headerRowEl.appendChild(homeHeaderEl);
+    gridEl.appendChild(headerRowEl);
+
     variantRowsDraft.forEach((row, index) => {
       const rowEl = document.createElement('div');
-      rowEl.className = row?.isBase
-        ? 'shopping-item-variant-row shopping-item-variant-row--base'
-        : 'shopping-item-variant-row';
+      rowEl.className = 'shopping-item-variant-grid-row';
+      rowEl.dataset.rowIndex = String(index);
 
       const variantCell = document.createElement('div');
-      variantCell.className = 'shopping-item-variant-cell';
+      variantCell.className = row?.isBase
+        ? 'shopping-item-variant-cell shopping-item-variant-cell--base'
+        : 'shopping-item-variant-cell shopping-item-variant-cell--variant';
+      variantCell.dataset.rowIndex = String(index);
+      variantCell.title = row?.isBase
+        ? `${getCurrentItemNameForBaseRow()} (base)`
+        : String(row?.value || '');
+      variantCell.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.ctrlKey) return;
+        const targetIndex = row?.isBase ? ensureNamedVariantRowAt(1) : index;
+        renderVariantRows({
+          focusCell: {
+            rowIndex: targetIndex,
+            column: 'variant',
+            caretAtStart: true,
+          },
+        });
+      });
+      variantCell.addEventListener('contextmenu', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
 
       if (row?.isBase) {
         const baseLabel = document.createElement('div');
-        baseLabel.className = 'shopping-item-variant-base-pill';
-        baseLabel.textContent = 'Base item';
+        baseLabel.className = 'shopping-item-variant-base-label';
+        const basePrefix = document.createElement('span');
+        basePrefix.className = 'shopping-item-variant-base-prefix';
+        basePrefix.textContent = getCurrentItemNameForBaseRow();
+        const baseName = document.createElement('span');
+        baseName.className = 'shopping-item-variant-base-name';
+        baseName.textContent = ' (base)';
+        baseLabel.appendChild(basePrefix);
+        baseLabel.appendChild(baseName);
         variantCell.appendChild(baseLabel);
       } else {
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'shopping-item-input shopping-item-variant-name-input';
-        input.placeholder = 'e.g. brand or kind';
+        input.className = 'shopping-item-variant-name-input';
+        input.dataset.rowIndex = String(index);
+        input.dataset.committedValue = String(row?.value || '');
+        input.placeholder = '';
         input.value = String(row?.value || '');
-        input.setAttribute('aria-label', `Variant ${index}`);
-
+        input.setAttribute(
+          'aria-label',
+          String(row?.value || '').trim()
+            ? `Variant ${index}`
+            : `Variant row ${index}`,
+        );
         input.addEventListener('input', () => {
           variantRowsDraft[index].value = input.value;
           syncVariantHiddenInput({ emit: true });
+          input.title = input.value;
         });
-
         input.addEventListener('paste', (event) => {
-          try {
-            const cd = event.clipboardData || window.clipboardData;
-            if (!cd || typeof cd.getData !== 'function') return;
-            const raw = cd.getData('text/plain');
-            if (typeof raw !== 'string' || raw.indexOf('\n') === -1) return;
-            const lines = raw
-              .replace(/\r\n?/g, '\n')
-              .split('\n')
-              .map((value) => String(value || '').trim())
-              .filter(Boolean);
-            if (!lines.length) return;
-            event.preventDefault();
-            variantRowsDraft[index].value = lines[0];
-            const extraRows = lines.slice(1).map((value) => ({ isBase: false, value }));
-            if (extraRows.length) {
-              variantRowsDraft.splice(index + 1, 0, ...extraRows);
-            }
-            syncVariantHiddenInput({ emit: true });
-            renderVariantRows({ focusIndex: index + extraRows.length });
-          } catch (_) {}
+          const clipboard = event.clipboardData || window.clipboardData;
+          const pastedText =
+            clipboard?.getData?.('text/plain') ||
+            clipboard?.getData?.('Text') ||
+            '';
+          if (!String(pastedText || '').match(/[\r\n]/)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          insertPastedVariantRowsAt(index, pastedText);
         });
-
         input.addEventListener('keydown', (event) => {
+          if (event.metaKey && !event.ctrlKey && !event.altKey) {
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              event.stopPropagation();
+              const moved = moveVariantRow(index, event.key === 'ArrowDown' ? 1 : -1);
+              if (moved) {
+                renderVariantRows({
+                  focusCell: {
+                    rowIndex: Math.max(1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+                    column: 'variant',
+                    caretAtStart: true,
+                  },
+                });
+              }
+              return;
+            }
+          }
           if (event.key === 'Enter') {
             event.preventDefault();
-            variantRowsDraft.splice(index + 1, 0, { isBase: false, value: '' });
-            syncVariantHiddenInput({ emit: true });
-            renderVariantRows({ focusIndex: index + 1 });
+            event.stopPropagation();
+            if (event.shiftKey) {
+              const targetIndex = ensureNamedVariantRowAt(index + 1);
+              renderVariantRows({
+                focusCell: {
+                  rowIndex: targetIndex,
+                  column: 'variant',
+                  caretAtStart: true,
+                },
+              });
+              return;
+            }
+            input.blur();
             return;
           }
-          if (
-            event.key === 'Backspace' &&
-            String(input.value || '').trim() === '' &&
-            variantRowsDraft.filter((entry) => !entry.isBase).length > 1
-          ) {
+          if (event.key === 'Backspace' && String(input.value || '').trim() === '') {
             event.preventDefault();
+            event.stopPropagation();
             variantRowsDraft.splice(index, 1);
+            removeEmptyNamedVariantRows();
             syncVariantHiddenInput({ emit: true });
-            renderVariantRows({ focusIndex: index - 1 });
+            renderVariantRows({
+              focusCell: {
+                rowIndex: Math.max(1, index - 1),
+                column: 'variant',
+                caretAtStart: true,
+              },
+            });
           }
         });
-
+        input.addEventListener('blur', () => {
+          const previousCommittedValue = String(input.dataset.committedValue || '').trim();
+          const normalizedValue = normalizeNamedIngredientVariant(input.value);
+          if (!normalizedValue) {
+            variantRowsDraft.splice(index, 1);
+            removeEmptyNamedVariantRows();
+            syncVariantHiddenInput({ emit: true });
+            renderVariantRows();
+            return;
+          }
+          const duplicateIndex = variantRowsDraft.findIndex(
+            (entry, entryIndex) =>
+              entryIndex !== index &&
+              entry &&
+              !entry.isBase &&
+              normalizeNamedIngredientVariant(entry.value).toLowerCase() ===
+                normalizedValue.toLowerCase(),
+          );
+          if (duplicateIndex !== -1) {
+            uiToast('That variant already exists.');
+            if (!previousCommittedValue) {
+              variantRowsDraft.splice(index, 1);
+              removeEmptyNamedVariantRows();
+              syncVariantHiddenInput({ emit: true });
+              renderVariantRows({
+                focusCell: {
+                  rowIndex: duplicateIndex,
+                  column: 'variant',
+                  caretAtStart: true,
+                },
+              });
+              return;
+            }
+            variantRowsDraft[index].value = previousCommittedValue;
+            syncVariantHiddenInput({ emit: true });
+            renderVariantRows({
+              focusCell: {
+                rowIndex: index,
+                column: 'variant',
+                caretAtStart: true,
+              },
+            });
+            return;
+          }
+          variantRowsDraft[index].value = normalizedValue;
+          input.value = normalizedValue;
+          input.dataset.committedValue = normalizedValue;
+          input.title = normalizedValue;
+          syncVariantHiddenInput({ emit: true });
+        });
+        input.addEventListener('click', (event) => {
+          if (event.ctrlKey) return;
+          event.stopPropagation();
+        });
+        input.addEventListener('contextmenu', (event) =>
+          handleVariantCellContextAction(event, index),
+        );
+        input.addEventListener('click', (event) => handleVariantCellContextAction(event, index));
         variantCell.appendChild(input);
       }
 
-      rowEl.appendChild(variantCell);
-
-      const actionCell = document.createElement('div');
-      actionCell.className = 'shopping-item-variant-actions';
-      if (row?.isBase) {
-        const baseMeta = document.createElement('span');
-        baseMeta.className = 'shopping-item-variant-meta';
-        baseMeta.textContent = 'Always present';
-        actionCell.appendChild(baseMeta);
-      } else {
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'shopping-item-variant-remove-btn';
-        removeBtn.textContent = 'Remove';
-        removeBtn.setAttribute('aria-label', `Remove variant ${index}`);
-        removeBtn.addEventListener('click', () => {
-          variantRowsDraft.splice(index, 1);
-          syncVariantHiddenInput({ emit: true });
-          renderVariantRows({ focusIndex: index - 1 });
+      const homeCell = document.createElement('div');
+      homeCell.className = 'shopping-item-variant-cell shopping-item-variant-cell--home';
+      homeCell.dataset.rowIndex = String(index);
+      homeCell.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.ctrlKey) return;
+        renderVariantRows({
+          focusCell: {
+            rowIndex: index,
+            column: 'home',
+            caretAtStart: true,
+            openTypeahead: true,
+          },
         });
-        actionCell.appendChild(removeBtn);
+      });
+      homeCell.addEventListener('contextmenu', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
+
+      const homeInput = document.createElement('input');
+      homeInput.type = 'text';
+      homeInput.className = 'shopping-item-variant-home-input';
+      homeInput.dataset.rowIndex = String(index);
+      homeInput.dataset.committedValue = getHomeLocationDisplayText(row?.homeLocation || 'none');
+      homeInput.value = getHomeLocationDisplayText(row?.homeLocation || 'none');
+      homeInput.placeholder = '';
+      homeInput.title = homeInput.value;
+      homeInput.setAttribute(
+        'aria-label',
+        row?.isBase
+          ? `Home location for Base item`
+          : `Home location for ${normalizeNamedIngredientVariant(row?.value) || 'variant'}`,
+      );
+      if (window.favoriteEatsTypeahead && typeof window.favoriteEatsTypeahead.attach === 'function') {
+        window.favoriteEatsTypeahead.attach({
+          inputEl: homeInput,
+          getPool: async () => homeLocationDefsForEditor.map((entry) => String(entry.label || entry.id)),
+          getItems: (pool, query) => {
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            const items = (Array.isArray(pool) ? pool : [])
+              .map((value) => String(value || '').trim())
+              .filter(Boolean);
+            if (!normalizedQuery) return items;
+            return items.filter((value) => value.toLowerCase().includes(normalizedQuery));
+          },
+          openOnFocus: true,
+          pickOnEnterWhenQueryEmpty: false,
+        });
       }
-      rowEl.appendChild(actionCell);
-      variantRowsEl.appendChild(rowEl);
+      homeInput.addEventListener('input', () => {
+        homeInput.title = homeInput.value;
+        const liveMatch = resolveHomeLocationIdFromInput(homeInput.value);
+        if (!liveMatch) return;
+        variantRowsDraft[index].homeLocation = liveMatch;
+        syncVariantHiddenInput({ emit: true });
+      });
+      homeInput.addEventListener('keydown', (event) => {
+        if (event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            event.stopPropagation();
+            const moved = moveVariantRow(index, event.key === 'ArrowDown' ? 1 : -1);
+            if (moved) {
+              renderVariantRows({
+                focusCell: {
+                  rowIndex: Math.max(1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+                  column: 'home',
+                  caretAtStart: true,
+                  openTypeahead: true,
+                },
+              });
+            }
+            return;
+          }
+        }
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.shiftKey) {
+          const nextIndex = index + 1;
+          if (nextIndex < variantRowsDraft.length) {
+            renderVariantRows({
+              focusCell: {
+                rowIndex: nextIndex,
+                column: 'home',
+                caretAtStart: true,
+                openTypeahead: true,
+              },
+            });
+            return;
+          }
+        }
+        window.setTimeout(() => {
+          try {
+            homeInput.blur();
+          } catch (_) {}
+        }, 0);
+      });
+      homeInput.addEventListener('blur', () => {
+        const rawValue = String(homeInput.value || '').trim();
+        const normalizedHomeLocation = resolveHomeLocationIdFromInput(rawValue);
+        if (!rawValue) {
+          variantRowsDraft[index].homeLocation = 'none';
+          homeInput.value = '';
+          homeInput.dataset.committedValue = '';
+          homeInput.title = '';
+          syncVariantHiddenInput({ emit: true });
+          return;
+        }
+        if (!normalizedHomeLocation) {
+          uiToast('Choose a known home location.');
+          homeInput.value = String(homeInput.dataset.committedValue || '');
+          homeInput.title = homeInput.value;
+          return;
+        }
+        variantRowsDraft[index].homeLocation = normalizedHomeLocation;
+        homeInput.value = getHomeLocationDisplayText(normalizedHomeLocation);
+        homeInput.dataset.committedValue = homeInput.value;
+        homeInput.title = homeInput.value;
+        syncVariantHiddenInput({ emit: true });
+      });
+      homeInput.addEventListener('click', (event) => {
+        if (event.ctrlKey) return;
+        event.stopPropagation();
+      });
+      homeInput.addEventListener('contextmenu', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
+      homeInput.addEventListener('click', (event) => handleVariantCellContextAction(event, index));
+      homeCell.appendChild(homeInput);
+
+      rowEl.appendChild(variantCell);
+      rowEl.appendChild(homeCell);
+      gridEl.appendChild(rowEl);
     });
 
-    if (focusIndex != null) {
-      requestAnimationFrame(() => moveVariantFocusToIndex(focusIndex));
-    }
+    variantRowsEl.appendChild(gridEl);
+    applyPendingVariantCellFocus();
   };
 
   const setVariantRowsFromSerialized = (rawValue) => {
-    const namedRows = String(rawValue || '')
-      .split('\n')
-      .map((value) => String(value || '').trim())
-      .filter(Boolean)
-      .map((value) => ({ isBase: false, value }));
-    variantRowsDraft = [{ isBase: true, value: '' }, ...namedRows];
+    variantRowsDraft = getVariantRowsForEditing(parseIngredientVariantRowsSerialized(rawValue));
     syncVariantHiddenInput({ emit: false });
     renderVariantRows();
   };
 
-  if (addVariantBtn) {
-    addVariantBtn.addEventListener('click', () => {
-      variantRowsDraft.push({ isBase: false, value: '' });
-      syncVariantHiddenInput({ emit: true });
-      renderVariantRows({
-        focusIndex: variantRowsDraft.filter((row) => !row.isBase).length - 1,
-      });
+  if (editorTitleEl) {
+    editorTitleEl.addEventListener('input', () => {
+      renderVariantRows();
     });
+    editorTitleEl.addEventListener(
+      'blur',
+      () => {
+        renderVariantRows();
+      },
+      true,
+    );
   }
 
   attachEditorTextareaAutoGrow(
@@ -9069,11 +9924,18 @@ function loadShoppingItemEditorPage() {
     try {
       const idStr = sessionStorage.getItem('selectedShoppingItemId');
       const id = Number(idStr);
-      const variantsText = (extraValues && extraValues.variants) || '';
+      const variantRowsText =
+        (extraValues && extraValues.variant_rows) || (extraValues && extraValues.variants) || '';
       const sizesText = (extraValues && extraValues.sizes) || '';
       const synonymsText = (extraValues && extraValues.synonyms) || '';
       const home = (extraValues && extraValues.home) || '';
-      const normalizedBaseHomeLocation = normalizeShoppingHomeLocationId(home);
+      const normalizedVariantRows = parseIngredientVariantRowsSerialized(variantRowsText, {
+        fallbackBaseHome: home,
+      });
+      const namedVariantRows = getNamedVariantRowsFromDraft(normalizedVariantRows);
+      const normalizedBaseHomeLocation = normalizeShoppingHomeLocationId(
+        normalizedVariantRows.find((row) => row?.isBase)?.homeLocation || home || 'none',
+      );
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
       const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
       const isHiddenRaw = (extraValues && extraValues.is_hidden) || '';
@@ -9104,7 +9966,7 @@ function loadShoppingItemEditorPage() {
         return out;
       };
 
-      const variants = parseList(variantsText);
+      const variants = namedVariantRows.map((row) => row.value);
       const reservedVariantNames = variants.filter((value) =>
         isReservedIngredientVariantName(value),
       );
@@ -9466,23 +10328,29 @@ function loadShoppingItemEditorPage() {
               db.run('DELETE FROM ingredient_variants WHERE ingredient_id = ?;', [
                 iid,
               ]);
-              const variantRowsToPersist = [INGREDIENT_BASE_VARIANT_NAME, ...variants];
-              variantRowsToPersist.forEach((v, idx) => {
+              const variantRowsToPersist = normalizeIngredientVariantRows(normalizedVariantRows, {
+                fallbackBaseHome: normalizedBaseHomeLocation,
+              });
+              variantRowsToPersist.forEach((row, idx) => {
                 const sortOrder = idx === 0 ? 0 : idx;
+                const variantName = row?.isBase
+                  ? INGREDIENT_BASE_VARIANT_NAME
+                  : normalizeNamedIngredientVariant(row?.value);
+                if (!row?.isBase && !variantName) return;
                 if (hasVariantHomeLocationCol) {
                   db.run(
                     'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order, home_location) VALUES (?, ?, ?, ?);',
                     [
                       iid,
-                      v,
+                      variantName,
                       sortOrder,
-                      idx === 0 ? normalizedBaseHomeLocation : 'none',
+                      normalizeShoppingHomeLocationId(row?.homeLocation || 'none'),
                     ],
                   );
                 } else {
                   db.run(
                     'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order) VALUES (?, ?, ?);',
-                    [iid, v, sortOrder],
+                    [iid, variantName, sortOrder],
                   );
                 }
               });
@@ -9591,37 +10459,36 @@ function loadShoppingItemEditorPage() {
           }
           if (hasVariantTable) {
             const vq = db.exec(
-              `SELECT COALESCE(variant, '')
+              `SELECT COALESCE(variant, ''),
+                      ${
+                        hasVariantHomeLocationCol
+                          ? "COALESCE(home_location, 'none')"
+                          : "'none'"
+                      }
                FROM ingredient_variants
                WHERE ingredient_id = ?
-                 AND trim(COALESCE(variant, '')) != ''
-                 AND lower(trim(COALESCE(variant, ''))) != '${INGREDIENT_BASE_VARIANT_NAME}'
                ORDER BY sort_order ASC, id ASC;`,
               [iid],
             );
-            const dbVariants = vq.length
-              ? vq[0].values.map((r) => String((r && r[0]) || ''))
-              : [];
-            if (!listEqual(dbVariants, variants)) {
-              throw new Error(`shopping-save-verify-variants-list:${iid}`);
-            }
-            if (hasVariantHomeLocationCol) {
-              const hq = db.exec(
-                `SELECT COALESCE(home_location, 'none')
-                 FROM ingredient_variants
-                 WHERE ingredient_id = ?
-                   AND ${getIngredientBaseVariantWhereSql('variant')}
-                 ORDER BY id ASC
-                 LIMIT 1;`,
-                [iid],
-              );
-              const savedHome =
-                hq.length && hq[0].values.length
-                  ? normalizeShoppingHomeLocationId(hq[0].values[0]?.[0] || 'none')
-                  : 'none';
-              if (savedHome !== normalizedBaseHomeLocation) {
-                throw new Error(`shopping-save-verify-base-home:${iid}`);
-              }
+            const dbVariantRows = vq.length
+              ? normalizeIngredientVariantRows(
+                  vq[0].values.map((r) => ({
+                    isBase: isIngredientBaseVariantName(r?.[0]),
+                    value: String((r && r[0]) || ''),
+                    homeLocation: String((r && r[1]) || 'none'),
+                  })),
+                  {
+                    fallbackBaseHome: normalizedBaseHomeLocation,
+                  },
+                )
+              : normalizeIngredientVariantRows([], {
+                  fallbackBaseHome: normalizedBaseHomeLocation,
+                });
+            const expectedVariantRows = normalizeIngredientVariantRows(normalizedVariantRows, {
+              fallbackBaseHome: normalizedBaseHomeLocation,
+            });
+            if (JSON.stringify(dbVariantRows) !== JSON.stringify(expectedVariantRows)) {
+              throw new Error(`shopping-save-verify-variant-rows:${iid}`);
             }
           }
           if (hasSizeTable) {
@@ -9707,6 +10574,9 @@ function loadShoppingItemEditorPage() {
       let baselineSizes = '';
       let baselineSynonyms = '';
       let baselineHome = 'none';
+      let baselineVariantRows = normalizeIngredientVariantRows([], {
+        fallbackBaseHome: baselineHome,
+      });
       let baselineIsFood = '1';
       let baselineIsDeprecated = '0';
       let baselineIsHidden = '0';
@@ -9872,21 +10742,33 @@ function loadShoppingItemEditorPage() {
             const rows = [];
             targetIngredientIds.forEach((iid) => {
               const vq = db.exec(
-                `SELECT variant
+                `SELECT variant,
+                        ${
+                          tableHasColumnInMain(db, 'ingredient_variants', 'home_location')
+                            ? "COALESCE(home_location, 'none')"
+                            : "'none'"
+                        }
                  FROM ingredient_variants
                  WHERE ingredient_id = ?
-                   AND NOT (${getIngredientBaseVariantWhereSql('variant')})
                  ORDER BY sort_order ASC, id ASC;`,
                 [iid],
               );
               if (vq.length && vq[0].values.length) {
-                vq[0].values.forEach((r) => rows.push(String((r && r[0]) || '')));
+                vq[0].values.forEach((r) =>
+                  rows.push({
+                    isBase: isIngredientBaseVariantName(r?.[0]),
+                    value: String((r && r[0]) || ''),
+                    homeLocation: String((r && r[1]) || 'none'),
+                  }),
+                );
               }
             });
-            const cleaned = dedupeStable(rows);
-            if (cleaned.length > 0) {
-              baselineVariants = cleaned.join('\n');
-            }
+            baselineVariantRows = normalizeIngredientVariantRows(rows, {
+              fallbackBaseHome: baselineHome,
+            });
+            baselineVariants = getNamedVariantRowsFromDraft(baselineVariantRows)
+              .map((row) => row.value)
+              .join('\n');
           } catch (_) {}
 
           try {
@@ -9911,20 +10793,22 @@ function loadShoppingItemEditorPage() {
 
           try {
             const rows = [];
-            targetIngredientIds.forEach((iid) => {
-              const hq = db.exec(
-                `SELECT COALESCE(home_location, 'none')
-                 FROM ingredient_variants
-                 WHERE ingredient_id = ?
-                   AND ${getIngredientBaseVariantWhereSql('variant')}
-                 ORDER BY id ASC
-                 LIMIT 1;`,
-                [iid],
-              );
-              if (hq.length && hq[0].values.length) {
-                rows.push(String((hq[0].values[0] && hq[0].values[0][0]) || 'none'));
-              }
-            });
+            if (tableHasColumnInMain(db, 'ingredient_variants', 'home_location')) {
+              targetIngredientIds.forEach((iid) => {
+                const hq = db.exec(
+                  `SELECT COALESCE(home_location, 'none')
+                   FROM ingredient_variants
+                   WHERE ingredient_id = ?
+                     AND ${getIngredientBaseVariantWhereSql('variant')}
+                   ORDER BY id ASC
+                   LIMIT 1;`,
+                  [iid],
+                );
+                if (hq.length && hq[0].values.length) {
+                  rows.push(String((hq[0].values[0] && hq[0].values[0][0]) || 'none'));
+                }
+              });
+            }
             const cleaned = dedupeStable(rows);
             if (cleaned.length > 0) {
               baselineHome = normalizeShoppingHomeLocationId(cleaned[0]);
@@ -9934,6 +10818,9 @@ function loadShoppingItemEditorPage() {
           } catch (_) {
             baselineHome = normalizeShoppingHomeLocationId(baselineHome);
           }
+          baselineVariantRows = normalizeIngredientVariantRows(baselineVariantRows, {
+            fallbackBaseHome: baselineHome,
+          });
 
           try {
             const rows = [];
@@ -9957,78 +10844,6 @@ function loadShoppingItemEditorPage() {
         }
       } catch (_) {}
 
-      // Home typeahead (suggest existing variant home locations).
-      try {
-        const homeInput = document.getElementById('shoppingItemHomeInput');
-        const ta = window.favoriteEatsTypeahead;
-        const canonicalHomes = [
-          'fridge',
-          'freezer',
-          'above fridge',
-          'pantry',
-          'cereal cabinet',
-          'spices',
-          'fruit stand',
-          'coffee bar',
-        ];
-        if (homeInput && ta && typeof ta.attach === 'function') {
-          ta.attach({
-            inputEl: homeInput,
-            openOnFocus: true,
-            maxVisible: 10,
-            getPool: async () => {
-              const db = window.dbInstance;
-              if (!db) return canonicalHomes;
-              const q = db.exec(
-                `SELECT DISTINCT home_location
-                 FROM ingredient_variants
-                 WHERE home_location IS NOT NULL
-                   AND trim(home_location) != ''
-                   AND lower(trim(home_location)) != 'none'
-                 ORDER BY home_location COLLATE NOCASE;`,
-              );
-              const vals =
-                Array.isArray(q) &&
-                q.length > 0 &&
-                q[0] &&
-                Array.isArray(q[0].values)
-                  ? q[0].values
-                      .map((row) => (Array.isArray(row) ? row[0] : null))
-                      .map((v) => String(v || '').trim())
-                      .filter((v) => v.length > 0)
-                  : [];
-              const out = [];
-              const seen = new Set();
-              [...canonicalHomes, ...vals].forEach((v) => {
-                const normalized = String(v || '').trim();
-                if (!normalized) return;
-                const key = normalized.toLowerCase();
-                if (seen.has(key)) return;
-                seen.add(key);
-                out.push(normalized);
-              });
-              return out;
-            },
-            // Simple per-field rules:
-            // - empty query: full alphabetical list
-            // - non-empty query: alphabetical subset containing the query (no prefix-boosting)
-            getItems: (pool, query) => {
-              const q = String(query || '')
-                .trim()
-                .toLowerCase();
-              const items = (pool || [])
-                .map((v) => String(v || '').trim())
-                .filter((v) => v.length > 0);
-              items.sort((a, b) =>
-                a.localeCompare(b, undefined, { sensitivity: 'base' }),
-              );
-              if (!q) return items;
-              return items.filter((v) => v.toLowerCase().includes(q));
-            },
-          });
-        }
-      } catch (_) {}
-
       const pageCtl = wireChildEditorPage({
         backBtn: document.getElementById('appBarBackBtn'),
         cancelBtn: document.getElementById('appBarCancelBtn'),
@@ -10039,11 +10854,12 @@ function loadShoppingItemEditorPage() {
         backHref: 'shopping.html',
         extraFields: [
           {
-            key: 'variants',
-            el: document.getElementById('shoppingItemVariantsHiddenInput'),
-            initialValue: baselineVariants,
-            getValue: () =>
-              getNamedVariantValuesFromRows(variantRowsDraft).join('\n'),
+            key: 'variant_rows',
+            el: document.getElementById('shoppingItemVariantRowsHiddenInput'),
+            initialValue: serializeIngredientVariantRows(baselineVariantRows, {
+              fallbackBaseHome: baselineHome,
+            }),
+            getValue: () => serializeIngredientVariantRows(variantRowsDraft),
             setValue: (value) => {
               setVariantRowsFromSerialized(value);
             },
@@ -10057,11 +10873,6 @@ function loadShoppingItemEditorPage() {
             key: 'sizes',
             el: document.getElementById('shoppingItemSizesTextarea'),
             initialValue: baselineSizes,
-          },
-          {
-            key: 'home',
-            el: document.getElementById('shoppingItemHomeInput'),
-            initialValue: baselineHome,
           },
           {
             key: 'plural_override',

@@ -52,10 +52,11 @@ Please assume this model is the right direction and help me make it robust. I wa
 
 ## 4. Base item is special in the editor
 
-```text
 We're changing ingredient home locations to be per variant instead of one value on the top-level item.
 
-The old single home location field is going away. Every item will have a special always-present "Base item" row, and existing home location values will migrate there. Named variants can each have their own home location. Search and home-location filtering should show the plain item name when the match comes from Base item, and show item + variant when a specific variant is the reason for the match. For v1, paste only needs to work in the Variant column. In the shopping list context, using the label "any" for the base case is intentional and good.
+The old single home location field is going away. Every item has a special always-present "Base item" row, and home location now lives on rows. Base item can have a home location, and each named variant can have its own home location. Search and home-location filtering should show the plain item name when the match comes from Base item, and show item + variant when a specific variant is the reason for the match. For v1, paste only needs to work in the Variant column. In the shopping list context, using the label "any" for the base case is intentional and good.
+
+Implementation note: step 3 is already landed enough that the editor now shows Base item as a distinct row, includes a Home location column on rows, removes the old standalone Base home field, and persists home locations per row. So for this chat, please treat step 4 as a refinement / hardening pass on the editor UX, not as a from-scratch design.
 
 I want to focus this chat on one rule only:
 
@@ -63,8 +64,16 @@ I want to focus this chat on one rule only:
 It is not a normal user variant.
 It should be shown as "Base item" in the editor.
 
-Please give me strongly opinionated UX guidance. I want recommendations on how this row should look, where it should sit, what users can and cannot do to it, and how to make it obvious that it is the anchor row for the item rather than just another variant somebody typed in.
-```
+Please give me strongly opinionated UX guidance. I want recommendations on:
+
+- whether the current Base row treatment is visually strong enough
+- what should change so Base item feels like the anchor row rather than just row 1
+- where it should sit
+- what users can and cannot do to it
+- what copy or affordances should change now that home lives on rows
+- how to make it obvious that it is the default item-level row with optional variant overrides, not just another variant somebody typed in
+
+Please optimize for "obvious and boring" over "technically elegant." I want Base item to read as the anchor/default row for the item, with named variants as overrides.
 
 ## 5. Migrate existing values into Base item
 

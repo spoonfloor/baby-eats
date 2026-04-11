@@ -136,7 +136,7 @@ function run() {
         },
       ],
     }),
-    'foo (1¼ lb)',
+    'foo (1 1/4 lb)',
     'single measured mass bucket renders with name-first display'
   );
 

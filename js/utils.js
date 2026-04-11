@@ -433,7 +433,8 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
         .replace(/(\.\d*?[1-9])0+$/u, '$1')
         .replace(/\.0+$/u, '');
     }
-    return String(Number(n.toFixed(6)));
+    // Numeric input: avoid float-noise tails (e.g. 1.499999 → match shopping qty rounding).
+    return String(Number(n.toFixed(4)));
   };
   const isNegative = n < 0;
   const abs = Math.abs(n);
@@ -480,7 +481,8 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   }
 
   if (!best) return String(n);
-  if (best.den !== 3 && best.err > 1e-6) {
+  // Allow ~0.0001 slop so near-half values (e.g. 1.4999) still map to halves/quarters.
+  if (best.den !== 3 && best.err > 1e-4) {
     return formatDecimalFallback();
   }
   let wholePart = whole + Math.floor(best.num / best.den);
@@ -525,12 +527,21 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   } else if (wholePart === 0) {
     rendered = fracGlyph || `${numPart}/${denPart}`;
   } else {
-    rendered = fracGlyph
-      ? `${wholePart}${fracGlyph}`
-      : `${wholePart} ${numPart}/${denPart}`;
+    rendered = `${wholePart} ${numPart}/${denPart}`;
   }
 
   return isNegative && rendered !== '0' ? `-${rendered}` : rendered;
+}
+
+/**
+ * Shopping Items stepper / badge labels: round float sums for display (e.g. 5.5 not 5.499999…).
+ * @param {number|string} qty
+ * @returns {string}
+ */
+function formatShoppingQtyForDisplay(qty) {
+  const n = Number(qty);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  return String(Number(n.toFixed(2)));
 }
 
 function getActionableQuantityFractionPolicy(unitText) {
@@ -735,6 +746,9 @@ if (typeof window !== 'undefined' && !window.prettifyDisplayText) {
 }
 if (typeof window !== 'undefined' && !window.normalizeActionableQuantity) {
   window.normalizeActionableQuantity = normalizeActionableQuantity;
+}
+if (typeof window !== 'undefined' && !window.formatShoppingQtyForDisplay) {
+  window.formatShoppingQtyForDisplay = formatShoppingQtyForDisplay;
 }
 
 // --- Global Undo (single-slot, toast-based) ---
