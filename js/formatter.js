@@ -89,6 +89,28 @@ function formatRecipe(db, recipeId) {
   const ingHasPluralByDefault = ingCols.includes('plural_by_default');
   const ingHasIsMassNoun = ingCols.includes('is_mass_noun');
   const ingHasPluralOverride = ingCols.includes('plural_override');
+  const variantCols = (() => {
+    try {
+      const info = db.exec('PRAGMA table_info(ingredient_variants);');
+      const rows = info.length ? info[0].values : [];
+      return rows.map((r) => String(r[1] || '').toLowerCase());
+    } catch (_) {
+      return [];
+    }
+  })();
+  const ingredientHomeLocationSql = variantCols.includes('home_location')
+    ? `(SELECT COALESCE(ivh.home_location, 'none')
+        FROM ingredient_variants ivh
+       WHERE ivh.ingredient_id = i.ID
+         AND lower(trim(COALESCE(ivh.variant, ''))) IN ('', 'default')
+       ORDER BY
+         CASE
+           WHEN lower(trim(COALESCE(ivh.variant, ''))) = 'default' THEN 0
+           ELSE 1
+         END,
+         ivh.id ASC
+       LIMIT 1)`
+    : "'none'";
 
   function loadHeadings(whereClause) {
     if (!tableExists('recipe_ingredient_headings')) return [];
@@ -162,7 +184,7 @@ function formatRecipe(db, recipeId) {
                  ? "COALESCE(i.parenthetical_note, '')"
                  : "''"
              },
-             i.location_at_home,
+             ${ingredientHomeLocationSql},
              ${
                rimHasIsRecipe
                  ? 'COALESCE(rim.is_recipe, 0)'

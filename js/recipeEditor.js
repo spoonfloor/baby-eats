@@ -24,33 +24,37 @@ const MEASURE_ORDER = [
   '8 cup',
 ];
 
+const RECIPE_EDITOR_HOME_LOCATION_DEFS =
+  typeof window !== 'undefined' && typeof window.getHomeLocationDefs === 'function'
+    ? window.getHomeLocationDefs()
+    : [
+        { id: 'fridge', label: 'fridge' },
+        { id: 'freezer', label: 'freezer' },
+        { id: 'above fridge', label: 'above fridge' },
+        { id: 'pantry', label: 'pantry' },
+        { id: 'cereal cabinet', label: 'cereal cabinet' },
+        { id: 'spices', label: 'spices' },
+        { id: 'fruit stand', label: 'fruit stand' },
+        { id: 'coffee bar', label: 'coffee bar' },
+        { id: 'none', label: 'no location' },
+      ];
+const RECIPE_EDITOR_HOME_LOCATION_ORDER = RECIPE_EDITOR_HOME_LOCATION_DEFS
+  .map((entry) => String(entry?.id || '').trim().toLowerCase())
+  .filter((locationId) => locationId && locationId !== 'none');
+
 // --- Canonical order for locations (base version used in debug and general logic) ---
-const LOCATION_ORDER = [
-  '', // null / top-level
-  'fridge',
-  'freezer',
-  'above fridge',
-  'pantry',
-  'cereal cabinet',
-  'spices',
-  'measures',
-  'fruit stand',
-  'coffee bar',
-];
+const LOCATION_ORDER = (() => {
+  const base = ['', ...RECIPE_EDITOR_HOME_LOCATION_ORDER];
+  const spicesIndex = base.indexOf('spices');
+  const measuresIndex = base.indexOf('measures');
+  if (measuresIndex !== -1) return base;
+  const insertIndex = spicesIndex === -1 ? Math.max(1, base.length) : spicesIndex + 1;
+  base.splice(insertIndex, 0, 'measures');
+  return base;
+})();
 
 // --- Custom order for “You will need” section only ---
-const NEED_LOCATION_ORDER = [
-  'fridge',
-  'freezer',
-  'above fridge',
-  'pantry',
-  'cereal cabinet',
-  'spices',
-  'fruit stand',
-  'coffee bar',
-  '', // no location/misc
-  'measures',
-];
+const NEED_LOCATION_ORDER = [...RECIPE_EDITOR_HOME_LOCATION_ORDER, '', 'measures'];
 
 // --- You Will Need helpers ---
 function formatNeedLine(ing) {

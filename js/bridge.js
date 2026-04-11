@@ -531,6 +531,22 @@ function loadRecipeFromDB(db, recipeId) {
   const hasPluralByDefault = ingHas('plural_by_default');
   const hasIsMassNoun = ingHas('is_mass_noun');
   const hasPluralOverride = ingHas('plural_override');
+  const variantCols = getTableColumns(db, 'ingredient_variants');
+  const variantHas = (col) =>
+    variantCols.map((c) => String(c).toLowerCase()).includes(col);
+  const recipeIngredientHomeLocationSql = variantHas('home_location')
+    ? `(SELECT COALESCE(ivh.home_location, 'none')
+        FROM ingredient_variants ivh
+       WHERE ivh.ingredient_id = i.ID
+         AND lower(trim(COALESCE(ivh.variant, ''))) IN ('', 'default')
+       ORDER BY
+         CASE
+           WHEN lower(trim(COALESCE(ivh.variant, ''))) = 'default' THEN 0
+           ELSE 1
+         END,
+         ivh.id ASC
+       LIMIT 1) AS home_location`
+    : "'none' AS home_location";
   const hasIngDeprecated = ingHas('is_deprecated');
   const hasIngHideLegacy = ingHas('hide_from_shopping_list');
   const ingredientDeprecatedSql = hasIngDeprecated
@@ -598,7 +614,7 @@ function loadRecipeFromDB(db, recipeId) {
       : hasIngParen
       ? "COALESCE(i.parenthetical_note, '') AS parenthetical_note"
       : "'' AS parenthetical_note",
-    'i.location_at_home',
+    recipeIngredientHomeLocationSql,
     hasIsRecipe ? 'COALESCE(rim.is_recipe, 0) AS is_recipe' : '0 AS is_recipe',
     hasLinkedRecipeId
       ? 'rim.linked_recipe_id AS linked_recipe_id'
@@ -961,6 +977,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
   const ingHas = (col) =>
     ingredientsCols.map((c) => c.toLowerCase()).includes(col);
+  const ingredientVariantCols = getTableColumns(activeDb, 'ingredient_variants');
+  const variantHas = (col) =>
+    ingredientVariantCols.map((c) => String(c).toLowerCase()).includes(col);
+  const hasVariantTable = ingredientVariantCols.length > 0;
 
   if (!rimHas('recipe_id') || !rimHas('ingredient_id')) {
     throw new Error(
@@ -1025,7 +1045,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
 
   const findOrCreateIngredientId = (ing) => {
     const name = (ing.name || '').trim();
-    const loc = (ing.locationAtHome || '').trim();
 
     // Match on name only — variant/size are per-recipe-line (stored on rim).
     let foundId = null;
@@ -1075,10 +1094,6 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
       cols.push('lemma');
       vals.push(deriveIngredientLemma(name));
     }
-    if (ingHas('location_at_home')) {
-      cols.push('location_at_home');
-      vals.push(loc);
-    }
 
     const placeholders = cols.map(() => '?').join(', ');
     const insStmt = activeDb.prepare(
@@ -1092,7 +1107,34 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
 
     const idQ = activeDb.exec('SELECT last_insert_rowid();');
     if (idQ.length && idQ[0].values.length) {
-      return Number(idQ[0].values[0][0]);
+      const newIngredientId = Number(idQ[0].values[0][0]);
+      if (
+        Number.isFinite(newIngredientId) &&
+        hasVariantTable &&
+        variantHas('ingredient_id') &&
+        variantHas('variant')
+      ) {
+        const variantInsertCols = ['ingredient_id', 'variant'];
+        const variantInsertVals = [newIngredientId, 'default'];
+        if (variantHas('sort_order')) {
+          variantInsertCols.push('sort_order');
+          variantInsertVals.push(0);
+        }
+        if (variantHas('home_location')) {
+          variantInsertCols.push('home_location');
+          variantInsertVals.push('none');
+        }
+        const variantPlaceholders = variantInsertCols.map(() => '?').join(', ');
+        try {
+          activeDb.run(
+            `INSERT INTO ingredient_variants (${variantInsertCols.join(
+              ', ',
+            )}) VALUES (${variantPlaceholders});`,
+            variantInsertVals,
+          );
+        } catch (_) {}
+      }
+      return newIngredientId;
     }
     throw new Error(
       'saveRecipeIngredientsFromModel: failed to insert ingredient'

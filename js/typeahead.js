@@ -814,6 +814,7 @@
          WHERE v.ingredient_id IN (${placeholders})
            AND v.variant IS NOT NULL
            AND trim(v.variant) != ''
+           AND lower(trim(v.variant)) != 'default'
          ORDER BY v.variant COLLATE NOCASE;`,
         canonicalIds
       );
@@ -826,6 +827,7 @@
          WHERE lower(trim(i.name)) = lower(trim(?))
            AND v.variant IS NOT NULL
            AND trim(v.variant) != ''
+           AND lower(trim(v.variant)) != 'default'
            ${ingVisibilityClause}
          ORDER BY v.variant COLLATE NOCASE;`,
         [nameText]
@@ -842,6 +844,7 @@
              WHERE ID IN (${canonicalIds.map(() => '?').join(', ')})
                AND variant IS NOT NULL
                AND trim(variant) != ''
+               AND lower(trim(variant)) != 'default'
              ORDER BY variant COLLATE NOCASE;`,
             canonicalIds
           )
@@ -852,6 +855,7 @@
              WHERE lower(trim(name)) = lower(trim(?))
                AND variant IS NOT NULL
                AND trim(variant) != ''
+               AND lower(trim(variant)) != 'default'
                ${ingVisibilityClauseNoAlias}
              ORDER BY variant COLLATE NOCASE;`,
             [nameText]

@@ -2672,18 +2672,44 @@ function mountTopFilterChipRail(opts = {}) {
   };
 }
 
+let filterDropdownChipPanelIdSeq = 0;
+
 function renderFilterChipList(opts = {}) {
   const mountEl = opts?.mountEl;
   if (!(mountEl instanceof HTMLElement)) return;
 
   const chips = Array.isArray(opts?.chips) ? opts.chips : [];
+  const compoundChips = Array.isArray(opts?.compoundChips) ? opts.compoundChips : [];
   const activeSrc = opts?.activeChipIds;
   const active = activeSrc instanceof Set ? activeSrc : new Set(activeSrc || []);
   const onToggle = typeof opts?.onToggle === 'function' ? opts.onToggle : null;
   const chipClassName = String(opts?.chipClassName || 'app-filter-chip').trim();
+  const reopenCompoundDropdown = !!opts?.reopenCompoundDropdown;
+  const reopenCompoundDropdownId = String(opts?.reopenCompoundDropdownId || '')
+    .trim()
+    .toLowerCase();
+
+  const previousCleanupFns = Array.isArray(mountEl.__chipUiCleanupFns)
+    ? mountEl.__chipUiCleanupFns
+    : [];
+  previousCleanupFns.forEach((fn) => {
+    try {
+      fn();
+    } catch (_) {}
+  });
+  mountEl.__chipUiCleanupFns = [];
 
   mountEl.innerHTML = '';
-  chips.forEach((chipDef) => {
+
+  const compoundInsertIndexRaw = opts?.compoundInsertIndex;
+  const compoundInsertIndex =
+    compoundInsertIndexRaw == null ||
+    compoundInsertIndexRaw === '' ||
+    Number.isNaN(Number(compoundInsertIndexRaw))
+      ? null
+      : Math.max(0, Math.floor(Number(compoundInsertIndexRaw)));
+
+  const renderOneFlatChip = (chipDef) => {
     const id = String(chipDef?.id || '').trim().toLowerCase();
     if (!id) return;
     const label = String(chipDef?.label || id);
@@ -2700,7 +2726,243 @@ function renderFilterChipList(opts = {}) {
       chip.addEventListener('click', () => onToggle(id));
     }
     mountEl.appendChild(chip);
-  });
+  };
+
+  const renderAllCompoundChips = () => {
+    compoundChips.forEach((compoundDef) => {
+      const compoundId = String(compoundDef?.id || '').trim().toLowerCase();
+      if (!compoundId) return;
+      const optionDefs = Array.isArray(compoundDef?.options) ? compoundDef.options : [];
+      const optionSelectedIds = new Set(
+        compoundDef?.selectedOptionIds instanceof Set
+          ? Array.from(compoundDef.selectedOptionIds)
+          : compoundDef?.selectedOptionIds || [],
+      );
+      const label = String(compoundDef?.label || compoundId);
+      const toggleOption =
+        typeof compoundDef?.onToggleOption === 'function'
+          ? compoundDef.onToggleOption
+          : null;
+      const onClearSelection =
+        typeof compoundDef?.onClearSelection === 'function'
+          ? compoundDef.onClearSelection
+          : null;
+      const align = String(compoundDef?.panelAlign || 'start').trim().toLowerCase();
+      const hasSelection = optionSelectedIds.size > 0;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'app-filter-chip-dropdown-wrap';
+
+      const pill = document.createElement('div');
+      pill.className = `${chipClassName} app-filter-chip--dropdown app-filter-chip--dropdown-pill`;
+      pill.setAttribute('role', 'group');
+
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'app-filter-chip-dropdown-open';
+      openBtn.setAttribute('aria-haspopup', 'listbox');
+      openBtn.setAttribute('aria-expanded', 'false');
+      if (hasSelection) pill.classList.add('is-active');
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'app-filter-chip-dropdown-label';
+      labelEl.textContent = label;
+      openBtn.appendChild(labelEl);
+
+      const chevronEl = document.createElement('span');
+      chevronEl.className =
+        'material-symbols-outlined app-filter-chip-dropdown-chevron';
+      chevronEl.setAttribute('aria-hidden', 'true');
+      chevronEl.textContent = 'expand_more';
+      openBtn.appendChild(chevronEl);
+
+      pill.appendChild(openBtn);
+
+      if (hasSelection && onClearSelection) {
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'app-filter-chip-dropdown-clear';
+        clearBtn.setAttribute(
+          'aria-label',
+          String(compoundDef?.clearAriaLabel || 'Clear selection'),
+        );
+        const clearIcon = document.createElement('span');
+        clearIcon.className =
+          'material-symbols-outlined app-filter-chip-dropdown-clear-icon';
+        clearIcon.setAttribute('aria-hidden', 'true');
+        clearIcon.textContent = 'cancel';
+        clearBtn.appendChild(clearIcon);
+        clearBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClearSelection();
+        });
+        pill.appendChild(clearBtn);
+      }
+
+      const panel = document.createElement('div');
+      panel.className = 'app-filter-chip-dropdown-panel';
+      panel.hidden = true;
+      panel.role = 'listbox';
+      panel.setAttribute('aria-multiselectable', 'true');
+      panel.id = `filterChipDropdownPanel${++filterDropdownChipPanelIdSeq}`;
+      openBtn.setAttribute('aria-controls', panel.id);
+
+      optionDefs.forEach((optionDef) => {
+        const optionId = String(optionDef?.id || '').trim().toLowerCase();
+        if (!optionId) return;
+        const optionLabel = String(optionDef?.label || optionId);
+        const optionDisabled = !!optionDef?.disabled;
+        const selected = optionSelectedIds.has(optionId);
+
+        const optionBtn = document.createElement('button');
+        optionBtn.type = 'button';
+        optionBtn.className = 'app-filter-chip-dropdown-option';
+        optionBtn.role = 'option';
+        optionBtn.dataset.optionId = optionId;
+        optionBtn.setAttribute('aria-selected', selected ? 'true' : 'false');
+        if (selected) optionBtn.classList.add('is-selected');
+        if (optionDisabled) {
+          optionBtn.disabled = true;
+          optionBtn.classList.add('is-disabled');
+        }
+
+        const optionText = document.createElement('span');
+        optionText.className = 'app-filter-chip-dropdown-option-label';
+        optionText.textContent = optionLabel;
+        optionBtn.appendChild(optionText);
+
+        const optionCheck = document.createElement('span');
+        optionCheck.className =
+          'material-symbols-outlined app-filter-chip-dropdown-option-check';
+        optionCheck.setAttribute('aria-hidden', 'true');
+        optionCheck.textContent = selected ? 'check' : '';
+        optionBtn.appendChild(optionCheck);
+
+        if (toggleOption) {
+          optionBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (optionDisabled) return;
+            toggleOption(optionId);
+          });
+        }
+
+        panel.appendChild(optionBtn);
+      });
+
+      wrapper.appendChild(pill);
+      mountEl.appendChild(wrapper);
+
+      let backdropEl = null;
+
+      const closePanel = () => {
+        if (panel.hidden) return;
+        panel.hidden = true;
+        wrapper.classList.remove('is-open');
+        openBtn.setAttribute('aria-expanded', 'false');
+        if (backdropEl && backdropEl.parentNode) {
+          backdropEl.parentNode.removeChild(backdropEl);
+        }
+        backdropEl = null;
+        if (panel.parentElement) {
+          panel.parentElement.removeChild(panel);
+        }
+      };
+      const syncPanelPosition = () => {
+        if (panel.hidden) return;
+        const rect = pill.getBoundingClientRect();
+        if (!rect || rect.width <= 0) return;
+        const viewportWidth =
+          window.innerWidth || document.documentElement.clientWidth || rect.right;
+        panel.style.minWidth = `${Math.round(rect.width)}px`;
+        const margin = 12;
+        let left = align === 'end' ? rect.right - panel.offsetWidth : rect.left;
+        left = Math.max(margin, Math.min(left, viewportWidth - panel.offsetWidth - margin));
+        panel.style.left = `${Math.round(left)}px`;
+        panel.style.top = `${Math.round(rect.bottom + 8)}px`;
+      };
+      const openPanel = () => {
+        if (!panel.hidden) return;
+        backdropEl = document.createElement('div');
+        backdropEl.className = 'app-filter-chip-dropdown-backdrop';
+        backdropEl.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(backdropEl);
+        document.body.appendChild(panel);
+        panel.hidden = false;
+        wrapper.classList.add('is-open');
+        openBtn.setAttribute('aria-expanded', 'true');
+        syncPanelPosition();
+      };
+      const onDocumentPointerDown = (event) => {
+        if (panel.hidden) return;
+        const target = event?.target;
+        if (!(target instanceof Node)) {
+          closePanel();
+          return;
+        }
+        if (pill.contains(target) || panel.contains(target)) return;
+        closePanel();
+      };
+      const onDocumentKeyDown = (event) => {
+        if (event?.key === 'Escape') {
+          closePanel();
+        }
+      };
+      const onViewportMove = () => {
+        syncPanelPosition();
+      };
+
+      openBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (panel.hidden) {
+          openPanel();
+        } else {
+          closePanel();
+        }
+      });
+      document.addEventListener('pointerdown', onDocumentPointerDown, true);
+      document.addEventListener('keydown', onDocumentKeyDown);
+      window.addEventListener('resize', onViewportMove);
+      window.addEventListener('scroll', onViewportMove, true);
+
+      mountEl.__chipUiCleanupFns.push(() => {
+        closePanel();
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+        document.removeEventListener('keydown', onDocumentKeyDown);
+        window.removeEventListener('resize', onViewportMove);
+        window.removeEventListener('scroll', onViewportMove, true);
+      });
+
+      if (
+        reopenCompoundDropdown &&
+        (
+          (reopenCompoundDropdownId && compoundId === reopenCompoundDropdownId) ||
+          (!reopenCompoundDropdownId && compoundChips.length === 1)
+        )
+      ) {
+        requestAnimationFrame(() => {
+          openPanel();
+        });
+      }
+    });
+  };
+
+  if (compoundInsertIndex == null) {
+    chips.forEach((chipDef) => renderOneFlatChip(chipDef));
+    renderAllCompoundChips();
+  } else {
+    chips.forEach((chipDef, idx) => {
+      if (idx === compoundInsertIndex) {
+        renderAllCompoundChips();
+      }
+      renderOneFlatChip(chipDef);
+    });
+    if (compoundInsertIndex >= chips.length) {
+      renderAllCompoundChips();
+    }
+  }
 }
 
 if (typeof window !== 'undefined') {

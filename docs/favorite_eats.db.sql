@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS "ingredient_variants" (
 	"ingredient_id"	INTEGER NOT NULL,
 	"variant"	TEXT NOT NULL,
 	"sort_order"	INTEGER,
+	"home_location"	TEXT NOT NULL DEFAULT 'none',
 	PRIMARY KEY("id" AUTOINCREMENT),
 	FOREIGN KEY("ingredient_id") REFERENCES "ingredients"("ID") ON DELETE CASCADE
 );
