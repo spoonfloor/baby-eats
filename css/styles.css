@@ -79,6 +79,10 @@
   /* Shopping list: expanded recipe contribution rows */
   --shopping-list-doc-contribution-line-gap: 0px;
   --shopping-list-doc-contribution-trailing-gap: 12px;
+  /* All doc contribution child rows (RECIPES + recipe lines): extra top inset. */
+  --shopping-list-doc-contribution-child-padding-top: 4px;
+  /* RECIPES label row: bottom padding only (`0` = none). */
+  --shopping-list-doc-contribution-context-padding-y: 0;
   /* Inline title + chevron (Shopping Items variant parents + Shopping List doc rows) */
   --shopping-inline-expand-gap: 2px;
   --shopping-inline-expand-line-height: var(--ingredients-line-height);
@@ -1513,10 +1517,22 @@ body.shopping-list-page
   background-color: transparent;
 }
 
+/* "RECIPES" label row: shared top padding + optional bottom; horizontal matches parent via `.list-view li`. */
 body.shopping-list-page
   #shoppingListOutput
   li.shopping-list-doc-item--contribution-context {
   margin-top: var(--shopping-list-doc-contribution-line-gap);
+  padding-top: var(--shopping-list-doc-contribution-child-padding-top);
+  padding-bottom: var(--shopping-list-doc-contribution-context-padding-y);
+}
+
+/* Recipe contribution rows: same top padding as RECIPES; horizontal matches parent via `.list-view li`. */
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--contribution {
+  margin-top: var(--shopping-list-doc-contribution-line-gap);
+  padding-top: var(--shopping-list-doc-contribution-child-padding-top);
+  padding-bottom: 0;
 }
 
 body.shopping-list-page
@@ -1546,12 +1562,6 @@ body.shopping-list-page
   font-size: 13px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution {
-  margin-top: var(--shopping-list-doc-contribution-line-gap);
 }
 
 body.shopping-list-page
