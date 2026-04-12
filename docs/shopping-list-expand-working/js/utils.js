@@ -433,8 +433,7 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
         .replace(/(\.\d*?[1-9])0+$/u, '$1')
         .replace(/\.0+$/u, '');
     }
-    // Numeric input: avoid float-noise tails (e.g. 1.499999 → match shopping qty rounding).
-    return String(Number(n.toFixed(4)));
+    return String(Number(n.toFixed(6)));
   };
   const isNegative = n < 0;
   const abs = Math.abs(n);
@@ -481,8 +480,7 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   }
 
   if (!best) return String(n);
-  // Allow ~0.0001 slop so near-half values (e.g. 1.4999) still map to halves/quarters.
-  if (best.den !== 3 && best.err > 1e-4) {
+  if (best.den !== 3 && best.err > 1e-6) {
     return formatDecimalFallback();
   }
   let wholePart = whole + Math.floor(best.num / best.den);
@@ -527,22 +525,12 @@ function decimalToFractionDisplay(value, denominators = [2, 4, 8]) {
   } else if (wholePart === 0) {
     rendered = fracGlyph || `${numPart}/${denPart}`;
   } else {
-    rendered = fracGlyph ? `${wholePart}${fracGlyph}` : `${wholePart} ${numPart}/${denPart}`;
+    rendered = fracGlyph
+      ? `${wholePart}${fracGlyph}`
+      : `${wholePart} ${numPart}/${denPart}`;
   }
 
   return isNegative && rendered !== '0' ? `-${rendered}` : rendered;
-}
-
-/**
- * Shopping Items stepper / badge labels: round float sums for display (e.g. 5.5 not 5.499999…).
- * @param {number|string} qty
- * @returns {string}
- */
-function formatShoppingQtyForDisplay(qty) {
-  const n = Number(qty);
-  if (!Number.isFinite(n) || n <= 0) return '0';
-  const formatted = decimalToFractionDisplay(n);
-  return formatted || String(Number(n.toFixed(2)));
 }
 
 function getActionableQuantityFractionPolicy(unitText) {
@@ -745,14 +733,8 @@ function prettifyDisplayText(rawText) {
 if (typeof window !== 'undefined' && !window.prettifyDisplayText) {
   window.prettifyDisplayText = prettifyDisplayText;
 }
-if (typeof window !== 'undefined' && !window.decimalToFractionDisplay) {
-  window.decimalToFractionDisplay = decimalToFractionDisplay;
-}
 if (typeof window !== 'undefined' && !window.normalizeActionableQuantity) {
   window.normalizeActionableQuantity = normalizeActionableQuantity;
-}
-if (typeof window !== 'undefined' && !window.formatShoppingQtyForDisplay) {
-  window.formatShoppingQtyForDisplay = formatShoppingQtyForDisplay;
 }
 
 // --- Global Undo (single-slot, toast-based) ---
@@ -2528,54 +2510,20 @@ function mountTopFilterChipRail(opts = {}) {
   const anchorEl = opts?.anchorEl;
   if (!(anchorEl instanceof HTMLElement)) return null;
 
-  const readRootPxVar = (varName, fallback) => {
-    try {
-      const root = document.documentElement;
-      if (!(root instanceof HTMLElement)) return fallback;
-      const raw = getComputedStyle(root).getPropertyValue(varName);
-      const parsed = Number.parseFloat(String(raw || '').trim());
-      return Number.isFinite(parsed) ? parsed : fallback;
-    } catch (_) {
-      return fallback;
-    }
-  };
-  const syncRailStackHeightVar = () => {
-    try {
-      const root = document.documentElement;
-      if (!(root instanceof HTMLElement)) return;
-      const appBarBottom = Number(
-        document.querySelector('.app-bar-wrapper')?.getBoundingClientRect?.().bottom || 0,
-      );
-      const docks = Array.from(document.querySelectorAll('.list-filter-chip-dock'));
-      if (!docks.length || !Number.isFinite(appBarBottom) || appBarBottom <= 0) {
-        root.style.removeProperty('--top-filter-chip-rail-stack-height');
-        return;
-      }
-      let maxBottom = appBarBottom;
-      docks.forEach((dockEl) => {
-        if (!(dockEl instanceof HTMLElement)) return;
-        if (!document.body.contains(dockEl)) return;
-        const rect = dockEl.getBoundingClientRect();
-        if (!rect || rect.height <= 0) return;
-        maxBottom = Math.max(maxBottom, rect.bottom);
-      });
-      const stackHeight = Math.max(0, Math.round(maxBottom - appBarBottom));
-      if (stackHeight > 0) {
-        root.style.setProperty('--top-filter-chip-rail-stack-height', `${stackHeight}px`);
-      } else {
-        root.style.removeProperty('--top-filter-chip-rail-stack-height');
-      }
-    } catch (_) {}
-  };
-
   const dockId = String(opts?.dockId || 'topFilterChipDock').trim();
   const removeOnDestroy = opts?.removeOnDestroy !== false;
   const gapFromAnchorPx = Number.isFinite(opts?.gapFromAnchorPx)
     ? Number(opts.gapFromAnchorPx)
-    : readRootPxVar('--top-filter-chip-gap-from-anchor', 8);
+    : 8;
   const gapFromAppBarPx = Number.isFinite(opts?.gapFromAppBarPx)
     ? Number(opts.gapFromAppBarPx)
-    : readRootPxVar('--top-filter-chip-gap-from-appbar', 8);
+    : 8;
+  const comfortableWidthPx = Number.isFinite(opts?.comfortableWidthPx)
+    ? Number(opts.comfortableWidthPx)
+    : 600;
+  const edgeToEdgeWidthPx = Number.isFinite(opts?.edgeToEdgeWidthPx)
+    ? Number(opts.edgeToEdgeWidthPx)
+    : 360;
 
   let dock = dockId ? document.getElementById(dockId) : null;
   if (!dock) {
@@ -2587,32 +2535,22 @@ function mountTopFilterChipRail(opts = {}) {
     dock.classList.add('list-filter-chip-dock');
   }
 
+  let viewport = dock.querySelector('.list-filter-chip-viewport');
+  if (!(viewport instanceof HTMLElement)) {
+    viewport = document.createElement('div');
+    viewport.className = 'list-filter-chip-viewport';
+    dock.appendChild(viewport);
+  }
+
   let track = dock.querySelector('.list-filter-chip-track');
   if (!(track instanceof HTMLElement)) {
     track = document.createElement('div');
     track.className = 'list-filter-chip-track';
-    dock.appendChild(track);
-  } else if (track.parentElement !== dock) {
-    dock.appendChild(track);
+    viewport.appendChild(track);
   }
 
-  dock.querySelectorAll('.list-filter-chip-viewport').forEach((el) => {
-    try {
-      el.remove();
-    } catch (_) {}
-  });
-
-  const bodyEl =
-    document.body instanceof HTMLBodyElement ? document.body : null;
-  const bodyRailCountKey = 'topFilterChipRailCount';
-  if (bodyEl) {
-    const currentCount = Math.max(
-      0,
-      Number.parseInt(bodyEl.dataset?.[bodyRailCountKey] || '0', 10) || 0,
-    );
-    bodyEl.dataset[bodyRailCountKey] = String(currentCount + 1);
-    bodyEl.classList.add('has-top-filter-chip-rail');
-  }
+  const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
+  const lerp = (start, end, amount) => start + (end - start) * amount;
 
   const sync = () => {
     if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
@@ -2625,11 +2563,24 @@ function mountTopFilterChipRail(opts = {}) {
       ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
       : rect.bottom + gapFromAnchorPx;
 
-    dock.style.removeProperty('left');
-    dock.style.removeProperty('right');
-    dock.style.removeProperty('width');
+    const docEl =
+      document.documentElement instanceof HTMLElement
+        ? document.documentElement
+        : null;
+    const vw = window.innerWidth || docEl?.clientWidth || 0;
+    const alignedLeft = Number(rect.left) || 0;
+    const alignedRight = Number(rect.right) || alignedLeft + (Number(rect.width) || 0);
+    const fullyRelaxedLeft = 0;
+    const fullyRelaxedRight = vw;
+    const widthDenominator = Math.max(1, comfortableWidthPx - edgeToEdgeWidthPx);
+    const blend = clamp01((comfortableWidthPx - rect.width) / widthDenominator);
+    const dockLeft = lerp(alignedLeft, fullyRelaxedLeft, blend);
+    const dockRight = lerp(alignedRight, fullyRelaxedRight, blend);
+    const dockWidth = Math.max(0, dockRight - dockLeft);
+
+    dock.style.left = `${Math.round(dockLeft)}px`;
+    dock.style.width = `${Math.round(dockWidth)}px`;
     dock.style.top = `${Math.round(safeTop)}px`;
-    syncRailStackHeightVar();
   };
 
   let _syncRafId = 0;
@@ -2640,94 +2591,41 @@ function mountTopFilterChipRail(opts = {}) {
       sync();
     });
   };
-  const resizeObserver =
-    typeof ResizeObserver === 'function'
-      ? new ResizeObserver(() => scheduleSync())
-      : null;
-  if (resizeObserver) {
-    resizeObserver.observe(anchorEl);
-    const appBarEl = document.querySelector('.app-bar-wrapper');
-    if (appBarEl instanceof HTMLElement) resizeObserver.observe(appBarEl);
-  }
   window.addEventListener('resize', scheduleSync);
   window.addEventListener('scroll', scheduleSync, { passive: true });
   scheduleSync();
 
-  let destroyed = false;
   return {
     dockEl: dock,
-    viewportEl: dock,
+    viewportEl: viewport,
     trackEl: track,
     sync: scheduleSync,
     destroy() {
-      if (destroyed) return;
-      destroyed = true;
       window.removeEventListener('resize', scheduleSync);
       window.removeEventListener('scroll', scheduleSync);
-      if (resizeObserver) resizeObserver.disconnect();
       if (_syncRafId) {
         cancelAnimationFrame(_syncRafId);
         _syncRafId = 0;
       }
-      if (bodyEl) {
-        const currentCount = Math.max(
-          0,
-          Number.parseInt(bodyEl.dataset?.[bodyRailCountKey] || '0', 10) || 0,
-        );
-        const nextCount = Math.max(0, currentCount - 1);
-        if (nextCount > 0) {
-          bodyEl.dataset[bodyRailCountKey] = String(nextCount);
-        } else {
-          delete bodyEl.dataset[bodyRailCountKey];
-          bodyEl.classList.remove('has-top-filter-chip-rail');
-        }
-      }
       if (removeOnDestroy && dock?.parentNode) {
         dock.parentNode.removeChild(dock);
       }
-      syncRailStackHeightVar();
     },
   };
 }
-
-let filterDropdownChipPanelIdSeq = 0;
 
 function renderFilterChipList(opts = {}) {
   const mountEl = opts?.mountEl;
   if (!(mountEl instanceof HTMLElement)) return;
 
   const chips = Array.isArray(opts?.chips) ? opts.chips : [];
-  const compoundChips = Array.isArray(opts?.compoundChips) ? opts.compoundChips : [];
   const activeSrc = opts?.activeChipIds;
   const active = activeSrc instanceof Set ? activeSrc : new Set(activeSrc || []);
   const onToggle = typeof opts?.onToggle === 'function' ? opts.onToggle : null;
   const chipClassName = String(opts?.chipClassName || 'app-filter-chip').trim();
-  const reopenCompoundDropdown = !!opts?.reopenCompoundDropdown;
-  const reopenCompoundDropdownId = String(opts?.reopenCompoundDropdownId || '')
-    .trim()
-    .toLowerCase();
-
-  const previousCleanupFns = Array.isArray(mountEl.__chipUiCleanupFns)
-    ? mountEl.__chipUiCleanupFns
-    : [];
-  previousCleanupFns.forEach((fn) => {
-    try {
-      fn();
-    } catch (_) {}
-  });
-  mountEl.__chipUiCleanupFns = [];
 
   mountEl.innerHTML = '';
-
-  const compoundInsertIndexRaw = opts?.compoundInsertIndex;
-  const compoundInsertIndex =
-    compoundInsertIndexRaw == null ||
-    compoundInsertIndexRaw === '' ||
-    Number.isNaN(Number(compoundInsertIndexRaw))
-      ? null
-      : Math.max(0, Math.floor(Number(compoundInsertIndexRaw)));
-
-  const renderOneFlatChip = (chipDef) => {
+  chips.forEach((chipDef) => {
     const id = String(chipDef?.id || '').trim().toLowerCase();
     if (!id) return;
     const label = String(chipDef?.label || id);
@@ -2744,243 +2642,7 @@ function renderFilterChipList(opts = {}) {
       chip.addEventListener('click', () => onToggle(id));
     }
     mountEl.appendChild(chip);
-  };
-
-  const renderAllCompoundChips = () => {
-    compoundChips.forEach((compoundDef) => {
-      const compoundId = String(compoundDef?.id || '').trim().toLowerCase();
-      if (!compoundId) return;
-      const optionDefs = Array.isArray(compoundDef?.options) ? compoundDef.options : [];
-      const optionSelectedIds = new Set(
-        compoundDef?.selectedOptionIds instanceof Set
-          ? Array.from(compoundDef.selectedOptionIds)
-          : compoundDef?.selectedOptionIds || [],
-      );
-      const label = String(compoundDef?.label || compoundId);
-      const toggleOption =
-        typeof compoundDef?.onToggleOption === 'function'
-          ? compoundDef.onToggleOption
-          : null;
-      const onClearSelection =
-        typeof compoundDef?.onClearSelection === 'function'
-          ? compoundDef.onClearSelection
-          : null;
-      const align = String(compoundDef?.panelAlign || 'start').trim().toLowerCase();
-      const hasSelection = optionSelectedIds.size > 0;
-
-      const wrapper = document.createElement('div');
-      wrapper.className = 'app-filter-chip-dropdown-wrap';
-
-      const pill = document.createElement('div');
-      pill.className = `${chipClassName} app-filter-chip--dropdown app-filter-chip--dropdown-pill`;
-      pill.setAttribute('role', 'group');
-
-      const openBtn = document.createElement('button');
-      openBtn.type = 'button';
-      openBtn.className = 'app-filter-chip-dropdown-open';
-      openBtn.setAttribute('aria-haspopup', 'listbox');
-      openBtn.setAttribute('aria-expanded', 'false');
-      if (hasSelection) pill.classList.add('is-active');
-
-      const labelEl = document.createElement('span');
-      labelEl.className = 'app-filter-chip-dropdown-label';
-      labelEl.textContent = label;
-      openBtn.appendChild(labelEl);
-
-      const chevronEl = document.createElement('span');
-      chevronEl.className =
-        'material-symbols-outlined app-filter-chip-dropdown-chevron';
-      chevronEl.setAttribute('aria-hidden', 'true');
-      chevronEl.textContent = 'expand_more';
-      openBtn.appendChild(chevronEl);
-
-      pill.appendChild(openBtn);
-
-      if (hasSelection && onClearSelection) {
-        const clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'app-filter-chip-dropdown-clear';
-        clearBtn.setAttribute(
-          'aria-label',
-          String(compoundDef?.clearAriaLabel || 'Clear selection'),
-        );
-        const clearIcon = document.createElement('span');
-        clearIcon.className =
-          'material-symbols-outlined app-filter-chip-dropdown-clear-icon';
-        clearIcon.setAttribute('aria-hidden', 'true');
-        clearIcon.textContent = 'cancel';
-        clearBtn.appendChild(clearIcon);
-        clearBtn.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onClearSelection();
-        });
-        pill.appendChild(clearBtn);
-      }
-
-      const panel = document.createElement('div');
-      panel.className = 'app-filter-chip-dropdown-panel';
-      panel.hidden = true;
-      panel.role = 'listbox';
-      panel.setAttribute('aria-multiselectable', 'true');
-      panel.id = `filterChipDropdownPanel${++filterDropdownChipPanelIdSeq}`;
-      openBtn.setAttribute('aria-controls', panel.id);
-
-      optionDefs.forEach((optionDef) => {
-        const optionId = String(optionDef?.id || '').trim().toLowerCase();
-        if (!optionId) return;
-        const optionLabel = String(optionDef?.label || optionId);
-        const optionDisabled = !!optionDef?.disabled;
-        const selected = optionSelectedIds.has(optionId);
-
-        const optionBtn = document.createElement('button');
-        optionBtn.type = 'button';
-        optionBtn.className = 'app-filter-chip-dropdown-option';
-        optionBtn.role = 'option';
-        optionBtn.dataset.optionId = optionId;
-        optionBtn.setAttribute('aria-selected', selected ? 'true' : 'false');
-        if (selected) optionBtn.classList.add('is-selected');
-        if (optionDisabled) {
-          optionBtn.disabled = true;
-          optionBtn.classList.add('is-disabled');
-        }
-
-        const optionText = document.createElement('span');
-        optionText.className = 'app-filter-chip-dropdown-option-label';
-        optionText.textContent = optionLabel;
-        optionBtn.appendChild(optionText);
-
-        const optionCheck = document.createElement('span');
-        optionCheck.className =
-          'material-symbols-outlined app-filter-chip-dropdown-option-check';
-        optionCheck.setAttribute('aria-hidden', 'true');
-        optionCheck.textContent = selected ? 'check' : '';
-        optionBtn.appendChild(optionCheck);
-
-        if (toggleOption) {
-          optionBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (optionDisabled) return;
-            toggleOption(optionId);
-          });
-        }
-
-        panel.appendChild(optionBtn);
-      });
-
-      wrapper.appendChild(pill);
-      mountEl.appendChild(wrapper);
-
-      let backdropEl = null;
-
-      const closePanel = () => {
-        if (panel.hidden) return;
-        panel.hidden = true;
-        wrapper.classList.remove('is-open');
-        openBtn.setAttribute('aria-expanded', 'false');
-        if (backdropEl && backdropEl.parentNode) {
-          backdropEl.parentNode.removeChild(backdropEl);
-        }
-        backdropEl = null;
-        if (panel.parentElement) {
-          panel.parentElement.removeChild(panel);
-        }
-      };
-      const syncPanelPosition = () => {
-        if (panel.hidden) return;
-        const rect = pill.getBoundingClientRect();
-        if (!rect || rect.width <= 0) return;
-        const viewportWidth =
-          window.innerWidth || document.documentElement.clientWidth || rect.right;
-        panel.style.minWidth = `${Math.round(rect.width)}px`;
-        const margin = 12;
-        let left = align === 'end' ? rect.right - panel.offsetWidth : rect.left;
-        left = Math.max(margin, Math.min(left, viewportWidth - panel.offsetWidth - margin));
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(rect.bottom + 8)}px`;
-      };
-      const openPanel = () => {
-        if (!panel.hidden) return;
-        backdropEl = document.createElement('div');
-        backdropEl.className = 'app-filter-chip-dropdown-backdrop';
-        backdropEl.setAttribute('aria-hidden', 'true');
-        document.body.appendChild(backdropEl);
-        document.body.appendChild(panel);
-        panel.hidden = false;
-        wrapper.classList.add('is-open');
-        openBtn.setAttribute('aria-expanded', 'true');
-        syncPanelPosition();
-      };
-      const onDocumentPointerDown = (event) => {
-        if (panel.hidden) return;
-        const target = event?.target;
-        if (!(target instanceof Node)) {
-          closePanel();
-          return;
-        }
-        if (pill.contains(target) || panel.contains(target)) return;
-        closePanel();
-      };
-      const onDocumentKeyDown = (event) => {
-        if (event?.key === 'Escape') {
-          closePanel();
-        }
-      };
-      const onViewportMove = () => {
-        syncPanelPosition();
-      };
-
-      openBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (panel.hidden) {
-          openPanel();
-        } else {
-          closePanel();
-        }
-      });
-      document.addEventListener('pointerdown', onDocumentPointerDown, true);
-      document.addEventListener('keydown', onDocumentKeyDown);
-      window.addEventListener('resize', onViewportMove);
-      window.addEventListener('scroll', onViewportMove, true);
-
-      mountEl.__chipUiCleanupFns.push(() => {
-        closePanel();
-        document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-        document.removeEventListener('keydown', onDocumentKeyDown);
-        window.removeEventListener('resize', onViewportMove);
-        window.removeEventListener('scroll', onViewportMove, true);
-      });
-
-      if (
-        reopenCompoundDropdown &&
-        (
-          (reopenCompoundDropdownId && compoundId === reopenCompoundDropdownId) ||
-          (!reopenCompoundDropdownId && compoundChips.length === 1)
-        )
-      ) {
-        requestAnimationFrame(() => {
-          openPanel();
-        });
-      }
-    });
-  };
-
-  if (compoundInsertIndex == null) {
-    chips.forEach((chipDef) => renderOneFlatChip(chipDef));
-    renderAllCompoundChips();
-  } else {
-    chips.forEach((chipDef, idx) => {
-      if (idx === compoundInsertIndex) {
-        renderAllCompoundChips();
-      }
-      renderOneFlatChip(chipDef);
-    });
-    if (compoundInsertIndex >= chips.length) {
-      renderAllCompoundChips();
-    }
-  }
+  });
 }
 
 if (typeof window !== 'undefined') {

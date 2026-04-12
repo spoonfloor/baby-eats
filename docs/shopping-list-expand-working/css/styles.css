@@ -5,7 +5,7 @@
   --body-font-weight: 400;
   /* Used by `css/overrides.css` as the global font-weight token */
   --main-font-weight: var(--body-font-weight);
-  --headline-font-size: 15px;
+  --headline-font-size: 16px;
   --ingredient-editor-control-font-size: 14px;
 
   /* --- Colors: theme + surfaces + roles --- */
@@ -59,29 +59,7 @@
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
   --page-top-gap: 48px;
-  --top-filter-chip-page-top-gap: 64px;
-  --top-level-list-edge-gap: 32px;
-  --top-level-list-row-padding-y: 0.5rem;
-  --top-level-list-row-padding-x: 0.75rem;
-
-  --top-level-list-row-height-electron: 40px;
-  --top-level-list-row-height-web: 40px;
-
-  --section-label-color: rgba(0, 0, 0, 0.55);
-  /* Top-level empty-state tuning knobs */
-  --top-level-empty-font-size: 16px;
-  --top-level-empty-color: var(--section-label-color);
-  --top-level-empty-text-transform: uppercase;
-  --top-level-empty-paragraph-gap: 1.2rem;
-  --top-filter-chip-gap-from-anchor: 8px;
-  --top-filter-chip-gap-from-appbar: 8px;
   --page-content-width: 574px;
-  /* Shopping list: expanded recipe contribution rows */
-  --shopping-list-doc-contribution-line-gap: 0px;
-  --shopping-list-doc-contribution-trailing-gap: 12px;
-  /* Inline title + chevron (Shopping Items variant parents + Shopping List doc rows) */
-  --shopping-inline-expand-gap: 2px;
-  --shopping-inline-expand-line-height: var(--ingredients-line-height);
 
   --header-font-size: 16px;
   --section-card-offset: 24px;
@@ -89,8 +67,6 @@
   /* --- Z-index scale (keep consistent across dropdowns/dialogs/toasts) --- */
   --z-app-chrome: 1000;
   --z-filter-chip-rail: 990;
-  /* Above page list; below chip rail (--z-filter-chip-rail) so other filters stay clickable */
-  --z-filter-chip-dropdown-backdrop: 900;
   --z-dropdown: 22000;
   --z-dialog: 20000;
   --z-toast: 21000;
@@ -161,24 +137,6 @@
   /* App bar */
   --app-bar-title-size: 18px;
   --app-bar-gap: 12px;
-  --app-filter-chip-font-size: 15px;
-  --app-filter-chip-font-weight: var(--body-font-weight);
-  --app-filter-chip-height: 38px;
-  --app-filter-chip-gap: 12px;
-  --app-filter-chip-padding-x: 20px;
-  --app-filter-chip-rail-padding-inline: 20px;
-  --app-filter-chip-rail-padding-block: 1px;
-  --top-filter-chip-rail-height: calc(
-    var(--app-filter-chip-height) +
-      (var(--app-filter-chip-rail-padding-block) * 2)
-  );
-  --top-filter-chip-rail-stack-height: calc(
-    var(--top-filter-chip-gap-from-appbar) + var(--top-filter-chip-rail-height)
-  );
-  --app-filter-chip-bg: var(--pill-bg);
-  --app-filter-chip-fg: var(--theme-primary);
-  --app-filter-chip-active-bg: var(--theme-primary);
-  --app-filter-chip-active-fg: #fff;
   --shopping-filter-chip-font-size: var(--ingredient-editor-control-font-size);
   --shopping-filter-chip-font-weight: var(--body-font-weight);
   --shopping-filter-chip-height: 30px;
@@ -187,24 +145,9 @@
   --shopping-filter-chip-border: rgb(var(--theme-primary-rgb) / 0.25);
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
-  --shopping-filter-chip-active-bg: var(--theme-primary);
+  --shopping-filter-chip-active-bg: var(--theme-secondary);
   --shopping-filter-chip-active-fg: #fff;
-  --app-filter-chip-dropdown-gap: 7px;
-  --app-filter-chip-dropdown-panel-bg: #fff;
-  --app-filter-chip-dropdown-panel-shadow: 0 14px 30px rgb(0 0 0 / 0.16);
-  /* Location dropdown panel spacing (edit these) */
-  --app-filter-chip-dropdown-row-gap: 6px; /* gap between option rows */
-  --app-filter-chip-dropdown-panel-padding-inline: 8px; /* left + right inset */
-  --app-filter-chip-dropdown-panel-padding-top: 8px;
-  --app-filter-chip-dropdown-panel-padding-bottom: 12px;
-  --app-filter-chip-dropdown-chevron-size: 1.275em;
-  /* Chevron nudge (Material icon): +x right, +y down */
-  --app-filter-chip-dropdown-chevron-offset-x: 0px;
-  --app-filter-chip-dropdown-chevron-offset-y: 1px;
-  /* Y when panel is open (after rotate(180deg)); often nudge up vs closed — tune here */
-  --app-filter-chip-dropdown-chevron-offset-y-open: -1px;
-  --app-filter-chip-dropdown-check-size: 20px;
-  --app-filter-chip-dropdown-option-min-height: 36px;
+  --shopping-filter-chip-track-padding-start: 0px;
 
   /* --- Insert affordance positioning --- */
   --ing-insert-icon-size: 20px;
@@ -235,10 +178,7 @@ body[data-force-web-mode='on'] {
   --shopping-filter-chip-border: rgb(var(--theme-primary-rgb) / 0.25);
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
-  --shopping-filter-chip-active-bg: var(--theme-primary);
-  --app-filter-chip-bg: var(--pill-bg);
-  --app-filter-chip-fg: var(--theme-primary);
-  --app-filter-chip-active-bg: var(--theme-primary);
+  --shopping-filter-chip-active-bg: var(--theme-secondary);
 }
 
 /* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
@@ -287,9 +227,7 @@ body[data-force-web-mode='on'] {
   cursor: pointer;
 }
 
-.button:not(:disabled):not(.button--secondary):not(.button--danger):not(
-    .button--danger-outline
-  ):hover {
+.button:not(:disabled):not(.button--secondary):not(.button--danger):not(.button--danger-outline):hover {
   background: var(--button-primary-hover);
 }
 
@@ -312,32 +250,6 @@ body[data-force-web-mode='on'] {
 
 .page-main {
   padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
-}
-
-body.has-top-filter-chip-rail {
-  --page-top-gap: var(--top-filter-chip-page-top-gap);
-}
-
-body.recipes-page .page-main,
-body.shopping-page .page-main,
-body.stores-page .page-main,
-body.tags-page .page-main,
-body.sizes-page .page-main,
-body.units-page .page-main,
-body.shopping-list-page .page-main {
-  padding-top: var(--app-bar-height);
-}
-
-body.has-top-filter-chip-rail.recipes-page .page-main,
-body.has-top-filter-chip-rail.shopping-page .page-main,
-body.has-top-filter-chip-rail.stores-page .page-main,
-body.has-top-filter-chip-rail.tags-page .page-main,
-body.has-top-filter-chip-rail.sizes-page .page-main,
-body.has-top-filter-chip-rail.units-page .page-main,
-body.has-top-filter-chip-rail.shopping-list-page .page-main {
-  padding-top: calc(
-    var(--app-bar-height) + var(--top-filter-chip-rail-stack-height)
-  );
 }
 
 /* Prevent a white flash before the app-bar fragment injects on navigation.
@@ -389,13 +301,13 @@ body.has-top-filter-chip-rail.shopping-list-page .page-main {
   appearance: none;
   border: none;
   border-radius: 9999px;
-  background: var(--app-filter-chip-bg);
-  color: var(--app-filter-chip-fg);
-  height: var(--app-filter-chip-height);
-  padding: 0 var(--app-filter-chip-padding-x);
+  background: var(--shopping-filter-chip-bg);
+  color: var(--shopping-filter-chip-fg);
+  height: var(--shopping-filter-chip-height);
+  padding: 0 var(--shopping-filter-chip-padding-x);
   font-family: var(--main-font);
-  font-size: var(--app-filter-chip-font-size);
-  font-weight: var(--app-filter-chip-font-weight);
+  font-size: var(--shopping-filter-chip-font-size);
+  font-weight: var(--shopping-filter-chip-font-weight);
   line-height: 1;
   cursor: pointer;
 }
@@ -407,216 +319,29 @@ body.has-top-filter-chip-rail.shopping-list-page .page-main {
 }
 
 .app-filter-chip.is-active {
-  background: var(--app-filter-chip-active-bg);
-  color: var(--app-filter-chip-active-fg);
+  background: var(--shopping-filter-chip-active-bg);
+  color: var(--shopping-filter-chip-active-fg);
 }
 
 .app-filter-chip:hover {
   background: color-mix(
     in srgb,
-    var(--app-filter-chip-bg) 90%,
-    var(--app-filter-chip-active-bg) 10%
+    var(--shopping-filter-chip-bg) 90%,
+    var(--shopping-filter-chip-active-bg) 10%
   );
 }
 
 .app-filter-chip.is-active:hover {
-  background: var(--app-filter-chip-active-bg);
+  background: color-mix(
+    in srgb,
+    var(--shopping-filter-chip-active-bg) 92%,
+    #000 8%
+  );
 }
 
 .app-filter-chip:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.8);
   outline-offset: 1px;
-}
-
-.app-filter-chip-dropdown-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.app-filter-chip--dropdown {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--app-filter-chip-dropdown-gap);
-}
-
-.app-filter-chip--dropdown-pill.app-filter-chip--dropdown {
-  gap: 4px;
-  box-sizing: border-box;
-}
-
-.app-filter-chip-dropdown-open {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--app-filter-chip-dropdown-gap);
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  line-height: 1;
-}
-
-.app-filter-chip-dropdown-open:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.8);
-  outline-offset: 1px;
-  border-radius: 8px;
-}
-
-.app-filter-chip-dropdown-clear {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.app-filter-chip--dropdown-pill.is-active .app-filter-chip-dropdown-clear {
-  color: var(--app-filter-chip-active-fg);
-}
-
-.app-filter-chip-dropdown-clear:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
-  outline-offset: 1px;
-}
-
-.app-filter-chip-dropdown-clear-icon.material-symbols-outlined {
-  font-size: 18px;
-  line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 20;
-}
-
-.app-filter-chip-dropdown-chevron.material-symbols-outlined {
-  font-size: var(--app-filter-chip-dropdown-chevron-size);
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 24;
-  transform: translate(
-    var(--app-filter-chip-dropdown-chevron-offset-x),
-    var(--app-filter-chip-dropdown-chevron-offset-y)
-  );
-}
-
-.app-filter-chip-dropdown-wrap.is-open .app-filter-chip-dropdown-chevron {
-  transform: translate(
-      var(--app-filter-chip-dropdown-chevron-offset-x),
-      var(--app-filter-chip-dropdown-chevron-offset-y-open)
-    )
-    rotate(180deg);
-}
-
-.app-filter-chip-dropdown-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-filter-chip-dropdown-backdrop);
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  pointer-events: auto;
-}
-
-.app-filter-chip-dropdown-panel {
-  position: fixed;
-  z-index: var(--z-dropdown);
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-filter-chip-dropdown-row-gap);
-  margin: 0;
-  padding: var(--app-filter-chip-dropdown-panel-padding-top)
-    var(--app-filter-chip-dropdown-panel-padding-inline)
-    var(--app-filter-chip-dropdown-panel-padding-bottom)
-    var(--app-filter-chip-dropdown-panel-padding-inline);
-  box-sizing: border-box;
-  border-radius: 12px;
-  border: none;
-  background: var(--app-filter-chip-dropdown-panel-bg);
-  box-shadow: var(--app-filter-chip-dropdown-panel-shadow);
-  min-width: 180px;
-  max-width: min(92vw, 320px);
-  max-height: min(56vh, 460px);
-  overflow-y: auto;
-}
-
-.app-filter-chip-dropdown-option {
-  appearance: none;
-  border: none;
-  background: transparent;
-  width: 100%;
-  box-sizing: border-box;
-  min-height: var(--app-filter-chip-dropdown-option-min-height);
-  padding: 8px 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  text-align: left;
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  color: var(--font-color-near-black);
-  cursor: pointer;
-  border-radius: 8px;
-}
-
-/* Unselected hover: same as `.list-view li:hover:not(.is-selected)` */
-.app-filter-chip-dropdown-option:hover:not(.is-selected):not(.is-disabled) {
-  background-color: hsl(270, 0%, 96%);
-}
-
-/* Selected: default chip look (not active / pressed chip) */
-.app-filter-chip-dropdown-option.is-selected {
-  background: var(--app-filter-chip-bg);
-  color: var(--app-filter-chip-fg);
-  font-weight: var(--app-filter-chip-font-weight);
-}
-
-/* Selected hover: same as `.app-filter-chip:hover` (unselected chip hover) */
-.app-filter-chip-dropdown-option.is-selected:hover:not(.is-disabled) {
-  background: color-mix(
-    in srgb,
-    var(--app-filter-chip-bg) 90%,
-    var(--app-filter-chip-active-bg) 10%
-  );
-  color: var(--app-filter-chip-fg);
-}
-
-.app-filter-chip-dropdown-option.is-disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.app-filter-chip-dropdown-option-check.material-symbols-outlined {
-  flex: 0 0 auto;
-  width: var(--app-filter-chip-dropdown-check-size);
-  min-width: var(--app-filter-chip-dropdown-check-size);
-  font-size: var(--app-filter-chip-dropdown-check-size);
-  line-height: 1;
-  text-align: center;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 24;
 }
 
 /* Shopping list rows: keep items single-line; truncate long "(variants...)" tails. */
@@ -626,9 +351,7 @@ body.shopping-page #shoppingList li:not(.list-section-label) {
   text-overflow: ellipsis;
 }
 
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li:not(.list-section-label) {
+body.shopping-page[data-force-web-mode='on'] #shoppingList li:not(.list-section-label) {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -642,21 +365,6 @@ body.shopping-page #shoppingList .shopping-list-row-label {
   text-overflow: ellipsis;
 }
 
-/* Match Shopping List doc row: same body type + line rhythm as inline ▾/▴ in label text. */
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-parent
-  .shopping-list-row-label,
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-label {
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  line-height: var(--shopping-inline-expand-line-height);
-}
-
 body.shopping-page #shoppingList .shopping-list-row-icon {
   display: none;
   flex: 0 0 auto;
@@ -664,21 +372,12 @@ body.shopping-page #shoppingList .shopping-list-row-icon {
   pointer-events: none;
 }
 
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-icon {
+body.shopping-page[data-force-web-mode='on'] #shoppingList .shopping-list-row-icon {
   display: inline-block;
   font-size: 32px;
   line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -692,9 +391,7 @@ body.shopping-page #shoppingList .shopping-list-row-stepper {
   height: 32px;
 }
 
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-stepper {
+body.shopping-page[data-force-web-mode='on'] #shoppingList .shopping-list-row-stepper {
   display: inline-flex;
 }
 
@@ -719,15 +416,10 @@ body.shopping-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  .shopping-stepper-btn
-  .material-symbols-outlined {
+  .shopping-stepper-btn .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 26;
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -774,7 +466,6 @@ body.shopping-page[data-force-web-mode='on']
 body.shopping-page #shoppingList .shopping-list-row-badge {
   display: none;
   flex: 0 0 auto;
-  flex-shrink: 0;
   margin-left: auto;
   font-family: var(--main-font);
   font-size: var(--body-font-size);
@@ -783,27 +474,18 @@ body.shopping-page #shoppingList .shopping-list-row-badge {
   user-select: none;
   line-height: 32px;
   min-height: 32px;
-  min-width: 0;
-  width: auto;
-  max-width: none;
-  padding: 0 2px 0 4px;
-  box-sizing: border-box;
-  text-align: right;
-  overflow: visible;
+  width: 32px;
+  text-align: center;
   margin-right: 0;
   cursor: pointer;
   pointer-events: auto;
 }
 
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-badge {
+body.shopping-page[data-force-web-mode='on'] #shoppingList .shopping-list-row-badge {
   display: none;
 }
 
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li:not(.list-section-label) {
+body.recipes-page[data-force-web-mode='on'] #recipeList li:not(.list-section-label) {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -824,21 +506,12 @@ body.recipes-page #recipeList .shopping-list-row-icon {
   pointer-events: none;
 }
 
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-icon {
+body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-list-row-icon {
   display: inline-block;
   font-size: 32px;
   line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -852,13 +525,13 @@ body.recipes-page #recipeList .shopping-list-row-stepper {
   height: 32px;
 }
 
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-stepper {
+body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-list-row-stepper {
   display: inline-flex;
 }
 
-body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-btn {
+body.recipes-page[data-force-web-mode='on']
+  #recipeList
+  .shopping-stepper-btn {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -877,18 +550,15 @@ body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-btn {
 
 body.recipes-page[data-force-web-mode='on']
   #recipeList
-  .shopping-stepper-btn
-  .material-symbols-outlined {
+  .shopping-stepper-btn .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 26;
 }
 
-body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-qty {
+body.recipes-page[data-force-web-mode='on']
+  #recipeList
+  .shopping-stepper-qty {
   font-family: var(--main-font);
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
@@ -902,7 +572,6 @@ body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-qty {
 body.recipes-page #recipeList .shopping-list-row-badge {
   display: none;
   flex: 0 0 auto;
-  flex-shrink: 0;
   margin-left: auto;
   font-family: var(--main-font);
   font-size: var(--body-font-size);
@@ -911,49 +580,38 @@ body.recipes-page #recipeList .shopping-list-row-badge {
   user-select: none;
   line-height: 32px;
   min-height: 32px;
-  min-width: 0;
-  width: auto;
-  max-width: none;
-  padding: 0 2px 0 4px;
-  box-sizing: border-box;
-  text-align: right;
-  overflow: visible;
+  width: 32px;
+  text-align: center;
   margin-right: 0;
   cursor: pointer;
   pointer-events: auto;
 }
 
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-badge {
+body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-list-row-badge {
   display: none;
 }
 
 body.recipes-page[data-force-web-mode='on']
   #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon {
   color: var(--theme-primary);
 }
 
 body.recipes-page[data-force-web-mode='on']
   #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-badge {
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-badge {
   color: var(--theme-primary);
 }
 
 body.recipes-page[data-force-web-mode='on']
   #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-btn {
+  li.shopping-row-checked:not(.list-section-label) .shopping-stepper-btn {
   color: var(--theme-primary);
 }
 
 body.recipes-page[data-force-web-mode='on']
   #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-qty {
+  li.shopping-row-checked:not(.list-section-label) .shopping-stepper-qty {
   color: var(--theme-primary);
 }
 
@@ -963,9 +621,7 @@ body.recipes-page[data-force-web-mode='on']
   color: var(--theme-primary);
 }
 
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li:not(.list-section-label) {
+body.stores-page[data-force-web-mode='on'] #storesList li:not(.list-section-label) {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -990,23 +646,15 @@ body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-icon {
   display: inline-block;
   font-size: 32px;
   line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 32;
   cursor: pointer;
   pointer-events: auto;
 }
 
 body.stores-page[data-force-web-mode='on']
   #storesList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon {
   color: var(--theme-primary);
 }
 
@@ -1018,29 +666,25 @@ body.stores-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-badge {
+  li.shopping-row-checked:not(.list-section-label) .shopping-list-row-badge {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-btn {
+  li.shopping-row-checked:not(.list-section-label) .shopping-stepper-btn {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-qty {
+  li.shopping-row-checked:not(.list-section-label) .shopping-stepper-qty {
   color: var(--theme-primary);
 }
 
@@ -1102,57 +746,44 @@ body.shopping-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-label {
+  li.shopping-variant-child .shopping-list-row-label {
   font-size: calc(var(--body-font-size) - 1px);
   color: rgba(0, 0, 0, 0.65);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-list-row-label {
+  li.shopping-variant-child.shopping-row-checked .shopping-list-row-label {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-icon {
+  li.shopping-variant-child .shopping-list-row-icon {
   display: inline-block;
   font-size: 32px;
   line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 32;
   cursor: pointer;
   pointer-events: auto;
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-list-row-icon {
+  li.shopping-variant-child.shopping-row-checked .shopping-list-row-icon {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-stepper {
+  li.shopping-variant-child .shopping-list-row-stepper {
   display: inline-flex;
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-btn {
+  li.shopping-variant-child .shopping-stepper-btn {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -1171,29 +802,21 @@ body.shopping-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-stepper-btn {
+  li.shopping-variant-child.shopping-row-checked .shopping-stepper-btn {
   color: var(--theme-primary);
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-btn
-  .material-symbols-outlined {
+  li.shopping-variant-child .shopping-stepper-btn .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 26;
 }
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-qty {
+  li.shopping-variant-child .shopping-stepper-qty {
   font-family: var(--main-font);
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
@@ -1206,8 +829,7 @@ body.shopping-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-stepper-qty {
+  li.shopping-variant-child.shopping-row-checked .shopping-stepper-qty {
   color: var(--theme-primary);
 }
 
@@ -1244,13 +866,17 @@ body.stores-page[data-force-web-mode='on']
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--section-label-color);
+  color: rgba(0, 0, 0, 0.55);
   padding-top: 1rem;
   padding-bottom: 0.25rem;
 }
 
 .list-view li.list-section-label:hover {
   background-color: transparent;
+}
+
+body.shopping-list-page #shoppingListOutput.list-view {
+  padding-bottom: calc(var(--page-top-gap) + 1rem);
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-section--store,
@@ -1260,12 +886,8 @@ body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted {
   font-size: 13px;
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section--store:first-child,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section--unlisted:first-child {
+body.shopping-list-page #shoppingListOutput .shopping-list-section--store:first-child,
+body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted:first-child {
   margin-top: 0;
 }
 
@@ -1305,19 +927,13 @@ body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle {
   text-transform: inherit;
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section-toggle__icon {
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__icon {
   flex: 0 0 auto;
   font-size: 20px;
   line-height: 1;
   color: inherit;
   opacity: 0.72;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 200,
-    'GRAD' 0,
-    'opsz' 20;
+  font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 20;
   transition: transform 120ms ease;
 }
 
@@ -1328,9 +944,7 @@ body.shopping-list-page
   transform: rotate(180deg);
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section-toggle__label {
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__label {
   line-height: 1.2;
 }
 
@@ -1358,17 +972,10 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox {
   justify-content: center;
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-checkbox
-  .material-symbols-outlined {
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox .material-symbols-outlined {
   font-size: 24px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 24;
+  font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 24;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-text-wrap {
@@ -1402,221 +1009,28 @@ body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--checked {
   color: rgba(0, 0, 0, 0.48);
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--checked
-  .shopping-list-doc-checkbox {
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--checked .shopping-list-doc-checkbox {
   color: rgba(0, 0, 0, 0.48);
 }
 
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-headline {
-  display: flex;
-  align-items: center;
-  gap: var(--shopping-inline-expand-gap);
-  min-width: 0;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline
-  .shopping-list-doc-text {
-  width: auto;
-  flex: 0 1 auto;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline
-  .shopping-list-doc-link {
-  line-height: var(--shopping-inline-expand-line-height);
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-link,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link {
-  color: inherit;
-  text-decoration: none;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-link:hover,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link:hover {
-  text-decoration: underline;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-link:focus-visible,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link:focus-visible,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-expand:focus-visible {
-  outline: 2px solid rgb(var(--theme-primary-rgb) / 0.3);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-text--amount {
-  width: auto;
-  flex: 0 0 auto;
-  color: rgba(0, 0, 0, 0.56);
-  white-space: nowrap;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  font-family: var(--main-font);
+.top-level-empty-state {
+  color: var(--theme-primary);
+  text-transform: none;
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
-  line-height: var(--shopping-inline-expand-line-height);
-  color: inherit;
-  cursor: pointer;
-  flex-shrink: 0;
-  /* Match Items-page inline "text + space + chevron" optical spacing. */
-  margin-left: calc(1ch - var(--shopping-inline-expand-gap));
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-expand[aria-expanded='true'] {
-  color: inherit;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context,
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  cursor: default;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context:hover,
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution:hover {
-  background-color: transparent;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context {
-  margin-top: var(--shopping-list-doc-contribution-line-gap);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-checkbox--placeholder {
-  visibility: hidden;
-  pointer-events: none;
-  cursor: default;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline--contribution-context,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline--contribution {
-  flex-wrap: wrap;
-  align-items: baseline;
-  row-gap: 2px;
-  column-gap: 6px;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-context-label {
-  color: var(--theme-primary);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution {
-  margin-top: var(--shopping-list-doc-contribution-line-gap);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-last {
-  margin-bottom: var(--shopping-list-doc-contribution-trailing-gap);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-label {
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-detail {
-  color: rgba(0, 0, 0, 0.56);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* Must beat `.list-view li.list-section-label` (section headers: 12px / uppercase). */
-.list-view li.list-section-label.top-level-empty-state {
-  color: var(--top-level-empty-color);
-  text-transform: var(--top-level-empty-text-transform);
-  font-size: var(--top-level-empty-font-size);
-  font-weight: var(--body-font-weight);
   font-family: var(--main-font);
-  line-height: 1.5;
+  line-height: var(--ingredients-line-height);
   letter-spacing: 0;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--top-level-empty-paragraph-gap);
-  width: 100%;
-  padding: 0;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
-.list-page li.top-level-empty-state {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  cursor: default;
-}
-
-.top-level-empty-diagnosis,
-.top-level-empty-cta {
+.top-level-empty-state > p {
   margin: 0;
 }
 
-.list-view.list-page.is-top-level-empty {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(
-    100dvh - var(--app-bar-height) - var(--bottom-nav-height) -
-      (2 * var(--top-level-list-edge-gap))
-  );
+.top-level-empty-state > p + p {
+  margin-top: 0.75em;
 }
 
 .list-view.top-level-kbd-nav li:hover:not(.is-selected) {
@@ -1719,116 +1133,6 @@ body.store-editor-page .shopping-item-textarea:focus {
   caret-color: var(--edit-mode-color);
 }
 
-body.shopping-editor-page .shopping-item-variant-editor {
-  --shopping-item-variant-cols: minmax(0, 1fr) minmax(140px, 220px);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-rows {
-  min-width: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid {
-  min-height: 56px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid:focus-within {
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid-row {
-  display: grid;
-  grid-template-columns: var(--shopping-item-variant-cols);
-  gap: 24px;
-  align-items: center;
-  min-height: 32px;
-  min-width: 380px;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid-row--header {
-  min-height: 20px;
-  margin-bottom: 4px;
-}
-
-body.shopping-editor-page
-  .shopping-item-variant-grid-row
-  + .shopping-item-variant-grid-row {
-  margin-top: 2px;
-}
-
-body.shopping-editor-page .shopping-item-variant-header-cell {
-  min-width: 0;
-  font-size: 13px;
-  color: var(--theme-primary);
-  letter-spacing: 0.2px;
-}
-
-body.shopping-editor-page .shopping-item-variant-cell {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 24px;
-  cursor: text;
-}
-
-body.shopping-editor-page .shopping-item-variant-cell--base {
-  cursor: text;
-}
-
-body.shopping-editor-page .shopping-item-variant-base-label {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: var(--ingredient-editor-control-font-size);
-}
-
-body.shopping-editor-page .shopping-item-variant-base-prefix {
-  color: var(--field-fg);
-}
-
-body.shopping-editor-page .shopping-item-variant-base-name {
-  color: var(--theme-primary);
-}
-
-body.shopping-editor-page .shopping-item-variant-name-input,
-body.shopping-editor-page .shopping-item-variant-home-input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--field-fg);
-  font: inherit;
-  font-size: var(--ingredient-editor-control-font-size);
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body.shopping-editor-page .shopping-item-variant-name-input:focus {
-  outline: none;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.shopping-editor-page .shopping-item-variant-home-input:focus {
-  outline: none;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
 body.store-editor-page .shopping-item-textarea::placeholder {
   font-size: var(--ingredient-editor-control-font-size);
   font-family: var(--main-font);
@@ -1889,9 +1193,7 @@ body.store-editor-page .store-add-aisle-cta--per-slot {
   display: none;
 }
 
-body.store-editor-page
-  .store-aisle-slot.store-aisle-slot--hint-active
-  > .store-add-aisle-cta--per-slot {
+body.store-editor-page .store-aisle-slot.store-aisle-slot--hint-active > .store-add-aisle-cta--per-slot {
   display: block;
 }
 
@@ -2058,9 +1360,7 @@ body.store-editor-page .store-aisle-move-controls {
 }
 
 body.store-editor-page .store-aisle-card:hover .store-aisle-move-controls,
-body.store-editor-page
-  .store-aisle-card:focus-within
-  .store-aisle-move-controls,
+body.store-editor-page .store-aisle-card:focus-within .store-aisle-move-controls,
 body.store-editor-page .store-aisle-card:focus .store-aisle-move-controls {
   opacity: 1;
   pointer-events: auto;
@@ -2083,11 +1383,7 @@ body.store-editor-page .store-aisle-move-btn {
 body.store-editor-page .store-aisle-move-icon {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 20;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
 
 body.store-editor-page .store-aisle-move-btn:disabled,
@@ -2171,11 +1467,15 @@ body.shopping-editor-page
 body.unit-editor-page
   .shopping-item-toggle
   input[type='checkbox']:checked::after,
-body.unit-editor-page .shopping-item-toggle input[type='radio']:checked::after,
+body.unit-editor-page
+  .shopping-item-toggle
+  input[type='radio']:checked::after,
 body.size-editor-page
   .shopping-item-toggle
   input[type='checkbox']:checked::after,
-body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after {
+body.size-editor-page
+  .shopping-item-toggle
+  input[type='radio']:checked::after {
   content: '';
   width: 18px;
   height: 18px;
@@ -2246,11 +1546,7 @@ body.recipe-editor-page .ingredient-row-move-btn {
 body.recipe-editor-page .ingredient-row-move-icon {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 20;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
 
 body.recipe-editor-page .ingredient-row-move-btn:disabled,
@@ -2260,15 +1556,9 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
 }
 
 /* Read-only recipe list: deprecated master ingredient (not used in edit tray) */
-#ingredientsSection
-  .ingredient-line.ingredient-line--deprecated
-  .ingredient-text,
-#ingredientsSection
-  .ingredient-line.ingredient-line--deprecated
-  .sub-recipe-link,
-#ingredientsSection
-  .ingredient-line.ingredient-line--deprecated
-  .sub-recipe-link:visited {
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .ingredient-text,
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link,
+#ingredientsSection .ingredient-line.ingredient-line--deprecated .sub-recipe-link:visited {
   color: var(--ingredient-deprecated-fg);
 }
 
@@ -2343,15 +1633,15 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
 }
 
 body.ingredient-insert-blank-active
-  .ingredient-add-cta-action[data-cta-action='add-ingredient'] {
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"] {
   cursor: default;
   color: var(--placeholder-muted);
 }
 
 body.ingredient-insert-blank-active
-  .ingredient-add-cta-action[data-cta-action='add-ingredient']:hover,
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"]:hover,
 body.ingredient-insert-blank-active
-  .ingredient-add-cta-action[data-cta-action='add-ingredient']:focus-visible {
+  .ingredient-add-cta-action[data-cta-action="add-ingredient"]:focus-visible {
   color: var(--placeholder-muted);
   outline: none;
 }
@@ -2427,13 +1717,11 @@ body.ingredient-insert-blank-active
 }
 
 /* When the empty-state CTA is present, suppress between-row insertion icons and interactions */
-#ingredientsSection:has(.ingredient-header-cta--persistent)
-  .ingredient-insert-zone::before {
+#ingredientsSection:has(.ingredient-header-cta--persistent) .ingredient-insert-zone::before {
   opacity: 0 !important;
 }
 
-#ingredientsSection:has(.ingredient-header-cta--persistent)
-  .ingredient-insert-zone {
+#ingredientsSection:has(.ingredient-header-cta--persistent) .ingredient-insert-zone {
   pointer-events: none;
   cursor: default;
 }
@@ -2570,6 +1858,7 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   cursor: default;
 }
 
+
 .step-insert-zone {
   position: relative;
   height: 0;
@@ -2665,81 +1954,21 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 }
 
 body.recipes-page .list-view.list-page,
-body.shopping-page .list-view.list-page,
-body.stores-page .list-view.list-page,
-body.tags-page .list-view.list-page,
-body.sizes-page .list-view.list-page,
-body.units-page .list-view.list-page,
-body.shopping-list-page .list-view.list-page {
-  /* One shared breathing-space token for first and last list rows. */
-  padding-top: var(--top-level-list-edge-gap);
-  padding-bottom: var(--top-level-list-edge-gap);
+body.shopping-page .list-view.list-page {
+  /* Shared top-list spacing below the fixed filter chip rail. */
+  padding-top: 10px;
+  /* Keep comfortable breathing room after the final row when scrolled to bottom. */
+  padding-bottom: 40px;
 }
 
 .list-page li {
   cursor: pointer;
+  padding: 0.5rem 0.75rem;
   border-radius: 8px;
   /* Polished truncation */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-body:not(.shopping-list-page) .list-page li:not(.list-section-label) {
-  padding: var(--top-level-list-row-padding-y)
-    var(--top-level-list-row-padding-x);
-  height: var(--top-level-list-row-height-electron);
-  box-sizing: border-box;
-}
-
-/* Freeze web-mode rows separately so Electron and web can be tuned visually. */
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label) {
-  height: var(--top-level-list-row-height-web);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-stepper {
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-stepper-btn {
-  width: 20px;
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-stepper-btn
-  .material-symbols-outlined {
-  font-size: 16px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-badge {
-  line-height: 20px;
-  min-height: 20px;
-  width: 20px;
 }
 
 .list-page li:hover:not(.is-selected) {
@@ -2903,30 +2132,30 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
 .list-filter-chip-dock {
   position: fixed;
   z-index: var(--z-filter-chip-rail);
-  left: 0;
-  right: 0;
+  pointer-events: none;
+}
+
+.list-filter-chip-viewport {
+  width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
   pointer-events: auto;
-  overscroll-behavior-x: contain;
-  box-sizing: border-box;
 }
 
-.list-filter-chip-dock::-webkit-scrollbar {
+.list-filter-chip-viewport::-webkit-scrollbar {
   display: none;
 }
 
 .list-filter-chip-track {
   display: inline-flex;
   align-items: center;
-  gap: var(--app-filter-chip-gap);
+  gap: var(--shopping-filter-chip-gap);
   min-width: 100%;
   white-space: nowrap;
-  padding: var(--app-filter-chip-rail-padding-block)
-    var(--app-filter-chip-rail-padding-inline);
-  box-sizing: border-box;
+  padding: 1px 0;
+  padding-left: var(--shopping-filter-chip-track-padding-start);
 }
 
 /* .recipe-list-wrapper {
@@ -3177,11 +2406,7 @@ h1.nav-text {
 .servings-line--web .shopping-stepper-btn .material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 20;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
 }
 
 .servings-line--web .shopping-stepper-qty {
@@ -3925,12 +3150,17 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-padding-x: 10px;
     --shopping-filter-chip-gap: 6px;
-    --top-level-list-row-padding-x: 0.5rem;
+    --shopping-filter-chip-track-padding-start: 0px;
   }
 
   .list-view.list-page {
     padding-left: 6px;
     padding-right: 6px;
+  }
+
+  .list-page li {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   .app-bar-wrapper {
@@ -3944,7 +3174,6 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-padding-x: 8px;
     --app-bar-gap: 8px;
-    --top-level-list-row-padding-x: 0.4rem;
   }
 
   .list-view.list-page {
@@ -3952,7 +3181,9 @@ body.ingredient-master-link-mode
     padding-right: 2px;
   }
 
-  body:not(.shopping-list-page) .list-page li {
+  .list-page li {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
     border-radius: 4px;
   }
 
@@ -3967,7 +3198,6 @@ body.ingredient-master-link-mode
   :root {
     --shopping-filter-chip-gap: 4px;
     --shopping-filter-chip-padding-x: 6px;
-    --top-level-list-row-padding-x: 0.35rem;
   }
 
   .list-view.list-page {
@@ -3975,7 +3205,9 @@ body.ingredient-master-link-mode
     padding-right: 0;
   }
 
-  body:not(.shopping-list-page) .list-page li {
+  .list-page li {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
     border-radius: 0;
   }
 
@@ -3984,9 +3216,7 @@ body.ingredient-master-link-mode
     padding-right: 8px;
   }
 
-  body.shopping-page[data-force-web-mode='on']
-    #shoppingList
-    li:not(.list-section-label) {
+  body.shopping-page[data-force-web-mode='on'] #shoppingList li:not(.list-section-label) {
     gap: 8px;
   }
 }

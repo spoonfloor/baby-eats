@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
+    <title>Favorite Eats - Units</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/overlays.css" />
+
+    <!-- ✅ Local SQL.js (offline) -->
+    <script src="js/sql-wasm.js"></script>
+  </head>
+
+  <body class="units-page" data-page="units">
+    <div id="appBarMount"></div>
+
+    <main class="page-main">
+      <div class="page-wrapper">
+        <ul id="unitsList" class="list-view list-page"></ul>
+      </div>
+    </main>
+
+    <nav class="bottom-nav bottom-nav--hidden no-select" aria-label="Primary">
+      <div class="bottom-nav-pill-row">
+        <button class="bottom-nav-pill" data-tab="recipes" type="button">
+          Recipes
+        </button>
+        <button class="bottom-nav-pill" data-tab="shopping" type="button">
+          Shopping
+        </button>
+        <button class="bottom-nav-pill" data-tab="stores" type="button">
+          Stores
+        </button>
+        <button class="bottom-nav-pill" data-tab="tags" type="button">
+          Tags
+        </button>
+        <button class="bottom-nav-pill" data-tab="sizes" type="button">
+          Sizes
+        </button>
+        <button
+          class="bottom-nav-pill bottom-nav-pill--active"
+          data-tab="units"
+          type="button"
+        >
+          Units
+        </button>
+      </div>
+    </nav>
+
+    <!-- JS Modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

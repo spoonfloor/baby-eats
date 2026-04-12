@@ -136,26 +136,8 @@ function run() {
         },
       ],
     }),
-    'foo (1¼ lb)',
-    'single measured mass bucket renders with name-first display'
-  );
-
-  assertEqual(
-    helpers.formatShoppingListDisplayRow({
-      name: 'foo',
-      buckets: [{ key: 'selected', kind: 'selected', quantity: 2.5 }],
-    }),
-    'foo (2½)',
-    'mixed quantities compact to unicode glyph output'
-  );
-
-  assertEqual(
-    helpers.formatShoppingListDisplayDetailText({
-      variantName: 'large',
-      buckets: [{ key: 'count', kind: 'count', quantity: 2, unit: '', size: '' }],
-    }),
-    '2 large',
-    'detail formatter keeps size variants in the amount text'
+    '1¼ lb foo',
+    'single measured mass bucket renders in friendly US display'
   );
 
   assertEqual(
@@ -173,8 +155,8 @@ function run() {
         },
       ],
     }),
-    'foo (1 + 1 pinch + 1 carton + 1 gal)',
-    'mixed bucket lines use plus joins with naked counts first'
+    'foo (1 unspecified, 1 pinch, 1 carton, 1 gal)',
+    'incompatible buckets group under one ingredient label'
   );
 
   assertEqual(
@@ -182,41 +164,8 @@ function run() {
       name: 'foo',
       buckets: [{ key: 'selected', kind: 'selected', quantity: 2 }],
     }),
-    'foo (2)',
-    'manual selection rows use parenthetical count display'
-  );
-
-  assertEqual(
-    helpers.formatShoppingListDisplayRow({
-      name: 'ginger',
-      variantName: 'pickled',
-      buckets: [{ key: 'selected', kind: 'selected', quantity: 1 }],
-    }),
-    'pickled ginger (1)',
-    'non-size variants stay in the ingredient name'
-  );
-
-  assertEqual(
-    helpers.formatShoppingListDisplayRow({
-      name: 'ginger',
-      variantName: 'large',
-      buckets: [{ key: 'selected', kind: 'selected', quantity: 1 }],
-    }),
-    'ginger (1 large)',
-    'size variants move into the amount text instead of the name'
-  );
-
-  assertEqual(
-    helpers.formatShoppingListDisplayRow({
-      name: 'beans',
-      variantName: 'cannellini',
-      buckets: [
-        { key: 'selected', kind: 'selected', quantity: 1 },
-        { key: 'exact:can|', kind: 'exact', quantity: 2, unit: 'can', size: '' },
-      ],
-    }),
-    'cannellini beans (1 + 2 can)',
-    'variant products stay on one line with packaging in the amount'
+    'foo 2x',
+    'manual selection rows keep x display'
   );
 
   console.log('Shopping list amount tests passed.');

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
+    />
+    <title>Favorite Eats - Recipe</title>
+
+    <!-- Load Red Hat Mono font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/overrides.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/overlays.css" />
+
+    <!-- ✅ Local SQL.js (offline) -->
+    <script src="js/sql-wasm.js"></script>
+  </head>
+
+  <body class="recipe-editor-page" data-page="recipe-editor">
+    <!-- App Bar (injected) -->
+    <div id="appBarMount"></div>
+
+    <main class="page-main">
+      <div class="page-wrapper editor-page">
+        <div id="pageContent" class="page-content"></div>
+      </div>
+    </main>
+
+    <!-- JS Modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/ingredientDisplay.js"></script>
+    <script src="js/typeahead.js"></script>
+    <script src="js/ingredientPasteParser.js"></script>
+    <script src="js/ingredientRenderer.js"></script>
+    <script src="js/formatter.js"></script>
+    <script src="js/bridge.js"></script>
+
+    <script src="js/stepNodeModel.js"></script>
+
+    <script src="js/recipeEditor.session.js"></script>
+    <script src="js/recipeEditor.stepsEdit.js"></script>
+    <script src="js/ingredientHintController.js"></script>
+    <script src="js/listRowStepper.js"></script>
+    <script src="js/recipeEditor.js"></script>
+
+    <script src="js/main.js"></script>
+  </body>
+</html>

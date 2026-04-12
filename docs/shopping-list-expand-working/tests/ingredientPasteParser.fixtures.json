@@ -1,0 +1,701 @@
+[
+  {
+    "line": "1 cup sugar",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "quantityIsApprox": false,
+      "unit": "cup",
+      "name": "sugar"
+    }
+  },
+  {
+    "line": "1 1/2 cups flour",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "flour"
+    }
+  },
+  {
+    "line": "1½ cups flour",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "flour"
+    }
+  },
+  {
+    "line": "1-2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 to 2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1–2 tbsp olive oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 + 1/2 cups broth",
+    "expect": {
+      "quantityMin": 1.5,
+      "quantityMax": 1.5,
+      "unit": "cup",
+      "name": "broth"
+    }
+  },
+  {
+    "line": "about 2 cups milk",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "quantityIsApprox": true,
+      "unit": "cup",
+      "name": "milk"
+    }
+  },
+  {
+    "line": "roughly 2 cups milk",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "quantityIsApprox": true,
+      "unit": "cup",
+      "name": "milk"
+    }
+  },
+  {
+    "line": "heaping 1 tbsp brown sugar",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "quantityIsApprox": false,
+      "unit": "tbsp",
+      "name": "brown sugar",
+      "prepNotesContains": "heaping"
+    }
+  },
+  {
+    "line": "2 tb olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "2 tbl olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil"
+    }
+  },
+  {
+    "line": "1 t salt",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tsp",
+      "name": "salt"
+    }
+  },
+  {
+    "line": "8 fl oz water",
+    "expect": {
+      "quantityMin": 8,
+      "quantityMax": 8,
+      "unit": "fl oz",
+      "name": "water"
+    }
+  },
+  {
+    "line": "2 x 14 oz cans crushed tomatoes",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "can",
+      "name": "tomato",
+      "variant": "crushed",
+      "sizeContains": "14 oz"
+    }
+  },
+  {
+    "line": "2 cloves garlic (minced)",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "clove",
+      "name": "garlic",
+      "parentheticalNote": "minced"
+    }
+  },
+  {
+    "line": "salt to taste",
+    "expect": {
+      "name": "salt",
+      "isOptional": false,
+      "parentheticalNote": "to taste",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "as needed, water",
+    "expect": {
+      "name": "water",
+      "isOptional": false,
+      "parentheticalNote": "as needed",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "SOMETHING WEIRD ###",
+    "expect": {
+      "name": "SOMETHING WEIRD ###",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "28 oz can crushed tomatoes",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "can",
+      "sizeContains": "28 oz",
+      "name": "tomato",
+      "variant": "crushed"
+    }
+  },
+  {
+    "line": "2 tbsp extra-virgin olive oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "olive oil",
+      "variant": "extra-virgin"
+    }
+  },
+  {
+    "line": "1 tbsp toasted sesame oil",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tbsp",
+      "name": "sesame oil",
+      "variant": "toasted"
+    }
+  },
+  {
+    "line": "8 oz extra firm tofu",
+    "expect": {
+      "quantityMin": 8,
+      "quantityMax": 8,
+      "unit": "oz",
+      "name": "tofu",
+      "variant": "extra firm"
+    }
+  },
+  {
+    "line": "8 oz extra-firm tofu",
+    "expect": {
+      "quantityMin": 8,
+      "quantityMax": 8,
+      "unit": "oz",
+      "name": "tofu",
+      "variant": "extra-firm"
+    }
+  },
+  {
+    "line": "1 cup shelled peanuts",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "cup",
+      "name": "peanut",
+      "variant": "shelled"
+    }
+  },
+  {
+    "line": "1 cup shelled edamame",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "cup",
+      "name": "edamame",
+      "variant": "shelled"
+    }
+  },
+  {
+    "line": "2 tbsp toasted sesame seeds",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "sesame seed",
+      "variant": "toasted"
+    }
+  },
+  {
+    "line": "1 tbsp pickled ginger",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tbsp",
+      "name": "ginger",
+      "variant": "pickled"
+    }
+  },
+  {
+    "line": "2 tbsp canola oil",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "tbsp",
+      "name": "oil",
+      "variant": "canola"
+    }
+  },
+  {
+    "line": "2 green onions",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "name": "green onions",
+      "variant": ""
+    }
+  },
+  {
+    "line": "2 avocado",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "name": "avocado",
+      "variant": ""
+    }
+  },
+  {
+    "line": "1 tsp red pepper",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "tsp",
+      "name": "red pepper",
+      "variant": ""
+    }
+  },
+  {
+    "line": "1 bunch spring onion",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "bunch",
+      "name": "spring onion",
+      "variant": ""
+    }
+  },
+  {
+    "line": "ground nutmeg",
+    "expect": {
+      "name": "nutmeg",
+      "variant": "ground",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "apple cider vinegar",
+    "expect": {
+      "name": "vinegar",
+      "variant": "apple cider",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "rice vinegar",
+    "expect": {
+      "name": "vinegar",
+      "variant": "rice",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "vegan cream cheese",
+    "expect": {
+      "name": "cream cheese",
+      "variant": "vegan",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "fresh basil",
+    "expect": {
+      "name": "basil",
+      "variant": "fresh",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "dried oregano",
+    "expect": {
+      "name": "oregano",
+      "variant": "dried",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "low-sodium soy sauce",
+    "expect": {
+      "name": "soy sauce",
+      "variant": "low-sodium",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "unsalted butter",
+    "expect": {
+      "name": "butter",
+      "variant": "unsalted",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "dark brown sugar",
+    "expect": {
+      "name": "brown sugar",
+      "variant": "dark",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "2 large eggs",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "name": "egg",
+      "variant": "",
+      "size": "large"
+    }
+  },
+  {
+    "line": "5 medium potatoes",
+    "expect": {
+      "quantityMin": 5,
+      "quantityMax": 5,
+      "name": "potato",
+      "variant": "",
+      "size": "medium"
+    }
+  },
+  {
+    "line": "raw cashews",
+    "expect": {
+      "name": "cashews",
+      "variant": "raw",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "onion chopped",
+    "expect": {
+      "name": "onion",
+      "prepNotesContains": "chopped",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "carrot chopped",
+    "expect": {
+      "name": "carrot",
+      "prepNotesContains": "chopped",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "garlic minced",
+    "expect": {
+      "name": "garlic",
+      "prepNotesContains": "minced",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "5 cloves minced garlic",
+    "expect": {
+      "quantityMin": 5,
+      "quantityMax": 5,
+      "unit": "clove",
+      "name": "garlic",
+      "prepNotesContains": "minced"
+    }
+  },
+  {
+    "line": "gold potatoes peeled and diced",
+    "expect": {
+      "name": "potato",
+      "variant": "gold",
+      "prepNotesContains": "peeled and diced",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "frozen corn",
+    "expect": {
+      "name": "corn",
+      "variant": "frozen",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "vegetable broth",
+    "expect": {
+      "name": "broth",
+      "variant": "vegetable",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "no chicken bullion",
+    "expect": {
+      "name": "bullion",
+      "variant": "no chicken",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "smoked paprika",
+    "expect": {
+      "name": "paprika",
+      "variant": "smoked",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "freshly ground black pepper",
+    "expect": {
+      "name": "black pepper",
+      "variant": "",
+      "prepNotesContains": "freshly ground",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "package of Chives",
+    "expect": {
+      "name": "Chives",
+      "unit": "package",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "1 large head cauliflower about 1 1/2 lb, trimmed and cut into florets",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "head",
+      "name": "cauliflower",
+      "size": "large",
+      "prepNotesContains": "trimmed and cut into florets",
+      "parentheticalNote": "about 1 1/2 lb"
+    }
+  },
+  {
+    "line": "1 or 2 lemons",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 2,
+      "name": "lemons"
+    }
+  },
+  {
+    "line": "3 cups uncooked rice",
+    "expect": {
+      "quantityMin": 3,
+      "quantityMax": 3,
+      "unit": "cup",
+      "name": "rice",
+      "variant": "uncooked"
+    }
+  },
+  {
+    "line": "1/2 onion in thin quarter moons",
+    "expect": {
+      "quantityMin": 0.5,
+      "quantityMax": 0.5,
+      "name": "onion",
+      "prepNotesContains": "in thin quarter moons"
+    }
+  },
+  {
+    "line": "1/4 large purple cabbage, diced",
+    "expect": {
+      "quantityMin": 0.25,
+      "quantityMax": 0.25,
+      "name": "cabbage",
+      "variant": "purple",
+      "size": "large",
+      "prepNotesContains": "diced"
+    }
+  },
+  {
+    "line": "carrot (1 large)",
+    "expect": {
+      "name": "carrot",
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "size": "large",
+      "parentheticalNote": ""
+    }
+  },
+  {
+    "line": "carrot (1/2 small)",
+    "expect": {
+      "name": "carrot",
+      "quantityMin": 0.5,
+      "quantityMax": 0.5,
+      "size": "small",
+      "parentheticalNote": ""
+    }
+  },
+  {
+    "line": "1 crown broccoli",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "crown",
+      "name": "broccoli"
+    }
+  },
+  {
+    "line": "1 bag foo",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "bag",
+      "name": "foo"
+    }
+  },
+  {
+    "line": "3 shakes soy sauce",
+    "expect": {
+      "quantityMin": 3,
+      "quantityMax": 3,
+      "unit": "shake",
+      "name": "soy sauce"
+    }
+  },
+  {
+    "line": "2 sprigs thyme",
+    "expect": {
+      "quantityMin": 2,
+      "quantityMax": 2,
+      "unit": "sprig",
+      "name": "thyme"
+    }
+  },
+  {
+    "line": "1 handful parsley",
+    "expect": {
+      "quantityMin": 1,
+      "quantityMax": 1,
+      "unit": "handful",
+      "name": "parsley"
+    }
+  },
+  {
+    "line": "white rice",
+    "expect": {
+      "name": "rice",
+      "variant": "white",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "pinto beans",
+    "expect": {
+      "name": "bean",
+      "variant": "pinto",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "green beans",
+    "expect": {
+      "name": "green beans",
+      "variant": "",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "refried beans",
+    "expect": {
+      "name": "refried beans",
+      "variant": "",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": "bay leaves",
+    "expect": {
+      "name": "bay leaf",
+      "quantityMin": null,
+      "quantityMax": null
+    }
+  },
+  {
+    "line": ".25 head lettuce",
+    "expect": {
+      "quantityMin": 0.25,
+      "quantityMax": 0.25,
+      "unit": "head",
+      "name": "lettuce"
+    }
+  }
+]
