@@ -641,6 +641,7 @@ body.shopping-page #shoppingList .shopping-list-row-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/*  */
 
 /* Match Shopping List doc row: same body type + line rhythm as inline ▾/▴ in label text. */
 body.shopping-page[data-force-web-mode='on']
