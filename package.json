@@ -4,10 +4,13 @@
   "main": "electronMain.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder",
+    "build:web": "node scripts/buildWeb.js",
+    "build:electron": "electron-builder",
+    "dist": "npm run build:electron",
     "test:ingredient-display": "node tests/runIngredientDisplayTests.js",
     "test:ingredient-parser": "node tests/runIngredientPasteParserTests.js",
-    "test:unit-size-state": "node tests/runUnitSizeStateTests.js"
+    "test:unit-size-state": "node tests/runUnitSizeStateTests.js",
+    "test:web-build": "node tests/runWebBuildTests.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",

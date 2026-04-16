@@ -45,12 +45,24 @@ function loadHelpers(localStorageSeed = {}) {
     '// --- End recipe web servings helpers ---'
   );
   const localStorage = createLocalStorageMock(localStorageSeed);
+  const dispatchedEvents = [];
+  function CustomEvent(type, init = {}) {
+    this.type = type;
+    this.detail = init.detail;
+  }
   const context = {
     console,
+    CustomEvent,
     localStorage,
     window: {
       favoriteEatsStorageKeys: {
         recipeWebServings: 'favoriteEats:recipe-web-servings:v1',
+      },
+      favoriteEatsEventNames: {
+        recipeWebServingsChanged: 'favoriteEats:recipe-web-servings-changed',
+      },
+      dispatchEvent(event) {
+        dispatchedEvents.push(event);
       },
     },
   };
@@ -58,7 +70,7 @@ function loadHelpers(localStorageSeed = {}) {
   vm.runInContext(snippet, context, { filename: 'utils.recipe-web-servings.js' });
   const helpers = context.window.favoriteEatsRecipeWebServings;
   if (!helpers) throw new Error('Recipe web servings helpers were not attached to window.');
-  return { helpers, localStorage };
+  return { helpers, localStorage, dispatchedEvents };
 }
 
 function assertEqual(actual, expected, message) {
@@ -103,7 +115,11 @@ function run() {
   const validSeed = {
     'favoriteEats:recipe-web-servings:v1': JSON.stringify({ 12: 6 }),
   };
-  const { helpers: validHelpers, localStorage: validStorage } = loadHelpers(validSeed);
+  const {
+    helpers: validHelpers,
+    localStorage: validStorage,
+    dispatchedEvents: validEvents,
+  } = loadHelpers(validSeed);
   const adjustableRecipe = {
     id: 12,
     servingsDefault: 4,
@@ -128,6 +144,58 @@ function run() {
     validStorage.getItem('favoriteEats:recipe-web-servings:v1'),
     JSON.stringify({ 12: 6 }),
     'valid stored override is preserved during scrubbing'
+  );
+
+  validHelpers.setStoredValue(adjustableRecipe, 7);
+  assertEqual(
+    validStorage.getItem('favoriteEats:recipe-web-servings:v1'),
+    JSON.stringify({ 12: 7 }),
+    'setting a new servings override persists the updated value'
+  );
+  assertEqual(
+    validHelpers.changeEventName,
+    'favoriteEats:recipe-web-servings-changed',
+    'change event name is exposed on the shared API'
+  );
+  assertEqual(
+    typeof validHelpers.dispatchChanged,
+    'function',
+    'shared API exposes a change dispatcher'
+  );
+  assertEqual(
+    validHelpers.getEffectiveServings(adjustableRecipe, { scrubInvalid: true }),
+    7,
+    'effective servings reflect the latest persisted override'
+  );
+  assertEqual(
+    validHelpers.getMultiplier(adjustableRecipe, { scrubInvalid: true }),
+    1.75,
+    'updated override produces the expected multiplier'
+  );
+  assertEqual(
+    validHelpers.loadMap()['12'],
+    7,
+    'loadMap returns the latest persisted servings override'
+  );
+  assertEqual(
+    validEvents.length,
+    1,
+    'changing servings dispatches a single sync event'
+  );
+  assertEqual(
+    validEvents[0].type,
+    'favoriteEats:recipe-web-servings-changed',
+    'sync event uses the shared recipe-web-servings event name'
+  );
+  assertEqual(
+    validEvents[0].detail.recipeId,
+    12,
+    'sync event includes the changed recipe id'
+  );
+  assertEqual(
+    validEvents[0].detail.value,
+    7,
+    'sync event includes the latest effective servings value'
   );
 
   console.log('Recipe web servings tests passed.');

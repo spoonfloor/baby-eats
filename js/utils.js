@@ -7,6 +7,9 @@ window.favoriteEatsSessionKeys = window.favoriteEatsSessionKeys || {
 window.favoriteEatsStorageKeys = window.favoriteEatsStorageKeys || {
   recipeWebServings: 'favoriteEats:recipe-web-servings:v1',
 };
+window.favoriteEatsEventNames = window.favoriteEatsEventNames || {
+  recipeWebServingsChanged: 'favoriteEats:recipe-web-servings-changed',
+};
 
 // --- Recipe web servings helpers (tests extract this block) ---
 function getRecipeWebServingsModelId(recipe, { fallbackRecipeId = null } = {}) {
@@ -37,6 +40,22 @@ function persistRecipeWebServingsMapShared(nextMap) {
           ? nextMap
           : {}
       )
+    );
+  } catch (_) {}
+}
+
+function dispatchRecipeWebServingsChangedShared(recipeId, nextValue) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  const normalizedRecipeId = Number(recipeId);
+  if (!Number.isFinite(normalizedRecipeId) || normalizedRecipeId <= 0) return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent(window.favoriteEatsEventNames.recipeWebServingsChanged, {
+        detail: {
+          recipeId: Math.trunc(normalizedRecipeId),
+          value: nextValue == null ? null : Number(nextValue),
+        },
+      })
     );
   } catch (_) {}
 }
@@ -79,8 +98,33 @@ function getRecipeWebServingsBoundsShared(recipe) {
       : {};
   const rawMin = roundRecipeWebServingsValueShared(servingsObj.min);
   const rawMax = roundRecipeWebServingsValueShared(servingsObj.max);
-  const min = rawMin != null ? Math.min(rawMin, baseDefault) : baseDefault;
-  const max = rawMax != null ? Math.max(rawMax, baseDefault) : baseDefault;
+
+  let min;
+  let max;
+
+  if (rawMin == null && rawMax == null) {
+    min = baseDefault;
+    max = baseDefault;
+  } else if (rawMin != null && rawMax != null) {
+    min = Math.min(rawMin, rawMax);
+    max = Math.max(rawMin, rawMax);
+  } else if (rawMin != null) {
+    min = rawMin;
+    max = Math.max(rawMin, baseDefault);
+  } else {
+    max = rawMax;
+    min = Math.min(rawMax, baseDefault);
+  }
+
+  // Include the declared default in the range when it sits above max.
+  if (baseDefault > max) {
+    max = baseDefault;
+  }
+  // Do not pull min below an explicit DB minimum (servings_min) when the default is lower.
+  if (baseDefault < min && rawMin == null) {
+    min = baseDefault;
+  }
+
   return {
     baseDefault,
     min,
@@ -131,13 +175,31 @@ function setRecipeWebServingsStoredValueShared(recipe, nextValue, { fallbackReci
   const bounds = getRecipeWebServingsBoundsShared(recipe);
   if (!bounds) return;
   const map = loadRecipeWebServingsMapShared();
+  const storageKey = String(recipeId);
+  const previousRaw = map[storageKey];
+  const hadPrevious = Object.prototype.hasOwnProperty.call(map, storageKey);
+  const previousEffective =
+    clampRecipeWebServingsValueShared(previousRaw, bounds) ?? bounds.baseDefault;
   const next = clampRecipeWebServingsValueShared(nextValue, bounds);
+  let changed = false;
   if (next == null || next === bounds.baseDefault) {
-    delete map[String(recipeId)];
+    if (hadPrevious) {
+      delete map[storageKey];
+      changed = true;
+    }
   } else {
-    map[String(recipeId)] = next;
+    if (!hadPrevious || Number(previousRaw) !== next) {
+      map[storageKey] = next;
+      changed = true;
+    }
   }
-  persistRecipeWebServingsMapShared(map);
+  if (changed) {
+    persistRecipeWebServingsMapShared(map);
+  }
+  const nextEffective = next ?? bounds.baseDefault;
+  if (previousEffective !== nextEffective) {
+    dispatchRecipeWebServingsChangedShared(recipeId, nextEffective);
+  }
 }
 
 function getRecipeEffectiveServingsShared(
@@ -150,7 +212,9 @@ function getRecipeEffectiveServingsShared(
     fallbackRecipeId,
     scrubInvalid,
   });
-  return Number.isFinite(Number(stored)) && stored != null ? stored : bounds.baseDefault;
+  const candidate =
+    Number.isFinite(Number(stored)) && stored != null ? stored : bounds.baseDefault;
+  return clampRecipeWebServingsValueShared(candidate, bounds);
 }
 
 function getRecipeWebServingsMultiplierShared(
@@ -173,6 +237,8 @@ window.favoriteEatsRecipeWebServings = window.favoriteEatsRecipeWebServings || O
   getRecipeModelId: getRecipeWebServingsModelId,
   loadMap: loadRecipeWebServingsMapShared,
   persistMap: persistRecipeWebServingsMapShared,
+  dispatchChanged: dispatchRecipeWebServingsChangedShared,
+  changeEventName: window.favoriteEatsEventNames.recipeWebServingsChanged,
   roundValue: roundRecipeWebServingsValueShared,
   getBaseDefault: getRecipeBaseServingsDefaultShared,
   getBounds: getRecipeWebServingsBoundsShared,

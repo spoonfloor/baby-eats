@@ -425,6 +425,68 @@ function resetRecipeWebModeServings(recipe = window.recipeData) {
   }
 }
 
+function getRecipeWebServingsDisplayValue(recipe) {
+  const bounds = getRecipeWebServingsBounds(recipe);
+  if (!bounds) return null;
+  return roundRecipeWebServingsValue(recipe?.servingsDefault) ?? bounds.baseDefault;
+}
+
+function getNextRecipeWebServingsValue(recipe, delta) {
+  const bounds = getRecipeWebServingsBounds(recipe);
+  if (!bounds) return null;
+  const currentServings = roundRecipeWebServingsValue(recipe?.servingsDefault);
+  const currentStepValue =
+    Number.isFinite(Number(currentServings)) && Number(currentServings) > 0 ? currentServings : 0;
+  const nextCandidate =
+    window.listRowStepper &&
+    typeof window.listRowStepper.getNextStepQty === 'function'
+      ? window.listRowStepper.getNextStepQty(currentStepValue, delta, {
+          min: bounds.min,
+          max: bounds.max,
+          snapPositiveTo: bounds.baseDefault,
+        })
+      : currentStepValue > 0
+        ? currentStepValue + Number(delta || 0)
+        : Number(delta || 0) > 0
+          ? bounds.baseDefault
+          : currentStepValue + Number(delta || 0);
+  return clampRecipeWebServingsValue(nextCandidate, bounds);
+}
+
+function parseRecipeWebServingsInputValue(rawValue) {
+  const text = String(rawValue == null ? '' : rawValue).trim();
+  if (!text) return null;
+  if (typeof parseNumericQuantityValue === 'function') {
+    const parsed = parseNumericQuantityValue(text);
+    if (parsed != null) return Number(parsed);
+  }
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function commitRecipeWebServingsInputValue(recipe, rawValue, { fallbackValue = null } = {}) {
+  const parsed = parseRecipeWebServingsInputValue(rawValue);
+  const candidate =
+    parsed == null
+      ? fallbackValue != null
+        ? fallbackValue
+        : getRecipeWebServingsDisplayValue(recipe)
+      : parsed;
+  const rounded = roundRecipeWebServingsValue(candidate);
+  return applyRecipeWebServingsToModel(recipe, rounded);
+}
+
+function syncActiveRecipeWebServingsFromStorage() {
+  if (!isRecipeWebModeActive()) return;
+  const recipeModel = window.recipeData;
+  if (!recipeModel) return;
+  primeRecipeWebModeServings(recipeModel);
+  renderServingsRow(recipeModel);
+  if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+    window.recipeEditorRerenderIngredientsFromModel();
+  }
+}
+
 function navigateToShoppingListTarget(rawName, resolver) {
   const name = String(rawName || '').trim();
   const match =
@@ -699,9 +761,19 @@ function mergeByIngredient(list) {
 
 const getPageContentContainer = () => document.getElementById('pageContent');
 
+window.recipeWebModeServings = Object.freeze({
+  getBounds: getRecipeWebServingsBounds,
+  getDisplayValue: getRecipeWebServingsDisplayValue,
+  getNextValue: getNextRecipeWebServingsValue,
+  parseInputValue: parseRecipeWebServingsInputValue,
+  commitInputValue: commitRecipeWebServingsInputValue,
+  formatDisplay: formatRecipeWebServingsDisplay,
+  applyToModel: applyRecipeWebServingsToModel,
+});
 window.recipeWebModePrimeRecipe = primeRecipeWebModeServings;
 window.recipeWebModeResetServings = resetRecipeWebModeServings;
 window.recipeWebModeCanResetServings = recipeWebModeCanResetServings;
+window.recipeWebModeSyncFromStorage = syncActiveRecipeWebServingsFromStorage;
 
 // --- Subhead insertion mode (hold Option/Alt) ---
 function ensureIngredientSubheadInsertModeWiring() {
@@ -2635,8 +2707,7 @@ function renderServingsRow(recipe, container) {
 
     const field = document.createElement('div');
     field.className = 'row-field servings-web-field';
-    const displayServings =
-      roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
+    const displayServings = getRecipeWebServingsDisplayValue(recipeModel) ?? bounds.baseDefault;
     const subtitle = document.createElement('span');
     subtitle.className = 'servings-web-subtitle';
     const subtitlePrefix = document.createElement('span');
@@ -2664,19 +2735,9 @@ function renderServingsRow(recipe, container) {
     minusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const currentServings =
-        roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
-      const nextCandidate =
-        window.listRowStepper &&
-        typeof window.listRowStepper.getNextStepQty === 'function'
-          ? window.listRowStepper.getNextStepQty(currentServings, -1, {
-              min: bounds.min,
-              max: bounds.max,
-            })
-          : currentServings - 1;
       const next = applyRecipeWebServingsToModel(
         recipeModel,
-        nextCandidate
+        getNextRecipeWebServingsValue(recipeModel, -1)
       );
       if (next != null) {
         renderServingsRow(recipeModel, container);
@@ -2689,19 +2750,9 @@ function renderServingsRow(recipe, container) {
     plusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const currentServings =
-        roundRecipeWebServingsValue(recipeModel.servingsDefault) ?? bounds.baseDefault;
-      const nextCandidate =
-        window.listRowStepper &&
-        typeof window.listRowStepper.getNextStepQty === 'function'
-          ? window.listRowStepper.getNextStepQty(currentServings, 1, {
-              min: bounds.min,
-              max: bounds.max,
-            })
-          : currentServings + 1;
       const next = applyRecipeWebServingsToModel(
         recipeModel,
-        nextCandidate
+        getNextRecipeWebServingsValue(recipeModel, 1)
       );
       if (next != null) {
         renderServingsRow(recipeModel, container);
@@ -2727,21 +2778,10 @@ function renderServingsRow(recipe, container) {
 
       let cancelled = false;
       const fallbackValue = displayServings;
-      const parseInput = (raw) => {
-        const text = String(raw == null ? '' : raw).trim();
-        if (!text) return null;
-        if (typeof parseNumericQuantityValue === 'function') {
-          const parsed = parseNumericQuantityValue(text);
-          if (parsed != null) return Number(parsed);
-        }
-        const numeric = Number(text);
-        return Number.isFinite(numeric) ? numeric : null;
-      };
       const commit = () => {
-        const parsed = parseInput(input.value);
-        const candidate = parsed == null ? fallbackValue : parsed;
-        const rounded = roundRecipeWebServingsValue(candidate);
-        const next = applyRecipeWebServingsToModel(recipeModel, rounded);
+        const next = commitRecipeWebServingsInputValue(recipeModel, input.value, {
+          fallbackValue,
+        });
         renderServingsRow(recipeModel, container);
         if (next != null && typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
           window.recipeEditorRerenderIngredientsFromModel();

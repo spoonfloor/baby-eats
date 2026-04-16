@@ -99,9 +99,75 @@ function attachSecretGalleryShortcut(addBtn) {
   addBtn.addEventListener('click', handler, { capture: true });
 }
 
+const FAVORITE_EATS_BUILD_DEFAULTS = Object.freeze({
+  target: 'desktop',
+  forceWebExperience: false,
+  allowHiddenForceWebModeToggle: true,
+});
+
+function readFavoriteEatsBuildConfig() {
+  try {
+    const raw = window.__FAVORITE_EATS_BUILD__;
+    if (!raw || typeof raw !== 'object') {
+      return { ...FAVORITE_EATS_BUILD_DEFAULTS };
+    }
+    const target = String(raw.target || FAVORITE_EATS_BUILD_DEFAULTS.target)
+      .trim()
+      .toLowerCase();
+    return {
+      ...FAVORITE_EATS_BUILD_DEFAULTS,
+      ...raw,
+      target: target === 'web' ? 'web' : FAVORITE_EATS_BUILD_DEFAULTS.target,
+      forceWebExperience: raw.forceWebExperience === true,
+      allowHiddenForceWebModeToggle: raw.allowHiddenForceWebModeToggle !== false,
+    };
+  } catch (_) {
+    return { ...FAVORITE_EATS_BUILD_DEFAULTS };
+  }
+}
+
+const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
 const FORCE_WEB_MODE_STORAGE_KEY = 'favoriteEatsForceWebMode';
+const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
+  tags: 'recipes',
+  'tag-editor': 'recipes',
+  units: 'recipes',
+  'unit-editor': 'recipes',
+  sizes: 'recipes',
+  'size-editor': 'recipes',
+  'recipe-editor': 'recipes',
+  'shopping-editor': 'shopping',
+  'store-editor': 'stores',
+  'dialog-gallery': 'recipes',
+});
+
+function isPublicWebExperienceLocked() {
+  return FAVORITE_EATS_BUILD.target === 'web' && FAVORITE_EATS_BUILD.forceWebExperience;
+}
+
+function isHiddenForceWebModeToggleAllowed() {
+  return (
+    !isPublicWebExperienceLocked() &&
+    FAVORITE_EATS_BUILD.allowHiddenForceWebModeToggle !== false
+  );
+}
+
+function getPublicWebRedirectPageId(pageId = document.body?.dataset?.page || '') {
+  if (!isPublicWebExperienceLocked()) return '';
+  const key = String(pageId || '').trim().toLowerCase();
+  if (!key) return '';
+  return PUBLIC_WEB_PAGE_REDIRECTS[key] || '';
+}
+
+function redirectIfPublicWebPageIsDisallowed() {
+  const redirectPageId = getPublicWebRedirectPageId();
+  if (!redirectPageId) return false;
+  window.location.replace(getTopLevelPageHref(redirectPageId));
+  return true;
+}
 
 function isForceWebModeEnabled() {
+  if (isPublicWebExperienceLocked()) return true;
   try {
     return localStorage.getItem(FORCE_WEB_MODE_STORAGE_KEY) === '1';
   } catch (_) {
@@ -121,6 +187,9 @@ function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
 }
 
 function setForceWebModeEnabled(enabled) {
+  if (isPublicWebExperienceLocked()) {
+    return applyForceWebModePresentation(true);
+  }
   const next = !!enabled;
   try {
     localStorage.setItem(FORCE_WEB_MODE_STORAGE_KEY, next ? '1' : '0');
@@ -141,7 +210,9 @@ function getTopLevelPageHref(pageId) {
   return `${key}.html`;
 }
 
-applyForceWebModePresentation();
+if (!redirectIfPublicWebPageIsDisallowed()) {
+  applyForceWebModePresentation();
+}
 window.forceWebMode = Object.freeze({
   isEnabled: isForceWebModeEnabled,
   setEnabled: setForceWebModeEnabled,
@@ -3114,7 +3185,10 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
   let selectedIdx = -1;
   let selectionSource = null; // 'hover' | 'keyboard' | null
 
-  const getRows = () => Array.from(listEl.querySelectorAll('li'));
+  const getRows = () =>
+    Array.from(listEl.querySelectorAll('li')).filter(
+      (li) => !li.classList.contains('recipe-list-servings-header'),
+    );
 
   const applySelection = () => {
     const rows = getRows();
@@ -3318,6 +3392,8 @@ initSqlJs({
   SQL = sql;
 
   // --- page load routing ---
+
+  if (redirectIfPublicWebPageIsDisallowed()) return;
 
   const pageId = detectPageIdFromBody();
 
@@ -3569,8 +3645,53 @@ async function loadRecipesPage() {
   let searchQuery = '';
   let recipeRows = [];
   const listRowStepper = window.listRowStepper;
-  const recipeQuantities = new Map();
+  const recipeSelectionKeys = new Set();
+  let recipeRowEditingKey = '';
+  const recipeWebServingsUi = window.recipeWebModeServings || {};
+  const recipeWebServingsChangedEventName =
+    window.favoriteEatsRecipeWebServings?.changeEventName ||
+    window.favoriteEatsEventNames?.recipeWebServingsChanged ||
+    '';
   const isRecipeWebSelectMode = () => isForceWebModeEnabled();
+  const toPositiveServingsOrNull = (rawValue) => {
+    const numeric = Number(rawValue);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+  const getRecipeQtyKey = (recipeId) => String(recipeId || '').trim();
+  const isRecipeSelected = (recipeId) => recipeSelectionKeys.has(getRecipeQtyKey(recipeId));
+  const getRecipeRowById = (recipeId) =>
+    recipeRows.find((row) => Number(row?.id) === Number(recipeId)) || null;
+  const primeRecipeRowServings = (recipeRow) => {
+    if (!recipeRow || typeof window.recipeWebModePrimeRecipe !== 'function') return;
+    window.recipeWebModePrimeRecipe(recipeRow);
+  };
+  const getRecipeRowBounds = (recipeRow) => {
+    if (typeof recipeWebServingsUi.getBounds === 'function') {
+      return recipeWebServingsUi.getBounds(recipeRow);
+    }
+    return null;
+  };
+  const getRecipeRowDisplayServings = (recipeRow) => {
+    if (typeof recipeWebServingsUi.getDisplayValue === 'function') {
+      return recipeWebServingsUi.getDisplayValue(recipeRow);
+    }
+    const bounds = getRecipeRowBounds(recipeRow);
+    if (!bounds) return null;
+    return bounds.baseDefault;
+  };
+  const formatRecipeRowServings = (rawValue) => {
+    if (typeof recipeWebServingsUi.formatDisplay === 'function') {
+      return recipeWebServingsUi.formatDisplay(rawValue);
+    }
+    return typeof window.formatShoppingQtyForDisplay === 'function'
+      ? window.formatShoppingQtyForDisplay(rawValue)
+      : String(rawValue == null ? '' : rawValue);
+  };
+  const initializeRecipeRowServings = (recipeRow) => {
+    const bounds = getRecipeRowBounds(recipeRow);
+    if (!bounds || typeof recipeWebServingsUi.applyToModel !== 'function') return null;
+    return recipeWebServingsUi.applyToModel(recipeRow, bounds.baseDefault);
+  };
   const syncRecipesActionButtonState = () => {
     if (!(recipesActionBtn instanceof HTMLButtonElement)) return;
     if (!isRecipeWebSelectMode()) {
@@ -3578,52 +3699,118 @@ async function loadRecipesPage() {
       recipesActionBtn.removeAttribute('aria-disabled');
       return;
     }
-    const disabled = Object.keys(getShoppingPlanRecipeSelections()).length === 0;
+    const disabled = recipeSelectionKeys.size === 0;
     recipesActionBtn.disabled = disabled;
     recipesActionBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
   };
-  const getRecipeQtyKey = (recipeId) => String(recipeId || '').trim();
-  const getRecipeQty = (recipeId) =>
-    recipeQuantities.get(getRecipeQtyKey(recipeId)) || 0;
-  const setRecipeQty = (recipeId, qty) => {
-    const key = getRecipeQtyKey(recipeId);
-    if (!key) return 0;
-    const clamped = Math.max(0, Math.min(99, Number(qty || 0)));
-    if (!Number.isFinite(clamped) || clamped <= 0) {
-      recipeQuantities.delete(key);
-      return 0;
-    }
-    recipeQuantities.set(key, clamped);
-    return clamped;
-  };
   const makeRecipeStepperDOM = () => {
-    return listRowStepper.createStepperDOM({
+    const { stepper, minusBtn, qtySpan, plusBtn } = listRowStepper.createStepperDOM({
       decreaseLabel: 'Decrease recipe quantity',
       increaseLabel: 'Increase recipe quantity',
     });
+    const qtyBtn = document.createElement('button');
+    qtyBtn.type = 'button';
+    qtyBtn.className = 'shopping-stepper-qty shopping-stepper-qty-button';
+    qtyBtn.setAttribute('aria-label', 'Edit servings');
+    qtyBtn.textContent = qtySpan.textContent || '0';
+    stepper.replaceChild(qtyBtn, qtySpan);
+    return { stepper, minusBtn, qtyBtn, plusBtn };
   };
   let recipeRowStepperController = null;
-  const syncRecipeRowSelectionState = (rowEl, recipeId) => {
-    listRowStepper.syncRowVisuals(rowEl, {
-      enabled: isRecipeWebSelectMode(),
-      qty: getRecipeQty(recipeId),
-      isActive: !!recipeRowStepperController?.isActive(getRecipeQtyKey(recipeId)),
-      selectedDatasetKey: 'recipeSelected',
-    });
+  const syncRecipeRowSelectionState = (rowEl, recipeRow) => {
+    if (!(rowEl instanceof HTMLElement) || !recipeRow) return;
+    const recipeId = recipeRow.id;
+    const enabled = isRecipeWebSelectMode();
+    const bounds = getRecipeRowBounds(recipeRow);
+    const hasServings = !!bounds;
+    const selected = isRecipeSelected(recipeId);
+    const isActive = selected && !!recipeRowStepperController?.isActive(getRecipeQtyKey(recipeId));
+    const icon = rowEl.querySelector('.shopping-list-row-icon');
+    const stepper = rowEl.querySelector('.shopping-list-row-stepper');
+    const badge = rowEl.querySelector('.shopping-list-row-badge');
+    const disabledIndicator = rowEl.querySelector('.recipe-list-servings-disabled');
+    const qtyEl = stepper?.querySelector('.shopping-stepper-qty');
+    const minusBtn = stepper?.querySelector('.shopping-stepper-btn');
+    const minusIcon = minusBtn?.querySelector('.material-symbols-outlined');
+    const displayServings = getRecipeRowDisplayServings(recipeRow);
+    const formattedServings =
+      displayServings == null ? '' : formatRecipeRowServings(displayServings);
+    const shouldDeleteOnDecrease =
+      !!(
+        hasServings &&
+        selected &&
+        bounds?.canAdjust &&
+        displayServings != null &&
+        Math.abs(displayServings - bounds.min) < 1e-9
+      );
+
+    rowEl.dataset.recipeServingsAvailable = hasServings ? 'true' : 'false';
+    rowEl.dataset.recipeSelected = enabled && selected && hasServings ? 'true' : 'false';
+    rowEl.classList.toggle('shopping-row-checked', enabled && selected && hasServings);
+
+    if (qtyEl) qtyEl.textContent = formattedServings;
+    if (badge) badge.textContent = formattedServings;
+    if (minusBtn) {
+      minusBtn.setAttribute(
+        'aria-label',
+        shouldDeleteOnDecrease ? 'Remove recipe selection' : 'Decrease servings'
+      );
+    }
+    if (minusIcon) minusIcon.textContent = shouldDeleteOnDecrease ? 'delete' : 'remove';
+
+    if (!enabled) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) stepper.style.display = 'none';
+      if (badge) badge.style.display = 'none';
+      if (disabledIndicator) disabledIndicator.style.display = 'none';
+      return;
+    }
+
+    if (!hasServings) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) stepper.style.display = 'none';
+      if (badge) badge.style.display = 'none';
+      if (disabledIndicator) disabledIndicator.style.display = 'inline-flex';
+      return;
+    }
+
+    if (disabledIndicator) disabledIndicator.style.display = 'none';
+    if (isActive) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) stepper.style.display = 'inline-flex';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+
+    if (selected) {
+      if (icon) icon.style.display = 'none';
+      if (stepper) stepper.style.display = 'none';
+      if (badge) badge.style.display = 'inline-block';
+      return;
+    }
+
+    if (icon) icon.style.display = '';
+    if (stepper) stepper.style.display = 'none';
+    if (badge) badge.style.display = 'none';
   };
-  const incrementRecipeQty = (recipeId, delta) => {
-    const nextQty = setRecipeQty(recipeId, getRecipeQty(recipeId) + delta);
+  const setRecipeSelected = (recipeId, isSelected, { activate = false } = {}) => {
     const recipeKey = getRecipeQtyKey(recipeId);
-    const recipeRow = recipeRows.find((row) => Number(row?.id) === Number(recipeId));
+    const recipeRow = getRecipeRowById(recipeId);
+    if (!recipeKey || !recipeRow) return;
+    if (isSelected) recipeSelectionKeys.add(recipeKey);
+    else recipeSelectionKeys.delete(recipeKey);
     setShoppingPlanRecipeSelection({
       recipeId,
       title: recipeRow?.title || '',
-      quantity: nextQty,
+      quantity: isSelected ? 1 : 0,
     });
-    if (nextQty > 0) {
+    if (isSelected && activate) {
       recipeRowStepperController?.activate(recipeKey);
-    } else if (recipeRowStepperController?.isActive(recipeKey)) {
+    } else if (!isSelected && recipeRowStepperController?.isActive(recipeKey)) {
       recipeRowStepperController.collapseActive();
+    }
+    if (!isSelected && recipeRowEditingKey === recipeKey) {
+      recipeRowEditingKey = '';
     }
     syncRecipesActionButtonState();
     rerenderFilteredRecipes();
@@ -3638,20 +3825,40 @@ async function loadRecipesPage() {
       const quantity = Math.max(0, Math.min(99, Number(entry?.quantity || 0)));
       if (!Number.isFinite(recipeId) || recipeId <= 0) return;
       if (!Number.isFinite(quantity) || quantity <= 0) return;
-      recipeQuantities.set(getRecipeQtyKey(recipeId), quantity);
+      recipeSelectionKeys.add(getRecipeQtyKey(recipeId));
+      if (quantity !== 1) {
+        setShoppingPlanRecipeSelection({
+          recipeId,
+          title: String(entry?.title || '').trim(),
+          quantity: 1,
+        });
+      }
     });
   };
 
   const loadRecipeRows = () => {
     const recipesQ = db.exec(
-      'SELECT ID, title FROM recipes ORDER BY title COLLATE NOCASE;'
+      `
+        SELECT ID, title, servings_default, servings_min, servings_max
+        FROM recipes
+        ORDER BY title COLLATE NOCASE;
+      `
     );
     const rows = recipesQ.length ? recipesQ[0].values : [];
-    const out = rows.map(([id, title]) => ({
-      id: Number(id),
-      title: String(title || ''),
-      tags: [],
-    }));
+    const out = rows.map(([id, title, servingsDefault, servingsMin, servingsMax]) => {
+      const normalizedDefault = toPositiveServingsOrNull(servingsDefault);
+      return {
+        id: Number(id),
+        title: String(title || ''),
+        tags: [],
+        servingsDefault: normalizedDefault,
+        servings: {
+          default: normalizedDefault,
+          min: toPositiveServingsOrNull(servingsMin),
+          max: toPositiveServingsOrNull(servingsMax),
+        },
+      };
+    });
     const byRecipe = new Map();
     out.forEach((r) => byRecipe.set(r.id, r));
 
@@ -3743,9 +3950,30 @@ async function loadRecipesPage() {
       return;
     }
     setTopLevelEmptyStateLayoutMode(list, false);
+
+    if (isForceWebModeEnabled()) {
+      const headerLi = document.createElement('li');
+      headerLi.className = 'recipe-list-servings-header';
+      headerLi.setAttribute('aria-hidden', 'true');
+      const headerSpacer = document.createElement('span');
+      headerSpacer.className =
+        'recipe-list-title shopping-list-row-label recipe-list-servings-header-spacer';
+      headerSpacer.textContent = '';
+      const headerSlot = document.createElement('span');
+      headerSlot.className = 'recipe-list-servings-slot';
+      const headerLabel = document.createElement('span');
+      headerLabel.className = 'recipe-list-servings-header-label';
+      headerLabel.textContent = 'SERVINGS';
+      headerSlot.appendChild(headerLabel);
+      headerLi.appendChild(headerSpacer);
+      headerLi.appendChild(headerSlot);
+      list.appendChild(headerLi);
+    }
+
     items.forEach((row) => {
       const id = row.id;
       const title = row.title;
+      primeRecipeRowServings(row);
       const li = document.createElement('li');
       const titleSpan = document.createElement('span');
       titleSpan.className = 'recipe-list-title shopping-list-row-label';
@@ -3754,49 +3982,160 @@ async function loadRecipesPage() {
       icon.className = 'material-symbols-outlined shopping-list-row-icon';
       icon.textContent = 'add_box';
       icon.setAttribute('aria-hidden', 'true');
-      const { stepper, minusBtn, plusBtn } = makeRecipeStepperDOM();
+      const { stepper, minusBtn, qtyBtn, plusBtn } = makeRecipeStepperDOM();
       const badge = document.createElement('span');
       badge.className = 'shopping-list-row-badge';
       badge.style.display = 'none';
+      const disabledIndicator = document.createElement('span');
+      disabledIndicator.className =
+        'material-symbols-outlined recipe-list-servings-disabled';
+      disabledIndicator.textContent = 'add_box';
+      disabledIndicator.setAttribute('aria-hidden', 'true');
+      const slot = document.createElement('span');
+      slot.className = 'recipe-list-servings-slot';
+      slot.appendChild(icon);
+      slot.appendChild(stepper);
+      slot.appendChild(badge);
+      slot.appendChild(disabledIndicator);
       li.appendChild(titleSpan);
-      li.appendChild(icon);
-      li.appendChild(stepper);
-      li.appendChild(badge);
-      syncRecipeRowSelectionState(li, id);
+      li.appendChild(slot);
+      const recipeKey = getRecipeQtyKey(id);
+      li.dataset.recipeRowStepperKey = recipeKey;
+      syncRecipeRowSelectionState(li, row);
 
-      icon.addEventListener('click', (event) => {
+      const consumeRowStepperEvent = (event) => {
         event.preventDefault();
         event.stopPropagation();
+      };
+      const startInlineServingsEdit = () => {
+        if (!isRecipeWebSelectMode() || !isRecipeSelected(id)) return;
+        if (recipeRowEditingKey === recipeKey) return;
+        recipeRowEditingKey = recipeKey;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'shopping-stepper-qty shopping-stepper-qty-input';
+        input.inputMode = 'decimal';
+        input.setAttribute('aria-label', 'Servings value');
+        const fallbackValue = getRecipeRowDisplayServings(row);
+        input.value =
+          fallbackValue == null
+            ? ''
+            : Number.isInteger(fallbackValue)
+              ? String(fallbackValue)
+              : String(fallbackValue);
+        stepper.replaceChild(input, qtyBtn);
+        input.focus();
+        input.select();
+
+        let cancelled = false;
+        const finishEdit = (shouldCommit) => {
+          if (recipeRowEditingKey === recipeKey) {
+            recipeRowEditingKey = '';
+          }
+          if (shouldCommit && typeof recipeWebServingsUi.commitInputValue === 'function') {
+            recipeWebServingsUi.commitInputValue(row, input.value, {
+              fallbackValue,
+            });
+          }
+          rerenderFilteredRecipes();
+        };
+
+        input.addEventListener('click', consumeRowStepperEvent);
+        input.addEventListener('pointerdown', (event) => event.stopPropagation());
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            consumeRowStepperEvent(event);
+            input.blur();
+          } else if (event.key === 'Escape') {
+            consumeRowStepperEvent(event);
+            cancelled = true;
+            finishEdit(false);
+          }
+        });
+        input.addEventListener('blur', () => {
+          if (cancelled) return;
+          finishEdit(true);
+        });
+      };
+
+      icon.addEventListener('click', (event) => {
+        consumeRowStepperEvent(event);
         if (!isRecipeWebSelectMode()) return;
-        incrementRecipeQty(id, 1);
+        if (!getRecipeRowBounds(row)) return;
+        initializeRecipeRowServings(row);
+        setRecipeSelected(id, true, { activate: true });
       });
 
       badge.addEventListener('click', (event) => {
+        consumeRowStepperEvent(event);
+        if (!isRecipeWebSelectMode()) return;
+        if (!getRecipeRowBounds(row)) return;
+        recipeRowStepperController?.activate(recipeKey);
+        rerenderFilteredRecipes();
+      });
+      badge.addEventListener('pointerdown', (event) => event.stopPropagation());
+      disabledIndicator.addEventListener('click', consumeRowStepperEvent);
+      disabledIndicator.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (!isRecipeWebSelectMode()) return;
-        recipeRowStepperController?.activate(getRecipeQtyKey(id));
-        rerenderFilteredRecipes();
+      });
+      stepper.addEventListener('click', (event) => event.stopPropagation());
+      stepper.addEventListener('pointerdown', (event) => event.stopPropagation());
+      qtyBtn.addEventListener('click', (event) => {
+        consumeRowStepperEvent(event);
+        startInlineServingsEdit();
       });
 
       minusBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (isRecipeWebSelectMode() && getRecipeQty(id) <= 0) {
-          if (recipeRowStepperController?.isActive(getRecipeQtyKey(id))) {
+        consumeRowStepperEvent(event);
+        if (!isRecipeWebSelectMode()) return;
+        if (!isRecipeSelected(id)) {
+          if (recipeRowStepperController?.isActive(recipeKey)) {
             recipeRowStepperController.collapseActive();
             rerenderFilteredRecipes();
           }
           return;
         }
-        incrementRecipeQty(id, -1);
+        const bounds = getRecipeRowBounds(row);
+        const displayServings = getRecipeRowDisplayServings(row);
+        if (!bounds || displayServings == null) return;
+        if (bounds.canAdjust && Math.abs(displayServings - bounds.min) < 1e-9) {
+          setRecipeSelected(id, false);
+          return;
+        }
+        const nextValue =
+          typeof recipeWebServingsUi.getNextValue === 'function'
+            ? recipeWebServingsUi.getNextValue(row, -1)
+            : null;
+        if (nextValue == null || typeof recipeWebServingsUi.applyToModel !== 'function') return;
+        recipeWebServingsUi.applyToModel(row, nextValue);
+        rerenderFilteredRecipes();
       });
 
       plusBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        incrementRecipeQty(id, 1);
+        consumeRowStepperEvent(event);
+        if (!isRecipeWebSelectMode() || !isRecipeSelected(id)) return;
+        const nextValue =
+          typeof recipeWebServingsUi.getNextValue === 'function'
+            ? recipeWebServingsUi.getNextValue(row, 1)
+            : null;
+        if (nextValue == null || typeof recipeWebServingsUi.applyToModel !== 'function') return;
+        recipeWebServingsUi.applyToModel(row, nextValue);
+        rerenderFilteredRecipes();
       });
+
+      const bounds = getRecipeRowBounds(row);
+      const displayServings = getRecipeRowDisplayServings(row);
+      const atOrAboveMax =
+        bounds &&
+        displayServings != null &&
+        displayServings >= bounds.max - 1e-9;
+      minusBtn.disabled = !bounds || displayServings == null || !bounds.canAdjust;
+      plusBtn.disabled =
+        !bounds ||
+        displayServings == null ||
+        !bounds.canAdjust ||
+        atOrAboveMax;
 
       li.addEventListener('click', (event) => {
         // Treat Ctrl-click / Cmd-click as "delete"
@@ -3834,11 +4173,33 @@ async function loadRecipesPage() {
   recipeRowStepperController = listRowStepper.createController({
     listEl: list,
     isEnabled: isRecipeWebSelectMode,
+    collapseExpanded: () => {
+      if (!recipeRowEditingKey) return false;
+      recipeRowEditingKey = '';
+      return true;
+    },
+    idleCollapseMs: 3500,
+    onIdleCollapse: rerenderFilteredRecipes,
+    idleResetActivity: (target, activeKey) => {
+      if (!(target instanceof Element)) return false;
+      const row = target.closest('li');
+      if (!row || !list.contains(row)) return false;
+      return String(row.dataset.recipeRowStepperKey || '') === activeKey;
+    },
   });
   recipeRowStepperController.bindAutoDismiss({
     onDismissed: rerenderFilteredRecipes,
   });
   window.addEventListener('pageshow', collapseRecipeSelectionUi);
+  if (recipeWebServingsChangedEventName) {
+    window.addEventListener(recipeWebServingsChangedEventName, () => {
+      rerenderFilteredRecipes();
+    });
+  }
+  window.addEventListener('storage', (event) => {
+    if (event.key !== window.favoriteEatsStorageKeys?.recipeWebServings) return;
+    rerenderFilteredRecipes();
+  });
 
   recipeRows = loadRecipeRows();
   hydrateRecipeSelectionsFromPlan();
@@ -3992,26 +4353,28 @@ async function loadRecipesPage() {
     if (isRecipeWebSelectMode()) {
       recipesActionBtn.textContent = 'Reset';
       recipesActionBtn.addEventListener('click', () => {
-        if (!Object.keys(getShoppingPlanRecipeSelections()).length) {
+        if (!recipeSelectionKeys.size) {
           uiToast('No recipe selections to clear.');
           return;
         }
         const previousPlan = cloneForUndo(getShoppingPlan(), () =>
           createEmptyShoppingPlan()
         );
-        const previousRecipeQuantities = new Map(recipeQuantities);
+        const previousRecipeSelections = new Set(recipeSelectionKeys);
         const restoreClearedRecipes = () => {
           persistShoppingPlan(previousPlan);
-          recipeQuantities.clear();
-          previousRecipeQuantities.forEach((qty, key) => {
-            recipeQuantities.set(key, qty);
+          recipeSelectionKeys.clear();
+          previousRecipeSelections.forEach((key) => {
+            recipeSelectionKeys.add(key);
           });
+          recipeRowEditingKey = '';
           recipeRowStepperController?.collapseAll?.();
           syncRecipesActionButtonState();
           rerenderFilteredRecipes();
         };
         clearShoppingPlanSelections({ clearRecipes: true });
-        recipeQuantities.clear();
+        recipeSelectionKeys.clear();
+        recipeRowEditingKey = '';
         recipeRowStepperController?.collapseAll?.();
         syncRecipesActionButtonState();
         rerenderFilteredRecipes();
@@ -15884,23 +16247,25 @@ function initBottomNav() {
   // Menu icon toggles bottom nav visibility on list pages.
   if (menuButton) {
     menuButton.addEventListener('click', () => {
-      menuClickCount += 1;
-      if (menuClickResetTimer) {
-        window.clearTimeout(menuClickResetTimer);
-      }
-      menuClickResetTimer = window.setTimeout(() => {
-        menuClickCount = 0;
-        menuClickResetTimer = null;
-      }, MENU_TRIPLE_CLICK_WINDOW_MS);
-
-      if (menuClickCount >= 3) {
-        menuClickCount = 0;
+      if (isHiddenForceWebModeToggleAllowed()) {
+        menuClickCount += 1;
         if (menuClickResetTimer) {
           window.clearTimeout(menuClickResetTimer);
-          menuClickResetTimer = null;
         }
-        toggleForceWebModeFromMenu();
-        return;
+        menuClickResetTimer = window.setTimeout(() => {
+          menuClickCount = 0;
+          menuClickResetTimer = null;
+        }, MENU_TRIPLE_CLICK_WINDOW_MS);
+
+        if (menuClickCount >= 3) {
+          menuClickCount = 0;
+          if (menuClickResetTimer) {
+            window.clearTimeout(menuClickResetTimer);
+            menuClickResetTimer = null;
+          }
+          toggleForceWebModeFromMenu();
+          return;
+        }
       }
 
       toggleNavVisibility();
@@ -17255,6 +17620,35 @@ async function loadRecipeEditorPage() {
         : true;
   };
   window.recipeWebModeSyncAppBar();
+  if (isRecipeWebMode) {
+    const recipeWebServingsChangedEventName =
+      window.favoriteEatsRecipeWebServings?.changeEventName ||
+      window.favoriteEatsEventNames?.recipeWebServingsChanged ||
+      '';
+    if (!window._recipeWebModeStorageSyncBound) {
+      window._recipeWebModeStorageSyncBound = true;
+      const syncFromStorage = (event) => {
+        const changedRecipeId = Number(event?.detail?.recipeId);
+        if (
+          Number.isFinite(changedRecipeId) &&
+          changedRecipeId > 0 &&
+          Number(window.recipeData?.id) !== changedRecipeId
+        ) {
+          return;
+        }
+        if (typeof window.recipeWebModeSyncFromStorage === 'function') {
+          window.recipeWebModeSyncFromStorage();
+        }
+      };
+      if (recipeWebServingsChangedEventName) {
+        window.addEventListener(recipeWebServingsChangedEventName, syncFromStorage);
+      }
+      window.addEventListener('storage', (event) => {
+        if (event.key !== window.favoriteEatsStorageKeys?.recipeWebServings) return;
+        syncFromStorage();
+      });
+    }
+  }
 
   renderRecipe(recipe);
 

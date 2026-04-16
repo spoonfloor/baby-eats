@@ -15,9 +15,18 @@
     const threshold = Number.isFinite(epsilon) ? Math.abs(epsilon) : STEPPER_EPSILON;
     const isFractional = (value) => Math.abs(value - Math.round(value)) > threshold;
     const clamp = (value) => Math.max(min, Math.min(max, value));
+    const snapRaw = Number(options.snapPositiveTo);
+    const snapPositiveTo = Number.isFinite(snapRaw) && snapRaw > 0 ? snapRaw : null;
 
     if (!Number.isFinite(numeric)) {
-      return clamp(stepDelta > 0 ? 1 : 0);
+      return clamp(stepDelta > 0 ? (snapPositiveTo ?? 1) : 0);
+    }
+
+    if (numeric <= 0) {
+      if (stepDelta > 0) {
+        return clamp(snapPositiveTo ?? 1);
+      }
+      return clamp(numeric + stepDelta);
     }
 
     if (stepDelta > 0 && isFractional(numeric)) {
@@ -137,8 +146,27 @@
       typeof options.isEnabled === 'function' ? options.isEnabled : () => true;
     const collapseExpanded =
       typeof options.collapseExpanded === 'function' ? options.collapseExpanded : null;
+    const idleCollapseMsRaw = Number(options.idleCollapseMs);
+    const idleCollapseMs =
+      Number.isFinite(idleCollapseMsRaw) && idleCollapseMsRaw > 0
+        ? idleCollapseMsRaw
+        : 0;
+    const onIdleCollapse =
+      typeof options.onIdleCollapse === 'function' ? options.onIdleCollapse : null;
+    const idleResetActivity =
+      typeof options.idleResetActivity === 'function'
+        ? options.idleResetActivity
+        : null;
 
     let activeKey = normalizeKey(options.activeKey);
+
+    let idleTimerId = null;
+    const clearIdleTimer = () => {
+      if (idleTimerId != null) {
+        clearTimeout(idleTimerId);
+        idleTimerId = null;
+      }
+    };
 
     const getActiveKey = () => activeKey;
     const isActive = (key) => {
@@ -147,23 +175,9 @@
     };
 
     const collapseActive = () => {
+      clearIdleTimer();
       if (!activeKey) return false;
       activeKey = '';
-      return true;
-    };
-
-    const activate = (key) => {
-      const normalized = normalizeKey(key);
-      if (!normalized || normalized === activeKey) return false;
-      activeKey = normalized;
-      return true;
-    };
-
-    const toggle = (key) => {
-      const normalized = normalizeKey(key);
-      if (!normalized) return false;
-      if (normalized === activeKey) return collapseActive();
-      activeKey = normalized;
       return true;
     };
 
@@ -172,6 +186,46 @@
       const expandedChanged = collapseExpanded ? !!collapseExpanded() : false;
       return activeChanged || expandedChanged;
     };
+
+    const scheduleIdleCollapse = () => {
+      clearIdleTimer();
+      if (!idleCollapseMs || !activeKey) return;
+      idleTimerId = setTimeout(() => {
+        idleTimerId = null;
+        if (!isEnabled() || !activeKey) return;
+        if (!collapseAll()) return;
+        if (onIdleCollapse) onIdleCollapse();
+      }, idleCollapseMs);
+    };
+
+    const activate = (key) => {
+      const normalized = normalizeKey(key);
+      if (!normalized || normalized === activeKey) return false;
+      activeKey = normalized;
+      scheduleIdleCollapse();
+      return true;
+    };
+
+    const toggle = (key) => {
+      const normalized = normalizeKey(key);
+      if (!normalized) return false;
+      if (normalized === activeKey) return collapseActive();
+      activeKey = normalized;
+      scheduleIdleCollapse();
+      return true;
+    };
+
+    if (idleCollapseMs && idleResetActivity && listEl instanceof HTMLElement) {
+      const onIdleResetActivity = (event) => {
+        if (!activeKey || !isEnabled()) return;
+        const target = event?.target;
+        if (!idleResetActivity(target, activeKey)) return;
+        scheduleIdleCollapse();
+      };
+      for (const type of ['pointerdown', 'keydown', 'focusin']) {
+        listEl.addEventListener(type, onIdleResetActivity, true);
+      }
+    }
 
     const bindAutoDismiss = (dismissOptions = {}) => {
       if (!(listEl instanceof HTMLElement)) return () => {};
