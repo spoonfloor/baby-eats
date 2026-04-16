@@ -320,6 +320,11 @@ function clampRecipeWebServingsValue(rawValue, bounds) {
   const api = getRecipeWebServingsApi();
   if (typeof api.clampValue === 'function') return api.clampValue(rawValue, bounds);
   if (!bounds) return null;
+  if (bounds.baseDefault == null) {
+    const rounded = roundRecipeWebServingsValue(rawValue);
+    if (rounded == null) return null;
+    return 1;
+  }
   const rounded = roundRecipeWebServingsValue(rawValue);
   if (rounded == null) return null;
   return Math.max(bounds.min, Math.min(bounds.max, rounded));
@@ -376,7 +381,28 @@ function applyRecipeWebServingsToModel(recipe, nextValue, { persist = true } = {
   const bounds = getRecipeWebServingsBounds(recipe);
   if (!bounds) return null;
   const next = clampRecipeWebServingsValue(nextValue, bounds);
-  if (next == null) return null;
+  const allowsUnset = bounds.baseDefault == null;
+  if (next == null && !allowsUnset) return null;
+  if (next == null && allowsUnset) {
+    if (!recipe.servings || typeof recipe.servings !== 'object') {
+      recipe.servings = {
+        default: null,
+        min: null,
+        max: null,
+      };
+    } else {
+      recipe.servings.default = null;
+    }
+    recipe.servingsDefault = null;
+    recipe._webModeCurrentServingsDefault = null;
+    if (persist) setRecipeWebServingsStoredValue(recipe, null);
+    try {
+      if (typeof window.recipeWebModeSyncAppBar === 'function') {
+        window.recipeWebModeSyncAppBar();
+      }
+    } catch (_) {}
+    return null;
+  }
   if (!recipe.servings || typeof recipe.servings !== 'object') {
     recipe.servings = {
       default: bounds.baseDefault,
@@ -437,18 +463,28 @@ function getNextRecipeWebServingsValue(recipe, delta) {
   const currentServings = roundRecipeWebServingsValue(recipe?.servingsDefault);
   const currentStepValue =
     Number.isFinite(Number(currentServings)) && Number(currentServings) > 0 ? currentServings : 0;
+  const isUnsetMode = bounds.baseDefault == null;
+  const stepMin = isUnsetMode ? 0 : bounds.min;
+  const stepMax = isUnsetMode ? 1 : bounds.max;
+  const snapPositiveTo = isUnsetMode
+    ? 1
+    : Number.isFinite(Number(bounds.baseDefault)) && Number(bounds.baseDefault) > 0
+      ? bounds.baseDefault
+      : 1;
   const nextCandidate =
     window.listRowStepper &&
     typeof window.listRowStepper.getNextStepQty === 'function'
       ? window.listRowStepper.getNextStepQty(currentStepValue, delta, {
-          min: bounds.min,
-          max: bounds.max,
-          snapPositiveTo: bounds.baseDefault,
+          min: stepMin,
+          max: stepMax,
+          snapPositiveTo,
         })
       : currentStepValue > 0
         ? currentStepValue + Number(delta || 0)
         : Number(delta || 0) > 0
-          ? bounds.baseDefault
+          ? bounds.baseDefault != null
+            ? bounds.baseDefault
+            : 1
           : currentStepValue + Number(delta || 0);
   return clampRecipeWebServingsValue(nextCandidate, bounds);
 }
@@ -2708,6 +2744,8 @@ function renderServingsRow(recipe, container) {
     const field = document.createElement('div');
     field.className = 'row-field servings-web-field';
     const displayServings = getRecipeWebServingsDisplayValue(recipeModel) ?? bounds.baseDefault;
+    const curRounded = roundRecipeWebServingsValue(recipeModel?.servingsDefault);
+    const atNone = curRounded == null;
     const subtitle = document.createElement('span');
     subtitle.className = 'servings-web-subtitle';
     const subtitlePrefix = document.createElement('span');
@@ -2729,36 +2767,39 @@ function renderServingsRow(recipe, container) {
     picker.classList.add('servings-picker', 'servings-picker--inline');
     value.remove();
     picker.style.display = '';
-    minusBtn.disabled = !bounds.canAdjust || displayServings <= bounds.min;
-    plusBtn.disabled = !bounds.canAdjust || displayServings >= bounds.max;
+    if (bounds.baseDefault == null) {
+      minusBtn.disabled = !bounds.canAdjust || atNone;
+      plusBtn.disabled = !bounds.canAdjust || !atNone;
+    } else {
+      minusBtn.disabled =
+        !bounds.canAdjust || (curRounded != null && curRounded <= bounds.min + 1e-9);
+      plusBtn.disabled =
+        !bounds.canAdjust || (curRounded != null && curRounded >= bounds.max - 1e-9);
+    }
 
     minusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const next = applyRecipeWebServingsToModel(
+      applyRecipeWebServingsToModel(
         recipeModel,
         getNextRecipeWebServingsValue(recipeModel, -1)
       );
-      if (next != null) {
-        renderServingsRow(recipeModel, container);
-        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
-          window.recipeEditorRerenderIngredientsFromModel();
-        }
+      renderServingsRow(recipeModel, container);
+      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+        window.recipeEditorRerenderIngredientsFromModel();
       }
     });
 
     plusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const next = applyRecipeWebServingsToModel(
+      applyRecipeWebServingsToModel(
         recipeModel,
         getNextRecipeWebServingsValue(recipeModel, 1)
       );
-      if (next != null) {
-        renderServingsRow(recipeModel, container);
-        if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
-          window.recipeEditorRerenderIngredientsFromModel();
-        }
+      renderServingsRow(recipeModel, container);
+      if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+        window.recipeEditorRerenderIngredientsFromModel();
       }
     });
 
@@ -2769,9 +2810,8 @@ function renderServingsRow(recipe, container) {
       input.className = 'servings-web-value-input';
       input.inputMode = 'decimal';
       input.setAttribute('aria-label', 'Servings value');
-      input.value = Number.isInteger(displayServings)
-        ? String(displayServings)
-        : String(displayServings);
+      input.value =
+        displayServings != null ? String(displayServings) : '';
       subtitle.replaceChild(input, subtitleValue);
       input.focus();
       input.select();

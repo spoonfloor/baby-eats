@@ -424,6 +424,38 @@ function ensureRecipeTagsSchema(activeDb) {
   return true;
 }
 
+function ensureIngredientVariantTagsSchema(activeDb) {
+  if (!activeDb) return false;
+  ensureRecipeTagsSchema(activeDb);
+  try {
+    activeDb.run('PRAGMA foreign_keys = ON;');
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE TABLE IF NOT EXISTS ingredient_variant_tag_map (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ingredient_variant_id INTEGER NOT NULL REFERENCES ingredient_variants(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        sort_order INTEGER,
+        UNIQUE(ingredient_variant_id, tag_id)
+      );
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_variant
+      ON ingredient_variant_tag_map(ingredient_variant_id, sort_order, id);
+    `);
+  } catch (_) {}
+  try {
+    activeDb.run(`
+      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_tag
+      ON ingredient_variant_tag_map(tag_id, ingredient_variant_id);
+    `);
+  } catch (_) {}
+  return true;
+}
+
 function parseRecipeTags(rawTags) {
   if (rawTags == null) return [];
   const seen = new Set();
@@ -455,6 +487,7 @@ window.bridge = {
   ensureRecipeIngredientMapDisplayNameSchema,
   ensureIngredientSynonymsSchema,
   ensureRecipeTagsSchema,
+  ensureIngredientVariantTagsSchema,
   propagateIngredientGrammarFlags,
   ensureRecipeIngredientMapVariantSizeSchema,
   writeIngredientSortOrderFromModel,

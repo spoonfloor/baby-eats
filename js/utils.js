@@ -90,7 +90,13 @@ function getRecipeBaseServingsDefaultShared(recipe) {
 function getRecipeWebServingsBoundsShared(recipe) {
   const baseDefault = getRecipeBaseServingsDefaultShared(recipe);
   if (!Number.isFinite(Number(baseDefault)) || Number(baseDefault) <= 0) {
-    return null;
+    // No declared servings: web mode uses a simple none ↔ 1 toggle (see clamp + stepper options).
+    return {
+      baseDefault: null,
+      min: 1,
+      max: 1,
+      canAdjust: true,
+    };
   }
   const servingsObj =
     recipe && recipe.servings && typeof recipe.servings === 'object'
@@ -135,6 +141,11 @@ function getRecipeWebServingsBoundsShared(recipe) {
 
 function clampRecipeWebServingsValueShared(rawValue, bounds) {
   if (!bounds) return null;
+  if (bounds.baseDefault == null) {
+    const rounded = roundRecipeWebServingsValueShared(rawValue);
+    if (rounded == null) return null;
+    return 1;
+  }
   const rounded = roundRecipeWebServingsValueShared(rawValue);
   if (rounded == null) return null;
   return Math.max(bounds.min, Math.min(bounds.max, rounded));
@@ -222,14 +233,23 @@ function getRecipeWebServingsMultiplierShared(
   { fallbackRecipeId = null, scrubInvalid = false } = {}
 ) {
   const bounds = getRecipeWebServingsBoundsShared(recipe);
-  if (!bounds || !Number.isFinite(Number(bounds.baseDefault)) || Number(bounds.baseDefault) <= 0) {
+  if (!bounds) {
     return 1;
   }
   const current = getRecipeEffectiveServingsShared(recipe, {
     fallbackRecipeId,
     scrubInvalid,
   });
-  const multiplier = Number(current) / Number(bounds.baseDefault);
+  if (current == null || !Number.isFinite(Number(current)) || Number(current) <= 0) {
+    return 1;
+  }
+  const denom =
+    bounds.baseDefault != null &&
+    Number.isFinite(Number(bounds.baseDefault)) &&
+    Number(bounds.baseDefault) > 0
+      ? Number(bounds.baseDefault)
+      : 1;
+  const multiplier = Number(current) / denom;
   return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
 }
 

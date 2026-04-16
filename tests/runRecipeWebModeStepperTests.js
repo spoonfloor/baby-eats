@@ -63,6 +63,13 @@ function loadRecipeServingsStepper(listRowStepper) {
     },
     clampRecipeWebServingsValue(rawValue, bounds) {
       if (!bounds) return null;
+      if (bounds.baseDefault == null) {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric) || numeric <= 0) return null;
+        const rounded = Math.round(numeric * 2) / 2;
+        if (rounded == null || rounded <= 0) return null;
+        return 1;
+      }
       const numeric = Number(rawValue);
       if (!Number.isFinite(numeric) || numeric <= 0) return null;
       const rounded = Math.round(numeric * 2) / 2;
@@ -116,6 +123,23 @@ function run() {
     getNextRecipeWebServingsValue({ servingsDefault: 4, bounds: recipeBounds }, 1),
     5,
     'recipe servings stepper continues normal increments after initialization'
+  );
+
+  const unsetBounds = {
+    baseDefault: null,
+    min: 1,
+    max: 1,
+    canAdjust: true,
+  };
+  assertEqual(
+    getNextRecipeWebServingsValue({ servingsDefault: null, bounds: unsetBounds }, 1),
+    1,
+    'no-base recipe: stepper selects 1 from unset'
+  );
+  assertEqual(
+    getNextRecipeWebServingsValue({ servingsDefault: 1, bounds: unsetBounds }, -1),
+    null,
+    'no-base recipe: stepper returns to unset from 1'
   );
 
   console.log('Recipe web mode stepper tests passed.');

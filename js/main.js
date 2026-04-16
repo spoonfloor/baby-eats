@@ -1360,6 +1360,38 @@ function ensureRecipeTagsSchemaInMain(db) {
   return true;
 }
 
+function ensureIngredientVariantTagsSchemaInMain(db) {
+  if (!db) return false;
+  ensureRecipeTagsSchemaInMain(db);
+  try {
+    db.run('PRAGMA foreign_keys = ON;');
+  } catch (_) {}
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS ingredient_variant_tag_map (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ingredient_variant_id INTEGER NOT NULL REFERENCES ingredient_variants(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        sort_order INTEGER,
+        UNIQUE(ingredient_variant_id, tag_id)
+      );
+    `);
+  } catch (_) {}
+  try {
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_variant
+      ON ingredient_variant_tag_map(ingredient_variant_id, sort_order, id);
+    `);
+  } catch (_) {}
+  try {
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_tag
+      ON ingredient_variant_tag_map(tag_id, ingredient_variant_id);
+    `);
+  } catch (_) {}
+  return true;
+}
+
 function ensureSizesSchemaInMain(db) {
   if (!db) return false;
   try {
@@ -2055,7 +2087,7 @@ function walkExpandedShoppingPlanIngredientLines(
       ? section.ingredients
       : [];
     ingredients.forEach((line) => {
-      if (!line || line.rowType === 'heading' || line.isAlt) return;
+      if (!line || line.rowType === 'heading') return;
 
       const linkedRecipeId = Math.trunc(Number(line.linkedRecipeId));
       if (line.isRecipe) {
@@ -2518,14 +2550,20 @@ function getShoppingPlanSelectionRows(options = {}) {
         )
       : null;
   const aggregate = new Map();
-  const ensureRow = ({ name = '', variantName = '' } = {}) => {
+  const ensureRow = ({ name = '', variantName = '', allowInvisible = false } = {}) => {
     const resolvedName = String(name || '').trim();
     const resolvedVariantName = String(variantName || '').trim();
     if (!resolvedName) return null;
     const key = getShoppingPlanAggregateKey(resolvedName, resolvedVariantName);
     if (!key) return null;
     const nameKey = resolvedName.toLowerCase();
-    if (visibleNameKeys instanceof Set && !visibleNameKeys.has(nameKey)) return null;
+    if (
+      !allowInvisible &&
+      visibleNameKeys instanceof Set &&
+      !visibleNameKeys.has(nameKey)
+    ) {
+      return null;
+    }
     if (!aggregate.has(key)) {
       aggregate.set(key, {
         key,
@@ -2616,11 +2654,13 @@ function getShoppingPlanSelectionRows(options = {}) {
     { recipeId = null, recipeTitle = '', recipeCount = 0, servingsMultiplier = 1 } = {},
   ) => {
     if (!line || typeof line !== 'object') return;
-    if (line.rowType === 'heading' || line.isAlt || line.isRecipe) return;
+    if (line.rowType === 'heading' || line.isRecipe) return;
     const name = String(line.name || '').trim();
     if (!name) return;
     const variantName = String(line.variant || '').trim();
-    const row = ensureRow({ name, variantName });
+    // Recipe-sourced rows should stay visible even when the master ingredient is
+    // hidden from the browse pool; otherwise OR/alt ingredients can disappear.
+    const row = ensureRow({ name, variantName, allowInvisible: true });
     if (!row) return;
     const recipeMultiplier = Number(recipeCount);
     if (!Number.isFinite(recipeMultiplier) || recipeMultiplier <= 0) return;
@@ -3599,6 +3639,7 @@ async function loadRecipesPage() {
   window.dbInstance = db;
   await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
   ensureRecipeTagsSchemaInMain(db);
+  ensureIngredientVariantTagsSchemaInMain(db);
 
   initAppBar({
     mode: 'list',
@@ -3618,6 +3659,7 @@ async function loadRecipesPage() {
   const list = document.getElementById('recipeList');
   if (!list) return;
   ensureRecipeTagsSchemaInMain(db);
+  ensureIngredientVariantTagsSchemaInMain(db);
   list.innerHTML = '';
 
   window.dbInstance = db;
@@ -3690,7 +3732,9 @@ async function loadRecipesPage() {
   const initializeRecipeRowServings = (recipeRow) => {
     const bounds = getRecipeRowBounds(recipeRow);
     if (!bounds || typeof recipeWebServingsUi.applyToModel !== 'function') return null;
-    return recipeWebServingsUi.applyToModel(recipeRow, bounds.baseDefault);
+    const initial =
+      bounds.baseDefault != null && bounds.baseDefault > 0 ? bounds.baseDefault : 1;
+    return recipeWebServingsUi.applyToModel(recipeRow, initial);
   };
   const syncRecipesActionButtonState = () => {
     if (!(recipesActionBtn instanceof HTMLButtonElement)) return;
@@ -3747,6 +3791,14 @@ async function loadRecipesPage() {
     rowEl.dataset.recipeServingsAvailable = hasServings ? 'true' : 'false';
     rowEl.dataset.recipeSelected = enabled && selected && hasServings ? 'true' : 'false';
     rowEl.classList.toggle('shopping-row-checked', enabled && selected && hasServings);
+
+    const servingsSlot = rowEl.querySelector('.recipe-list-servings-slot');
+    if (servingsSlot) {
+      servingsSlot.classList.toggle(
+        'recipe-list-servings-slot--collapsed-hit',
+        !!(enabled && hasServings && !isActive)
+      );
+    }
 
     if (qtyEl) qtyEl.textContent = formattedServings;
     if (badge) badge.textContent = formattedServings;
@@ -3976,8 +4028,11 @@ async function loadRecipesPage() {
       primeRecipeRowServings(row);
       const li = document.createElement('li');
       const titleSpan = document.createElement('span');
-      titleSpan.className = 'recipe-list-title shopping-list-row-label';
-      titleSpan.textContent = title || '';
+      titleSpan.className = 'shopping-list-row-label';
+      const titleHit = document.createElement('span');
+      titleHit.className = 'recipe-list-title recipe-list-title-hit';
+      titleHit.textContent = title || '';
+      titleSpan.appendChild(titleHit);
       const icon = document.createElement('span');
       icon.className = 'material-symbols-outlined shopping-list-row-icon';
       icon.textContent = 'add_box';
@@ -4058,22 +4113,38 @@ async function loadRecipesPage() {
         });
       };
 
-      icon.addEventListener('click', (event) => {
-        consumeRowStepperEvent(event);
+      slot.addEventListener('click', (event) => {
         if (!isRecipeWebSelectMode()) return;
         if (!getRecipeRowBounds(row)) return;
-        initializeRecipeRowServings(row);
-        setRecipeSelected(id, true, { activate: true });
-      });
+        if (disabledIndicator.contains(event.target)) return;
 
-      badge.addEventListener('click', (event) => {
+        const isStepperVisible = stepper.style.display === 'inline-flex';
+        if (isStepperVisible && stepper.contains(event.target)) return;
+
+        const selectedNow = isRecipeSelected(id);
+        const stepperActive = !!recipeRowStepperController?.isActive(recipeKey);
+        if (isStepperVisible && stepperActive) {
+          consumeRowStepperEvent(event);
+          return;
+        }
+
         consumeRowStepperEvent(event);
+
+        if (!selectedNow) {
+          initializeRecipeRowServings(row);
+          setRecipeSelected(id, true, { activate: true });
+        } else {
+          recipeRowStepperController?.activate(recipeKey);
+          rerenderFilteredRecipes();
+        }
+      });
+      slot.addEventListener('pointerdown', (event) => {
         if (!isRecipeWebSelectMode()) return;
         if (!getRecipeRowBounds(row)) return;
-        recipeRowStepperController?.activate(recipeKey);
-        rerenderFilteredRecipes();
+        if (disabledIndicator.contains(event.target)) return;
+        if (stepper.style.display === 'inline-flex' && stepper.contains(event.target)) return;
+        event.stopPropagation();
       });
-      badge.addEventListener('pointerdown', (event) => event.stopPropagation());
       disabledIndicator.addEventListener('click', consumeRowStepperEvent);
       disabledIndicator.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -4137,7 +4208,7 @@ async function loadRecipesPage() {
         !bounds.canAdjust ||
         atOrAboveMax;
 
-      li.addEventListener('click', (event) => {
+      titleHit.addEventListener('click', (event) => {
         // Treat Ctrl-click / Cmd-click as "delete"
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
@@ -6100,14 +6171,14 @@ async function loadShoppingPage() {
         li.clientWidth - (padL || 0) - (padR || 0) - checkboxReserve,
       );
       const measure = makeTextMeasurer(li);
-      if (!measure || maxPx <= 0) return `${baseName}, (${parts[0]})`;
+      if (!measure || maxPx <= 0) return `${baseName} (${parts[0]})`;
 
-      const prefix = `${baseName}, (`;
+      const prefix = `${baseName} (`;
       const close = `)`;
       const prefixW = measure(prefix);
       const closeW = measure(close);
 
-      const full = `${baseName}, (${parts.join(', ')})`;
+      const full = `${baseName} (${parts.join(', ')})`;
       if (measure(full) <= maxPx) return full;
 
       if (parts.length <= 3) {
@@ -7487,6 +7558,21 @@ function normalizeShoppingHomeLocationId(raw) {
 
 function normalizeIngredientVariantRows(rows, options = {}) {
   const fallbackBaseHome = normalizeShoppingHomeLocationId(options?.fallbackBaseHome || 'none');
+  const normalizeRowTags = (rawTags) =>
+    normalizeRecipeTagList(
+      Array.isArray(rawTags)
+        ? rawTags
+        : rawTags == null
+          ? []
+          : String(rawTags)
+              .split(/[\n,]/)
+              .map((value) => String(value || '').trim()),
+    );
+  const mergeTagLists = (left, right) =>
+    normalizeRecipeTagList([
+      ...(Array.isArray(left) ? left : []),
+      ...(Array.isArray(right) ? right : []),
+    ]);
   const namedRows = [];
   const namedRowsByKey = new Map();
   let baseRow = null;
@@ -7503,6 +7589,9 @@ function normalizeIngredientVariantRows(rows, options = {}) {
             ? fallbackBaseHome
             : 'none',
     );
+    const normalizedTags = normalizeRowTags(
+      row.tags != null ? row.tags : row.tagNames != null ? row.tagNames : [],
+    );
 
     if (isBase) {
       if (!baseRow) {
@@ -7510,9 +7599,13 @@ function normalizeIngredientVariantRows(rows, options = {}) {
           isBase: true,
           value: '',
           homeLocation: normalizedHome,
+          tags: normalizedTags,
         };
       } else if (baseRow.homeLocation === 'none' && normalizedHome !== 'none') {
         baseRow.homeLocation = normalizedHome;
+        baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
+      } else if (normalizedTags.length) {
+        baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
       }
       return;
     }
@@ -7525,6 +7618,9 @@ function normalizeIngredientVariantRows(rows, options = {}) {
       if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
         existing.homeLocation = normalizedHome;
       }
+      if (normalizedTags.length) {
+        existing.tags = mergeTagLists(existing.tags, normalizedTags);
+      }
       return;
     }
 
@@ -7532,12 +7628,16 @@ function normalizeIngredientVariantRows(rows, options = {}) {
       isBase: false,
       value: normalizedValue,
       homeLocation: normalizedHome,
+      tags: normalizedTags,
     };
     namedRowsByKey.set(rowKey, normalizedRow);
     namedRows.push(normalizedRow);
   });
 
-  return [baseRow || { isBase: true, value: '', homeLocation: fallbackBaseHome }, ...namedRows];
+  return [
+    baseRow || { isBase: true, value: '', homeLocation: fallbackBaseHome, tags: [] },
+    ...namedRows,
+  ];
 }
 
 function serializeIngredientVariantRows(rows, options = {}) {
@@ -7569,9 +7669,71 @@ function parseIngredientVariantRowsSerialized(rawValue, options = {}) {
   return normalizeIngredientVariantRows(
     serialized
       .split('\n')
-      .map((value) => ({ isBase: false, value, homeLocation: 'none' })),
+      .map((value) => ({ isBase: false, value, homeLocation: 'none', tags: [] })),
     { fallbackBaseHome },
   );
+}
+
+function loadIngredientVariantRowsForIngredientInMain(db, ingredientId, options = {}) {
+  const iid = Number(ingredientId);
+  if (!db || !Number.isFinite(iid) || iid <= 0) {
+    return normalizeIngredientVariantRows([], {
+      fallbackBaseHome: options?.fallbackBaseHome || 'none',
+    });
+  }
+  ensureIngredientVariantTagsSchemaInMain(db);
+  const hasHomeLocation = tableHasColumnInMain(db, 'ingredient_variants', 'home_location');
+  const rows = [];
+  const rowsByVariantId = new Map();
+  try {
+    const q = db.exec(
+      `SELECT iv.id,
+              COALESCE(iv.variant, '') AS variant_name,
+              ${hasHomeLocation ? "COALESCE(iv.home_location, 'none')" : "'none'"} AS home_location,
+              t.name AS tag_name
+       FROM ingredient_variants iv
+       LEFT JOIN ingredient_variant_tag_map ivtm
+         ON ivtm.ingredient_variant_id = iv.id
+       LEFT JOIN tags t
+         ON t.id = ivtm.tag_id
+        AND COALESCE(t.is_hidden, 0) = 0
+       WHERE iv.ingredient_id = ?
+       ORDER BY COALESCE(iv.sort_order, 999999) ASC,
+                iv.id ASC,
+                COALESCE(ivtm.sort_order, 999999) ASC,
+                ivtm.id ASC,
+                t.name COLLATE NOCASE;`,
+      [iid],
+    );
+    if (Array.isArray(q) && q.length && Array.isArray(q[0].values)) {
+      q[0].values.forEach((entry) => {
+        const variantId = Number(Array.isArray(entry) ? entry[0] : NaN);
+        const variantName = String((Array.isArray(entry) ? entry[1] : '') || '');
+        const homeLocation = String((Array.isArray(entry) ? entry[2] : 'none') || 'none');
+        const tagName = String((Array.isArray(entry) ? entry[3] : '') || '').trim();
+        if (!Number.isFinite(variantId) || variantId <= 0) return;
+        let row = rowsByVariantId.get(variantId);
+        if (!row) {
+          row = {
+            isBase: isIngredientBaseVariantName(variantName),
+            value: variantName,
+            homeLocation,
+            tags: [],
+          };
+          rowsByVariantId.set(variantId, row);
+          rows.push(row);
+        }
+        if (tagName) row.tags.push(tagName);
+      });
+    }
+  } catch (_) {
+    return normalizeIngredientVariantRows([], {
+      fallbackBaseHome: options?.fallbackBaseHome || 'none',
+    });
+  }
+  return normalizeIngredientVariantRows(rows, {
+    fallbackBaseHome: options?.fallbackBaseHome || 'none',
+  });
 }
 
 function getShoppingListSourceBaseKey(sourceKey) {
@@ -9577,13 +9739,15 @@ function loadShoppingItemEditorPage() {
   let refreshVariantEditorDirty = () => {};
   let pendingVariantCellFocus = null;
   let variantActionDialogOpen = false;
+  let activeVariantTagEditorState = null;
 
   const getVariantRowsSignature = (rows) =>
     normalizeIngredientVariantRows(Array.isArray(rows) ? rows : [])
       .map((row) => {
         const homeLocation = normalizeShoppingHomeLocationId(row?.homeLocation || 'none');
-        if (row?.isBase) return `base:${homeLocation}`;
-        return `variant:${String(row?.value || '')}:${homeLocation}`;
+        const tagKey = normalizeRecipeTagList(row?.tags || []).join('|');
+        if (row?.isBase) return `base:${homeLocation}:${tagKey}`;
+        return `variant:${String(row?.value || '')}:${homeLocation}:${tagKey}`;
       })
       .join('\n');
 
@@ -9594,6 +9758,7 @@ function loadShoppingItemEditorPage() {
         isBase: false,
         value: normalizeNamedIngredientVariant(row.value),
         homeLocation: normalizeShoppingHomeLocationId(row.homeLocation || 'none'),
+        tags: normalizeRecipeTagList(row.tags || []),
       }))
       .filter((row) => row.value);
 
@@ -9605,7 +9770,12 @@ function loadShoppingItemEditorPage() {
       existingBaseRow?.homeLocation || 'none',
     );
     variantRowsDraft = [
-      { isBase: true, value: '', homeLocation: baseHomeLocation },
+      {
+        isBase: true,
+        value: '',
+        homeLocation: baseHomeLocation,
+        tags: normalizeRecipeTagList(existingBaseRow?.tags || []),
+      },
       ...variantRowsDraft.filter((row) => row && !row.isBase),
     ];
   };
@@ -9653,10 +9823,47 @@ function loadShoppingItemEditorPage() {
     refreshVariantEditorDirty();
   };
 
+  const addVariantTagToRow = (rowIndex, rawTag) => {
+    const normalizedIndex = Number(rowIndex);
+    if (
+      !Number.isFinite(normalizedIndex) ||
+      normalizedIndex < 0 ||
+      normalizedIndex >= variantRowsDraft.length
+    ) {
+      return false;
+    }
+    const nextTag = normalizeRecipeTagList([rawTag])[0] || '';
+    if (!nextTag) return false;
+    const nextTags = normalizeRecipeTagList([
+      ...(variantRowsDraft[normalizedIndex].tags || []),
+      nextTag,
+    ]);
+    const previousKey = JSON.stringify(
+      normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []).map((value) =>
+        String(value || '').toLowerCase(),
+      ),
+    );
+    const nextKey = JSON.stringify(nextTags.map((value) => String(value || '').toLowerCase()));
+    if (previousKey === nextKey) return false;
+    variantRowsDraft[normalizedIndex].tags = nextTags;
+    syncVariantHiddenInput({ emit: true });
+    return true;
+  };
+
+  const commitActiveVariantTagDraft = ({ clear = false } = {}) => {
+    if (!activeVariantTagEditorState) return false;
+    const rowIndex = Number(activeVariantTagEditorState.rowIndex);
+    const draft = String(activeVariantTagEditorState.draft || '').trim();
+    const changed = draft ? addVariantTagToRow(rowIndex, draft) : false;
+    if (clear) activeVariantTagEditorState = null;
+    else activeVariantTagEditorState.draft = '';
+    return changed;
+  };
+
   const setPendingVariantCellFocus = (rowIndex, column, options = {}) => {
     pendingVariantCellFocus = {
       rowIndex: Math.max(0, Number(rowIndex) || 0),
-      column: column === 'home' ? 'home' : 'variant',
+      column: column === 'home' || column === 'tags' ? column : 'variant',
       caretAtStart: options?.caretAtStart !== false,
       openTypeahead: !!options?.openTypeahead,
     };
@@ -9676,12 +9883,14 @@ function loadShoppingItemEditorPage() {
         isBase: false,
         value: String(row?.value || ''),
         homeLocation: normalizeShoppingHomeLocationId(row?.homeLocation || 'none'),
+        tags: normalizeRecipeTagList(row?.tags || []),
       }));
     variantRowsDraft = [
       {
         isBase: true,
         value: '',
         homeLocation: normalizeShoppingHomeLocationId(baseRow.homeLocation || 'none'),
+        tags: normalizeRecipeTagList(baseRow.tags || []),
       },
       ...namedRows,
     ];
@@ -9695,6 +9904,7 @@ function loadShoppingItemEditorPage() {
         isBase: false,
         value: '',
         homeLocation: 'none',
+        tags: [],
       });
     }
     syncVariantHiddenInput({ emit: true });
@@ -9747,6 +9957,7 @@ function loadShoppingItemEditorPage() {
             nextRows.length === 0
               ? normalizeShoppingHomeLocationId(currentRow.homeLocation || 'none')
               : 'none',
+          tags: [],
         });
       });
 
@@ -9859,7 +10070,7 @@ function loadShoppingItemEditorPage() {
 
       const deleteVariant = await uiConfirm({
         title: 'Delete variant',
-        message: `Delete "${variantLabel}" and its home location?`,
+        message: `Delete "${variantLabel}" and its home location/tags?`,
         confirmText: 'Delete',
         cancelText: 'Cancel',
         danger: true,
@@ -9903,12 +10114,16 @@ function loadShoppingItemEditorPage() {
       const selector =
         column === 'home'
           ? `.shopping-item-variant-home-input[data-row-index="${rowIndex}"]`
+          : column === 'tags'
+            ? `.shopping-item-variant-tags-input[data-row-index="${rowIndex}"]`
           : `.shopping-item-variant-name-input[data-row-index="${rowIndex}"]`;
       const target =
         variantRowsEl.querySelector(selector) ||
         variantRowsEl.querySelector(
           column === 'home'
             ? '.shopping-item-variant-home-input[data-row-index]'
+            : column === 'tags'
+              ? '.shopping-item-variant-tags-input[data-row-index]'
             : '.shopping-item-variant-name-input[data-row-index]',
         );
       if (!(target instanceof HTMLInputElement)) return;
@@ -9931,6 +10146,14 @@ function loadShoppingItemEditorPage() {
   const renderVariantRows = ({ focusCell = null } = {}) => {
     if (!variantRowsEl) return;
     ensureBaseVariantRowPresent();
+    if (
+      activeVariantTagEditorState &&
+      (!Number.isFinite(Number(activeVariantTagEditorState.rowIndex)) ||
+        Number(activeVariantTagEditorState.rowIndex) < 0 ||
+        Number(activeVariantTagEditorState.rowIndex) >= variantRowsDraft.length)
+    ) {
+      activeVariantTagEditorState = null;
+    }
     if (focusCell && Number.isFinite(Number(focusCell.rowIndex))) {
       setPendingVariantCellFocus(focusCell.rowIndex, focusCell.column, focusCell);
     }
@@ -9950,8 +10173,13 @@ function loadShoppingItemEditorPage() {
     homeHeaderEl.className = 'shopping-item-variant-header-cell';
     homeHeaderEl.textContent = 'Home location';
 
+    const tagsHeaderEl = document.createElement('div');
+    tagsHeaderEl.className = 'shopping-item-variant-header-cell';
+    tagsHeaderEl.textContent = 'Tags';
+
     headerRowEl.appendChild(nameHeaderEl);
     headerRowEl.appendChild(homeHeaderEl);
+    headerRowEl.appendChild(tagsHeaderEl);
     gridEl.appendChild(headerRowEl);
 
     variantRowsDraft.forEach((row, index) => {
@@ -9969,6 +10197,9 @@ function loadShoppingItemEditorPage() {
         : String(row?.value || '');
       variantCell.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.ctrlKey) return;
+        if (activeVariantTagEditorState) {
+          commitActiveVariantTagDraft({ clear: true });
+        }
         const targetIndex = row?.isBase ? ensureNamedVariantRowAt(1) : index;
         renderVariantRows({
           focusCell: {
@@ -10140,6 +10371,9 @@ function loadShoppingItemEditorPage() {
       homeCell.dataset.rowIndex = String(index);
       homeCell.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.ctrlKey) return;
+        if (activeVariantTagEditorState) {
+          commitActiveVariantTagDraft({ clear: true });
+        }
         renderVariantRows({
           focusCell: {
             rowIndex: index,
@@ -10265,8 +10499,186 @@ function loadShoppingItemEditorPage() {
       homeInput.addEventListener('click', (event) => handleVariantCellContextAction(event, index));
       homeCell.appendChild(homeInput);
 
+      const tagsCell = document.createElement('div');
+      tagsCell.className = 'shopping-item-variant-cell shopping-item-variant-cell--tags';
+      tagsCell.dataset.rowIndex = String(index);
+      const committedTags = normalizeRecipeTagList(row?.tags || []);
+      variantRowsDraft[index].tags = committedTags;
+      const isEditingTags = Number(activeVariantTagEditorState?.rowIndex) === index;
+      const tagsControl = document.createElement('div');
+      tagsControl.className = isEditingTags
+        ? 'shopping-item-variant-tags-control is-editing'
+        : 'shopping-item-variant-tags-control';
+      const tagsWrap = document.createElement('div');
+      tagsWrap.className = 'recipe-tags-wrap shopping-item-variant-tags-wrap';
+      committedTags.forEach((tag) => {
+        const pill = document.createElement('span');
+        pill.className = 'recipe-tag-pill shopping-item-variant-tag-pill';
+        pill.textContent = tag;
+        pill.title = 'Ctrl-click to remove';
+        const removeTag = () => {
+          variantRowsDraft[index].tags = normalizeRecipeTagList(
+            committedTags.filter(
+              (value) => String(value || '').toLowerCase() !== String(tag || '').toLowerCase(),
+            ),
+          );
+          syncVariantHiddenInput({ emit: true });
+          renderVariantRows({
+            focusCell: {
+              rowIndex: index,
+              column: 'tags',
+              caretAtStart: true,
+              openTypeahead: true,
+            },
+          });
+        };
+        pill.addEventListener('click', (event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          removeTag();
+        });
+        pill.addEventListener('contextmenu', (event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          removeTag();
+        });
+        tagsWrap.appendChild(pill);
+      });
+      tagsControl.appendChild(tagsWrap);
+
+      const tagsInput = document.createElement('input');
+      tagsInput.type = 'text';
+      tagsInput.className = 'shopping-item-variant-tags-input';
+      tagsInput.dataset.rowIndex = String(index);
+      tagsInput.value =
+        isEditingTags && typeof activeVariantTagEditorState?.draft === 'string'
+          ? activeVariantTagEditorState.draft
+          : '';
+      tagsInput.placeholder = committedTags.length ? '' : 'Add tag';
+      tagsInput.setAttribute(
+        'aria-label',
+        row?.isBase
+          ? `Tags for Base item`
+          : `Tags for ${normalizeNamedIngredientVariant(row?.value) || 'variant'}`,
+      );
+      if (
+        window.favoriteEatsTypeahead &&
+        typeof window.favoriteEatsTypeahead.attach === 'function'
+      ) {
+        window.favoriteEatsTypeahead.attach({
+          inputEl: tagsInput,
+          getPool: async () => getVisibleTagNamePool(window.dbInstance || null),
+          openOnFocus: true,
+          pickOnEnterWhenQueryEmpty: false,
+          onPick: (pickedValue, inputEl) => {
+            addVariantTagToRow(index, pickedValue);
+            inputEl.value = '';
+            if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) === index) {
+              activeVariantTagEditorState.draft = '';
+            }
+            renderVariantRows({
+              focusCell: {
+                rowIndex: index,
+                column: 'tags',
+                caretAtStart: true,
+                openTypeahead: true,
+              },
+            });
+          },
+        });
+      }
+      tagsInput.addEventListener('input', () => {
+        if (!activeVariantTagEditorState || Number(activeVariantTagEditorState.rowIndex) !== index) {
+          activeVariantTagEditorState = { rowIndex: index, draft: tagsInput.value || '' };
+        } else {
+          activeVariantTagEditorState.draft = tagsInput.value || '';
+        }
+      });
+      tagsInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ',') {
+          event.preventDefault();
+          event.stopPropagation();
+          const changed = addVariantTagToRow(index, tagsInput.value || '');
+          tagsInput.value = '';
+          if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) === index) {
+            activeVariantTagEditorState.draft = '';
+          }
+          if (changed) {
+            renderVariantRows({
+              focusCell: {
+                rowIndex: index,
+                column: 'tags',
+                caretAtStart: true,
+                openTypeahead: true,
+              },
+            });
+          }
+          return;
+        }
+        if (event.key === 'Backspace' && String(tagsInput.value || '').trim() === '') {
+          const existingTags = normalizeRecipeTagList(variantRowsDraft[index].tags || []);
+          if (!existingTags.length) return;
+          event.preventDefault();
+          event.stopPropagation();
+          variantRowsDraft[index].tags = existingTags.slice(0, -1);
+          syncVariantHiddenInput({ emit: true });
+          renderVariantRows({
+            focusCell: {
+              rowIndex: index,
+              column: 'tags',
+              caretAtStart: true,
+              openTypeahead: true,
+            },
+          });
+        }
+      });
+      tagsInput.addEventListener('blur', () => {
+        window.setTimeout(() => {
+          if (tagsCell.contains(document.activeElement)) return;
+          commitActiveVariantTagDraft({ clear: true });
+          if (pendingVariantCellFocus) return;
+          renderVariantRows();
+        }, 0);
+      });
+      tagsInput.addEventListener('click', (event) => {
+        if (event.ctrlKey) return;
+        event.stopPropagation();
+      });
+      tagsInput.addEventListener('contextmenu', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
+      tagsControl.appendChild(tagsInput);
+      tagsCell.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.ctrlKey) return;
+        if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
+          commitActiveVariantTagDraft({ clear: true });
+        }
+        activeVariantTagEditorState = {
+          rowIndex: index,
+          draft:
+            Number(activeVariantTagEditorState?.rowIndex) === index
+              ? String(activeVariantTagEditorState?.draft || '')
+              : '',
+        };
+        renderVariantRows({
+          focusCell: {
+            rowIndex: index,
+            column: 'tags',
+            caretAtStart: false,
+            openTypeahead: true,
+          },
+        });
+      });
+      tagsCell.addEventListener('contextmenu', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
+      tagsCell.appendChild(tagsControl);
+
       rowEl.appendChild(variantCell);
       rowEl.appendChild(homeCell);
+      rowEl.appendChild(tagsCell);
       gridEl.appendChild(rowEl);
     });
 
@@ -10275,6 +10687,7 @@ function loadShoppingItemEditorPage() {
   };
 
   const setVariantRowsFromSerialized = (rawValue) => {
+    activeVariantTagEditorState = null;
     variantRowsDraft = getVariantRowsForEditing(parseIngredientVariantRowsSerialized(rawValue));
     syncVariantHiddenInput({ emit: false });
     renderVariantRows();
@@ -10334,6 +10747,7 @@ function loadShoppingItemEditorPage() {
 
     window.dbInstance = db;
     await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+    ensureIngredientVariantTagsSchemaInMain(db);
     return { db, isElectron };
   };
 
@@ -10439,6 +10853,7 @@ function loadShoppingItemEditorPage() {
       const hasVariantHomeLocationCol =
         hasVariantTable &&
         tableHasColumnInMain(db, 'ingredient_variants', 'home_location');
+      ensureIngredientVariantTagsSchemaInMain(db);
       const hasSizeTable = tableExists('ingredient_sizes');
       const hasSynonymsTable = tableExists('ingredient_synonyms');
       const hasStoreLocationTable = tableExists('ingredient_store_location');
@@ -10576,6 +10991,9 @@ function loadShoppingItemEditorPage() {
       }
 
       let txStarted = false;
+      let findTagStmt = null;
+      let insertTagStmt = null;
+      let insertVariantTagStmt = null;
       try {
         try {
           db.run('BEGIN IMMEDIATE;');
@@ -10725,6 +11143,25 @@ function loadShoppingItemEditorPage() {
               : [];
         if (variantSizeTargetIds.length > 0) {
           if (hasVariantTable) {
+            let nextTagSort = 1;
+            try {
+              const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;');
+              if (maxQ.length && maxQ[0].values.length) {
+                const nextSort = Number(maxQ[0].values[0][0]);
+                if (Number.isFinite(nextSort) && nextSort > 0) nextTagSort = nextSort;
+              }
+            } catch (_) {}
+            findTagStmt = db.prepare(
+              `SELECT id FROM tags
+               WHERE lower(trim(name)) = lower(trim(?))
+               LIMIT 1;`,
+            );
+            insertTagStmt = db.prepare('INSERT INTO tags (name, sort_order) VALUES (?, ?);');
+            insertVariantTagStmt = db.prepare(
+              `INSERT INTO ingredient_variant_tag_map
+                 (ingredient_variant_id, tag_id, sort_order)
+               VALUES (?, ?, ?);`,
+            );
             variantSizeTargetIds.forEach((iid) => {
               // If this ingredient currently has variant-only aisle links and the user
               // clears the variant list, migrate those aisle assignments to the base
@@ -10778,6 +11215,38 @@ function loadShoppingItemEditorPage() {
                     [iid, variantName, sortOrder],
                   );
                 }
+                const variantIdQ = db.exec('SELECT last_insert_rowid();');
+                const insertedVariantId =
+                  variantIdQ.length && variantIdQ[0].values.length
+                    ? Number(variantIdQ[0].values[0][0])
+                    : NaN;
+                if (!Number.isFinite(insertedVariantId) || insertedVariantId <= 0) return;
+                normalizeRecipeTagList(row?.tags || []).forEach((tagName, tagIndex) => {
+                  let tagId = null;
+                  try {
+                    findTagStmt.bind([tagName]);
+                    if (findTagStmt.step()) {
+                      const foundRow = findTagStmt.getAsObject();
+                      const foundId = Number(foundRow && foundRow.id != null ? foundRow.id : NaN);
+                      if (Number.isFinite(foundId) && foundId > 0) tagId = foundId;
+                    }
+                  } finally {
+                    findTagStmt.reset();
+                  }
+                  if (tagId == null) {
+                    insertTagStmt.run([tagName, nextTagSort++]);
+                    const insertedTagQ = db.exec('SELECT last_insert_rowid();');
+                    if (insertedTagQ.length && insertedTagQ[0].values.length) {
+                      const insertedTagId = Number(insertedTagQ[0].values[0][0]);
+                      if (Number.isFinite(insertedTagId) && insertedTagId > 0) {
+                        tagId = insertedTagId;
+                      }
+                    }
+                  }
+                  if (tagId != null) {
+                    insertVariantTagStmt.run([insertedVariantId, tagId, tagIndex + 1]);
+                  }
+                });
               });
 
               if (
@@ -10883,32 +11352,9 @@ function loadShoppingItemEditorPage() {
             }
           }
           if (hasVariantTable) {
-            const vq = db.exec(
-              `SELECT COALESCE(variant, ''),
-                      ${
-                        hasVariantHomeLocationCol
-                          ? "COALESCE(home_location, 'none')"
-                          : "'none'"
-                      }
-               FROM ingredient_variants
-               WHERE ingredient_id = ?
-               ORDER BY sort_order ASC, id ASC;`,
-              [iid],
-            );
-            const dbVariantRows = vq.length
-              ? normalizeIngredientVariantRows(
-                  vq[0].values.map((r) => ({
-                    isBase: isIngredientBaseVariantName(r?.[0]),
-                    value: String((r && r[0]) || ''),
-                    homeLocation: String((r && r[1]) || 'none'),
-                  })),
-                  {
-                    fallbackBaseHome: normalizedBaseHomeLocation,
-                  },
-                )
-              : normalizeIngredientVariantRows([], {
-                  fallbackBaseHome: normalizedBaseHomeLocation,
-                });
+            const dbVariantRows = loadIngredientVariantRowsForIngredientInMain(db, iid, {
+              fallbackBaseHome: normalizedBaseHomeLocation,
+            });
             const expectedVariantRows = normalizeIngredientVariantRows(normalizedVariantRows, {
               fallbackBaseHome: normalizedBaseHomeLocation,
             });
@@ -10963,8 +11409,29 @@ function loadShoppingItemEditorPage() {
           } catch (_) {}
           txStarted = false;
         }
+        try {
+          if (findTagStmt) findTagStmt.free();
+        } catch (_) {}
+        try {
+          if (insertTagStmt) insertTagStmt.free();
+        } catch (_) {}
+        try {
+          if (insertVariantTagStmt) insertVariantTagStmt.free();
+        } catch (_) {}
+        findTagStmt = null;
+        insertTagStmt = null;
+        insertVariantTagStmt = null;
         throw writeErr;
       }
+      try {
+        if (findTagStmt) findTagStmt.free();
+      } catch (_) {}
+      try {
+        if (insertTagStmt) insertTagStmt.free();
+      } catch (_) {}
+      try {
+        if (insertVariantTagStmt) insertVariantTagStmt.free();
+      } catch (_) {}
     } catch (err) {
       console.error('❌ Failed to upsert shopping item ingredient:', err);
       uiToast('Failed to save shopping item. See console for details.');
@@ -11166,27 +11633,9 @@ function loadShoppingItemEditorPage() {
           try {
             const rows = [];
             targetIngredientIds.forEach((iid) => {
-              const vq = db.exec(
-                `SELECT variant,
-                        ${
-                          tableHasColumnInMain(db, 'ingredient_variants', 'home_location')
-                            ? "COALESCE(home_location, 'none')"
-                            : "'none'"
-                        }
-                 FROM ingredient_variants
-                 WHERE ingredient_id = ?
-                 ORDER BY sort_order ASC, id ASC;`,
-                [iid],
-              );
-              if (vq.length && vq[0].values.length) {
-                vq[0].values.forEach((r) =>
-                  rows.push({
-                    isBase: isIngredientBaseVariantName(r?.[0]),
-                    value: String((r && r[0]) || ''),
-                    homeLocation: String((r && r[1]) || 'none'),
-                  }),
-                );
-              }
+              loadIngredientVariantRowsForIngredientInMain(db, iid, {
+                fallbackBaseHome: baselineHome,
+              }).forEach((row) => rows.push(row));
             });
             baselineVariantRows = normalizeIngredientVariantRows(rows, {
               fallbackBaseHome: baselineHome,
@@ -12097,6 +12546,7 @@ async function loadTagsPage() {
   window.dbInstance = db;
   await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
   ensureRecipeTagsSchemaInMain(db);
+  ensureIngredientVariantTagsSchemaInMain(db);
 
   const persistDb = async () => {
     const binaryArray = db.export();
@@ -12113,16 +12563,30 @@ async function loadTagsPage() {
 
   const queryTags = () => {
     const q = db.exec(`
-      SELECT id, name, COALESCE(sort_order, 999999) AS sort_order
-      FROM tags
-      WHERE COALESCE(is_hidden, 0) = 0
-      ORDER BY sort_order, name COLLATE NOCASE;
+      SELECT t.id,
+             t.name,
+             COALESCE(t.sort_order, 999999) AS sort_order,
+             EXISTS(
+               SELECT 1
+               FROM recipe_tag_map rtm
+               WHERE rtm.tag_id = t.id
+             ) AS has_recipe_usage,
+             EXISTS(
+               SELECT 1
+               FROM ingredient_variant_tag_map ivtm
+               WHERE ivtm.tag_id = t.id
+             ) AS has_ingredient_usage
+      FROM tags t
+      WHERE COALESCE(t.is_hidden, 0) = 0
+      ORDER BY sort_order, t.name COLLATE NOCASE;
     `);
     if (!q.length) return [];
-    return q[0].values.map(([id, name, sortOrder]) => ({
+    return q[0].values.map(([id, name, sortOrder, hasRecipeUsage, hasIngredientUsage]) => ({
       id: Number(id),
       name: String(name || ''),
       sortOrder: Number(sortOrder),
+      hasRecipeUsage: Number(hasRecipeUsage) === 1,
+      hasIngredientUsage: Number(hasIngredientUsage) === 1,
     }));
   };
 
@@ -12132,7 +12596,7 @@ async function loadTagsPage() {
     if (!tag || !Number.isFinite(Number(tag.id))) return false;
     const ok = await uiConfirm({
       title: 'Delete Tag',
-      message: `Delete "${tag.name}"?\n\nThis removes it from all recipes.`,
+      message: `Delete "${tag.name}"?\n\nThis removes it from all recipes and ingredient variants.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       danger: true,
@@ -12158,37 +12622,51 @@ async function loadTagsPage() {
       return;
     }
     setTopLevelEmptyStateLayoutMode(list, false);
-    items.forEach((tag) => {
-      const li = document.createElement('li');
-      li.textContent = tag.name || '';
-      li.addEventListener('click', (event) => {
-        if (event.ctrlKey || event.metaKey) {
+    const appendSection = (label, sectionRows) => {
+      const header = document.createElement('li');
+      header.className = 'list-section-label';
+      header.textContent = label;
+      list.appendChild(header);
+      sectionRows.forEach((tag) => {
+        const li = document.createElement('li');
+        li.textContent = tag.name || '';
+        li.addEventListener('click', (event) => {
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            void (async () => {
+              const ok = await deleteTag(tag);
+              if (!ok) return;
+              tagRows = queryTags();
+              renderTags(applyTagSearchFilter(tagRows));
+            })();
+            return;
+          }
+          sessionStorage.setItem('selectedTagId', String(tag.id));
+          sessionStorage.setItem('selectedTagName', tag.name || '');
+          sessionStorage.removeItem('selectedTagIsNew');
+          window.location.href = 'tagEditor.html';
+        });
+        li.addEventListener('contextmenu', (event) => {
           event.preventDefault();
-          event.stopPropagation();
           void (async () => {
             const ok = await deleteTag(tag);
             if (!ok) return;
             tagRows = queryTags();
             renderTags(applyTagSearchFilter(tagRows));
           })();
-          return;
-        }
-        sessionStorage.setItem('selectedTagId', String(tag.id));
-        sessionStorage.setItem('selectedTagName', tag.name || '');
-        sessionStorage.removeItem('selectedTagIsNew');
-        window.location.href = 'tagEditor.html';
+        });
+        list.appendChild(li);
       });
-      li.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        void (async () => {
-          const ok = await deleteTag(tag);
-          if (!ok) return;
-          tagRows = queryTags();
-          renderTags(applyTagSearchFilter(tagRows));
-        })();
-      });
-      list.appendChild(li);
-    });
+    };
+    appendSection(
+      'Recipes',
+      items.filter((tag) => tag.hasRecipeUsage || !tag.hasIngredientUsage),
+    );
+    appendSection(
+      'Ingredients',
+      items.filter((tag) => tag.hasIngredientUsage),
+    );
     listNav?.syncAfterRender?.();
   }
 
@@ -12336,6 +12814,7 @@ function loadTagEditorPage() {
         db = new SQL.Database(Uints);
       }
       ensureRecipeTagsSchemaInMain(db);
+      ensureIngredientVariantTagsSchemaInMain(db);
       const q = db.exec(`
         SELECT DISTINCT r.ID, r.title
         FROM recipe_tag_map m
@@ -12389,6 +12868,7 @@ function loadTagEditorPage() {
           db = new SQL.Database(Uints);
         }
         ensureRecipeTagsSchemaInMain(db);
+        ensureIngredientVariantTagsSchemaInMain(db);
         window.dbInstance = db;
         await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
 
@@ -17092,6 +17572,7 @@ async function loadRecipeEditorPage() {
   window.recipeId = recipeId;
   const isRecipeWebMode = isForceWebModeEnabled();
   ensureRecipeTagsSchemaInMain(db);
+  ensureIngredientVariantTagsSchemaInMain(db);
   ensureSizesSchemaInMain(db);
   ensureUnitsSchemaInMain(db);
 

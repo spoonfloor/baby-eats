@@ -290,9 +290,55 @@ function runCycleGuardTest() {
   );
 }
 
+function runHiddenAlternateIngredientSelectionTest() {
+  const recipes = {
+    21: {
+      id: 21,
+      title: 'Alternate Root',
+      servings: { default: 1 },
+      sections: [
+        {
+          ingredients: [
+            { name: 'onion', quantity: 1 },
+            { name: 'bar', quantity: 2, isAlt: true },
+          ],
+        },
+      ],
+    },
+  };
+
+  const context = loadShoppingPlanFunctions({ recipes });
+  context.setShoppingPlanRecipeSelection({
+    recipeId: 21,
+    title: 'Alternate Root',
+    quantity: 1,
+  });
+
+  const derivedRows = rowMap(context.getRecipeDerivedShoppingPlanRows({ db: { exec() { return []; } } }));
+  assertJsonEqual(
+    sortedEntries(derivedRows, (row) => [row.key, row.quantity]),
+    [
+      ['bar', 2],
+      ['onion', 1],
+    ],
+    'derived rows should keep alternate ingredients even when not in the browse pool'
+  );
+
+  const selectionRows = rowMap(context.getShoppingPlanSelectionRows({ db: { exec() { return []; } } }));
+  assertJsonEqual(
+    sortedEntries(selectionRows, (row) => [row.key, row.detailText]),
+    [
+      ['bar', '2'],
+      ['onion', '1'],
+    ],
+    'selection rows should include recipe-sourced alternate ingredients even when hidden from the browse pool'
+  );
+}
+
 function run() {
   runNestedLinkedRecipeTest();
   runCycleGuardTest();
+  runHiddenAlternateIngredientSelectionTest();
   console.log('Shopping plan linked recipe tests passed.');
 }
 

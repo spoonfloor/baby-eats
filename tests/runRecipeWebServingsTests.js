@@ -198,6 +198,33 @@ function run() {
     'sync event includes the latest effective servings value'
   );
 
+  const { helpers: noBaseHelpers } = loadHelpers({});
+  const noBaseRecipe = {
+    id: 99,
+    servingsDefault: null,
+    servings: { default: null, min: null, max: null },
+  };
+  const nbBounds = noBaseHelpers.getBounds(noBaseRecipe);
+  assertEqual(nbBounds.baseDefault, null, 'no-base recipe exposes null baseDefault');
+  assertEqual(nbBounds.canAdjust, true, 'no-base recipe stepper is adjustable (none ↔ 1)');
+  assertEqual(
+    noBaseHelpers.clampValue(0, nbBounds),
+    null,
+    'no-base clamp maps zero to unset'
+  );
+  assertEqual(noBaseHelpers.clampValue(1, nbBounds), 1, 'no-base clamp maps positive to 1');
+  assertEqual(
+    noBaseHelpers.getMultiplier(noBaseRecipe, { scrubInvalid: true }),
+    1,
+    'no-base unset servings use neutral multiplier'
+  );
+  noBaseHelpers.setStoredValue(noBaseRecipe, 1);
+  assertEqual(
+    noBaseHelpers.getMultiplier(noBaseRecipe, { scrubInvalid: true }),
+    1,
+    'no-base servings at 1 keep neutral multiplier'
+  );
+
   console.log('Recipe web servings tests passed.');
 }
 

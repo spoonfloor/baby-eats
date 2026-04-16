@@ -724,6 +724,13 @@ body.shopping-page[data-force-web-mode='on']
 
 body.shopping-page[data-force-web-mode='on']
   #shoppingList
+  .shopping-stepper-btn[disabled] {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+body.shopping-page[data-force-web-mode='on']
+  #shoppingList
   .shopping-stepper-btn
   .material-symbols-outlined {
   font-size: 26px;
@@ -835,6 +842,21 @@ body.recipes-page #recipeList .shopping-list-row-label {
   text-overflow: ellipsis;
 }
 
+body.recipes-page #recipeList li[data-recipe-row-stepper-key] .shopping-list-row-label {
+  cursor: default;
+}
+
+body.recipes-page #recipeList li[data-recipe-row-stepper-key] .recipe-list-title-hit {
+  cursor: pointer;
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 body.recipes-page
   #recipeList
   .recipe-list-servings-slot {
@@ -844,6 +866,17 @@ body.recipes-page
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Web mode: full column is tappable when stepper is collapsed (icon or badge). */
+body.recipes-page[data-force-web-mode='on']
+  #recipeList
+  li[data-recipe-row-stepper-key]
+  .recipe-list-servings-slot--collapsed-hit {
+  cursor: pointer;
+  min-height: 32px;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body.recipes-page
@@ -916,9 +949,21 @@ body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   color: rgba(0, 0, 0, 0.4);
   -webkit-tap-highlight-color: transparent;
+}
+
+body.recipes-page[data-force-web-mode='on']
+  #recipeList
+  .shopping-stepper-btn:not([disabled]) {
+  cursor: pointer;
+}
+
+body.recipes-page[data-force-web-mode='on']
+  #recipeList
+  .shopping-stepper-btn[disabled] {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 body.recipes-page[data-force-web-mode='on']
@@ -1838,7 +1883,7 @@ body.store-editor-page .shopping-item-textarea:focus {
 }
 
 body.shopping-editor-page .shopping-item-variant-editor {
-  --shopping-item-variant-cols: minmax(0, 1fr) minmax(140px, 220px);
+  --shopping-item-variant-cols: minmax(0, 1fr) minmax(140px, 220px) minmax(180px, 1fr);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1871,7 +1916,7 @@ body.shopping-editor-page .shopping-item-variant-grid-row {
   gap: 24px;
   align-items: center;
   min-height: 32px;
-  min-width: 380px;
+  min-width: 620px;
 }
 
 body.shopping-editor-page .shopping-item-variant-grid-row--header {
@@ -1921,7 +1966,8 @@ body.shopping-editor-page .shopping-item-variant-base-name {
 }
 
 body.shopping-editor-page .shopping-item-variant-name-input,
-body.shopping-editor-page .shopping-item-variant-home-input {
+body.shopping-editor-page .shopping-item-variant-home-input,
+body.shopping-editor-page .shopping-item-variant-tags-input {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -1942,6 +1988,44 @@ body.shopping-editor-page .shopping-item-variant-name-input:focus {
 }
 
 body.shopping-editor-page .shopping-item-variant-home-input:focus {
+  outline: none;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
+body.shopping-editor-page .shopping-item-variant-cell--tags {
+  align-items: stretch;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body.shopping-editor-page .shopping-item-variant-tag-pill {
+  max-width: 100%;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-input {
+  display: none;
+  min-width: 72px;
+  flex: 0 1 120px;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+  .shopping-item-variant-tags-input {
+  display: block;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-input:focus {
   outline: none;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
@@ -3287,8 +3371,7 @@ h1.nav-text {
 }
 
 .servings-line--web .shopping-stepper-btn[disabled] {
-  background-color: hsl(270, 0%, 97%);
-  color: rgba(0, 0, 0, 0.22);
+  opacity: 0.42;
   cursor: default;
 }
 
