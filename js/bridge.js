@@ -388,9 +388,16 @@ function ensureRecipeTagsSchema(activeDb) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL COLLATE NOCASE,
         is_hidden INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER
+        sort_order INTEGER,
+        intended_use TEXT NOT NULL DEFAULT 'recipes'
       );
     `);
+  } catch (_) {}
+  try {
+    const cols = getTableColumns(activeDb, 'tags').map((c) => String(c).toLowerCase());
+    if (!cols.includes('intended_use')) {
+      activeDb.run("ALTER TABLE tags ADD COLUMN intended_use TEXT NOT NULL DEFAULT 'recipes';");
+    }
   } catch (_) {}
   try {
     activeDb.run(`

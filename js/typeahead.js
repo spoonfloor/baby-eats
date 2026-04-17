@@ -68,6 +68,22 @@
   const norm = (s) => (s || '').toString().trim();
   const lower = (s) => norm(s).toLowerCase();
 
+  // --- Typeahead keyboard helpers (tests extract this block) ---
+  function shouldPreserveTextareaShiftEnter(inputEl, event) {
+    return !!(
+      event &&
+      event.key === 'Enter' &&
+      event.shiftKey &&
+      inputEl &&
+      String(inputEl.tagName || '').toUpperCase() === 'TEXTAREA'
+    );
+  }
+
+  window.__typeaheadKeyboardHelpers = {
+    shouldPreserveTextareaShiftEnter,
+  };
+  // --- End typeahead keyboard helpers ---
+
   // Levenshtein distance (small strings; OK for our pool sizes)
   function levenshtein(a, b) {
     a = lower(a);
@@ -619,6 +635,35 @@
 
   const dropdown = new TypeaheadDropdown();
 
+  function isOpenForInput(inputEl) {
+    return !!(inputEl && dropdown.isOpen && dropdown.anchorInput === inputEl);
+  }
+
+  function pickHighlightedIfOpenForInput(inputEl) {
+    if (!isOpenForInput(inputEl)) return false;
+    return !!dropdown.pickHighlighted();
+  }
+
+  /** Mirrors Enter handling in attachTypeaheadToInput keydown (for hosts that register keydown before typeahead). */
+  function tryPickEnterForInput(inputEl) {
+    if (!isOpenForInput(inputEl)) return false;
+    if (!dropdown.items || dropdown.items.length === 0) return false;
+    const cfg = dropdown.config;
+    let canPick = true;
+    if (cfg && cfg.pickOnEnterWhenQueryEmpty === false) {
+      let q = '';
+      try {
+        q =
+          typeof cfg.getQuery === 'function'
+            ? norm(cfg.getQuery(inputEl))
+            : norm(inputEl.value);
+      } catch (_) {}
+      canPick = q.length > 0;
+    }
+    if (!canPick) return false;
+    return !!dropdown.pickHighlighted();
+  }
+
   // --- Pool cache + invalidation
   const poolCache = {
     nameAll: null,
@@ -1059,6 +1104,10 @@
       }
 
       if (e.key === 'Enter') {
+        // Shift+Enter: native newline in TEXTAREA (do not treat as pick).
+        if (shouldPreserveTextareaShiftEnter(inputEl, e)) {
+          return;
+        }
         // Only intercept Enter if there is something to pick.
         if (dropdown.items && dropdown.items.length > 0) {
           let canPick = true;
@@ -1249,6 +1298,9 @@
     close: () => dropdown.close(),
     invalidate: invalidatePools,
     attach: (args) => attachTypeaheadToInput(args || {}),
+    isOpenForInput,
+    pickHighlightedIfOpenForInput,
+    tryPickEnterForInput,
     getNamePool: async () => await getNamePool(),
   };
 })();

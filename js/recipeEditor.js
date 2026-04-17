@@ -3268,6 +3268,20 @@ function formatRecipeTagsSubtitle(tags) {
   return arr.join('\n');
 }
 
+// --- Recipe tags keyboard helpers (tests extract this block) ---
+function shouldCommitRecipeTagsEdit(event) {
+  return !!(
+    event &&
+    event.key === 'Enter' &&
+    !event.shiftKey
+  );
+}
+
+window.__recipeTagsKeyboardHelpers = {
+  shouldCommitRecipeTagsEdit,
+};
+// --- End recipe tags keyboard helpers ---
+
 function getVisibleRecipeTagNamePool() {
   const db = window.dbInstance;
   if (!db) return [];
@@ -3530,6 +3544,15 @@ function renderRecipeTagsSection(recipe, container) {
     }
   });
   textarea.addEventListener('keydown', (e) => {
+    if (shouldCommitRecipeTagsEdit(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+      }
+      finishEdit({ shouldCommit: true });
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       finishEdit({ shouldCommit: false });

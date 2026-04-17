@@ -1010,7 +1010,7 @@ if (typeof window !== 'undefined') {
     title = '',
     message = '',
     messageNode = null, // Optional extra body content (e.g. links list)
-    fields = null, // [{ key, label, type, value, placeholder, required, autocapitalize }]
+    fields = null, // [{ key, label, type, value, placeholder, required, autocapitalize, options, validate }]
     confirmText = 'OK',
     cancelText = 'Cancel',
     showCancel = true,
@@ -1081,6 +1081,7 @@ if (typeof window !== 'undefined') {
 
       const values = {};
       let firstInput = null;
+      const fieldErrorEls = new Map();
 
       if (Array.isArray(fields) && fields.length) {
         const fieldsWrap = document.createElement('div');
@@ -1089,6 +1090,75 @@ if (typeof window !== 'undefined') {
         fields.forEach((f) => {
           const key = String(f?.key || '');
           if (!key) return;
+          const fieldType = String(f?.type || 'text');
+
+          if (fieldType === 'toggleGroup') {
+            const options = Array.isArray(f.options) ? f.options : [];
+            let initial = f?.value != null ? String(f.value) : '';
+            if (
+              initial &&
+              !options.some((o) => String(o?.value ?? '') === initial)
+            ) {
+              initial = '';
+            }
+            if (!initial && options.length) {
+              initial = String(options[0]?.value ?? '');
+            }
+            values[key] = initial;
+
+            const field = document.createElement('div');
+            field.className = 'ui-dialog-field';
+
+            const lab = document.createElement('div');
+            lab.className = 'ui-dialog-label';
+            lab.textContent = String(f?.label || key);
+            field.appendChild(lab);
+
+            const row = document.createElement('div');
+            row.className = 'ui-dialog-toggle-group';
+            row.setAttribute('role', 'radiogroup');
+            row.setAttribute('aria-label', String(f?.label || key));
+
+            const groupName = `uiDialogToggle_${key}_${Date.now()}_${Math.random()
+              .toString(36)
+              .slice(2)}`;
+
+            const syncFromDom = () => {
+              const checked = row.querySelector(
+                `input[type="radio"][name="${groupName}"]:checked`,
+              );
+              values[key] = checked ? String(checked.value) : initial;
+              syncValidity();
+            };
+
+            options.forEach((opt) => {
+              const optValue = String(opt?.value ?? '');
+              const optLabel = String(opt?.label ?? optValue);
+              const labEl = document.createElement('label');
+              labEl.className = 'shopping-item-toggle';
+              const inp = document.createElement('input');
+              inp.type = 'radio';
+              inp.name = groupName;
+              inp.value = optValue;
+              if (optValue === values[key]) inp.checked = true;
+              inp.addEventListener('change', syncFromDom);
+              const span = document.createElement('span');
+              span.textContent = optLabel;
+              labEl.appendChild(inp);
+              labEl.appendChild(span);
+              row.appendChild(labEl);
+            });
+
+            field.appendChild(row);
+            const fieldError = document.createElement('div');
+            fieldError.className = 'ui-dialog-field-error';
+            fieldError.style.display = 'none';
+            field.appendChild(fieldError);
+            fieldErrorEls.set(key, fieldError);
+            fieldsWrap.appendChild(field);
+            return;
+          }
+
           values[key] = f?.value != null ? String(f.value) : '';
 
           const field = document.createElement('label');
@@ -1113,6 +1183,11 @@ if (typeof window !== 'undefined') {
           });
 
           field.appendChild(input);
+          const fieldError = document.createElement('div');
+          fieldError.className = 'ui-dialog-field-error';
+          fieldError.style.display = 'none';
+          field.appendChild(fieldError);
+          fieldErrorEls.set(key, fieldError);
           fieldsWrap.appendChild(field);
 
           if (!firstInput) firstInput = input;
@@ -1165,28 +1240,53 @@ if (typeof window !== 'undefined') {
         }
       };
 
+      const setFieldError = (key, msg) => {
+        const el = fieldErrorEls.get(String(key || ''));
+        if (!el) return;
+        const m = String(msg || '').trim();
+        if (!m) {
+          el.textContent = '';
+          el.style.display = 'none';
+        } else {
+          el.textContent = m;
+          el.style.display = '';
+        }
+      };
+
       const syncValidity = () => {
         let err = '';
         let hasMissingRequired = false;
+        let hasFieldErrors = false;
         try {
-          // Required fields
+          // Field-level required + validation
           if (Array.isArray(fields)) {
             for (const f of fields) {
               const key = String(f?.key || '');
               if (!key) continue;
-              if (f?.required && !(values[key] || '').trim()) {
+              const value = values?.[key] != null ? String(values[key]) : '';
+              if (f?.required && !value.trim()) {
                 hasMissingRequired = true;
+                setFieldError(key, '');
+                continue;
+              }
+              let fieldErr = '';
+              if (typeof f?.validate === 'function') {
+                fieldErr = String(f.validate(value, values) || '').trim();
+              }
+              setFieldError(key, fieldErr);
+              if (fieldErr) {
+                hasFieldErrors = true;
               }
             }
           }
-          // Only show an error message for semantic validation (not basic "required" empties).
-          if (!err && !hasMissingRequired && typeof validate === 'function') {
+          // Only show a global error when per-field validation and required checks pass.
+          if (!err && !hasMissingRequired && !hasFieldErrors && typeof validate === 'function') {
             err = String(validate(values) || '').trim();
           }
         } catch (_) {}
 
         setError(err);
-        confirmBtn.disabled = !!err || hasMissingRequired;
+        confirmBtn.disabled = !!err || hasMissingRequired || hasFieldErrors;
       };
 
       const doCancel = () => {
@@ -1948,7 +2048,7 @@ if (typeof window !== 'undefined') {
     // only when it adds clarity.
     title = '',
     message = '',
-    fields = [], // [{ key, label, value, placeholder, required, normalize }]
+    fields = [], // [{ key, label, type, value, placeholder, required, normalize, options, validate }]
     confirmText = 'OK',
     cancelText = 'Cancel',
     validate = null, // (values) => string|''|null
@@ -1961,10 +2061,12 @@ if (typeof window !== 'undefined') {
         key: f.key,
         label: f.label,
         type: f.type || 'text',
-        value: f.value || '',
+        value: f.value != null && f.value !== '' ? f.value : '',
         placeholder: f.placeholder || '',
         required: !!f.required,
         autocapitalize: f.autocapitalize || 'sentences',
+        options: Array.isArray(f.options) ? f.options : null,
+        validate: typeof f.validate === 'function' ? f.validate : null,
       })),
       confirmText,
       cancelText,
@@ -2853,6 +2955,8 @@ function renderFilterChipList(opts = {}) {
           : null;
       const align = String(compoundDef?.panelAlign || 'start').trim().toLowerCase();
       const hasSelection = optionSelectedIds.size > 0;
+      const compoundDisabled =
+        !!compoundDef?.disabled || optionDefs.length === 0;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'app-filter-chip-dropdown-wrap';
@@ -2860,12 +2964,19 @@ function renderFilterChipList(opts = {}) {
       const pill = document.createElement('div');
       pill.className = `${chipClassName} app-filter-chip--dropdown app-filter-chip--dropdown-pill`;
       pill.setAttribute('role', 'group');
+      if (compoundDisabled) {
+        pill.classList.add('is-disabled');
+      }
 
       const openBtn = document.createElement('button');
       openBtn.type = 'button';
       openBtn.className = 'app-filter-chip-dropdown-open';
       openBtn.setAttribute('aria-haspopup', 'listbox');
       openBtn.setAttribute('aria-expanded', 'false');
+      if (compoundDisabled) {
+        openBtn.disabled = true;
+        openBtn.classList.add('is-disabled');
+      }
       if (hasSelection) pill.classList.add('is-active');
 
       const labelEl = document.createElement('span');
@@ -3020,6 +3131,7 @@ function renderFilterChipList(opts = {}) {
       openBtn.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (compoundDisabled) return;
         if (panel.hidden) {
           openPanel();
         } else {

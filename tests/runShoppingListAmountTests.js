@@ -161,6 +161,15 @@ function run() {
   assertEqual(
     helpers.formatShoppingListDisplayRow({
       name: 'foo',
+      buckets: [{ key: 'unspecified', kind: 'unspecified', quantity: 3 }],
+    }),
+    'foo (some)',
+    'unspecified recipe buckets render as some instead of a batch count'
+  );
+
+  assertEqual(
+    helpers.formatShoppingListDisplayRow({
+      name: 'foo',
       buckets: [
         { key: 'unspecified', kind: 'unspecified', quantity: 1 },
         { key: 'exact:pinch|', kind: 'exact', quantity: 1, unit: 'pinch', size: '' },
@@ -173,8 +182,30 @@ function run() {
         },
       ],
     }),
-    'foo (1 + 1 pinch + 1 carton + 1 gal)',
-    'mixed bucket lines use plus joins with naked counts first'
+    'foo (some + 1 pinch + 1 carton + 1 gal)',
+    'mixed bucket lines render some first before measured or packaged amounts'
+  );
+
+  assertEqual(
+    helpers.formatShoppingListDisplayRow({
+      name: 'apples',
+      buckets: [
+        { key: 'count', kind: 'count', quantity: 12, unit: '', size: '' },
+        { key: 'unspecified', kind: 'unspecified', quantity: 1 },
+      ],
+    }),
+    'apples (some + 12)',
+    'unspecified recipe lines stay literal while compatible numeric amounts remain summed'
+  );
+
+  assertEqual(
+    helpers.formatShoppingListDisplayRow({
+      name: 'ginger',
+      variantName: 'large',
+      buckets: [{ key: 'unspecified', kind: 'unspecified', quantity: 1 }],
+    }),
+    'ginger (some large)',
+    'size variants still appear alongside some for unspecified quantities'
   );
 
   assertEqual(

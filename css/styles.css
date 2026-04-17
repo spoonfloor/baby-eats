@@ -368,6 +368,10 @@ body.has-top-filter-chip-rail.shopping-list-page .page-main {
   padding: 0 0px;
 }
 
+body.shopping-editor-page .page-wrapper {
+  max-width: calc(var(--page-content-width) + 120px);
+}
+
 .page-title {
   font-size: 22px;
 }
@@ -1222,7 +1226,7 @@ body.shopping-page[data-force-web-mode='on']
   }
 }
 
-body.shopping-page[data-force-web-mode='on']
+body.shopping-page
   #shoppingList
   li.shopping-nav-target:not(.list-section-label) {
   animation: shopping-nav-target-pulse 1200ms ease-out 1;
@@ -1230,7 +1234,7 @@ body.shopping-page[data-force-web-mode='on']
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.shopping-page[data-force-web-mode='on']
+  body.shopping-page
     #shoppingList
     li.shopping-nav-target:not(.list-section-label) {
     animation: none;
@@ -1411,7 +1415,10 @@ body.stores-page[data-force-web-mode='on']
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-section--store,
-body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted {
+body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted,
+body.shopping-list-page #shoppingListOutput .shopping-list-section--recipes,
+body.tags-page #tagsList .shopping-list-section--recipes,
+body.tags-page #tagsList .tags-list-section--ingredients {
   margin-top: 0.75rem;
   color: var(--theme-primary);
   font-size: 13px;
@@ -1422,7 +1429,12 @@ body.shopping-list-page
   .shopping-list-section--store:first-child,
 body.shopping-list-page
   #shoppingListOutput
-  .shopping-list-section--unlisted:first-child {
+  .shopping-list-section--unlisted:first-child,
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-section--recipes:first-child,
+body.tags-page #tagsList .shopping-list-section--recipes:first-child,
+body.tags-page #tagsList .tags-list-section--ingredients:first-child {
   margin-top: 0;
 }
 
@@ -1444,7 +1456,8 @@ body.shopping-list-page #shoppingListOutput .shopping-list-section--completed {
   font-size: 13px;
 }
 
-body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle {
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle,
+body.tags-page #tagsList .shopping-list-section-toggle {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -1464,7 +1477,8 @@ body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle {
 
 body.shopping-list-page
   #shoppingListOutput
-  .shopping-list-section-toggle__icon {
+  .shopping-list-section-toggle__icon,
+body.tags-page #tagsList .shopping-list-section-toggle__icon {
   flex: 0 0 auto;
   font-size: 20px;
   line-height: 1;
@@ -1472,7 +1486,7 @@ body.shopping-list-page
   opacity: 0.72;
   font-variation-settings:
     'FILL' 0,
-    'wght' 200,
+    'wght' 300,
     'GRAD' 0,
     'opsz' 20;
   transition: transform 120ms ease;
@@ -1481,13 +1495,18 @@ body.shopping-list-page
 body.shopping-list-page
   #shoppingListOutput
   .shopping-list-section-toggle[aria-expanded='true']
+  .shopping-list-section-toggle__icon,
+body.tags-page
+  #tagsList
+  .shopping-list-section-toggle[aria-expanded='true']
   .shopping-list-section-toggle__icon {
   transform: rotate(180deg);
 }
 
 body.shopping-list-page
   #shoppingListOutput
-  .shopping-list-section-toggle__label {
+  .shopping-list-section-toggle__label,
+body.tags-page #tagsList .shopping-list-section-toggle__label {
   line-height: 1.2;
 }
 
@@ -1495,6 +1514,26 @@ body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--recipe-summary {
+  cursor: default;
+  gap: 0;
+}
+
+body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--recipe-summary:hover {
+  background-color: transparent;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-recipe-summary-text {
+  line-height: var(--ingredients-line-height);
+  color: inherit;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-headline--recipe-summary {
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox {
@@ -1883,7 +1922,7 @@ body.store-editor-page .shopping-item-textarea:focus {
 }
 
 body.shopping-editor-page .shopping-item-variant-editor {
-  --shopping-item-variant-cols: minmax(0, 1fr) minmax(140px, 220px) minmax(180px, 1fr);
+  --shopping-item-variant-cols: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1895,14 +1934,14 @@ body.shopping-editor-page .shopping-item-variant-rows {
 
 body.shopping-editor-page .shopping-item-variant-grid {
   min-height: 56px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: 10px;
   background-color: hsl(0, 0%, 98%);
   color: var(--field-fg);
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 body.shopping-editor-page .shopping-item-variant-grid:focus-within {
@@ -1914,9 +1953,10 @@ body.shopping-editor-page .shopping-item-variant-grid-row {
   display: grid;
   grid-template-columns: var(--shopping-item-variant-cols);
   gap: 24px;
-  align-items: center;
-  min-height: 32px;
-  min-width: 620px;
+  /* start: when tags wrap, Name/Home stay with the first tag line (not vertically centered in the full tags block). */
+  align-items: start;
+  min-height: var(--shopping-filter-chip-height);
+  min-width: 0;
 }
 
 body.shopping-editor-page .shopping-item-variant-grid-row--header {
@@ -1941,7 +1981,7 @@ body.shopping-editor-page .shopping-item-variant-cell {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 24px;
+  min-height: var(--shopping-filter-chip-height);
   cursor: text;
 }
 
@@ -1950,6 +1990,9 @@ body.shopping-editor-page .shopping-item-variant-cell--base {
 }
 
 body.shopping-editor-page .shopping-item-variant-base-label {
+  display: flex;
+  align-items: center;
+  min-height: var(--shopping-filter-chip-height);
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -1968,6 +2011,7 @@ body.shopping-editor-page .shopping-item-variant-base-name {
 body.shopping-editor-page .shopping-item-variant-name-input,
 body.shopping-editor-page .shopping-item-variant-home-input,
 body.shopping-editor-page .shopping-item-variant-tags-input {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -1976,6 +2020,8 @@ body.shopping-editor-page .shopping-item-variant-tags-input {
   font: inherit;
   font-size: var(--ingredient-editor-control-font-size);
   padding: 0;
+  height: var(--shopping-filter-chip-height);
+  line-height: var(--shopping-filter-chip-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1994,19 +2040,15 @@ body.shopping-editor-page .shopping-item-variant-home-input:focus {
 }
 
 body.shopping-editor-page .shopping-item-variant-cell--tags {
-  align-items: stretch;
+  align-items: flex-start;
 }
 
 body.shopping-editor-page .shopping-item-variant-tags-control {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 8px;
   width: 100%;
-  min-width: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-tags-wrap {
-  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2014,15 +2056,42 @@ body.shopping-editor-page .shopping-item-variant-tag-pill {
   max-width: 100%;
 }
 
-body.shopping-editor-page .shopping-item-variant-tags-input {
+body.shopping-editor-page .shopping-item-variant-tags-slot {
   display: none;
-  min-width: 72px;
-  flex: 0 1 120px;
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--shopping-filter-chip-height);
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-input {
+  display: block;
+  min-width: 1ch;
+  width: auto;
+  max-width: 100%;
 }
 
 body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
-  .shopping-item-variant-tags-input {
+  .shopping-item-variant-tags-slot {
   display: block;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+  .shopping-item-variant-tags-slot.is-empty {
+  width: 0;
+  flex-basis: 0;
+  overflow: visible;
+}
+
+body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+  .shopping-item-variant-tags-slot.is-empty
+  .shopping-item-variant-tags-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  min-width: 1px;
 }
 
 body.shopping-editor-page .shopping-item-variant-tags-input:focus {
@@ -2324,7 +2393,8 @@ body.size-editor-page .shopping-item-status-row {
 
 body.shopping-editor-page .shopping-item-toggle,
 body.unit-editor-page .shopping-item-toggle,
-body.size-editor-page .shopping-item-toggle {
+body.size-editor-page .shopping-item-toggle,
+.ui-dialog-panel .shopping-item-toggle {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -2333,7 +2403,8 @@ body.size-editor-page .shopping-item-toggle {
 
 body.shopping-editor-page .shopping-item-toggle span,
 body.unit-editor-page .shopping-item-toggle span,
-body.size-editor-page .shopping-item-toggle span {
+body.size-editor-page .shopping-item-toggle span,
+.ui-dialog-panel .shopping-item-toggle span {
   font-size: 13px;
   color: rgba(0, 0, 0, 0.7);
 }
@@ -2343,7 +2414,9 @@ body.shopping-editor-page .shopping-item-toggle input[type='radio'],
 body.unit-editor-page .shopping-item-toggle input[type='checkbox'],
 body.unit-editor-page .shopping-item-toggle input[type='radio'],
 body.size-editor-page .shopping-item-toggle input[type='checkbox'],
-body.size-editor-page .shopping-item-toggle input[type='radio'] {
+body.size-editor-page .shopping-item-toggle input[type='radio'],
+.ui-dialog-panel .shopping-item-toggle input[type='checkbox'],
+.ui-dialog-panel .shopping-item-toggle input[type='radio'] {
   appearance: none;
   -webkit-appearance: none;
   width: 18px;
@@ -2360,7 +2433,9 @@ body.shopping-editor-page .shopping-item-toggle input[type='radio']:checked,
 body.unit-editor-page .shopping-item-toggle input[type='checkbox']:checked,
 body.unit-editor-page .shopping-item-toggle input[type='radio']:checked,
 body.size-editor-page .shopping-item-toggle input[type='checkbox']:checked,
-body.size-editor-page .shopping-item-toggle input[type='radio']:checked {
+body.size-editor-page .shopping-item-toggle input[type='radio']:checked,
+.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked,
+.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked {
   border-color: var(--theme-primary);
 }
 
@@ -2377,7 +2452,13 @@ body.unit-editor-page .shopping-item-toggle input[type='radio']:checked::after,
 body.size-editor-page
   .shopping-item-toggle
   input[type='checkbox']:checked::after,
-body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after {
+body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after,
+.ui-dialog-panel
+  .shopping-item-toggle
+  input[type='checkbox']:checked::after,
+.ui-dialog-panel
+  .shopping-item-toggle
+  input[type='radio']:checked::after {
   content: '';
   width: 18px;
   height: 18px;

@@ -9,6 +9,8 @@
     "dist": "npm run build:electron",
     "test:ingredient-display": "node tests/runIngredientDisplayTests.js",
     "test:ingredient-parser": "node tests/runIngredientPasteParserTests.js",
+    "test:recipe-tags-keyboard": "node tests/runRecipeTagsKeyboardTests.js",
+    "test:typeahead-keyboard": "node tests/runTypeaheadKeyboardTests.js",
     "test:unit-size-state": "node tests/runUnitSizeStateTests.js",
     "test:web-build": "node tests/runWebBuildTests.js"
   },

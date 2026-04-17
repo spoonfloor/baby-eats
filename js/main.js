@@ -1073,14 +1073,13 @@ function formatShoppingListAmountLeadText({ quantity = '', size = '', unit = '' 
 
 function getShoppingListBucketSortPriority(bucket) {
   if (!bucket || typeof bucket !== 'object') return 99;
-  if (
-    bucket.kind === 'selected' ||
-    bucket.kind === 'unspecified' ||
-    bucket.kind === 'count'
-  ) {
-    return 0;
-  }
-  return 1;
+  if (bucket.kind === 'unspecified') return 0;
+  if (bucket.kind === 'selected' || bucket.kind === 'count') return 1;
+  return 2;
+}
+
+function formatShoppingListUnspecifiedLeadText({ size = '' } = {}) {
+  return ['some', String(size || '').trim()].filter(Boolean).join(' ').trim();
 }
 
 function getShoppingListBucketLeadText(bucket, options = {}) {
@@ -1093,8 +1092,7 @@ function getShoppingListBucketLeadText(bucket, options = {}) {
     });
   }
   if (bucket.kind === 'unspecified') {
-    return formatShoppingListAmountLeadText({
-      quantity: bucket.quantity,
+    return formatShoppingListUnspecifiedLeadText({
       size: quantitySizePrefix,
     });
   }
@@ -1324,9 +1322,15 @@ function ensureRecipeTagsSchemaInMain(db) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL COLLATE NOCASE,
         is_hidden INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER
+        sort_order INTEGER,
+        intended_use TEXT NOT NULL DEFAULT 'recipes'
       );
     `);
+  } catch (_) {}
+  try {
+    if (!tableHasColumnInMain(db, 'tags', 'intended_use')) {
+      db.run("ALTER TABLE tags ADD COLUMN intended_use TEXT NOT NULL DEFAULT 'recipes';");
+    }
   } catch (_) {}
   try {
     db.run(`
@@ -1662,6 +1666,8 @@ function deriveIngredientLemmaInMain(rawTitle) {
 const LAST_PAGE_SESSION_KEY = 'favoriteEats:last-page-id';
 const SHOPPING_FILTER_CHIPS_SESSION_KEY_LEGACY = 'favoriteEats:shopping-filter-chips';
 const SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX = 'favoriteEats:shopping-filter-chips';
+/** Prefix for Items-page tag filter chip ids (avoids collisions with home location ids). */
+const SHOPPING_TAG_FILTER_PREFIX = 'tag:';
 const SHOPPING_SCROLL_RESTORE_SESSION_KEY = 'favoriteEats:shopping-scroll-restore-y';
 // --- Shopping plan helpers (tests extract this block) ---
 const SHOPPING_PLAN_STORAGE_KEY = 'favoriteEats:shopping-plan:v1';
@@ -4744,6 +4750,8 @@ async function loadShoppingPage() {
   // Normalize into the same shape the UI already expects, but
   // aggregate variants by ingredient name so each name appears once.
   let shoppingRows = [];
+  /** Tag filter dropdown options for Items page (ids use {@link SHOPPING_TAG_FILTER_PREFIX}). */
+  let shoppingTagChipOptionDefs = [];
   if (result.length > 0) {
     const rawRows = result[0].values.map(
       ([
@@ -4778,7 +4786,8 @@ async function loadShoppingPage() {
     const byName = new Map();
 
     rawRows.forEach((row) => {
-      const key = (row.name || '').toLowerCase();
+      const key = String(row.name || '').trim().toLowerCase();
+      if (!key) return;
 
       if (!byName.has(key)) {
         byName.set(key, {
@@ -4930,6 +4939,88 @@ async function loadShoppingPage() {
       }),
     );
   }
+
+  const rebuildShoppingTagChipOptionDefsFromRows = () => {
+    const seen = new Map();
+    shoppingRows.forEach((item) => {
+      (Array.isArray(item.tags) ? item.tags : []).forEach((raw) => {
+        const label = String(raw || '').trim();
+        if (!label) return;
+        const key = label.toLowerCase();
+        if (!seen.has(key)) seen.set(key, label);
+      });
+    });
+    getVisibleIngredientTagNamePool(db).forEach((label) => {
+      const normalizedLabel = String(label || '').trim();
+      const key = normalizedLabel.toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.set(key, normalizedLabel);
+    });
+    const pairs = Array.from(seen.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], undefined, { sensitivity: 'base' }),
+    );
+    shoppingTagChipOptionDefs = pairs.map(([lower, label]) => ({
+      id: `${SHOPPING_TAG_FILTER_PREFIX}${lower}`,
+      label,
+    }));
+  };
+
+  const attachVariantTagsToShoppingRows = () => {
+    shoppingRows.forEach((item) => {
+      item.tags = [];
+    });
+    rebuildShoppingTagChipOptionDefsFromRows();
+    if (
+      !tableExists('ingredient_variants') ||
+      !tableExists('ingredient_variant_tag_map') ||
+      !tableExists('tags')
+    ) {
+      return;
+    }
+    try {
+      ensureIngredientVariantTagsSchemaInMain(db);
+    } catch (_) {}
+    try {
+      const tagQ = db.exec(`
+        SELECT lower(trim(i.name)) AS name_key,
+               t.name AS tag_name
+        FROM ingredient_variants iv
+        JOIN ingredients i ON i.ID = iv.ingredient_id
+        JOIN ingredient_variant_tag_map ivtm ON ivtm.ingredient_variant_id = iv.id
+        JOIN tags t ON t.id = ivtm.tag_id
+        WHERE COALESCE(t.is_hidden, 0) = 0
+      `);
+      const byKey = new Map();
+      if (Array.isArray(tagQ) && tagQ.length && Array.isArray(tagQ[0].values)) {
+        tagQ[0].values.forEach(([nameKey, tagName]) => {
+          const k = String(nameKey || '').trim().toLowerCase();
+          const tag = String(tagName || '').trim();
+          if (!k || !tag) return;
+          if (!byKey.has(k)) byKey.set(k, new Set());
+          byKey.get(k).add(tag);
+        });
+      }
+      shoppingRows.forEach((item) => {
+        const k = String(item?.name || '').trim().toLowerCase();
+        const set = byKey.get(k);
+        if (!set) {
+          item.tags = [];
+          return;
+        }
+        const arr = Array.from(set);
+        arr.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        item.tags = arr;
+      });
+    } catch (err) {
+      console.warn('attachVariantTagsToShoppingRows: tag query failed', err);
+      shoppingRows.forEach((item) => {
+        item.tags = [];
+      });
+    }
+    rebuildShoppingTagChipOptionDefsFromRows();
+  };
+
+  attachVariantTagsToShoppingRows();
 
   const buildShoppingUsageCountMaps = () => {
     const recipeCounts = new Map();
@@ -5456,6 +5547,10 @@ async function loadShoppingPage() {
         const optionId = String(optionDef?.id || '').trim().toLowerCase();
         if (optionId) knownIds.add(optionId);
       });
+      shoppingTagChipOptionDefs.forEach((def) => {
+        const tid = String(def?.id || '').trim().toLowerCase();
+        if (tid) knownIds.add(tid);
+      });
       parsed.forEach((chipId) => {
         const id = String(chipId || '').trim().toLowerCase();
         // Back-compat: old "hidden" chip represented deprecated/removed.
@@ -5486,6 +5581,10 @@ async function loadShoppingPage() {
       const optionId = String(optionDef?.id || '').trim().toLowerCase();
       if (optionId) counts.set(optionId, 0);
     });
+    shoppingTagChipOptionDefs.forEach((def) => {
+      const tid = String(def?.id || '').trim().toLowerCase();
+      if (tid) counts.set(tid, 0);
+    });
     counts.set('recent', shoppingRows.length);
     shoppingRows.forEach((item) => {
       if (hasPositiveShoppingQty(getShoppingRowTotalQty(item))) {
@@ -5515,6 +5614,15 @@ async function loadShoppingPage() {
       if (Number(item?.aisleUseCount || 0) <= 0) {
         counts.set('no aisle', (counts.get('no aisle') || 0) + 1);
       }
+      const tagSeen = new Set();
+      (Array.isArray(item.tags) ? item.tags : []).forEach((raw) => {
+        const key = String(raw || '').trim().toLowerCase();
+        if (!key) return;
+        const chipId = `${SHOPPING_TAG_FILTER_PREFIX}${key}`;
+        if (tagSeen.has(chipId)) return;
+        tagSeen.add(chipId);
+        counts.set(chipId, (counts.get(chipId) || 0) + 1);
+      });
     });
     shoppingChipCounts = counts;
   };
@@ -5536,9 +5644,16 @@ async function loadShoppingPage() {
       .map((c) => String(c?.id || '').trim().toLowerCase())
       .filter((id) => id && chipIds.has(id));
 
+  const getActiveShoppingTagKeysFromChipIds = (chipIds = activeFilterChips) =>
+    Array.from(chipIds)
+      .map((id) => String(id || '').trim().toLowerCase())
+      .filter((id) => id.startsWith(SHOPPING_TAG_FILTER_PREFIX))
+      .map((id) => id.slice(SHOPPING_TAG_FILTER_PREFIX.length));
+
   const buildShoppingRowFilterMatcher = ({
     chipIds = activeFilterChips,
     forcedLocationIds = null,
+    forcedTagKeys = null,
   } = {}) => {
     const query = (searchInput?.value || '').trim().toLowerCase();
     const foodOnly = chipIds.has('food');
@@ -5552,6 +5667,9 @@ async function loadShoppingPage() {
     const activeLocationIds = Array.isArray(forcedLocationIds)
       ? forcedLocationIds
       : getActiveShoppingLocationFilterIds(chipIds);
+    const activeTagKeys = Array.isArray(forcedTagKeys)
+      ? forcedTagKeys.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean)
+      : getActiveShoppingTagKeysFromChipIds(chipIds);
     return (item) => {
       const name = String(item?.name || '').toLowerCase();
       const variants = Array.isArray(item?.variants) ? item.variants : [];
@@ -5579,6 +5697,12 @@ async function loadShoppingPage() {
       const matchesRecipeSelections = recipeOnly
         ? hasPositiveShoppingQty(getShoppingRowRecipeQty(item))
         : true;
+      const matchesTags =
+        activeTagKeys.length === 0 ||
+        (Array.isArray(item.tags) &&
+          activeTagKeys.some((tk) =>
+            item.tags.some((t) => String(t || '').trim().toLowerCase() === tk),
+          ));
       return (
         matchesSearch &&
         matchesRemoved &&
@@ -5588,7 +5712,8 @@ async function loadShoppingPage() {
         matchesNoRecipe &&
         matchesNoAisle &&
         matchesSelected &&
-        matchesRecipeSelections
+        matchesRecipeSelections &&
+        matchesTags
       );
     };
   };
@@ -5601,6 +5726,19 @@ async function loadShoppingPage() {
     const rowMatchesFilters = buildShoppingRowFilterMatcher({
       chipIds: activeFilterChips,
       forcedLocationIds: [locationId],
+    });
+    return !shoppingRows.some((item) => rowMatchesFilters(item));
+  };
+
+  const isShoppingTagOptionUnavailable = (rawChipId) => {
+    const id = String(rawChipId || '').trim().toLowerCase();
+    if (!id.startsWith(SHOPPING_TAG_FILTER_PREFIX)) return true;
+    const keyOnly = id.slice(SHOPPING_TAG_FILTER_PREFIX.length);
+    if (!keyOnly) return true;
+    if (activeFilterChips.has(id)) return false;
+    const rowMatchesFilters = buildShoppingRowFilterMatcher({
+      chipIds: activeFilterChips,
+      forcedTagKeys: [keyOnly],
     });
     return !shoppingRows.some((item) => rowMatchesFilters(item));
   };
@@ -5637,98 +5775,137 @@ async function loadShoppingPage() {
     const moreSelectedIds = shoppingMoreChipOptionDefs
       .map((optionDef) => String(optionDef?.id || '').trim().toLowerCase())
       .filter((optionId) => optionId && activeFilterChips.has(optionId));
+    const tagSelectedIds = shoppingTagChipOptionDefs
+      .map((def) => String(def?.id || '').trim().toLowerCase())
+      .filter((tid) => tid && activeFilterChips.has(tid));
     window.renderFilterChipList({
       mountEl: chipMountEl,
       chips,
       reopenCompoundDropdown,
       reopenCompoundDropdownId,
-      compoundInsertIndex:
-        getShoppingFilterChipMode() === 'editor' ? 3 : null,
-      compoundChips:
-        getShoppingFilterChipMode() === 'editor'
-          ? [
-              {
-                id: 'home-locations',
-                label: 'location',
-                options: shoppingLocationChipDefs.map((locationDef) => {
-                  const locationId = String(locationDef?.id || '').trim().toLowerCase();
-                  return {
-                    id: locationId,
-                    label: String(locationDef?.label || locationId),
-                    disabled: isShoppingLocationOptionUnavailable(locationId),
-                  };
-                }),
-                selectedOptionIds: locationSelectedIds,
-                onToggleOption: (locationId) => {
-                  const key = String(locationId || '').toLowerCase();
-                  if (!key) return;
-                  if (!activeFilterChips.has(key) && isShoppingLocationOptionUnavailable(key)) return;
-                  if (activeFilterChips.has(key)) {
-                    activeFilterChips.delete(key);
-                  } else {
-                    activeFilterChips.add(key);
-                  }
-                  reopenShoppingCompoundDropdownId = 'home-locations';
-                  persistShoppingChipState();
-                  rerenderShoppingFilterChips();
-                  applyShoppingFilters();
-                },
-                onClearSelection: () => {
-                  suppressLocationDropdownReopen = true;
-                  reopenShoppingCompoundDropdownId = '';
-                  shoppingLocationChipDefs.forEach((locationDef) => {
-                    const id = String(locationDef?.id || '').trim().toLowerCase();
-                    if (id) activeFilterChips.delete(id);
-                  });
-                  persistShoppingChipState();
-                  rerenderShoppingFilterChips();
-                  applyShoppingFilters();
-                },
-                clearAriaLabel: 'Clear location filters',
-              },
-              {
-                id: 'shopping-more-filters',
-                label: 'more',
-                options: shoppingMoreChipOptionDefs.map((optionDef) => {
-                  const optionId = String(optionDef?.id || '').trim().toLowerCase();
-                  const count = Number(shoppingChipCounts.get(optionId) || 0);
-                  return {
-                    id: optionId,
-                    label: String(optionDef?.label || optionId),
-                    disabled: count <= 0,
-                  };
-                }),
-                selectedOptionIds: moreSelectedIds,
-                onToggleOption: (optionId) => {
-                  const key = String(optionId || '').toLowerCase();
-                  if (!key) return;
-                  const count = Number(shoppingChipCounts.get(key) || 0);
-                  if (count <= 0) return;
-                  if (activeFilterChips.has(key)) {
-                    activeFilterChips.delete(key);
-                  } else {
-                    activeFilterChips.add(key);
-                  }
-                  reopenShoppingCompoundDropdownId = 'shopping-more-filters';
-                  persistShoppingChipState();
-                  rerenderShoppingFilterChips();
-                  applyShoppingFilters();
-                },
-                onClearSelection: () => {
-                  suppressLocationDropdownReopen = true;
-                  reopenShoppingCompoundDropdownId = '';
-                  shoppingMoreChipOptionDefs.forEach((optionDef) => {
-                    const optionId = String(optionDef?.id || '').trim().toLowerCase();
-                    if (optionId) activeFilterChips.delete(optionId);
-                  });
-                  persistShoppingChipState();
-                  rerenderShoppingFilterChips();
-                  applyShoppingFilters();
-                },
-                clearAriaLabel: 'Clear more filters',
-              },
-            ]
-          : [],
+      compoundInsertIndex: getShoppingFilterChipMode() === 'editor' ? 3 : 4,
+      compoundChips: [
+        {
+          id: 'home-locations',
+          label: 'location',
+          options: shoppingLocationChipDefs.map((locationDef) => {
+            const locationId = String(locationDef?.id || '').trim().toLowerCase();
+            return {
+              id: locationId,
+              label: String(locationDef?.label || locationId),
+              disabled: isShoppingLocationOptionUnavailable(locationId),
+            };
+          }),
+          selectedOptionIds: locationSelectedIds,
+          onToggleOption: (locationId) => {
+            const key = String(locationId || '').toLowerCase();
+            if (!key) return;
+            if (!activeFilterChips.has(key) && isShoppingLocationOptionUnavailable(key)) return;
+            if (activeFilterChips.has(key)) {
+              activeFilterChips.delete(key);
+            } else {
+              activeFilterChips.add(key);
+            }
+            reopenShoppingCompoundDropdownId = 'home-locations';
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          onClearSelection: () => {
+            suppressLocationDropdownReopen = true;
+            reopenShoppingCompoundDropdownId = '';
+            shoppingLocationChipDefs.forEach((locationDef) => {
+              const id = String(locationDef?.id || '').trim().toLowerCase();
+              if (id) activeFilterChips.delete(id);
+            });
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          clearAriaLabel: 'Clear location filters',
+        },
+        {
+          id: 'shopping-item-tags',
+          label: 'tags',
+          disabled: shoppingTagChipOptionDefs.length === 0,
+          options: shoppingTagChipOptionDefs.map((def) => {
+            const optionId = String(def?.id || '').trim().toLowerCase();
+            return {
+              id: optionId,
+              label: String(def?.label || optionId),
+              disabled: isShoppingTagOptionUnavailable(optionId),
+            };
+          }),
+          selectedOptionIds: tagSelectedIds,
+          onToggleOption: (optionId) => {
+            const key = String(optionId || '').toLowerCase();
+            if (!key.startsWith(SHOPPING_TAG_FILTER_PREFIX)) return;
+            if (!activeFilterChips.has(key) && isShoppingTagOptionUnavailable(key)) return;
+            if (activeFilterChips.has(key)) {
+              activeFilterChips.delete(key);
+            } else {
+              activeFilterChips.add(key);
+            }
+            reopenShoppingCompoundDropdownId = 'shopping-item-tags';
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          onClearSelection: () => {
+            suppressLocationDropdownReopen = true;
+            reopenShoppingCompoundDropdownId = '';
+            shoppingTagChipOptionDefs.forEach((def) => {
+              const tid = String(def?.id || '').trim().toLowerCase();
+              if (tid) activeFilterChips.delete(tid);
+            });
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          clearAriaLabel: 'Clear tag filters',
+        },
+        {
+          id: 'shopping-more-filters',
+          label: 'more',
+          options: shoppingMoreChipOptionDefs.map((optionDef) => {
+            const optionId = String(optionDef?.id || '').trim().toLowerCase();
+            const count = Number(shoppingChipCounts.get(optionId) || 0);
+            return {
+              id: optionId,
+              label: String(optionDef?.label || optionId),
+              disabled: count <= 0,
+            };
+          }),
+          selectedOptionIds: moreSelectedIds,
+          onToggleOption: (optionId) => {
+            const key = String(optionId || '').toLowerCase();
+            if (!key) return;
+            const count = Number(shoppingChipCounts.get(key) || 0);
+            if (count <= 0) return;
+            if (activeFilterChips.has(key)) {
+              activeFilterChips.delete(key);
+            } else {
+              activeFilterChips.add(key);
+            }
+            reopenShoppingCompoundDropdownId = 'shopping-more-filters';
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          onClearSelection: () => {
+            suppressLocationDropdownReopen = true;
+            reopenShoppingCompoundDropdownId = '';
+            shoppingMoreChipOptionDefs.forEach((optionDef) => {
+              const optionId = String(optionDef?.id || '').trim().toLowerCase();
+              if (optionId) activeFilterChips.delete(optionId);
+            });
+            persistShoppingChipState();
+            rerenderShoppingFilterChips();
+            applyShoppingFilters();
+          },
+          clearAriaLabel: 'Clear more filters',
+        },
+      ],
       activeChipIds: activeFilterChips,
       onToggle: (chipId) => {
         const key = String(chipId || '').toLowerCase();
@@ -7881,7 +8058,7 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
       const completedSectionKey = shoppingListCompletedCollapseKey(storeLabel);
       out.push({
         rowType: 'section',
-        text: 'Completed',
+        text: 'Excluded',
         className: 'shopping-list-section--completed',
         sectionKey: completedSectionKey,
         sectionCollapseKey: completedSectionKey,
@@ -7958,7 +8135,7 @@ function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
     const completedSectionKey = shoppingListHomeCompletedCollapseKey();
     out.push({
       rowType: 'section',
-      text: 'Completed',
+      text: 'Excluded',
       className: 'shopping-list-section--completed',
       sectionKey: completedSectionKey,
       sectionCollapseKey: completedSectionKey,
@@ -7988,6 +8165,83 @@ function getShoppingListChecklistDisplayRows(docRows, options = {}) {
     return buildShoppingListChecklistHomeDisplayRows(rows, options);
   }
   return buildShoppingListChecklistStoreDisplayRows(rows, options);
+}
+
+function createSectionToggleButton({ label = '', expanded = true, onToggle, completed = false }) {
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = completed
+    ? 'shopping-list-section-toggle shopping-list-section-toggle--completed'
+    : 'shopping-list-section-toggle';
+  toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  const toggleLabel = document.createElement('span');
+  toggleLabel.className = 'shopping-list-section-toggle__label';
+  toggleLabel.textContent = String(label || '').trim();
+  toggleBtn.appendChild(toggleLabel);
+  const toggleIcon = document.createElement('span');
+  toggleIcon.className = 'material-symbols-outlined shopping-list-section-toggle__icon';
+  toggleIcon.setAttribute('aria-hidden', 'true');
+  toggleIcon.textContent = 'expand_more';
+  toggleBtn.appendChild(toggleIcon);
+  if (typeof onToggle === 'function') {
+    toggleBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onToggle(event);
+    });
+  }
+  return toggleBtn;
+}
+
+function getShoppingListSelectedRecipeSummaryRows({ db = window.dbInstance } = {}) {
+  const selections = Object.values(getShoppingPlanRecipeSelections())
+    .filter((entry) => Number(entry?.recipeId) > 0);
+  if (!selections.length) return [];
+  const formatServingsValue = (rawValue) => {
+    const numeric = Number(rawValue);
+    if (!Number.isFinite(numeric) || numeric <= 0) return '';
+    if (typeof window.formatShoppingQtyForDisplay === 'function') {
+      return String(window.formatShoppingQtyForDisplay(numeric) || '').trim();
+    }
+    return Number.isInteger(numeric) ? String(numeric) : String(Number(numeric.toFixed(2)));
+  };
+  return selections
+    .map((selection) => {
+      const recipeId = Math.trunc(Number(selection?.recipeId));
+      if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
+      const recipe =
+        db && typeof db.exec === 'function' ? loadShoppingPlanRecipeFromDB(db, recipeId) : null;
+      const title =
+        String(selection?.title || '').trim() ||
+        String(recipe?.title || '').trim() ||
+        `Recipe ${recipeId}`;
+      const recipeDefaultServings = Number(
+        recipe?.servings?.default != null ? recipe.servings.default : recipe?.servingsDefault,
+      );
+      const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
+      const servingsValue =
+        Number.isFinite(selectedServings) && selectedServings > 0
+          ? selectedServings
+          : Number.isFinite(recipeDefaultServings) && recipeDefaultServings > 0
+            ? recipeDefaultServings
+            : null;
+      const formattedServings = formatServingsValue(servingsValue);
+      const servingsSuffix =
+        formattedServings && Number(servingsValue) === 1 ? 'serving' : 'servings';
+      return {
+        recipeId,
+        title,
+        servingsText: formattedServings ? `${formattedServings} ${servingsSuffix}` : '',
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const titleDelta = String(a?.title || '').localeCompare(String(b?.title || ''), undefined, {
+        sensitivity: 'base',
+      });
+      if (titleDelta !== 0) return titleDelta;
+      return Number(a?.recipeId || 0) - Number(b?.recipeId || 0);
+    });
 }
 
 if (typeof window !== 'undefined') {
@@ -8430,9 +8684,10 @@ async function loadShoppingListPage() {
             shoppingNavTargetId: 'favoriteEats:shopping-nav-target-id',
             shoppingNavTargetName: 'favoriteEats:shopping-nav-target-name',
           };
+    const selectedRecipes = isSearchActive ? [] : getShoppingListSelectedRecipeSummaryRows({ db });
     list.innerHTML = '';
 
-    if (!displayRows.length) {
+    if (!displayRows.length && !selectedRecipes.length) {
       if (isSearchActive) {
         renderTopLevelEmptyState(list, 'searchNoMatch');
       } else {
@@ -8452,6 +8707,59 @@ async function loadShoppingListPage() {
     let shoppingListChecklistItemDebugCount = 0;
     const SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX = 12;
 
+    if (selectedRecipes.length) {
+      const recipesSectionKey = 'sl-recipes';
+      const recipesExpanded = !collapsedShoppingListSections.has(recipesSectionKey);
+      const recipeSection = document.createElement('li');
+      recipeSection.className = 'list-section-label shopping-list-section--recipes';
+      const toggleBtn = createSectionToggleButton({
+        label: 'RECIPES',
+        expanded: recipesExpanded,
+        onToggle: () => {
+        if (collapsedShoppingListSections.has(recipesSectionKey)) {
+          collapsedShoppingListSections.delete(recipesSectionKey);
+        } else {
+          collapsedShoppingListSections.add(recipesSectionKey);
+        }
+        renderChecklist();
+        },
+      });
+      recipeSection.appendChild(toggleBtn);
+      list.appendChild(recipeSection);
+      if (recipesExpanded) {
+        selectedRecipes.forEach((recipe) => {
+          const li = document.createElement('li');
+          li.className = 'shopping-list-doc-item shopping-list-doc-item--recipe-summary';
+          const headline = document.createElement('div');
+          headline.className =
+            'shopping-list-doc-headline shopping-list-doc-headline--recipe-summary';
+          const recipeLink = document.createElement('a');
+          recipeLink.href = 'recipeEditor.html';
+          recipeLink.className = 'shopping-list-doc-contribution-link shopping-list-doc-recipe-summary-link';
+          recipeLink.textContent = String(recipe.title || '').trim();
+          recipeLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof window.openRecipe === 'function') {
+              window.openRecipe(recipe.recipeId);
+              return;
+            }
+            sessionStorage.setItem('selectedRecipeId', String(recipe.recipeId || ''));
+            window.location.href = 'recipeEditor.html';
+          });
+          headline.appendChild(recipeLink);
+          if (recipe.servingsText) {
+            const detail = document.createElement('span');
+            detail.className = 'shopping-list-doc-contribution-detail';
+            detail.textContent = `(${recipe.servingsText})`;
+            headline.appendChild(detail);
+          }
+          li.appendChild(headline);
+          list.appendChild(li);
+        });
+      }
+    }
+
     visibleRows.forEach((row) => {
       const li = document.createElement('li');
       if (row?.rowType === 'section') {
@@ -8459,34 +8767,22 @@ async function loadShoppingListPage() {
         const sectionToggleKey = String(row?.sectionCollapseKey || '').trim();
         const isCollapsible = !isSearchActive && !!row.collapsible && !!sectionToggleKey;
         if (isCollapsible) {
-          const toggleBtn = document.createElement('button');
-          toggleBtn.type = 'button';
           const isCompleted = String(row?.className || '').includes(
             'shopping-list-section--completed',
           );
-          toggleBtn.className = isCompleted
-            ? 'shopping-list-section-toggle shopping-list-section-toggle--completed'
-            : 'shopping-list-section-toggle';
           const isExpanded = !collapsedShoppingListSections.has(sectionToggleKey);
-          toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-          const toggleLabel = document.createElement('span');
-          toggleLabel.className = 'shopping-list-section-toggle__label';
-          toggleLabel.textContent = String(row.text || row.label || '').trim();
-          toggleBtn.appendChild(toggleLabel);
-          const toggleIcon = document.createElement('span');
-          toggleIcon.className = 'material-symbols-outlined shopping-list-section-toggle__icon';
-          toggleIcon.setAttribute('aria-hidden', 'true');
-          toggleIcon.textContent = 'expand_more';
-          toggleBtn.appendChild(toggleIcon);
-          toggleBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
+          const toggleBtn = createSectionToggleButton({
+            label: row.text || row.label || '',
+            expanded: isExpanded,
+            completed: isCompleted,
+            onToggle: () => {
             if (collapsedShoppingListSections.has(sectionToggleKey)) {
               collapsedShoppingListSections.delete(sectionToggleKey);
             } else {
               collapsedShoppingListSections.add(sectionToggleKey);
             }
             renderChecklist();
+            },
           });
           li.appendChild(toggleBtn);
         } else {
@@ -8544,7 +8840,7 @@ async function loadShoppingListPage() {
       checkbox.className = 'shopping-list-doc-checkbox';
       checkbox.setAttribute(
         'aria-label',
-        row?.checked || isPendingChecked ? 'Mark item incomplete' : 'Mark item complete',
+        row?.checked || isPendingChecked ? 'Include item' : 'Exclude item',
       );
       checkbox.setAttribute('aria-pressed', row?.checked || isPendingChecked ? 'true' : 'false');
       const checkboxIcon = document.createElement('span');
@@ -8557,37 +8853,13 @@ async function loadShoppingListPage() {
         event.preventDefault();
         event.stopPropagation();
         editingRowId = '';
-        if (pendingCheckedRowIds.has(String(row?.id || ''))) {
-          cancelPendingCheck(row.id);
-          renderChecklist();
-          return;
-        }
-        if (!row?.checked) {
-          pendingCheckedRowIds.add(String(row.id || ''));
-          renderChecklist();
-          const timerId = window.setTimeout(() => {
-            pendingCheckTimers.delete(String(row.id || ''));
-            pendingCheckedRowIds.delete(String(row.id || ''));
-            updateRow(
-              row.id,
-              (draft) => {
-                draft.checked = true;
-              },
-              {
-                message: 'Item completed.',
-              },
-            );
-          }, CHECK_MOVE_DELAY_MS);
-          pendingCheckTimers.set(String(row.id || ''), timerId);
-          return;
-        }
         updateRow(
           row.id,
           (draft) => {
             draft.checked = !draft.checked;
           },
           {
-            message: row?.checked ? 'Item restored.' : 'Item completed.',
+            message: row?.checked ? 'Item included.' : 'Item excluded.',
           },
         );
       });
@@ -9740,6 +10012,129 @@ function loadShoppingItemEditorPage() {
   let pendingVariantCellFocus = null;
   let variantActionDialogOpen = false;
   let activeVariantTagEditorState = null;
+  /** Tracks an in-flight Ctrl/Cmd tag-pill gesture so blur doesn't tear down the clicked row. */
+  let pendingVariantTagPillInteraction = null;
+  /** Suppresses the old tags input blur cleanup during intentional rerender-and-refocus flows. */
+  let pendingVariantTagBlurCleanupSuppression = null;
+
+  const isVariantTagDebugLoggingEnabled = () =>
+    !!(window && window.__favoriteEatsVariantTagDebug);
+  const logVariantTagDebug = (message, details = null) => {
+    if (!isVariantTagDebugLoggingEnabled()) return;
+    if (details && typeof details === 'object') {
+      console.log(`[variant-tags] ${message}`, details);
+      return;
+    }
+    console.log(`[variant-tags] ${message}`);
+  };
+  const suppressNextVariantTagBlurCleanup = (rowIndex, reason = '') => {
+    const normalizedRowIndex = Number(rowIndex);
+    if (!Number.isFinite(normalizedRowIndex) || normalizedRowIndex < 0) return;
+    pendingVariantTagBlurCleanupSuppression = {
+      rowIndex: normalizedRowIndex,
+      reason: String(reason || ''),
+    };
+    logVariantTagDebug('suppress next tags blur cleanup', pendingVariantTagBlurCleanupSuppression);
+  };
+
+  const confirmShoppingVariantTagRemoval = async (tagLabel) => {
+    const cleanTag = String(tagLabel || '').trim() || 'this tag';
+    try {
+      if (window.ui && typeof window.ui.confirm === 'function') {
+        const ok = await window.ui.confirm({
+          title: 'Remove tag?',
+          message: `Remove "${cleanTag}" from this variant?`,
+          confirmText: 'Remove',
+          cancelText: 'Cancel',
+          danger: true,
+        });
+        return !!ok;
+      }
+      return window.confirm(`Remove "${cleanTag}" from this variant?`);
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const getActiveVariantTagEditorRowIndex = () => {
+    const rowIndex = Number(activeVariantTagEditorState?.rowIndex);
+    return Number.isFinite(rowIndex) ? rowIndex : -1;
+  };
+
+  const setActiveVariantTagEditorState = (rowIndex, draft = '', options = {}) => {
+    const normalizedRowIndex = Number(rowIndex);
+    if (!Number.isFinite(normalizedRowIndex) || normalizedRowIndex < 0) {
+      activeVariantTagEditorState = null;
+      return;
+    }
+    const insertAfterTagIndex = Number(options?.insertAfterTagIndex);
+    activeVariantTagEditorState = {
+      rowIndex: normalizedRowIndex,
+      draft: String(draft || ''),
+      insertAfterTagIndex: Number.isFinite(insertAfterTagIndex) ? Math.trunc(insertAfterTagIndex) : -1,
+    };
+  };
+
+  const beginVariantTagPillInteraction = (rowIndex) => {
+    const interaction = {
+      rowIndex: Math.max(0, Number(rowIndex) || 0),
+      previousActiveRowIndex: getActiveVariantTagEditorRowIndex(),
+      handled: false,
+    };
+    pendingVariantTagPillInteraction = interaction;
+    return interaction;
+  };
+
+  const getVariantTagInsertAfterIndexForPoint = (pillElements, clientX, clientY) => {
+    const pills = Array.isArray(pillElements)
+      ? pillElements
+          .filter((el) => el instanceof HTMLElement)
+          .map((el, index) => ({
+            index,
+            rect: el.getBoundingClientRect(),
+          }))
+      : [];
+    if (!pills.length) return -1;
+    if (typeof clientX !== 'number' || typeof clientY !== 'number') return pills[pills.length - 1].index;
+
+    const rows = [];
+    const rowTolerancePx = 6;
+    pills.forEach((pill) => {
+      const existingRow = rows.find((row) => Math.abs(row.top - pill.rect.top) <= rowTolerancePx);
+      if (existingRow) {
+        existingRow.items.push(pill);
+        existingRow.top = Math.min(existingRow.top, pill.rect.top);
+        existingRow.bottom = Math.max(existingRow.bottom, pill.rect.bottom);
+        return;
+      }
+      rows.push({
+        top: pill.rect.top,
+        bottom: pill.rect.bottom,
+        items: [pill],
+      });
+    });
+    rows.sort((a, b) => a.top - b.top);
+    rows.forEach((row) => row.items.sort((a, b) => a.rect.left - b.rect.left));
+
+    const targetRow =
+      rows.find((row) => clientY >= row.top - rowTolerancePx && clientY <= row.bottom + rowTolerancePx) ||
+      rows.reduce((bestRow, row) => {
+        if (!bestRow) return row;
+        const bestDistance =
+          clientY < bestRow.top ? bestRow.top - clientY : clientY > bestRow.bottom ? clientY - bestRow.bottom : 0;
+        const rowDistance =
+          clientY < row.top ? row.top - clientY : clientY > row.bottom ? clientY - row.bottom : 0;
+        return rowDistance < bestDistance ? row : bestRow;
+      }, null);
+    if (!targetRow) return pills[pills.length - 1].index;
+
+    for (let i = 0; i < targetRow.items.length; i += 1) {
+      const pill = targetRow.items[i];
+      const midpoint = pill.rect.left + pill.rect.width / 2;
+      if (clientX < midpoint) return pill.index - 1;
+    }
+    return targetRow.items[targetRow.items.length - 1].index;
+  };
 
   const getVariantRowsSignature = (rows) =>
     normalizeIngredientVariantRows(Array.isArray(rows) ? rows : [])
@@ -9823,7 +10218,7 @@ function loadShoppingItemEditorPage() {
     refreshVariantEditorDirty();
   };
 
-  const addVariantTagToRow = (rowIndex, rawTag) => {
+  const addVariantTagToRow = (rowIndex, rawTag, { emit = true } = {}) => {
     const normalizedIndex = Number(rowIndex);
     if (
       !Number.isFinite(normalizedIndex) ||
@@ -9834,30 +10229,107 @@ function loadShoppingItemEditorPage() {
     }
     const nextTag = normalizeRecipeTagList([rawTag])[0] || '';
     if (!nextTag) return false;
-    const nextTags = normalizeRecipeTagList([
-      ...(variantRowsDraft[normalizedIndex].tags || []),
-      nextTag,
-    ]);
+    const currentTags = normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []);
+    const nextTags = normalizeRecipeTagList([...currentTags, nextTag]);
     const previousKey = JSON.stringify(
-      normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []).map((value) =>
-        String(value || '').toLowerCase(),
-      ),
+      currentTags.map((value) => String(value || '').toLowerCase()),
     );
     const nextKey = JSON.stringify(nextTags.map((value) => String(value || '').toLowerCase()));
     if (previousKey === nextKey) return false;
     variantRowsDraft[normalizedIndex].tags = nextTags;
-    syncVariantHiddenInput({ emit: true });
+    syncVariantHiddenInput({ emit });
     return true;
   };
 
-  const commitActiveVariantTagDraft = ({ clear = false } = {}) => {
+  const insertVariantTagToRow = (
+    rowIndex,
+    rawTag,
+    insertAfterTagIndex,
+    { emit = true } = {},
+  ) => {
+    const normalizedIndex = Number(rowIndex);
+    if (
+      !Number.isFinite(normalizedIndex) ||
+      normalizedIndex < 0 ||
+      normalizedIndex >= variantRowsDraft.length
+    ) {
+      return false;
+    }
+    const nextTag = normalizeRecipeTagList([rawTag])[0] || '';
+    if (!nextTag) return false;
+    const currentTags = normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []);
+    const normalizedInsertAfter = Number.isFinite(Number(insertAfterTagIndex))
+      ? Math.trunc(Number(insertAfterTagIndex))
+      : currentTags.length - 1;
+    const insertAt = Math.max(0, Math.min(currentTags.length, normalizedInsertAfter + 1));
+    const nextTags = normalizeRecipeTagList([
+      ...currentTags.slice(0, insertAt),
+      nextTag,
+      ...currentTags.slice(insertAt),
+    ]);
+    const previousKey = JSON.stringify(currentTags.map((value) => String(value || '').toLowerCase()));
+    const nextKey = JSON.stringify(nextTags.map((value) => String(value || '').toLowerCase()));
+    if (previousKey === nextKey) return false;
+    variantRowsDraft[normalizedIndex].tags = nextTags;
+    syncVariantHiddenInput({ emit });
+    return true;
+  };
+
+  const commitActiveVariantTagDraft = ({ clear = false, emit = true } = {}) => {
     if (!activeVariantTagEditorState) return false;
     const rowIndex = Number(activeVariantTagEditorState.rowIndex);
     const draft = String(activeVariantTagEditorState.draft || '').trim();
-    const changed = draft ? addVariantTagToRow(rowIndex, draft) : false;
+    const insertAfterTagIndex = Number(activeVariantTagEditorState.insertAfterTagIndex);
+    const changed = draft
+      ? insertVariantTagToRow(rowIndex, draft, insertAfterTagIndex, { emit })
+      : false;
     if (clear) activeVariantTagEditorState = null;
-    else activeVariantTagEditorState.draft = '';
+    else {
+      activeVariantTagEditorState.draft = '';
+      if (changed) {
+        activeVariantTagEditorState.insertAfterTagIndex = Math.trunc(
+          (Number.isFinite(insertAfterTagIndex) ? insertAfterTagIndex : -1) + 1,
+        );
+      }
+    }
     return changed;
+  };
+
+  /** Merge in-progress tag text so Save serializes the same rows the user sees while typing. */
+  const getVariantRowsDraftWithMergedActiveTagDraft = () => {
+    const raw = Array.isArray(variantRowsDraft) ? variantRowsDraft : [];
+    const rows = raw.map((row) => ({
+      ...row,
+      tags: normalizeRecipeTagList(row?.tags || []),
+    }));
+    if (!activeVariantTagEditorState) return rows;
+    const idx = Number(activeVariantTagEditorState.rowIndex);
+    const draftRaw = String(activeVariantTagEditorState.draft || '').trim();
+    const nextTag = normalizeRecipeTagList([draftRaw])[0] || '';
+    const insertAfterTagIndex = Number(activeVariantTagEditorState.insertAfterTagIndex);
+    if (
+      !Number.isFinite(idx) ||
+      idx < 0 ||
+      idx >= rows.length ||
+      !nextTag
+    ) {
+      return rows;
+    }
+    const cur = normalizeRecipeTagList(rows[idx].tags || []);
+    const normalizedInsertAfter = Number.isFinite(insertAfterTagIndex)
+      ? Math.trunc(insertAfterTagIndex)
+      : cur.length - 1;
+    const insertAt = Math.max(0, Math.min(cur.length, normalizedInsertAfter + 1));
+    const merged = normalizeRecipeTagList([
+      ...cur.slice(0, insertAt),
+      nextTag,
+      ...cur.slice(insertAt),
+    ]);
+    rows[idx] = {
+      ...rows[idx],
+      tags: merged,
+    };
+    return rows;
   };
 
   const setPendingVariantCellFocus = (rowIndex, column, options = {}) => {
@@ -10128,6 +10600,14 @@ function loadShoppingItemEditorPage() {
         );
       if (!(target instanceof HTMLInputElement)) return;
       try {
+        logVariantTagDebug('apply pending focus', {
+          rowIndex,
+          column,
+          caretAtStart: !!caretAtStart,
+          openTypeahead: !!openTypeahead,
+          targetClassName: target.className,
+          targetValue: target.value,
+        });
         target.focus();
         const caretIndex = caretAtStart ? 0 : target.value.length;
         target.setSelectionRange(caretIndex, caretIndex);
@@ -10415,6 +10895,8 @@ function loadShoppingItemEditorPage() {
           },
           openOnFocus: true,
           pickOnEnterWhenQueryEmpty: false,
+          minWidth: 220,
+          maxWidth: 360,
         });
       }
       homeInput.addEventListener('input', () => {
@@ -10504,59 +10986,38 @@ function loadShoppingItemEditorPage() {
       tagsCell.dataset.rowIndex = String(index);
       const committedTags = normalizeRecipeTagList(row?.tags || []);
       variantRowsDraft[index].tags = committedTags;
-      const isEditingTags = Number(activeVariantTagEditorState?.rowIndex) === index;
+      const tagsEditorState =
+        Number(activeVariantTagEditorState?.rowIndex) === index ? activeVariantTagEditorState : null;
+      const isEditingTags = !!tagsEditorState;
+      const activeInsertAfterTagIndex = Number.isFinite(Number(tagsEditorState?.insertAfterTagIndex))
+        ? Math.trunc(Number(tagsEditorState?.insertAfterTagIndex))
+        : committedTags.length - 1;
+      const inputInsertBeforeIndex = isEditingTags
+        ? Math.max(0, Math.min(committedTags.length, activeInsertAfterTagIndex + 1))
+        : -1;
       const tagsControl = document.createElement('div');
       tagsControl.className = isEditingTags
         ? 'shopping-item-variant-tags-control is-editing'
         : 'shopping-item-variant-tags-control';
-      const tagsWrap = document.createElement('div');
-      tagsWrap.className = 'recipe-tags-wrap shopping-item-variant-tags-wrap';
-      committedTags.forEach((tag) => {
-        const pill = document.createElement('span');
-        pill.className = 'recipe-tag-pill shopping-item-variant-tag-pill';
-        pill.textContent = tag;
-        pill.title = 'Ctrl-click to remove';
-        const removeTag = () => {
-          variantRowsDraft[index].tags = normalizeRecipeTagList(
-            committedTags.filter(
-              (value) => String(value || '').toLowerCase() !== String(tag || '').toLowerCase(),
-            ),
-          );
-          syncVariantHiddenInput({ emit: true });
-          renderVariantRows({
-            focusCell: {
-              rowIndex: index,
-              column: 'tags',
-              caretAtStart: true,
-              openTypeahead: true,
-            },
-          });
-        };
-        pill.addEventListener('click', (event) => {
-          if (!(event.ctrlKey || event.metaKey)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          removeTag();
-        });
-        pill.addEventListener('contextmenu', (event) => {
-          if (!(event.ctrlKey || event.metaKey)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          removeTag();
-        });
-        tagsWrap.appendChild(pill);
-      });
-      tagsControl.appendChild(tagsWrap);
 
       const tagsInput = document.createElement('input');
       tagsInput.type = 'text';
       tagsInput.className = 'shopping-item-variant-tags-input';
       tagsInput.dataset.rowIndex = String(index);
+      const tagsInputSlot = document.createElement('span');
+      tagsInputSlot.className = 'shopping-item-variant-tags-slot';
+      tagsInputSlot.appendChild(tagsInput);
       tagsInput.value =
-        isEditingTags && typeof activeVariantTagEditorState?.draft === 'string'
-          ? activeVariantTagEditorState.draft
+        isEditingTags && typeof tagsEditorState?.draft === 'string'
+          ? tagsEditorState.draft
           : '';
-      tagsInput.placeholder = committedTags.length ? '' : 'Add tag';
+      const syncVariantTagsInputLayout = () => {
+        const draftValue = String(tagsInput.value || '');
+        tagsInput.size = Math.max(1, draftValue.length || 1);
+        tagsInputSlot.classList.toggle('is-empty', draftValue.length === 0);
+      };
+      syncVariantTagsInputLayout();
+      tagsInput.placeholder = '';
       tagsInput.setAttribute(
         'aria-label',
         row?.isBase
@@ -10569,76 +11030,294 @@ function loadShoppingItemEditorPage() {
       ) {
         window.favoriteEatsTypeahead.attach({
           inputEl: tagsInput,
-          getPool: async () => getVisibleTagNamePool(window.dbInstance || null),
+          getPool: async () => getVisibleIngredientTagNamePool(window.dbInstance || null),
           openOnFocus: true,
           pickOnEnterWhenQueryEmpty: false,
+          minWidth: 220,
+          maxWidth: 380,
           onPick: (pickedValue, inputEl) => {
-            addVariantTagToRow(index, pickedValue);
+            const inserted = insertVariantTagToRow(index, pickedValue, activeInsertAfterTagIndex);
             inputEl.value = '';
-            if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) === index) {
-              activeVariantTagEditorState.draft = '';
-            }
-            renderVariantRows({
-              focusCell: {
-                rowIndex: index,
-                column: 'tags',
-                caretAtStart: true,
-                openTypeahead: true,
-              },
+            syncVariantTagsInputLayout();
+            if (!inserted) return;
+            setActiveVariantTagEditorState(index, '', {
+              insertAfterTagIndex: activeInsertAfterTagIndex + 1,
+            });
+            rerenderVariantTagsEditorWithFocus(index, {
+              suppressBlurCleanup: true,
+              reason: 'typeahead-pick',
             });
           },
         });
       }
       tagsInput.addEventListener('input', () => {
-        if (!activeVariantTagEditorState || Number(activeVariantTagEditorState.rowIndex) !== index) {
-          activeVariantTagEditorState = { rowIndex: index, draft: tagsInput.value || '' };
-        } else {
-          activeVariantTagEditorState.draft = tagsInput.value || '';
-        }
+        const currentInsertAfterTagIndex =
+          Number(activeVariantTagEditorState?.rowIndex) === index &&
+          Number.isFinite(Number(activeVariantTagEditorState?.insertAfterTagIndex))
+            ? Math.trunc(Number(activeVariantTagEditorState.insertAfterTagIndex))
+            : activeInsertAfterTagIndex;
+        setActiveVariantTagEditorState(index, tagsInput.value || '', {
+          insertAfterTagIndex: currentInsertAfterTagIndex,
+        });
+        syncVariantTagsInputLayout();
+        refreshVariantEditorDirty();
       });
       tagsInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ',') {
+        const getCurrentInsertAfterTagIndex = () =>
+          Number(activeVariantTagEditorState?.rowIndex) === index &&
+          Number.isFinite(Number(activeVariantTagEditorState?.insertAfterTagIndex))
+            ? Math.trunc(Number(activeVariantTagEditorState.insertAfterTagIndex))
+            : activeInsertAfterTagIndex;
+
+        const tryMoveVariantTagInsertSlot = (direction) => {
+          if (direction !== -1 && direction !== 1) return false;
+          if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+          if (String(tagsInput.value || '') !== '') return false;
+          const existingTags = normalizeRecipeTagList(variantRowsDraft[index].tags || []);
+          if (existingTags.length === 0) return false;
+
           event.preventDefault();
           event.stopPropagation();
-          const changed = addVariantTagToRow(index, tagsInput.value || '');
-          tagsInput.value = '';
-          if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) === index) {
-            activeVariantTagEditorState.draft = '';
+
+          const currentInsertAfterTagIndex = getCurrentInsertAfterTagIndex();
+          const nextInsertAfterTagIndex = Math.max(
+            -1,
+            Math.min(existingTags.length - 1, currentInsertAfterTagIndex + direction),
+          );
+          if (nextInsertAfterTagIndex === currentInsertAfterTagIndex) {
+            logVariantTagDebug('slot move no-op at boundary', {
+              rowIndex: index,
+              key: event.key,
+              insertAfterTagIndex: currentInsertAfterTagIndex,
+            });
+            return true;
           }
+
+          setActiveVariantTagEditorState(index, '', {
+            insertAfterTagIndex: nextInsertAfterTagIndex,
+          });
+          logVariantTagDebug('slot move via arrow key', {
+            rowIndex: index,
+            key: event.key,
+            insertAfterTagIndex: currentInsertAfterTagIndex,
+            nextInsertAfterTagIndex,
+          });
+          rerenderVariantTagsEditorWithFocus(index, {
+            suppressBlurCleanup: true,
+            reason: direction < 0 ? 'slot-move:left' : 'slot-move:right',
+          });
+          return true;
+        };
+
+        const commitTagsDraftInlineAndStay = () => {
+          const draftText = String(tagsInput.value || '').trim();
+          if (!draftText) {
+            logVariantTagDebug('skip inline commit: empty draft', {
+              rowIndex: index,
+              key: event.key,
+              shiftKey: !!event.shiftKey,
+              insertAfterTagIndex: activeInsertAfterTagIndex,
+            });
+            return false;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          const pickedSuggestion =
+            !!window.favoriteEatsTypeahead &&
+            typeof window.favoriteEatsTypeahead.pickHighlightedIfOpenForInput === 'function' &&
+            window.favoriteEatsTypeahead.pickHighlightedIfOpenForInput(tagsInput);
+          if (pickedSuggestion) {
+            logVariantTagDebug('inline commit resolved via typeahead pick', {
+              rowIndex: index,
+              key: event.key,
+              draftText,
+              insertAfterTagIndex: activeInsertAfterTagIndex,
+            });
+            return true;
+          }
+          const changed = insertVariantTagToRow(index, draftText, activeInsertAfterTagIndex);
+          tagsInput.value = '';
+          syncVariantTagsInputLayout();
+          setActiveVariantTagEditorState(index, '', {
+            insertAfterTagIndex: activeInsertAfterTagIndex + 1,
+          });
+          logVariantTagDebug('inline commit attempted', {
+            rowIndex: index,
+            key: event.key,
+            draftText,
+            changed,
+            insertAfterTagIndex: activeInsertAfterTagIndex,
+            nextInsertAfterTagIndex: activeInsertAfterTagIndex + 1,
+          });
           if (changed) {
-            renderVariantRows({
-              focusCell: {
-                rowIndex: index,
-                column: 'tags',
-                caretAtStart: true,
-                openTypeahead: true,
-              },
+            rerenderVariantTagsEditorWithFocus(index, {
+              suppressBlurCleanup: true,
+              reason: `inline-commit:${String(event.key || '').toLowerCase() || 'unknown'}`,
+            });
+          }
+          return true;
+        };
+
+        logVariantTagDebug('keydown', {
+          rowIndex: index,
+          key: event.key,
+          shiftKey: !!event.shiftKey,
+          ctrlKey: !!event.ctrlKey,
+          metaKey: !!event.metaKey,
+          altKey: !!event.altKey,
+          draftText: String(tagsInput.value || ''),
+          activeInsertAfterTagIndex,
+          defaultPrevented: !!event.defaultPrevented,
+        });
+
+        if (event.key === 'ArrowLeft') {
+          if (tryMoveVariantTagInsertSlot(-1)) return;
+        }
+        if (event.key === 'ArrowRight') {
+          if (tryMoveVariantTagInsertSlot(1)) return;
+        }
+
+        if (event.key === 'Tab' && !event.shiftKey) {
+          if (!String(tagsInput.value || '').trim()) {
+            logVariantTagDebug('allow native Tab: empty draft', {
+              rowIndex: index,
+              activeInsertAfterTagIndex,
+            });
+            return;
+          }
+          commitTagsDraftInlineAndStay();
+          return;
+        }
+        if (event.key === 'Enter' && event.shiftKey) {
+          if (!String(tagsInput.value || '').trim()) {
+            event.preventDefault();
+            event.stopPropagation();
+            logVariantTagDebug('Shift+Enter scheduling blur: empty draft', {
+              rowIndex: index,
+              activeInsertAfterTagIndex,
+            });
+            window.setTimeout(() => {
+              try {
+                tagsInput.blur();
+              } catch (_) {}
+            }, 0);
+            return;
+          }
+          commitTagsDraftInlineAndStay();
+          return;
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+          if (
+            window.favoriteEatsTypeahead &&
+            typeof window.favoriteEatsTypeahead.tryPickEnterForInput === 'function' &&
+            window.favoriteEatsTypeahead.tryPickEnterForInput(tagsInput)
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            logVariantTagDebug('plain Enter picked highlighted suggestion', {
+              rowIndex: index,
+              draftText: String(tagsInput.value || ''),
+            });
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          logVariantTagDebug('plain Enter scheduling blur', {
+            rowIndex: index,
+            draftText: String(tagsInput.value || ''),
+            activeInsertAfterTagIndex,
+          });
+          window.setTimeout(() => {
+            try {
+              tagsInput.blur();
+            } catch (_) {}
+          }, 0);
+          return;
+        }
+        if (event.key === ',') {
+          event.preventDefault();
+          event.stopPropagation();
+          const changed = insertVariantTagToRow(index, tagsInput.value || '', activeInsertAfterTagIndex);
+          tagsInput.value = '';
+          syncVariantTagsInputLayout();
+          setActiveVariantTagEditorState(index, '', {
+            insertAfterTagIndex: activeInsertAfterTagIndex + 1,
+          });
+          if (changed) {
+            rerenderVariantTagsEditorWithFocus(index, {
+              suppressBlurCleanup: true,
+              reason: 'inline-commit:comma',
             });
           }
           return;
         }
         if (event.key === 'Backspace' && String(tagsInput.value || '').trim() === '') {
           const existingTags = normalizeRecipeTagList(variantRowsDraft[index].tags || []);
-          if (!existingTags.length) return;
+          const previousTagIndex = Math.min(existingTags.length - 1, activeInsertAfterTagIndex);
+          if (previousTagIndex < 0) return;
           event.preventDefault();
           event.stopPropagation();
-          variantRowsDraft[index].tags = existingTags.slice(0, -1);
+          variantRowsDraft[index].tags = normalizeRecipeTagList(
+            existingTags.filter((_, tagIndex) => tagIndex !== previousTagIndex),
+          );
           syncVariantHiddenInput({ emit: true });
-          renderVariantRows({
-            focusCell: {
-              rowIndex: index,
-              column: 'tags',
-              caretAtStart: true,
-              openTypeahead: true,
-            },
+          setActiveVariantTagEditorState(index, '', {
+            insertAfterTagIndex: previousTagIndex - 1,
+          });
+          rerenderVariantTagsEditorWithFocus(index, {
+            suppressBlurCleanup: true,
+            reason: 'backspace-remove-previous-tag',
           });
         }
       });
       tagsInput.addEventListener('blur', () => {
+        logVariantTagDebug('tags input blur', {
+          rowIndex: index,
+          draftText: String(tagsInput.value || ''),
+          activeElementClassName:
+            document.activeElement instanceof HTMLElement ? document.activeElement.className : '',
+          pendingVariantCellFocus,
+          pendingVariantTagPillInteraction,
+        });
         window.setTimeout(() => {
-          if (tagsCell.contains(document.activeElement)) return;
+          if (pendingVariantTagPillInteraction) {
+            logVariantTagDebug('blur deferred for pending tag-pill interaction', {
+              rowIndex: index,
+              pendingVariantTagPillInteraction,
+            });
+            if (pendingVariantTagPillInteraction.rowIndex === index) return;
+            commitActiveVariantTagDraft({ clear: true });
+            return;
+          }
+          if (pendingVariantTagBlurCleanupSuppression?.rowIndex === index) {
+            logVariantTagDebug('skip blur cleanup due to intentional tags refocus', {
+              rowIndex: index,
+              reason: pendingVariantTagBlurCleanupSuppression.reason,
+            });
+            pendingVariantTagBlurCleanupSuppression = null;
+            return;
+          }
+          if (tagsCell.contains(document.activeElement)) {
+            logVariantTagDebug('blur ignored: focus stayed inside tags cell', {
+              rowIndex: index,
+              activeElementClassName:
+                document.activeElement instanceof HTMLElement ? document.activeElement.className : '',
+            });
+            return;
+          }
+          logVariantTagDebug('blur committing active draft and maybe rerendering', {
+            rowIndex: index,
+            draftText: String(tagsInput.value || ''),
+          });
           commitActiveVariantTagDraft({ clear: true });
-          if (pendingVariantCellFocus) return;
+          if (pendingVariantCellFocus) {
+            logVariantTagDebug('skip rerender after blur: pending focus exists', {
+              rowIndex: index,
+              pendingVariantCellFocus,
+            });
+            return;
+          }
+          logVariantTagDebug('rerender rows after blur', { rowIndex: index });
           renderVariantRows();
         }, 0);
       });
@@ -10649,26 +11328,140 @@ function loadShoppingItemEditorPage() {
       tagsInput.addEventListener('contextmenu', (event) =>
         handleVariantCellContextAction(event, index),
       );
-      tagsControl.appendChild(tagsInput);
-      tagsCell.addEventListener('click', (event) => {
-        if (event.defaultPrevented || event.ctrlKey) return;
-        if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
-          commitActiveVariantTagDraft({ clear: true });
+      tagsCell.addEventListener('mousedown', (event) => {
+        if (event.target === tagsInput) return;
+        if (event.ctrlKey || event.metaKey || Number(event.button) !== 0) return;
+        event.preventDefault();
+      });
+
+      const focusTagsInputInCurrentRow = () => {
+        try {
+          tagsInput.focus();
+          const caretIndex = tagsInput.value.length;
+          tagsInput.setSelectionRange(caretIndex, caretIndex);
+        } catch (_) {}
+      };
+
+      const tagPills = [];
+      const renderTagsInput = () => {
+        tagsControl.appendChild(tagsInputSlot);
+      };
+
+      committedTags.forEach((tag, tagIndex) => {
+        if (isEditingTags && tagIndex === inputInsertBeforeIndex) {
+          renderTagsInput();
         }
-        activeVariantTagEditorState = {
-          rowIndex: index,
-          draft:
+        const pill = document.createElement('span');
+        pill.className = 'recipe-tag-pill shopping-item-variant-tag-pill';
+        pill.textContent = tag;
+        pill.title = 'Ctrl-click to remove';
+        const removeTag = () => {
+          setActiveVariantTagEditorState(index, '', {
+            insertAfterTagIndex: tagIndex - 1,
+          });
+          variantRowsDraft[index].tags = normalizeRecipeTagList(
+            committedTags.filter(
+              (value) => String(value || '').toLowerCase() !== String(tag || '').toLowerCase(),
+            ),
+          );
+          syncVariantHiddenInput({ emit: true });
+          rerenderVariantTagsEditorWithFocus(index, {
+            suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+            reason: 'remove-tag',
+          });
+        };
+        pill.addEventListener('mousedown', (event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          beginVariantTagPillInteraction(index);
+        });
+        const handleTagPillModifierAction = async (event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          const interaction =
+            pendingVariantTagPillInteraction?.rowIndex === index
+              ? pendingVariantTagPillInteraction
+              : beginVariantTagPillInteraction(index);
+          if (interaction.handled) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          interaction.handled = true;
+          event.preventDefault();
+          event.stopPropagation();
+          const ok = await confirmShoppingVariantTagRemoval(tag);
+          if (pendingVariantTagPillInteraction === interaction) {
+            pendingVariantTagPillInteraction = null;
+          }
+          if (!ok) {
+            if (interaction.previousActiveRowIndex === index) {
+              focusTagsInputInCurrentRow();
+            } else if (interaction.previousActiveRowIndex >= 0) {
+              setActiveVariantTagEditorState(index, '', {
+                insertAfterTagIndex: tagIndex - 1,
+              });
+              rerenderVariantTagsEditorWithFocus(index, {
+                reason: 'cancel-remove-refocus',
+              });
+            }
+            return;
+          }
+          removeTag();
+        };
+        pill.addEventListener('click', (event) => {
+          if (event.ctrlKey || event.metaKey) {
+            void handleTagPillModifierAction(event);
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
+            commitActiveVariantTagDraft({ clear: true });
+          }
+          const rect = pill.getBoundingClientRect();
+          const midpoint = rect.left + rect.width / 2;
+          const insertAfterTagIndex = typeof event.clientX === 'number' && event.clientX < midpoint
+            ? tagIndex - 1
+            : tagIndex;
+          setActiveVariantTagEditorState(
+            index,
             Number(activeVariantTagEditorState?.rowIndex) === index
               ? String(activeVariantTagEditorState?.draft || '')
               : '',
-        };
-        renderVariantRows({
-          focusCell: {
-            rowIndex: index,
-            column: 'tags',
-            caretAtStart: false,
-            openTypeahead: true,
+            { insertAfterTagIndex },
+          );
+          rerenderVariantTagsEditorWithFocus(index, {
+            suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+            reason: 'pill-click-reposition',
+          });
+        });
+        pill.addEventListener('contextmenu', handleTagPillModifierAction);
+        tagPills.push(pill);
+        tagsControl.appendChild(pill);
+      });
+      if (isEditingTags && inputInsertBeforeIndex >= committedTags.length) {
+        renderTagsInput();
+      }
+      tagsCell.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+        if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
+          commitActiveVariantTagDraft({ clear: true });
+        }
+        setActiveVariantTagEditorState(
+          index,
+          Number(activeVariantTagEditorState?.rowIndex) === index
+            ? String(activeVariantTagEditorState?.draft || '')
+            : '',
+          {
+            insertAfterTagIndex: getVariantTagInsertAfterIndexForPoint(
+              tagPills,
+              event.clientX,
+              event.clientY,
+            ),
           },
+        );
+        rerenderVariantTagsEditorWithFocus(index, {
+          suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+          reason: 'tags-cell-click',
         });
       });
       tagsCell.addEventListener('contextmenu', (event) =>
@@ -10684,6 +11477,22 @@ function loadShoppingItemEditorPage() {
 
     variantRowsEl.appendChild(gridEl);
     applyPendingVariantCellFocus();
+  };
+  const rerenderVariantTagsEditorWithFocus = (
+    rowIndex,
+    { suppressBlurCleanup = false, reason = '' } = {},
+  ) => {
+    if (suppressBlurCleanup) {
+      suppressNextVariantTagBlurCleanup(rowIndex, reason);
+    }
+    renderVariantRows({
+      focusCell: {
+        rowIndex,
+        column: 'tags',
+        caretAtStart: false,
+        openTypeahead: true,
+      },
+    });
   };
 
   const setVariantRowsFromSerialized = (rawValue) => {
@@ -10876,6 +11685,53 @@ function loadShoppingItemEditorPage() {
           return false;
         }
       })();
+
+      const tagsTableExists = tableExists('tags');
+      if (hasVariantTable && tagsTableExists) {
+        const rowsForNewTagCheck = normalizeIngredientVariantRows(
+          normalizedVariantRows,
+          { fallbackBaseHome: normalizedBaseHomeLocation },
+        );
+        const variantTagNames = [];
+        const seenLower = new Set();
+        rowsForNewTagCheck.forEach((row) => {
+          normalizeRecipeTagList(row?.tags || []).forEach((tag) => {
+            const lower = String(tag || '').toLowerCase();
+            if (seenLower.has(lower)) return;
+            seenLower.add(lower);
+            variantTagNames.push(tag);
+          });
+        });
+        const missingTagNames = [];
+        variantTagNames.forEach((tagName) => {
+          try {
+            const q = db.exec(
+              `SELECT id FROM tags WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1;`,
+              [tagName],
+            );
+            if (q.length && q[0].values && q[0].values.length) return;
+            missingTagNames.push(tagName);
+          } catch (_) {}
+        });
+        if (missingTagNames.length > 0) {
+          const label =
+            missingTagNames.length === 1
+              ? 'This tag is new to your library:'
+              : 'These tags are new to your library:';
+          const list = missingTagNames.map((t) => `• ${t}`).join('\n');
+          const ok = await uiConfirm({
+            title: 'Create new tags?',
+            message: `${label}\n\n${list}\n\nSave will add them to Tags and assign them to variants.`,
+            confirmText: 'Save',
+            cancelText: 'Cancel',
+          });
+          if (!ok) {
+            const err = new Error('new variant tags not confirmed');
+            err.silent = true;
+            throw err;
+          }
+        }
+      }
 
       let currentId = Number.isFinite(id) ? id : null;
       const baseName = String(baselineTitle || '').trim();
@@ -11156,7 +12012,9 @@ function loadShoppingItemEditorPage() {
                WHERE lower(trim(name)) = lower(trim(?))
                LIMIT 1;`,
             );
-            insertTagStmt = db.prepare('INSERT INTO tags (name, sort_order) VALUES (?, ?);');
+            insertTagStmt = db.prepare(
+              'INSERT INTO tags (name, sort_order, intended_use) VALUES (?, ?, ?);',
+            );
             insertVariantTagStmt = db.prepare(
               `INSERT INTO ingredient_variant_tag_map
                  (ingredient_variant_id, tag_id, sort_order)
@@ -11234,7 +12092,7 @@ function loadShoppingItemEditorPage() {
                     findTagStmt.reset();
                   }
                   if (tagId == null) {
-                    insertTagStmt.run([tagName, nextTagSort++]);
+                    insertTagStmt.run([tagName, nextTagSort++, 'ingredients']);
                     const insertedTagQ = db.exec('SELECT last_insert_rowid();');
                     if (insertedTagQ.length && insertedTagQ[0].values.length) {
                       const insertedTagId = Number(insertedTagQ[0].values[0][0]);
@@ -11733,7 +12591,8 @@ function loadShoppingItemEditorPage() {
             initialValue: serializeIngredientVariantRows(baselineVariantRows, {
               fallbackBaseHome: baselineHome,
             }),
-            getValue: () => serializeIngredientVariantRows(variantRowsDraft),
+            getValue: () =>
+              serializeIngredientVariantRows(getVariantRowsDraftWithMergedActiveTagDraft()),
             setValue: (value) => {
               setVariantRowsFromSerialized(value);
             },
@@ -11828,12 +12687,21 @@ function loadShoppingItemEditorPage() {
         ],
         onSave: persistShoppingItem,
         extraDirtyState: {
-          isDirty: () =>
-            getVariantRowsSignature(variantRowsDraft) !==
-            variantRowsBaselineSignature,
+          isDirty: () => {
+            const draftText = String(activeVariantTagEditorState?.draft || '');
+            if (draftText.trim().length > 0) return true;
+            return (
+              getVariantRowsSignature(variantRowsDraft) !==
+              variantRowsBaselineSignature
+            );
+          },
           onAfterSaveSuccess: () => {
+            commitActiveVariantTagDraft({ clear: true, emit: false });
             variantRowsBaselineSignature =
               getVariantRowsSignature(variantRowsDraft);
+            try {
+              renderVariantRows();
+            } catch (_) {}
           },
         },
       });
@@ -12566,6 +13434,7 @@ async function loadTagsPage() {
       SELECT t.id,
              t.name,
              COALESCE(t.sort_order, 999999) AS sort_order,
+             COALESCE(NULLIF(lower(trim(t.intended_use)), ''), 'recipes') AS intended_use,
              EXISTS(
                SELECT 1
                FROM recipe_tag_map rtm
@@ -12581,16 +13450,25 @@ async function loadTagsPage() {
       ORDER BY sort_order, t.name COLLATE NOCASE;
     `);
     if (!q.length) return [];
-    return q[0].values.map(([id, name, sortOrder, hasRecipeUsage, hasIngredientUsage]) => ({
-      id: Number(id),
-      name: String(name || ''),
-      sortOrder: Number(sortOrder),
-      hasRecipeUsage: Number(hasRecipeUsage) === 1,
-      hasIngredientUsage: Number(hasIngredientUsage) === 1,
-    }));
+    return q[0].values.map(
+      ([id, name, sortOrder, intendedUse, hasRecipeUsage, hasIngredientUsage]) => ({
+        id: Number(id),
+        name: String(name || ''),
+        sortOrder: Number(sortOrder),
+        intendedUse: intendedUse === 'ingredients' ? 'ingredients' : 'recipes',
+        hasRecipeUsage: Number(hasRecipeUsage) === 1,
+        hasIngredientUsage: Number(hasIngredientUsage) === 1,
+      }),
+    );
   };
 
   let tagRows = queryTags();
+
+  const TAGS_COLLAPSE_KEYS = {
+    recipes: 'tags-section-recipes',
+    ingredients: 'tags-section-ingredients',
+  };
+  const collapsedTagsSections = new Set();
 
   const deleteTag = async (tag) => {
     if (!tag || !Number.isFinite(Number(tag.id))) return false;
@@ -12622,50 +13500,83 @@ async function loadTagsPage() {
       return;
     }
     setTopLevelEmptyStateLayoutMode(list, false);
-    const appendSection = (label, sectionRows) => {
+    const appendSection = (label, collapseKey, headerModifierClass, sectionRows) => {
+      const expanded = !collapsedTagsSections.has(collapseKey);
       const header = document.createElement('li');
-      header.className = 'list-section-label';
-      header.textContent = label;
+      header.className = `list-section-label ${headerModifierClass}`;
+      const toggleBtn = createSectionToggleButton({
+        label,
+        expanded,
+        onToggle: () => {
+        if (collapsedTagsSections.has(collapseKey)) {
+          collapsedTagsSections.delete(collapseKey);
+        } else {
+          collapsedTagsSections.add(collapseKey);
+        }
+        renderTags(applyTagSearchFilter(tagRows));
+        },
+      });
+      header.appendChild(toggleBtn);
       list.appendChild(header);
-      sectionRows.forEach((tag) => {
-        const li = document.createElement('li');
-        li.textContent = tag.name || '';
-        li.addEventListener('click', (event) => {
-          if (event.ctrlKey || event.metaKey) {
+      if (!expanded) return;
+      [...sectionRows]
+        .sort((a, b) =>
+          String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+            sensitivity: 'base',
+          }),
+        )
+        .forEach((tag) => {
+          const li = document.createElement('li');
+          li.textContent = tag.name || '';
+          li.addEventListener('click', (event) => {
+            if (event.ctrlKey || event.metaKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              void (async () => {
+                const ok = await deleteTag(tag);
+                if (!ok) return;
+                tagRows = queryTags();
+                renderTags(applyTagSearchFilter(tagRows));
+              })();
+              return;
+            }
+            sessionStorage.setItem('selectedTagId', String(tag.id));
+            sessionStorage.setItem('selectedTagName', tag.name || '');
+            sessionStorage.removeItem('selectedTagIsNew');
+            sessionStorage.removeItem('selectedTagUseFor');
+            window.location.href = 'tagEditor.html';
+          });
+          li.addEventListener('contextmenu', (event) => {
             event.preventDefault();
-            event.stopPropagation();
             void (async () => {
               const ok = await deleteTag(tag);
               if (!ok) return;
               tagRows = queryTags();
               renderTags(applyTagSearchFilter(tagRows));
             })();
-            return;
-          }
-          sessionStorage.setItem('selectedTagId', String(tag.id));
-          sessionStorage.setItem('selectedTagName', tag.name || '');
-          sessionStorage.removeItem('selectedTagIsNew');
-          window.location.href = 'tagEditor.html';
+          });
+          list.appendChild(li);
         });
-        li.addEventListener('contextmenu', (event) => {
-          event.preventDefault();
-          void (async () => {
-            const ok = await deleteTag(tag);
-            if (!ok) return;
-            tagRows = queryTags();
-            renderTags(applyTagSearchFilter(tagRows));
-          })();
-        });
-        list.appendChild(li);
-      });
     };
     appendSection(
       'Recipes',
-      items.filter((tag) => tag.hasRecipeUsage || !tag.hasIngredientUsage),
+      TAGS_COLLAPSE_KEYS.recipes,
+      'shopping-list-section--recipes',
+      items.filter(
+        (tag) =>
+          tag.hasRecipeUsage ||
+          (!tag.hasIngredientUsage && (tag.intendedUse || 'recipes') !== 'ingredients'),
+      ),
     );
     appendSection(
       'Ingredients',
-      items.filter((tag) => tag.hasIngredientUsage),
+      TAGS_COLLAPSE_KEYS.ingredients,
+      'tags-list-section--ingredients',
+      items.filter(
+        (tag) =>
+          tag.hasIngredientUsage ||
+          (!tag.hasRecipeUsage && (tag.intendedUse || 'recipes') === 'ingredients'),
+      ),
     );
     listNav?.syncAfterRender?.();
   }
@@ -12680,6 +13591,30 @@ async function loadTagsPage() {
 
   const openCreateTagDialog = async () => {
     if (!window.ui) return;
+    const findDuplicateTagIdByName = (rawName) => {
+      const candidate = String(rawName || '').trim();
+      if (!candidate) return null;
+      const stmt = db.prepare(`
+        SELECT id
+        FROM tags
+        WHERE lower(trim(name)) = lower(trim(?))
+        LIMIT 1;
+      `);
+      try {
+        stmt.bind([candidate]);
+        if (!stmt.step()) return null;
+        const row = stmt.get();
+        if (!Array.isArray(row) || !row.length) return null;
+        const id = Number(row[0]);
+        return Number.isFinite(id) && id > 0 ? id : null;
+      } catch (_) {
+        return null;
+      } finally {
+        try {
+          stmt.free();
+        } catch (_) {}
+      }
+    };
     const vals = await window.ui.form({
       title: 'New Tag',
       fields: [
@@ -12689,6 +13624,23 @@ async function loadTagsPage() {
           value: '',
           required: true,
           normalize: (v) => String(v || '').trim(),
+          validate: (nameVal) => {
+            const clipped = String(nameVal || '').trim().slice(0, 48).trim();
+            if (!clipped) return '';
+            const dupId = findDuplicateTagIdByName(clipped);
+            if (!Number.isFinite(dupId)) return '';
+            return `There is already a tag called "${clipped}". Please choose a unique name.`;
+          },
+        },
+        {
+          key: 'useFor',
+          label: 'Use for',
+          type: 'toggleGroup',
+          value: 'recipes',
+          options: [
+            { value: 'recipes', label: 'Recipes' },
+            { value: 'ingredients', label: 'Ingredients' },
+          ],
         },
       ],
       confirmText: 'Create',
@@ -12702,29 +13654,38 @@ async function loadTagsPage() {
     if (!vals) return;
     const name = String(vals.name || '').trim().slice(0, 48).trim();
     if (!name) return;
+    const useFor =
+      vals.useFor === 'ingredients' ? 'ingredients' : 'recipes';
     try {
       const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;');
       const nextSort =
         maxQ.length && maxQ[0].values.length
           ? Number(maxQ[0].values[0][0]) || 1
           : 1;
-      db.run('INSERT INTO tags (name, sort_order) VALUES (?, ?);', [name, nextSort]);
+      db.run('INSERT INTO tags (name, sort_order, intended_use) VALUES (?, ?, ?);', [
+        name,
+        nextSort,
+        useFor,
+      ]);
       const idQ = db.exec('SELECT last_insert_rowid();');
       const newId =
         idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
       await persistDb();
       if (Number.isFinite(newId) && newId > 0) {
-        sessionStorage.setItem('selectedTagId', String(newId));
-        sessionStorage.setItem('selectedTagName', name);
-        sessionStorage.setItem('selectedTagIsNew', '1');
-        window.location.href = 'tagEditor.html';
+        const sectionKey =
+          useFor === 'ingredients'
+            ? TAGS_COLLAPSE_KEYS.ingredients
+            : TAGS_COLLAPSE_KEYS.recipes;
+        collapsedTagsSections.delete(sectionKey);
+        tagRows = queryTags();
+        renderTags(applyTagSearchFilter(tagRows));
         return;
       }
       tagRows = queryTags();
       renderTags(applyTagSearchFilter(tagRows));
     } catch (err) {
       console.error('❌ Failed to create tag:', err);
-      uiToast('Failed to create tag. Name must be unique.');
+      uiToast('Failed to create tag. Please try again.');
     }
   };
 
@@ -12735,6 +13696,25 @@ async function loadTagsPage() {
   }
 
   renderTags(tagRows);
+}
+
+function navigateShoppingListToIngredient({ id, name }) {
+  const keys = window.favoriteEatsSessionKeys || {};
+  const ingId = Number(id);
+  const n = String(name || '').trim();
+  try {
+    if (Number.isFinite(ingId) && ingId > 0) {
+      sessionStorage.setItem(keys.shoppingNavTargetId, String(Math.trunc(ingId)));
+      sessionStorage.setItem(keys.shoppingNavTargetName, n);
+    } else if (n) {
+      sessionStorage.removeItem(keys.shoppingNavTargetId);
+      sessionStorage.setItem(keys.shoppingNavTargetName, n);
+    } else {
+      sessionStorage.removeItem(keys.shoppingNavTargetId);
+      sessionStorage.removeItem(keys.shoppingNavTargetName);
+    }
+  } catch (_) {}
+  window.location.href = 'shopping.html';
 }
 
 function loadTagEditorPage() {
@@ -12751,13 +13731,11 @@ function loadTagEditorPage() {
   initAppBar({ mode: 'editor', titleText: titleDisplay });
   view.innerHTML = `
     <h1 id="childEditorTitle" class="recipe-title">${titleDisplay || ''}</h1>
-    <div id="tagRecipesCard" class="you-will-need-card" aria-label="Recipes with this tag">
-      <h2 class="section-header">RECIPES</h2>
-      <div id="tagRecipesList"></div>
-    </div>
+    <div id="tagUsageCardMount"></div>
   `;
-  const recipesListEl = document.getElementById('tagRecipesList');
-  const renderRecipesForTag = (rows) => {
+  const usageMount = document.getElementById('tagUsageCardMount');
+
+  const renderRecipesForTag = (recipesListEl, rows) => {
     if (!recipesListEl) return;
     recipesListEl.innerHTML = '';
     const items = Array.isArray(rows) ? rows : [];
@@ -12792,49 +13770,159 @@ function loadTagEditorPage() {
       line.appendChild(link);
       recipesListEl.appendChild(line);
     });
-    if (!recipesListEl.children.length) renderRecipesForTag([]);
+    if (!recipesListEl.children.length) renderRecipesForTag(recipesListEl, []);
   };
-  const loadRecipesForTagCard = async () => {
-    if (!(Number.isFinite(tagId) && tagId > 0)) {
-      renderRecipesForTag([]);
+
+  const renderIngredientsForTag = (listEl, rows) => {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    const items = Array.isArray(rows) ? rows : [];
+    if (!items.length) {
+      const line = document.createElement('div');
+      line.className = 'ingredient-line';
+      const span = document.createElement('span');
+      span.className = 'placeholder-prompt';
+      span.textContent = 'No ingredients use this tag.';
+      line.appendChild(span);
+      listEl.appendChild(line);
       return;
     }
+    items.forEach((row) => {
+      const ingredientId = Number(row?.ingredientId);
+      const canonicalName = String(row?.ingredientName || '').trim();
+      const label = String(row?.label || '').trim();
+      if (!Number.isFinite(ingredientId) || ingredientId <= 0 || !label) return;
+      const line = document.createElement('div');
+      line.className = 'ingredient-line';
+      const link = document.createElement('a');
+      link.href = 'shopping.html';
+      link.textContent = label;
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        navigateShoppingListToIngredient({
+          id: ingredientId,
+          name: canonicalName || label,
+        });
+      });
+      line.appendChild(link);
+      listEl.appendChild(line);
+    });
+    if (!listEl.children.length) renderIngredientsForTag(listEl, []);
+  };
+
+  const loadTagUsageCard = async () => {
+    if (!usageMount) return;
     const isElectron = !!window.electronAPI;
     let db;
     try {
       if (isElectron) {
         const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
         const bytes = await window.electronAPI.loadDB(pathHint);
-        const Uints = new Uint8Array(bytes);
-        db = new SQL.Database(Uints);
+        db = new SQL.Database(new Uint8Array(bytes));
       } else {
         const stored = localStorage.getItem('favoriteEatsDb');
         if (!stored) throw new Error('No DB in localStorage.');
-        const Uints = new Uint8Array(JSON.parse(stored));
-        db = new SQL.Database(Uints);
+        db = new SQL.Database(new Uint8Array(JSON.parse(stored)));
       }
-      ensureRecipeTagsSchemaInMain(db);
-      ensureIngredientVariantTagsSchemaInMain(db);
-      const q = db.exec(`
-        SELECT DISTINCT r.ID, r.title
-        FROM recipe_tag_map m
-        JOIN recipes r ON r.ID = m.recipe_id
-        WHERE m.tag_id = ${Math.trunc(tagId)}
-        ORDER BY r.title COLLATE NOCASE;
-      `);
-      const rows = q.length
-        ? q[0].values.map(([id, title]) => ({
-            id: Number(id),
-            title: String(title || ''),
-          }))
-        : [];
-      renderRecipesForTag(rows);
     } catch (err) {
-      console.warn('⚠️ Failed to load recipes for tag card:', err);
-      renderRecipesForTag([]);
+      console.warn('⚠️ Failed to load DB for tag usage card:', err);
+      usageMount.innerHTML = `
+        <div id="tagRecipesCard" class="you-will-need-card" aria-label="Recipes with this tag">
+          <h2 class="section-header">RECIPES</h2>
+          <div id="tagRecipesList"></div>
+        </div>`;
+      renderRecipesForTag(document.getElementById('tagRecipesList'), []);
+      return;
     }
+
+    ensureRecipeTagsSchemaInMain(db);
+    ensureIngredientVariantTagsSchemaInMain(db);
+
+    let tagUseMode = 'recipes';
+    if (Number.isFinite(tagId) && tagId > 0) {
+      try {
+        const uq = db.exec(`
+          SELECT COALESCE(NULLIF(lower(trim(intended_use)), ''), 'recipes') AS u
+          FROM tags
+          WHERE id = ${Math.trunc(tagId)}
+          LIMIT 1;
+        `);
+        if (uq.length && uq[0].values && uq[0].values.length) {
+          const raw = String(uq[0].values[0][0] || 'recipes');
+          tagUseMode = raw === 'ingredients' ? 'ingredients' : 'recipes';
+        }
+      } catch (_) {}
+    }
+
+    if (tagUseMode === 'ingredients') {
+      usageMount.innerHTML = `
+        <div id="tagRecipesCard" class="you-will-need-card" aria-label="Ingredients with this tag">
+          <h2 class="section-header">INGREDIENTS</h2>
+          <div id="tagRecipesList"></div>
+        </div>`;
+      const listEl = document.getElementById('tagRecipesList');
+      let rows = [];
+      if (Number.isFinite(tagId) && tagId > 0) {
+        try {
+          const iq = db.exec(`
+            SELECT i.ID,
+                   i.name,
+                   iv.variant
+            FROM ingredient_variant_tag_map ivtm
+            JOIN ingredient_variants iv ON iv.id = ivtm.ingredient_variant_id
+            JOIN ingredients i ON i.ID = iv.ingredient_id
+            WHERE ivtm.tag_id = ${Math.trunc(tagId)}
+            ORDER BY i.name COLLATE NOCASE,
+                     lower(trim(COALESCE(iv.variant, ''))) COLLATE NOCASE;
+          `);
+          rows = iq.length
+            ? iq[0].values.map(([ingId, ingName, variant]) => {
+                const nameStr = String(ingName || '').trim();
+                const varStr = String(variant || '').trim();
+                return {
+                  ingredientId: Number(ingId),
+                  ingredientName: nameStr,
+                  label: getShoppingListIngredientLabel(nameStr, varStr),
+                };
+              })
+            : [];
+        } catch (err) {
+          console.warn('⚠️ Failed to load ingredients for tag card:', err);
+        }
+      }
+      renderIngredientsForTag(listEl, rows);
+      return;
+    }
+
+    usageMount.innerHTML = `
+      <div id="tagRecipesCard" class="you-will-need-card" aria-label="Recipes with this tag">
+        <h2 class="section-header">RECIPES</h2>
+        <div id="tagRecipesList"></div>
+      </div>`;
+    const recipesListEl = document.getElementById('tagRecipesList');
+    let recipeRows = [];
+    if (Number.isFinite(tagId) && tagId > 0) {
+      try {
+        const q = db.exec(`
+          SELECT DISTINCT r.ID, r.title
+          FROM recipe_tag_map m
+          JOIN recipes r ON r.ID = m.recipe_id
+          WHERE m.tag_id = ${Math.trunc(tagId)}
+          ORDER BY r.title COLLATE NOCASE;
+        `);
+        recipeRows = q.length
+          ? q[0].values.map(([id, title]) => ({
+              id: Number(id),
+              title: String(title || ''),
+            }))
+          : [];
+      } catch (err) {
+        console.warn('⚠️ Failed to load recipes for tag card:', err);
+      }
+    }
+    renderRecipesForTag(recipesListEl, recipeRows);
   };
-  void loadRecipesForTagCard();
+  void loadTagUsageCard();
 
   if (typeof waitForAppBarReady !== 'function') return;
   waitForAppBarReady().then(() => {
@@ -16953,6 +18041,41 @@ function getVisibleTagNamePool(db) {
   } catch (_) {
     return [];
   }
+}
+
+function getVisibleIngredientTagNamePool(db) {
+  if (!db) return [];
+  ensureRecipeTagsSchemaInMain(db);
+  ensureIngredientVariantTagsSchemaInMain(db);
+  try {
+    const q = db.exec(`
+      SELECT DISTINCT t.name
+      FROM tags t
+      WHERE t.name IS NOT NULL
+        AND trim(t.name) != ''
+        AND COALESCE(t.is_hidden, 0) = 0
+        AND (
+          COALESCE(NULLIF(lower(trim(t.intended_use)), ''), 'recipes') = 'ingredients'
+          OR EXISTS(
+            SELECT 1
+            FROM ingredient_variant_tag_map ivtm
+            WHERE ivtm.tag_id = t.id
+          )
+        )
+      ORDER BY t.name COLLATE NOCASE;
+    `);
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    return q[0].values
+      .map((row) => (Array.isArray(row) ? row[0] : null))
+      .map((v) => String(v || '').trim())
+      .filter((v) => v.length > 0);
+  } catch (_) {
+    return [];
+  }
+}
+
+function getVisibleVariantTagNamePool(db) {
+  return getVisibleIngredientTagNamePool(db);
 }
 
 function normalizeRecipeSizeNameList(rawSizes) {
