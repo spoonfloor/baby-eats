@@ -518,7 +518,28 @@ async function saveRecipeToDB() {
     persistRecipeTags(db, rid, recipe.tags);
     persistRecipeUnits(db, recipe);
 
-    // --- 2) Persist steps from the StepNode model ---
+    // --- 2) Persist steps from the canonical recipe model ---
+    if (typeof window.recipeEditorReconcileRecipeStepsAndStepNodes === 'function') {
+      window.recipeEditorReconcileRecipeStepsAndStepNodes(recipe);
+    }
+
+    const canonicalStepCount =
+      Array.isArray(recipe.sections)
+        ? recipe.sections.reduce((count, section) => {
+            const sectionSteps = Array.isArray(section?.steps) ? section.steps.length : 0;
+            return count + sectionSteps;
+          }, 0)
+        : Array.isArray(recipe.steps)
+        ? recipe.steps.length
+        : 0;
+
+    if (
+      canonicalStepCount > 0 &&
+      (!Array.isArray(window.stepNodes) || window.stepNodes.length === 0)
+    ) {
+      throw new Error('saveRecipeToDB: refusing to save empty stepNodes for non-empty recipe model');
+    }
+
     bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);
 
     // --- 3) Persist ingredients from the live model ---

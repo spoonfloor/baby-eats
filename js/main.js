@@ -18733,10 +18733,11 @@ async function loadRecipeEditorPage() {
   // - brand-new recipes (fresh from "Add")
   // - OR recipes that currently have no steps and no ingredients at all
   const hasAnySteps =
-    Array.isArray(recipe.sections) &&
-    recipe.sections.some(
-      (section) => Array.isArray(section.steps) && section.steps.length > 0,
-    );
+    (Array.isArray(recipe.sections) &&
+      recipe.sections.some(
+        (section) => Array.isArray(section.steps) && section.steps.length > 0,
+      )) ||
+    (Array.isArray(recipe.steps) && recipe.steps.length > 0);
 
   const hasAnyIngredients =
     Array.isArray(recipe.sections) &&
@@ -18746,11 +18747,12 @@ async function loadRecipeEditorPage() {
     );
 
   // 🔍 Decide seeding separately for steps vs ingredients.
-  // - Steps placeholder only for truly empty / brand-new recipes.
+  // - Steps placeholder any time there are zero steps so the editor can
+  //   recover from missing-instruction recipes without user action.
   // - Ingredient placeholder any time there are zero ingredients, even if steps exist
   //   (e.g., user edited title + saved but never added ingredients).
   const shouldSeedStepPlaceholder =
-    !isRecipeWebMode && (isNewRecipe || (!hasAnySteps && !hasAnyIngredients));
+    !isRecipeWebMode && (isNewRecipe || !hasAnySteps);
 
   const shouldSeedIngredientPlaceholder = !isRecipeWebMode && !hasAnyIngredients;
 
@@ -18775,7 +18777,7 @@ async function loadRecipeEditorPage() {
 
     const firstSection = recipe.sections[0];
 
-    // Ensure at least one placeholder step (new/empty recipes only)
+    // Ensure at least one placeholder step when a recipe has no steps at all.
     if (
       shouldSeedStepPlaceholder &&
       (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0)
@@ -18787,7 +18789,7 @@ async function loadRecipeEditorPage() {
           id: tempId,
           section_id: firstSection.ID ?? firstSection.id ?? null,
           step_number: 1,
-          instructions: 'Add a step.',
+          instructions: '',
           type: 'step',
         },
       ];

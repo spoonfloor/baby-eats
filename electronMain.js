@@ -17,7 +17,7 @@ let APP_CONFIG = {
   googleDocsAuth: null,
 };
 
-const MAX_BACKUPS = 8;
+const MAX_BACKUPS = 20;
 
 // --- Backup helpers ---
 

@@ -2173,14 +2173,65 @@ window.recipeEditorInsertIngredientHeadingAt = (sectionRef, index) => {
 window.recipeEditorRerenderIngredientsFromModel =
   rerenderIngredientsSectionFromModel;
 
-// --- Main render function (bridge edition: safe, data-driven, backward compatible) ---
+function ensureRecipeHasEditableStep(recipe) {
+  if (!recipe || isRecipeWebModeActive()) return;
 
-function renderRecipe(recipe) {
-  // --- Canonical model: sections[*].steps is the source of truth.
-  // recipe.steps is a derived, render-only view.
+  const hasAnySectionSteps =
+    Array.isArray(recipe.sections) &&
+    recipe.sections.some(
+      (section) => Array.isArray(section.steps) && section.steps.length > 0
+    );
+  const hasAnyLegacySteps =
+    Array.isArray(recipe.steps) && recipe.steps.length > 0;
+
+  if (hasAnySectionSteps || hasAnyLegacySteps) return;
+
+  if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
+    recipe.sections = [
+      {
+        ID: null,
+        id: null,
+        name: '',
+        steps: [],
+        ingredients: [],
+      },
+    ];
+  }
+
+  const firstSection = recipe.sections[0];
+  if (!Array.isArray(firstSection.steps)) {
+    firstSection.steps = [];
+  }
+
+  const tempId = `tmp-step-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  firstSection.steps = [
+    {
+      ID: null,
+      id: tempId,
+      section_id: firstSection.ID ?? firstSection.id ?? null,
+      step_number: 1,
+      instructions: '',
+      type: 'step',
+    },
+  ];
+}
+
+function reconcileRecipeStepsAndStepNodes(recipe) {
+  if (!recipe) return;
+
+  const stepNodeModelRef =
+    window.StepNodeModel && typeof window.StepNodeModel === 'object'
+      ? window.StepNodeModel
+      : null;
+  const fromFlat =
+    stepNodeModelRef &&
+    typeof stepNodeModelRef.fromFlatStepsArray === 'function'
+      ? (steps) => stepNodeModelRef.fromFlatStepsArray(steps)
+      : null;
+
+  let canonicalSteps = [];
+
   if (Array.isArray(recipe.sections)) {
-    let allSectionSteps = [];
-
     recipe.sections.forEach((section, index) => {
       if (!Array.isArray(section.steps) || section.steps.length === 0) return;
 
@@ -2192,48 +2243,43 @@ function renderRecipe(recipe) {
         _section_sort: sectionSort,
       }));
 
-      allSectionSteps = allSectionSteps.concat(tagged);
+      canonicalSteps = canonicalSteps.concat(tagged);
+    });
+  }
+
+  if (canonicalSteps.length > 0) {
+    const normalizedSteps = canonicalSteps.sort((a, b) => {
+      if (a._section_sort !== b._section_sort) {
+        return a._section_sort - b._section_sort;
+      }
+      return (a.step_number ?? 0) - (b.step_number ?? 0);
     });
 
-    if (allSectionSteps.length > 0) {
-      const normalizedSteps = allSectionSteps.sort((a, b) => {
-        if (a._section_sort !== b._section_sort) {
-          return a._section_sort - b._section_sort;
-        }
-        return (a.step_number ?? 0) - (b.step_number ?? 0);
-      });
+    recipe.steps = normalizedSteps.map((s) => ({
+      id: s.ID || s.id,
+      instructions: s.instructions,
+      step_number: s.step_number,
+      type: s.type || 'step',
+    }));
 
-      recipe.steps = normalizedSteps.map((s) => ({
-        id: s.ID || s.id,
-        instructions: s.instructions,
-        step_number: s.step_number,
-        type: s.type || 'step',
-      }));
-
-      // Phase 1 — Load adapter: DB/bridge → StepNode model.
-      if (
-        window.StepNodeModel &&
-        typeof StepNodeModel.fromFlatStepsArray === 'function'
-      ) {
-        window.stepNodes = StepNodeModel.fromFlatStepsArray(recipe.steps);
-      }
-    } else {
-      console.warn(
-        '⚠️ Bridge: no section with steps found, rendering fallback view'
-      );
-    }
+    window.stepNodes = fromFlat ? fromFlat(recipe.steps) : [];
+    return;
   }
 
-  // Fallback: if we have flat steps but no StepNodes yet, build them now.
-  if (
-    (!Array.isArray(window.stepNodes) || window.stepNodes.length === 0) &&
-    Array.isArray(recipe.steps) &&
-    recipe.steps.length > 0 &&
-    window.StepNodeModel &&
-    typeof StepNodeModel.fromFlatStepsArray === 'function'
-  ) {
-    window.stepNodes = StepNodeModel.fromFlatStepsArray(recipe.steps);
-  }
+  const legacyFlatSteps = Array.isArray(recipe.steps) ? recipe.steps.slice() : [];
+  recipe.steps = legacyFlatSteps;
+  window.stepNodes =
+    legacyFlatSteps.length > 0 && fromFlat ? fromFlat(legacyFlatSteps) : [];
+}
+
+window.recipeEditorReconcileRecipeStepsAndStepNodes =
+  reconcileRecipeStepsAndStepNodes;
+
+// --- Main render function (bridge edition: safe, data-driven, backward compatible) ---
+
+function renderRecipe(recipe) {
+  ensureRecipeHasEditableStep(recipe);
+  reconcileRecipeStepsAndStepNodes(recipe);
 
   // Keep a deep copy for the live editing model (after normalization)
   window.recipeData = JSON.parse(JSON.stringify(recipe));
