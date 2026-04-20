@@ -49,6 +49,39 @@ function reserveBackupPath(historyDir, base, ext) {
   }
   throw new Error('Too many backups in the same second.');
 }
+function shouldMirrorDbToRepoAssets() {
+  return process.env.FAVORITE_EATS_MIRROR_ASSETS !== '0';
+}
+
+/**
+ * After a successful save to the user's DB, copy the file into `assets/favorite_eats.db`
+ * for the web bundle (default on). Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable.
+ * If the repo asset already exists and is not the same file as the active DB, it is moved
+ * to `assets/archive/` first.
+ */
+function mirrorDbToRepoAssets(sourcePath) {
+  if (!shouldMirrorDbToRepoAssets()) return;
+  if (!sourcePath || typeof sourcePath !== 'string') return;
+  try {
+    const dest = path.join(__dirname, 'assets', 'favorite_eats.db');
+    const resolvedSource = path.resolve(sourcePath);
+    const resolvedDest = path.resolve(dest);
+    if (resolvedSource === resolvedDest) {
+      return;
+    }
+    if (fs.existsSync(dest)) {
+      const archiveDir = path.join(__dirname, 'assets', 'archive');
+      fs.mkdirSync(archiveDir, { recursive: true });
+      const ext = path.extname(dest) || '.db';
+      const archivePath = reserveBackupPath(archiveDir, 'favorite_eats', ext);
+      fs.renameSync(dest, archivePath);
+    }
+    fs.copyFileSync(resolvedSource, resolvedDest);
+  } catch (err) {
+    console.warn('⚠️ mirror DB to assets failed:', err.message);
+  }
+}
+
 function pruneBackups(historyDir, keepCount = MAX_BACKUPS) {
   try {
     if (!fs.existsSync(historyDir)) return;
@@ -197,6 +230,7 @@ ipcMain.handle(
       const tmp = `${targetPath}.tmp`;
       fs.writeFileSync(tmp, buffer);
       fs.renameSync(tmp, targetPath);
+      mirrorDbToRepoAssets(targetPath);
       return true;
     } catch (err) {
       console.error('❌ Save failed:', err);

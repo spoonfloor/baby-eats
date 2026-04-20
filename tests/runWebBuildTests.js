@@ -59,6 +59,11 @@ function run() {
     'Web build should not copy the Electron entry point.',
   );
 
+  assert(
+    fs.existsSync(path.join(outputRoot, 'assets', 'favorite_eats.db')),
+    'Web build should include the bundled SQLite database under assets/.',
+  );
+
   console.log('Web build tests passed.');
 }
 

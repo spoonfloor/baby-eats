@@ -3557,6 +3557,28 @@ initSqlJs({
 const loadDbBtn = document.getElementById('loadDbBtn');
 const dbLoader = document.getElementById('dbLoader');
 
+const BUNDLED_FAVORITE_EATS_DB_PATH = 'assets/favorite_eats.db';
+
+function bundledFavoriteEatsDbUrl() {
+  try {
+    return new URL(BUNDLED_FAVORITE_EATS_DB_PATH, window.location.href).href;
+  } catch (_) {
+    return BUNDLED_FAVORITE_EATS_DB_PATH;
+  }
+}
+
+async function fetchBundledFavoriteEatsDbBytes() {
+  const res = await fetch(bundledFavoriteEatsDbUrl(), { cache: 'no-store' });
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  if (!buf || buf.byteLength < 100) return null;
+  return new Uint8Array(buf);
+}
+
+function persistFavoriteEatsDbBytesForWeb(uints) {
+  localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(uints)));
+}
+
 // 🔑 Pressing Enter on the welcome screen behaves like clicking "Load Recipes"
 if (document.body.classList.contains('welcome-page')) {
   document.addEventListener('keydown', (e) => {
@@ -3596,7 +3618,22 @@ if (loadDbBtn && dbLoader) {
         uiToast('Failed to load database — check console for details.');
       }
     } else {
-      // --- Browser fallback flow (no Electron) ---
+      // --- Browser: use cached copy, else bundled asset, else file picker ---
+      if (localStorage.getItem('favoriteEatsDb')) {
+        window.location.href = 'recipes.html';
+        return;
+      }
+      try {
+        const bytes = await fetchBundledFavoriteEatsDbBytes();
+        if (bytes) {
+          persistFavoriteEatsDbBytesForWeb(bytes);
+          window.location.href = 'recipes.html';
+          return;
+        }
+      } catch (err) {
+        console.warn('Bundled DB fetch failed:', err);
+      }
+      uiToast('Could not load the default database — choose a file…');
       dbLoader.click();
     }
   });
@@ -3607,11 +3644,26 @@ if (loadDbBtn && dbLoader) {
     const reader = new FileReader();
     reader.onload = () => {
       const Uints = new Uint8Array(reader.result);
-      localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(Uints)));
+      persistFavoriteEatsDbBytesForWeb(Uints);
       window.location.href = 'recipes.html';
     };
     reader.readAsArrayBuffer(file);
   });
+
+  // Public web build: if nothing is cached yet, try the bundled DB immediately (no click).
+  if (FAVORITE_EATS_BUILD.target === 'web') {
+    void (async () => {
+      try {
+        if (localStorage.getItem('favoriteEatsDb')) return;
+        const bytes = await fetchBundledFavoriteEatsDbBytes();
+        if (!bytes) return;
+        persistFavoriteEatsDbBytesForWeb(bytes);
+        window.location.href = 'recipes.html';
+      } catch (_) {
+        /* Stay on welcome; user can use Load Recipes. */
+      }
+    })();
+  }
 }
 
 // Recipes page logic
@@ -18821,7 +18873,7 @@ async function loadRecipeEditorPage() {
   initAppBar({
     mode: 'editor',
     titleText: recipe.title || '',
-    showCancel: isRecipeWebMode,
+    showCancel: true,
     showSave: !isRecipeWebMode,
     cancelText: isRecipeWebMode ? 'Reset servings' : 'Cancel',
     onBack: () => {

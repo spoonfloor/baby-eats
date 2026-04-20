@@ -11,25 +11,27 @@
   /* --- Colors: theme + surfaces + roles --- */
   /* Canonical palette sets: keep live theme vars below pointing at these so
      force-web-mode can swap one cluster of aliases instead of touching component CSS. */
-  --theme-primary-rgb-normal: 109 73 255;
-  --theme-primary-normal: #6d49ff;
-  --theme-secondary-rgb-normal: 127 92 255;
-  --theme-secondary-normal: #7f5cff;
-  --button-primary-hover-normal: #6d49ff;
-  --theme-light-normal: hsl(252, 100%, 96%);
-  --theme-light-hex-normal: #f1edfd;
-  --theme-secondary-muted-normal: hsl(252, 63%, 78%);
-  --placeholder-muted-normal: hsla(252, 100%, 37%, 0.5);
+  /* Desktop (Electron default): red accent */
+  --theme-primary-rgb-normal: 220 38 38;
+  --theme-primary-normal: #dc2626;
+  --theme-secondary-rgb-normal: 239 68 68;
+  --theme-secondary-normal: #ef4444;
+  --button-primary-hover-normal: #b91c1c;
+  --theme-light-normal: hsl(0, 100%, 97%);
+  --theme-light-hex-normal: #fef2f2;
+  --theme-secondary-muted-normal: hsl(0, 63%, 78%);
+  --placeholder-muted-normal: hsla(0, 72%, 35%, 0.5);
 
-  --theme-primary-rgb-debug: 22 163 74;
-  --theme-primary-debug: #16a34a;
-  --theme-secondary-rgb-debug: 34 197 94;
-  --theme-secondary-debug: #22c55e;
-  --button-primary-hover-debug: #15803d;
-  --theme-light-debug: hsl(142, 76%, 97%);
-  --theme-light-hex-debug: #f0fdf4;
-  --theme-secondary-muted-debug: hsl(142, 45%, 78%);
-  --placeholder-muted-debug: hsla(142, 55%, 35%, 0.5);
+  /* Web / force-web-mode: purple accent (legacy desktop look) */
+  --theme-primary-rgb-debug: 109 73 255;
+  --theme-primary-debug: #6d49ff;
+  --theme-secondary-rgb-debug: 127 92 255;
+  --theme-secondary-debug: #7f5cff;
+  --button-primary-hover-debug: #6d49ff;
+  --theme-light-debug: hsl(252, 100%, 96%);
+  --theme-light-hex-debug: #f1edfd;
+  --theme-secondary-muted-debug: hsl(252, 63%, 78%);
+  --placeholder-muted-debug: hsla(252, 100%, 37%, 0.5);
 
   --theme-primary-rgb: var(--theme-primary-rgb-normal);
   --theme-primary: var(--theme-primary-normal);
