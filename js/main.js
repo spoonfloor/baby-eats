@@ -262,8 +262,17 @@ function isModalOpen() {
   return !!document.querySelector('.modal:not(.hidden)');
 }
 
+const typeToAppBarSearchControllers = new WeakMap();
+const appBarSearchControllers = new WeakMap();
+
 function wireTypeToAppBarSearch(searchInput) {
   if (!(searchInput instanceof HTMLInputElement)) return;
+  const priorController = typeToAppBarSearchControllers.get(searchInput);
+  try {
+    priorController?.abort();
+  } catch (_) {}
+  const controller = new AbortController();
+  typeToAppBarSearchControllers.set(searchInput, controller);
 
   const onKeyDown = (e) => {
     if (!(e instanceof KeyboardEvent)) return;
@@ -292,6 +301,9 @@ function wireTypeToAppBarSearch(searchInput) {
       e.key +
       searchInput.value.slice(Math.max(start, end));
 
+    if (typeof setCompactWebAppBarSearchExpanded === 'function') {
+      setCompactWebAppBarSearchExpanded(true);
+    }
     searchInput.focus();
     searchInput.value = nextValue;
 
@@ -303,14 +315,24 @@ function wireTypeToAppBarSearch(searchInput) {
     searchInput.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
-  document.addEventListener('keydown', onKeyDown, true);
+  document.addEventListener('keydown', onKeyDown, {
+    capture: true,
+    signal: controller.signal,
+  });
 }
 
 function wireAppBarSearch(searchInput, options = {}) {
   if (!(searchInput instanceof HTMLInputElement)) return null;
+  const priorController = appBarSearchControllers.get(searchInput);
+  try {
+    priorController?.abort();
+  } catch (_) {}
+  const controller = new AbortController();
+  appBarSearchControllers.set(searchInput, controller);
 
   const {
     clearBtn = document.getElementById('appBarSearchClear'),
+    toggleBtn = document.getElementById('appBarSearchToggleBtn'),
     onQueryChange = null,
     normalizeQuery = (value) => String(value || '').trim(),
     enableTypeToSearch = true,
@@ -318,9 +340,36 @@ function wireAppBarSearch(searchInput, options = {}) {
 
   if (enableTypeToSearch) wireTypeToAppBarSearch(searchInput);
 
+  const isCompactExpanded = () =>
+    typeof isCompactWebAppBarSearchExpanded === 'function' &&
+    isCompactWebAppBarSearchExpanded();
+
+  const expandCompactSearch = () => {
+    if (typeof setCompactWebAppBarSearchExpanded === 'function') {
+      return !!setCompactWebAppBarSearchExpanded(true, { focusInput: true });
+    }
+    searchInput.focus();
+    return false;
+  };
+
+  const collapseCompactSearch = ({ restoreFocus = false } = {}) => {
+    if (typeof setCompactWebAppBarSearchExpanded === 'function') {
+      return !!setCompactWebAppBarSearchExpanded(false, { restoreFocus });
+    }
+    if (restoreFocus && toggleBtn instanceof HTMLButtonElement) {
+      toggleBtn.focus();
+    }
+    return false;
+  };
+
   const syncClearBtn = () => {
     if (!(clearBtn instanceof HTMLElement)) return;
-    clearBtn.style.display = searchInput.value ? 'inline' : 'none';
+    const compactExpanded = isCompactExpanded();
+    clearBtn.style.display = searchInput.value || compactExpanded ? 'inline' : 'none';
+    clearBtn.setAttribute(
+      'aria-label',
+      searchInput.value ? 'Clear search' : 'Close search',
+    );
   };
 
   const emitQueryChange = () => {
@@ -331,29 +380,93 @@ function wireAppBarSearch(searchInput, options = {}) {
   };
 
   syncClearBtn();
-  searchInput.addEventListener('input', emitQueryChange);
+  searchInput.addEventListener('input', emitQueryChange, {
+    signal: controller.signal,
+  });
 
-  if (clearBtn instanceof HTMLElement) {
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      emitQueryChange();
-      searchInput.focus();
-    });
+  if (toggleBtn instanceof HTMLButtonElement) {
+    toggleBtn.addEventListener(
+      'click',
+      () => {
+        expandCompactSearch();
+        syncClearBtn();
+      },
+      { signal: controller.signal },
+    );
   }
 
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      searchInput.blur();
-    }
-  });
+  if (clearBtn instanceof HTMLElement) {
+    clearBtn.addEventListener(
+      'click',
+      () => {
+        if (searchInput.value) {
+          searchInput.value = '';
+          emitQueryChange();
+          searchInput.focus();
+          return;
+        }
+        collapseCompactSearch({ restoreFocus: true });
+        syncClearBtn();
+      },
+      { signal: controller.signal },
+    );
+  }
+
+  searchInput.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isCompactExpanded()) {
+          collapseCompactSearch({ restoreFocus: true });
+          syncClearBtn();
+        } else {
+          searchInput.blur();
+        }
+      }
+    },
+    { signal: controller.signal },
+  );
+
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!isCompactExpanded()) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target) return;
+      if (target.closest('.app-bar-wrapper')) return;
+      collapseCompactSearch();
+      syncClearBtn();
+    },
+    {
+      capture: true,
+      signal: controller.signal,
+    },
+  );
+
+  window.addEventListener(
+    'resize',
+    () => {
+      if (
+        typeof isCompactWebAppBarModeActive === 'function' &&
+        !isCompactWebAppBarModeActive()
+      ) {
+        collapseCompactSearch();
+      }
+      syncClearBtn();
+    },
+    { signal: controller.signal },
+  );
 
   return {
     clearBtn,
+    toggleBtn,
     syncClearBtn,
     emitQueryChange,
+    expandCompactSearch,
+    collapseCompactSearch,
   };
 }
 
@@ -3644,7 +3757,8 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
       'pointerdown',
       (e) => {
         if (selectedIdx < 0) return;
-        if (e.target instanceof Node && listEl.contains(e.target)) return;
+        const targetRow = e.target?.closest?.('li');
+        if (targetRow && listEl.contains(targetRow)) return;
         clearSelection();
       },
       { capture: true },

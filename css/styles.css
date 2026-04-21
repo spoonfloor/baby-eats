@@ -3223,6 +3223,10 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   background: transparent;
 }
 
+.app-bar-wrapper .actions .app-bar-search-toggle {
+  display: none;
+}
+
 .app-bar-wrapper .title-and-back {
   flex: 0 1 auto;
   min-width: 0; /* allow title to shrink + ellipsis instead of forcing wrap */
@@ -3309,9 +3313,13 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   transform: translateY(-50%);
   cursor: pointer;
   font-size: 24px;
+  line-height: 1;
   color: var(--theme-secondary-muted);
   user-select: none;
   display: none; /* hidden by default */
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .clear-search:hover {
@@ -4354,6 +4362,28 @@ body.ingredient-master-link-mode
   .app-bar-wrapper {
     padding-left: 10px;
     padding-right: 14px;
+  }
+
+  .app-bar-wrapper .actions .app-bar-search-toggle {
+    display: inline-flex;
+  }
+
+  .app-bar-wrapper .app-bar-search-layer {
+    display: none;
+    flex: 0 1 auto;
+  }
+
+  .app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer {
+    display: flex;
+    flex: 1 1 auto;
+  }
+
+  .app-bar-wrapper.app-bar-search-expanded #appBarTitle {
+    display: none;
+  }
+
+  .app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer .search-bar {
+    max-width: none;
   }
 
   /* YWN: full-bleed strip — square corners, theme light purple surface */

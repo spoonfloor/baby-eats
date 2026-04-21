@@ -365,6 +365,7 @@ function ensureAppBarInjected() {
 }
 
 const COMPACT_WEB_APP_BAR_MAX_WIDTH_PX = 500;
+const COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS = 'app-bar-search-expanded';
 const COMPACT_WEB_APP_BAR_ICON_BY_LABEL = {
   add: 'add',
   reset: 'restart_alt',
@@ -388,6 +389,75 @@ function isCompactWebAppBarModeActive() {
     ).matches;
   }
   return Number(window.innerWidth || 0) <= COMPACT_WEB_APP_BAR_MAX_WIDTH_PX;
+}
+
+function getCompactWebAppBarSearchElements() {
+  return {
+    wrapper: document.querySelector('.app-bar-wrapper'),
+    searchLayer: document.getElementById('appBarSearchLayer'),
+    searchInput: document.getElementById('appBarSearchInput'),
+    searchToggleBtn: document.getElementById('appBarSearchToggleBtn'),
+    titleEl: document.getElementById('appBarTitle'),
+  };
+}
+
+function isCompactWebAppBarSearchExpanded() {
+  const { wrapper } = getCompactWebAppBarSearchElements();
+  return !!wrapper?.classList?.contains(COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS);
+}
+
+function setCompactWebAppBarSearchExpanded(expanded, options = {}) {
+  const { focusInput = false, restoreFocus = false } = options;
+  const { wrapper, searchLayer, searchInput, searchToggleBtn, titleEl } =
+    getCompactWebAppBarSearchElements();
+  if (!(wrapper instanceof HTMLElement)) return false;
+
+  const searchToggleVisible =
+    searchToggleBtn instanceof HTMLButtonElement &&
+    searchToggleBtn.style.display !== 'none';
+  const searchLayerVisible =
+    searchLayer instanceof HTMLElement && searchLayer.style.display !== 'none';
+  const nextExpanded =
+    !!expanded &&
+    isCompactWebAppBarModeActive() &&
+    searchToggleVisible &&
+    searchLayerVisible;
+
+  wrapper.classList.toggle(COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS, nextExpanded);
+
+  if (searchToggleBtn instanceof HTMLButtonElement) {
+    searchToggleBtn.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+  }
+
+  if (titleEl instanceof HTMLElement) {
+    if (nextExpanded) {
+      titleEl.setAttribute('aria-hidden', 'true');
+    } else {
+      titleEl.removeAttribute('aria-hidden');
+    }
+  }
+
+  if (nextExpanded && focusInput && searchInput instanceof HTMLInputElement) {
+    window.requestAnimationFrame(() => {
+      try {
+        searchInput.focus();
+        const caret = String(searchInput.value || '').length;
+        searchInput.setSelectionRange(caret, caret);
+      } catch (_) {}
+    });
+  } else if (
+    !nextExpanded &&
+    restoreFocus &&
+    searchToggleBtn instanceof HTMLButtonElement
+  ) {
+    window.requestAnimationFrame(() => {
+      try {
+        searchToggleBtn.focus();
+      } catch (_) {}
+    });
+  }
+
+  return nextExpanded;
 }
 
 function getCompactWebAppBarIconLabel(buttonEl) {
@@ -454,6 +524,9 @@ function syncCompactWebAppBarActionIcons() {
         buttonEl.removeAttribute('title');
       }
     });
+    if (!compactModeActive) {
+      setCompactWebAppBarSearchExpanded(false);
+    }
   } finally {
     appBarActionIconSyncing = false;
   }
@@ -544,6 +617,7 @@ function initAppBar(options = {}) {
   const backBtn = document.getElementById('appBarBackBtn');
 
   const addBtn = document.getElementById('appBarAddBtn');
+  const searchToggleBtn = document.getElementById('appBarSearchToggleBtn');
 
   const cancelBtn = document.getElementById('appBarCancelBtn');
   const saveBtn = document.getElementById('appBarSaveBtn');
@@ -593,6 +667,7 @@ function initAppBar(options = {}) {
     if (menuBtn) menuBtn.style.display = '';
     if (backBtn) backBtn.style.display = 'none';
     if (searchLayer) searchLayer.style.display = showSearch ? '' : 'none';
+    if (searchToggleBtn) searchToggleBtn.style.display = showSearch ? '' : 'none';
 
     if (addBtn) addBtn.style.display = showAdd ? '' : 'none';
     if (cancelBtn) cancelBtn.style.display = 'none';
@@ -601,6 +676,7 @@ function initAppBar(options = {}) {
     if (menuBtn) menuBtn.style.display = 'none';
     if (backBtn) backBtn.style.display = '';
     if (searchLayer) searchLayer.style.display = 'none';
+    if (searchToggleBtn) searchToggleBtn.style.display = 'none';
 
     if (addBtn) addBtn.style.display = 'none';
     if (cancelBtn) {
@@ -616,6 +692,9 @@ function initAppBar(options = {}) {
   }
 
   // Search layout is handled by CSS (flex middle column) to avoid collisions.
+  setCompactWebAppBarSearchExpanded(
+    mode === 'list' && showSearch && isCompactWebAppBarSearchExpanded(),
+  );
   ensureCompactWebAppBarActionSync();
 }
 
