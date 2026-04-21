@@ -11,7 +11,7 @@
   /* --- Colors: theme + surfaces + roles --- */
   /* Canonical palette sets: keep live theme vars below pointing at these so
      force-web-mode can swap one cluster of aliases instead of touching component CSS. */
-  /* Desktop (Electron default): red accent */
+  /* Alternate red accent (not the default UI theme) */
   --theme-primary-rgb-normal: 220 38 38;
   --theme-primary-normal: #dc2626;
   --theme-secondary-rgb-normal: 239 68 68;
@@ -22,7 +22,7 @@
   --theme-secondary-muted-normal: hsl(0, 63%, 78%);
   --placeholder-muted-normal: hsla(0, 72%, 35%, 0.5);
 
-  /* Web / force-web-mode: purple accent (legacy desktop look) */
+  /* Default desktop + web / force-web-mode: purple accent */
   --theme-primary-rgb-debug: 109 73 255;
   --theme-primary-debug: #6d49ff;
   --theme-secondary-rgb-debug: 127 92 255;
@@ -33,21 +33,21 @@
   --theme-secondary-muted-debug: hsl(252, 63%, 78%);
   --placeholder-muted-debug: hsla(252, 100%, 37%, 0.5);
 
-  --theme-primary-rgb: var(--theme-primary-rgb-normal);
-  --theme-primary: var(--theme-primary-normal);
-  --theme-secondary-rgb: var(--theme-secondary-rgb-normal);
-  --theme-secondary: var(--theme-secondary-normal);
-  --button-primary-hover: var(--button-primary-hover-normal);
+  --theme-primary-rgb: var(--theme-primary-rgb-debug);
+  --theme-primary: var(--theme-primary-debug);
+  --theme-secondary-rgb: var(--theme-secondary-rgb-debug);
+  --theme-secondary: var(--theme-secondary-debug);
+  --button-primary-hover: var(--button-primary-hover-debug);
   --theme-primary-transparent: rgb(var(--theme-primary-rgb) / 0.125);
 
-  --theme-light: var(--theme-light-normal);
-  --theme-light-hex: var(--theme-light-hex-normal);
-  --theme-secondary-muted: var(--theme-secondary-muted-normal);
+  --theme-light: var(--theme-light-debug);
+  --theme-light-hex: var(--theme-light-hex-debug);
+  --theme-secondary-muted: var(--theme-secondary-muted-debug);
 
   --font-color-near-black: #191919;
   --subtitle: #333333;
   /* --placeholder-muted: #533d8c; */
-  --placeholder-muted: var(--placeholder-muted-normal);
+  --placeholder-muted: var(--placeholder-muted-debug);
 
   --pill-bg: var(--theme-light-hex);
   --pill-fg: var(--theme-primary);
@@ -63,6 +63,8 @@
   --page-top-gap: 48px;
   --top-filter-chip-page-top-gap: 64px;
   --top-level-list-edge-gap: 32px;
+  --list-page-gutter-left: 12px;
+  --list-page-gutter-right: 12px;
   --top-level-list-row-padding-y: 0.5rem;
   --top-level-list-row-padding-x: 0.75rem;
 
@@ -150,6 +152,7 @@
   --servings-col-default: 6rem;
   --servings-col-min: 5rem;
   --servings-col-max: 5rem;
+  --recipe-list-servings-slot-width: 108px;
 
   /* --- Pill sizing pipeline --- */
   --pill-height: 28px;
@@ -174,6 +177,9 @@
   --app-filter-chip-padding-x: 20px;
   --app-filter-chip-rail-padding-inline: 20px;
   --app-filter-chip-rail-padding-block: 1px;
+  --list-filter-chip-leading-inset: var(--app-filter-chip-rail-padding-inline);
+  --list-filter-chip-trailing-inset: var(--app-filter-chip-rail-padding-inline);
+  --list-filter-chip-gap: var(--app-filter-chip-gap);
   --top-filter-chip-rail-height: calc(
     var(--app-filter-chip-height) +
       (var(--app-filter-chip-rail-padding-block) * 2)
@@ -880,8 +886,8 @@ body.recipes-page #recipeList li[data-recipe-row-stepper-key] .recipe-list-title
 body.recipes-page
   #recipeList
   .recipe-list-servings-slot {
-  flex: 0 0 108px;
-  width: 108px;
+  flex: 0 0 var(--recipe-list-servings-slot-width);
+  width: var(--recipe-list-servings-slot-width);
   margin-left: auto;
   display: inline-flex;
   align-items: center;
@@ -2958,8 +2964,8 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 /* Unified list styling for Recipes, Shopping, Units, Stores */
 .list-view.list-page {
   /* Inset the list so hover pills keep rounded corners visible on narrow windows */
-  padding-left: 12px;
-  padding-right: 12px;
+  padding-left: var(--list-page-gutter-left);
+  padding-right: var(--list-page-gutter-right);
   box-sizing: border-box;
 }
 
@@ -3220,11 +3226,13 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
 .list-filter-chip-track {
   display: inline-flex;
   align-items: center;
-  gap: var(--app-filter-chip-gap);
+  gap: var(--list-filter-chip-gap);
   min-width: 100%;
   white-space: nowrap;
-  padding: var(--app-filter-chip-rail-padding-block)
-    var(--app-filter-chip-rail-padding-inline);
+  padding-top: var(--app-filter-chip-rail-padding-block);
+  padding-right: var(--list-filter-chip-trailing-inset);
+  padding-bottom: var(--app-filter-chip-rail-padding-block);
+  padding-left: var(--list-filter-chip-leading-inset);
   box-sizing: border-box;
 }
 
@@ -4221,14 +4229,14 @@ body.ingredient-master-link-mode
 /* --- Tier 2: Snug (≤ 500px) ---------------------------------------- */
 @media (max-width: 500px) {
   :root {
+    --list-page-gutter-left: 10px;
+    --list-page-gutter-right: 4px;
+    --list-filter-chip-leading-inset: 15px;
+    --list-filter-chip-gap: 9px;
+    --recipe-list-servings-slot-width: 96px;
     --shopping-filter-chip-padding-x: 10px;
     --shopping-filter-chip-gap: 6px;
     --top-level-list-row-padding-x: 0.5rem;
-  }
-
-  .list-view.list-page {
-    padding-left: 6px;
-    padding-right: 6px;
   }
 
   .app-bar-wrapper {
@@ -4243,11 +4251,6 @@ body.ingredient-master-link-mode
     --shopping-filter-chip-padding-x: 8px;
     --app-bar-gap: 8px;
     --top-level-list-row-padding-x: 0.4rem;
-  }
-
-  .list-view.list-page {
-    padding-left: 2px;
-    padding-right: 2px;
   }
 
   body:not(.shopping-list-page) .list-page li {
@@ -4266,11 +4269,6 @@ body.ingredient-master-link-mode
     --shopping-filter-chip-gap: 4px;
     --shopping-filter-chip-padding-x: 6px;
     --top-level-list-row-padding-x: 0.35rem;
-  }
-
-  .list-view.list-page {
-    padding-left: 0;
-    padding-right: 0;
   }
 
   body:not(.shopping-list-page) .list-page li {
