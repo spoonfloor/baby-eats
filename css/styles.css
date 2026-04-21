@@ -73,7 +73,7 @@
 
   --section-label-color: rgba(0, 0, 0, 0.55);
   /* Top-level empty-state tuning knobs */
-  --top-level-empty-font-size: 16px;
+  --top-level-empty-font-size: 15px;
   --top-level-empty-color: var(--section-label-color);
   --top-level-empty-text-transform: uppercase;
   --top-level-empty-paragraph-gap: 1.2rem;
@@ -329,6 +329,8 @@ body[data-force-web-mode='on'] {
 
 #loadDbBtn {
   background: var(--theme-primary);
+  /* Stable width when label changes (Load Recipes → Opening…) so .welcome-card doesn’t shrink */
+  min-width: calc(12ch + 3rem);
 }
 
 /* --- File Input --- */
@@ -927,8 +929,6 @@ body.recipes-page #recipeList .recipe-list-servings-header-label {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: right;
-  /* padding-right: 4px; */
-  padding-right: 10px;
 }
 
 /* Editor mode: servings stepper column is off; hide slot so titles use full width */
@@ -1181,12 +1181,77 @@ body.stores-page[data-force-web-mode='on']
   gap: 12px;
 }
 
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.stores-row-reorderable:not(.list-section-label) {
+  cursor: grab;
+}
+
 body.stores-page #storesList .shopping-list-row-label {
   display: block;
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+body.stores-page #storesList .shopping-list-row-handle {
+  display: none;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+  transition: none;
+  animation: none;
+}
+
+body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-handle {
+  display: inline-block;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 100,
+    'GRAD' 0,
+    'opsz' 24;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li:not(.stores-row-reorderable)
+  .shopping-list-row-handle {
+  display: none;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  .shopping-list-row-handle--dragging {
+  color: rgba(0, 0, 0, 0.56);
+  cursor: grabbing;
+  transition: none;
+  animation: none;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.store-row-dragging:not(.list-section-label) {
+  position: relative;
+  z-index: 1;
+  background-color: rgb(var(--theme-primary-rgb) / 0.16);
+  transition: none;
+  animation: none;
+  border-radius: 8px;
+  cursor: grabbing;
+}
+
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  li.store-row-dragging:not(.list-section-label):hover {
+  background-color: rgb(var(--theme-primary-rgb) / 0.16);
 }
 
 body.stores-page #storesList .shopping-list-row-icon {
@@ -1223,7 +1288,7 @@ body.stores-page[data-force-web-mode='on']
 body.stores-page[data-force-web-mode='on']
   #storesList
   li.shopping-row-checked:not(.list-section-label) {
-  color: var(--theme-primary);
+  color: inherit;
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -1435,17 +1500,19 @@ body.stores-page[data-force-web-mode='on']
 body.stores-page[data-force-web-mode='on']
   #storesList
   li.is-selected:hover:not(.list-section-label) {
-  background-color: rgb(var(--theme-primary-rgb) / 0.24);
+  background-color: rgb(var(--theme-primary-rgb) / 0.16);
 }
 
-.list-view li:hover:not(.is-selected) {
-  background-color: hsl(270, 0%, 96%);
-}
+@media (hover: hover) and (pointer: fine) {
+  .list-view li:hover:not(.is-selected) {
+    background-color: hsl(270, 0%, 96%);
+  }
 
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li:hover:not(.is-selected):not(.list-section-label) {
-  background-color: hsl(270, 0%, 96%);
+  body.stores-page[data-force-web-mode='on']
+    #storesList
+    li:hover:not(.is-selected):not(.list-section-label):not(.store-row-dragging) {
+    background-color: hsl(270, 0%, 96%);
+  }
 }
 
 .list-view li.list-section-label {
@@ -3126,6 +3193,19 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   -webkit-tap-highlight-color: transparent;
 }
 
+.app-bar-wrapper .app-bar-icon-font.material-symbols-outlined {
+  font-size: var(--app-bar-chrome-icon-size);
+  line-height: 1;
+  color: #fff;
+  user-select: none;
+  pointer-events: none;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 100,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
 .app-bar-icon-button img.app-bar-icon {
   width: 24px;
   height: 24px;
@@ -3139,6 +3219,7 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
 }
 
 .app-bar-wrapper {
+  --app-bar-chrome-icon-size: 28px;
   position: fixed;
   background: var(--theme-primary);
   width: 100vw;
@@ -3167,10 +3248,30 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
 .app-bar-wrapper .actions {
   display: flex;
   align-items: center;
-  gap: var(--app-bar-gap);
+  gap: 2px;
   flex: 0 0 auto;
   white-space: nowrap; /* prevent Cancel/Save wrapping to a second line */
   margin-left: auto; /* keep actions pinned right on all pages */
+}
+
+.app-bar-wrapper .actions .button.app-bar-action-icon-only {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-bar-wrapper .actions .button.app-bar-action-icon-only:hover,
+.app-bar-wrapper .actions .button.app-bar-action-icon-only:focus,
+.app-bar-wrapper .actions .button.app-bar-action-icon-only:active {
+  background: transparent;
 }
 
 .app-bar-wrapper .title-and-back {
@@ -4301,11 +4402,18 @@ body.ingredient-master-link-mode
     --shopping-filter-chip-padding-x: 10px;
     --shopping-filter-chip-gap: 6px;
     --top-level-list-row-padding-x: 0.5rem;
+    --top-level-empty-font-size: 14px;
   }
 
   .app-bar-wrapper {
     padding-left: 10px;
     padding-right: 14px;
+  }
+
+  /* YWN: full-bleed strip — square corners, theme light purple surface */
+  .you-will-need-card {
+    border-radius: 0;
+    background: var(--theme-light);
   }
 }
 

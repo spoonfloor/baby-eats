@@ -359,36 +359,36 @@ function wireAppBarSearch(searchInput, options = {}) {
 
 const TOP_LEVEL_EMPTY_STATE_MESSAGES = Object.freeze({
   recipes: Object.freeze({
-    diagnosis: 'No recipes yet.',
-    cta: 'Add a recipe.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   shoppingItems: Object.freeze({
-    diagnosis: 'No shopping items yet.',
-    cta: 'Add a shopping item.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   shoppingList: Object.freeze({
-    diagnosis: 'No shopping list yet.',
-    cta: 'Select some shopping items or recipes.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   searchNoMatch: Object.freeze({
-    diagnosis: 'No matching items.',
-    cta: 'Try a different search.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   units: Object.freeze({
-    diagnosis: 'No units yet.',
-    cta: 'Add a unit.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   tags: Object.freeze({
-    diagnosis: 'No tags yet.',
-    cta: 'Add a tag.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   sizes: Object.freeze({
-    diagnosis: 'No sizes yet.',
-    cta: 'Add a size.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
   stores: Object.freeze({
-    diagnosis: 'No stores yet.',
-    cta: 'Add a store.',
+    diagnosis: 'Utter emptiness…',
+    cta: 'Complete bliss…',
   }),
 });
 
@@ -16241,10 +16241,8 @@ async function loadStoresPage() {
     });
     return orderedRows;
   };
-  const shouldUseStorePlanOrder = !isElectron;
-  if (shouldUseStorePlanOrder) {
-    storeRows = orderStoreRowsFromPlan(storeRows);
-  }
+  // Shopping-plan `storeOrder` (localStorage) on web and Electron — enables ⌘↑/⌘↓ reorder.
+  storeRows = orderStoreRowsFromPlan(storeRows);
   const getExistingStoreIds = () =>
     new Set(
       storeRows
@@ -16285,13 +16283,11 @@ async function loadStoresPage() {
     addBtn.setAttribute('aria-disabled', canReset ? 'false' : 'true');
   };
   const persistCurrentStoreOrder = () =>
-    shouldUseStorePlanOrder
-      ? setShoppingPlanStoreOrder(
-          storeRows
-            .map((row) => Math.trunc(Number(row?.id)))
-            .filter((storeId) => Number.isFinite(storeId) && storeId > 0),
-        )
-      : undefined;
+    setShoppingPlanStoreOrder(
+      storeRows
+        .map((row) => Math.trunc(Number(row?.id)))
+        .filter((storeId) => Number.isFinite(storeId) && storeId > 0),
+    );
   const persistCheckedStoreSelections = () =>
     setShoppingPlanSelectedStoreIds(
       Array.from(checkedStoreIds).filter((storeId) =>
@@ -16354,18 +16350,205 @@ async function loadStoresPage() {
     return true;
   };
 
+  let activeStoreDrag = null;
+  let suppressStoreListClickUntil = 0;
+
+  const getVisibleStoreIndexById = (storeId) =>
+    getFilteredStoreRows().findIndex(
+      (row) => Number(row?.id) === Number(storeId),
+    );
+
+  const isStoreReorderDragEnabled = () =>
+    isStoreWebSelectMode() && !searchQuery && getFilteredStoreRows().length > 1;
+
+  const isStoreRowDragExcludedTarget = (event, rowEl) => {
+    if (!(event instanceof PointerEvent) || !(rowEl instanceof HTMLElement)) {
+      return false;
+    }
+    const targetEl = event.target;
+    if (!(targetEl instanceof Element)) return false;
+    if (
+      targetEl.closest(
+        '.shopping-list-row-icon, button, a, input, label, textarea, select',
+      )
+    ) {
+      return true;
+    }
+    const rowRect = rowEl.getBoundingClientRect();
+    const checkboxExclusionPx = 48;
+    return rowRect.right - event.clientX <= checkboxExclusionPx;
+  };
+
+  const getStoreRowElementById = (storeId) =>
+    list.querySelector(`[data-store-id="${Number(storeId)}"]`);
+
+  const clearStoreDragVisualState = () => {
+    list
+      .querySelectorAll('.store-row-dragging, .store-row-drag-source')
+      .forEach((rowEl) => {
+        rowEl.classList.remove('store-row-dragging', 'store-row-drag-source');
+        rowEl.style.transform = '';
+      });
+    list
+      .querySelectorAll('.shopping-list-row-handle--dragging')
+      .forEach((handleEl) =>
+        handleEl.classList.remove('shopping-list-row-handle--dragging'),
+      );
+  };
+
+  const measureActiveStoreDragThreshold = () => {
+    if (!activeStoreDrag) return 0;
+    const rowEl = getStoreRowElementById(activeStoreDrag.storeId);
+    if (!(rowEl instanceof HTMLElement)) return activeStoreDrag.thresholdPx || 0;
+    const rect = rowEl.getBoundingClientRect();
+    const nextThreshold = Math.max(rect.height * 0.5, 24);
+    activeStoreDrag.thresholdPx = nextThreshold;
+    return nextThreshold;
+  };
+
+  const syncActiveStoreDragVisualState = () => {
+    clearStoreDragVisualState();
+    if (!activeStoreDrag || !isStoreReorderDragEnabled()) return;
+    const rowEl = getStoreRowElementById(activeStoreDrag.storeId);
+    if (!(rowEl instanceof HTMLElement)) return;
+    rowEl.classList.add('store-row-dragging', 'store-row-drag-source');
+    rowEl.style.transform = `translateY(${Math.round(activeStoreDrag.offsetY || 0)}px)`;
+    const handleEl = rowEl.querySelector('.shopping-list-row-handle');
+    handleEl?.classList?.add('shopping-list-row-handle--dragging');
+  };
+
+  const detachStoreDragListeners = () => {
+    if (!activeStoreDrag) return;
+    document.removeEventListener(
+      'pointermove',
+      activeStoreDrag.onPointerMove,
+      true,
+    );
+    document.removeEventListener('pointerup', activeStoreDrag.onPointerUp, true);
+    document.removeEventListener(
+      'pointercancel',
+      activeStoreDrag.onPointerCancel,
+      true,
+    );
+    window.removeEventListener('blur', activeStoreDrag.onWindowBlur);
+  };
+
+  const finishActiveStoreDrag = ({ suppressClick = false } = {}) => {
+    if (!activeStoreDrag) return;
+    detachStoreDragListeners();
+    clearStoreDragVisualState();
+    if (suppressClick) suppressStoreListClickUntil = Date.now() + 250;
+    activeStoreDrag = null;
+  };
+
+  const trySwapDraggedStore = (direction) => {
+    if (!activeStoreDrag) return false;
+    const visibleRows = getFilteredStoreRows();
+    const sourceIdx = getVisibleStoreIndexById(activeStoreDrag.storeId);
+    if (sourceIdx < 0) return false;
+    const targetIdx = sourceIdx + Number(direction || 0);
+    if (targetIdx < 0 || targetIdx >= visibleRows.length) return false;
+    const targetStore = visibleRows[targetIdx];
+    if (!targetStore) return false;
+    const moved = swapStoreRowsById(activeStoreDrag.storeId, targetStore.id);
+    if (!moved) return false;
+    activeStoreDrag.didSwap = true;
+    rerenderFilteredStores({ selectedStoreId: activeStoreDrag.storeId });
+    measureActiveStoreDragThreshold();
+    return true;
+  };
+
+  const onStoreDragPointerMove = (event) => {
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    if (!isStoreReorderDragEnabled()) {
+      finishActiveStoreDrag({ suppressClick: activeStoreDrag.didSwap });
+      return;
+    }
+    event.preventDefault();
+    const deltaY = event.clientY - activeStoreDrag.baselineY;
+    activeStoreDrag.offsetY = deltaY;
+    syncActiveStoreDragVisualState();
+    const threshold = measureActiveStoreDragThreshold();
+    if (threshold <= 0 || Math.abs(deltaY) < threshold) return;
+    const direction = deltaY > 0 ? 1 : -1;
+    const moved = trySwapDraggedStore(direction);
+    if (!moved) return;
+    activeStoreDrag.baselineY = event.clientY;
+    activeStoreDrag.offsetY = 0;
+    syncActiveStoreDragVisualState();
+  };
+
+  const onStoreDragPointerUp = (event) => {
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    event.preventDefault();
+    finishActiveStoreDrag({ suppressClick: true });
+  };
+
+  const onStoreDragPointerCancel = (event) => {
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    finishActiveStoreDrag({ suppressClick: activeStoreDrag.didSwap });
+  };
+
+  const onStoreDragWindowBlur = () => {
+    finishActiveStoreDrag({ suppressClick: !!activeStoreDrag?.didSwap });
+  };
+
+  const startStoreDrag = (event, storeId) => {
+    if (!(event instanceof PointerEvent)) return;
+    if (event.button !== 0 || event.isPrimary === false) return;
+    if (!isStoreReorderDragEnabled()) return;
+    const rowEl = getStoreRowElementById(storeId);
+    if (!(rowEl instanceof HTMLElement)) return;
+    finishActiveStoreDrag();
+    const visibleIdx = getVisibleStoreIndexById(storeId);
+    if (visibleIdx >= 0) {
+      listNav?.setSelectedIdx?.(visibleIdx);
+    }
+    activeStoreDrag = {
+      pointerId: event.pointerId,
+      storeId: Number(storeId),
+      baselineY: event.clientY,
+      offsetY: 0,
+      thresholdPx: Math.max(rowEl.getBoundingClientRect().height * 0.5, 24),
+      didSwap: false,
+      onPointerMove: onStoreDragPointerMove,
+      onPointerUp: onStoreDragPointerUp,
+      onPointerCancel: onStoreDragPointerCancel,
+      onWindowBlur: onStoreDragWindowBlur,
+    };
+    document.addEventListener('pointermove', onStoreDragPointerMove, true);
+    document.addEventListener('pointerup', onStoreDragPointerUp, true);
+    document.addEventListener('pointercancel', onStoreDragPointerCancel, true);
+    window.addEventListener('blur', onStoreDragWindowBlur);
+    event.preventDefault();
+    event.stopPropagation();
+    syncActiveStoreDragVisualState();
+  };
+
   function renderStoresList(rows, options = {}) {
+    if (activeStoreDrag && !isStoreReorderDragEnabled()) {
+      finishActiveStoreDrag({ suppressClick: activeStoreDrag.didSwap });
+    }
     list.innerHTML = '';
     const items = Array.isArray(rows) ? rows : [];
     if (!items.length) {
+      finishActiveStoreDrag();
       renderTopLevelEmptyState(list, 'stores');
       listNav?.syncAfterRender?.();
       return;
     }
     setTopLevelEmptyStateLayoutMode(list, false);
+    const reorderEnabled = isStoreReorderDragEnabled();
 
     items.forEach((store) => {
       const li = document.createElement('li');
+      li.dataset.storeId = String(store.id);
+      li.classList.toggle('stores-row-reorderable', reorderEnabled);
+      const dragHandle = document.createElement('span');
+      dragHandle.className =
+        'material-symbols-outlined shopping-list-row-handle';
+      dragHandle.setAttribute('aria-hidden', 'true');
+      dragHandle.textContent = 'drag_indicator';
       const label = document.createElement('span');
       label.className = 'shopping-list-row-label';
 
@@ -16377,6 +16560,7 @@ async function loadStoresPage() {
       const icon = document.createElement('span');
       icon.className = 'material-symbols-outlined shopping-list-row-icon';
       icon.setAttribute('aria-hidden', 'true');
+      li.appendChild(dragHandle);
       li.appendChild(label);
       li.appendChild(icon);
       syncStoreRowVisualState(li, store.id);
@@ -16451,6 +16635,11 @@ async function loadStoresPage() {
         syncStoreRowVisualState(li, storeId);
       });
 
+      li.addEventListener('pointerdown', (event) => {
+        if (isStoreRowDragExcludedTarget(event, li)) return;
+        startStoreDrag(event, store.id);
+      });
+
       li.addEventListener('click', (event) => {
         const wantsDelete = event.ctrlKey || event.metaKey;
         const webSelectMode = isStoreWebSelectMode();
@@ -16491,6 +16680,8 @@ async function loadStoresPage() {
 
       list.appendChild(li);
     });
+
+    syncActiveStoreDragVisualState();
 
     // Keep selection valid after rerender (search/filter changes).
     const selectedStoreId = Number(options?.selectedStoreId);
@@ -16541,6 +16732,17 @@ async function loadStoresPage() {
     renderStoresList(getFilteredStoreRows(), nextOptions);
     syncStoresResetButtonState();
   };
+
+  list.addEventListener(
+    'click',
+    (event) => {
+      if (Date.now() > suppressStoreListClickUntil) return;
+      suppressStoreListClickUntil = 0;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
 
   let isOpeningStoreDialog = false;
   const normalizeStoreField = (value) =>
@@ -16631,7 +16833,6 @@ async function loadStoresPage() {
   };
 
   const moveSelectedStoreRow = (delta) => {
-    if (!shouldUseStorePlanOrder) return false;
     const items = getFilteredStoreRows();
     const selectedIdx = Number(listNav?.getSelectedIdx?.() ?? -1);
     if (
