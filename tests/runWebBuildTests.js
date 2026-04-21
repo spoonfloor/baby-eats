@@ -56,10 +56,15 @@ function run() {
     'index.html should not ship the Electron front door in the web build.',
   );
 
-  const recipeEditorRedirect = readBuiltFile('recipeEditor.html');
+  const recipeEditorBuilt = readBuiltFile('recipeEditor.html');
   assert(
-    recipeEditorRedirect.includes('content="0; url=recipes.html"'),
-    'recipeEditor.html should redirect to recipes.html in the web build.',
+    recipeEditorBuilt.includes('data-page="recipe-editor"') &&
+      recipeEditorBuilt.includes('js/main.js'),
+    'recipeEditor.html should ship the full editor page in the web build (recipe opens from recipes list).',
+  );
+  assert(
+    !recipeEditorBuilt.includes('http-equiv="refresh"'),
+    'recipeEditor.html should not be a redirect stub in the web build.',
   );
 
   const shoppingEditorRedirect = readBuiltFile('shoppingEditor.html');
