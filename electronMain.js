@@ -50,6 +50,9 @@ function reserveBackupPath(historyDir, base, ext) {
   throw new Error('Too many backups in the same second.');
 }
 function shouldMirrorDbToRepoAssets() {
+  if (app.isPackaged) {
+    return false;
+  }
   return process.env.FAVORITE_EATS_MIRROR_ASSETS !== '0';
 }
 
@@ -59,7 +62,8 @@ function getRepoAssetDbPath() {
 
 /**
  * After a successful save to the user's DB, copy the file into `assets/favorite_eats.db`
- * for the web bundle (default on). Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable.
+ * for the web bundle when running unpackaged (e.g. npm start). Packaged dist builds never
+ * mirror — app.asar is read-only. Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable in dev.
  * If the repo asset already exists and is not the same file as the active DB, it is moved
  * to `assets/archive/` first.
  */

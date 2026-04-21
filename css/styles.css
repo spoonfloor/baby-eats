@@ -814,23 +814,36 @@ body.shopping-page #shoppingList .shopping-list-row-badge {
   flex: 0 0 auto;
   flex-shrink: 0;
   margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
   font-family: var(--main-font);
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
   color: rgba(0, 0, 0, 0.4);
   user-select: none;
-  line-height: 32px;
+  line-height: 1;
   min-height: 32px;
-  min-width: 0;
-  width: auto;
+  /* icon (32) + flex gap (12) + stepper: −(32) + gap(2) + qty(2ch) + gap(2) + +(32) */
+  width: calc(32px + 12px + 32px + 2px + 2ch + 2px + 32px);
   max-width: none;
-  padding: 0 2px 0 4px;
+  padding: 0;
   box-sizing: border-box;
-  text-align: right;
   overflow: visible;
   margin-right: 0;
   cursor: pointer;
   pointer-events: auto;
+}
+
+body.shopping-page #shoppingList .shopping-list-row-badge-qty {
+  flex: 0 0 32px;
+  width: 32px;
+  max-width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  min-height: 32px;
+  box-sizing: border-box;
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -847,9 +860,7 @@ body.recipes-page
   gap: 12px;
 }
 
-body.recipes-page
-  #recipeList
-  .recipe-list-servings-header {
+body.recipes-page #recipeList .recipe-list-servings-header {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -868,11 +879,17 @@ body.recipes-page #recipeList .shopping-list-row-label {
   text-overflow: ellipsis;
 }
 
-body.recipes-page #recipeList li[data-recipe-row-stepper-key] .shopping-list-row-label {
+body.recipes-page
+  #recipeList
+  li[data-recipe-row-stepper-key]
+  .shopping-list-row-label {
   cursor: default;
 }
 
-body.recipes-page #recipeList li[data-recipe-row-stepper-key] .recipe-list-title-hit {
+body.recipes-page
+  #recipeList
+  li[data-recipe-row-stepper-key]
+  .recipe-list-title-hit {
   cursor: pointer;
   display: inline-block;
   max-width: 100%;
@@ -883,15 +900,13 @@ body.recipes-page #recipeList li[data-recipe-row-stepper-key] .recipe-list-title
   vertical-align: bottom;
 }
 
-body.recipes-page
-  #recipeList
-  .recipe-list-servings-slot {
+body.recipes-page #recipeList .recipe-list-servings-slot {
   flex: 0 0 var(--recipe-list-servings-slot-width);
   width: var(--recipe-list-servings-slot-width);
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 /* Web mode: full column is tappable when stepper is collapsed (icon or badge). */
@@ -905,15 +920,15 @@ body.recipes-page[data-force-web-mode='on']
   -webkit-tap-highlight-color: transparent;
 }
 
-body.recipes-page
-  #recipeList
-  .recipe-list-servings-header-label {
+body.recipes-page #recipeList .recipe-list-servings-header-label {
   font-family: var(--main-font);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  text-align: center;
+  text-align: right;
+  /* padding-right: 4px; */
+  padding-right: 10px;
 }
 
 /* Editor mode: servings stepper column is off; hide slot so titles use full width */
@@ -952,7 +967,7 @@ body.recipes-page #recipeList .shopping-list-row-stepper {
   display: none;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 4px;
   height: 32px;
 }
@@ -1066,8 +1081,11 @@ body.recipes-page[data-force-web-mode='on']
 
 body.recipes-page #recipeList .shopping-list-row-badge {
   display: none;
-  flex: 0 0 auto;
+  flex: 0 0 32px;
   flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
   font-family: var(--main-font);
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
@@ -1075,15 +1093,24 @@ body.recipes-page #recipeList .shopping-list-row-badge {
   user-select: none;
   line-height: 32px;
   min-height: 32px;
-  min-width: 2.5ch;
-  width: auto;
-  max-width: none;
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
   padding: 0;
   box-sizing: border-box;
-  text-align: center;
   overflow: visible;
   cursor: pointer;
   pointer-events: auto;
+}
+
+body.recipes-page #recipeList .shopping-list-row-badge-qty {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
 }
 
 body.recipes-page[data-force-web-mode='on']
@@ -1497,9 +1524,7 @@ body.tags-page #tagsList .shopping-list-section-toggle {
   text-transform: inherit;
 }
 
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section-toggle__icon,
+body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__icon,
 body.tags-page #tagsList .shopping-list-section-toggle__icon {
   flex: 0 0 auto;
   font-size: 20px;
@@ -1534,28 +1559,54 @@ body.tags-page #tagsList .shopping-list-section-toggle__label {
 
 body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
+  /* Override `.list-page li` single-line ellipsis so long names wrap. */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
-body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--recipe-summary {
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--recipe-summary {
   cursor: default;
   gap: 0;
 }
 
-body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--recipe-summary:hover {
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--recipe-summary:hover {
   background-color: transparent;
 }
 
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-recipe-summary-text {
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-recipe-summary-text {
   line-height: var(--ingredients-line-height);
   color: inherit;
 }
 
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-headline--recipe-summary {
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 6px;
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-headline--recipe-summary {
+  line-height: var(--ingredients-line-height);
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--recipe-summary
+  .shopping-list-doc-recipe-summary-link {
+  font-size: var(--body-font-size);
+  line-height: var(--ingredients-line-height);
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--recipe-summary
+  .shopping-list-doc-contribution-detail {
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox {
@@ -1628,10 +1679,9 @@ body.shopping-list-page
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-headline {
-  display: flex;
-  align-items: center;
-  gap: var(--shopping-inline-expand-gap);
+  display: block;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 body.shopping-list-page
@@ -1639,7 +1689,10 @@ body.shopping-list-page
   .shopping-list-doc-headline
   .shopping-list-doc-text {
   width: auto;
-  flex: 0 1 auto;
+  min-width: 0;
+  display: inline;
+  overflow-wrap: anywhere;
+  vertical-align: baseline;
 }
 
 body.shopping-list-page
@@ -1647,6 +1700,12 @@ body.shopping-list-page
   .shopping-list-doc-headline
   .shopping-list-doc-link {
   line-height: var(--shopping-inline-expand-line-height);
+  overflow-wrap: anywhere;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-tail {
+  display: inline;
+  white-space: nowrap;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-link,
@@ -1679,10 +1738,12 @@ body.shopping-list-page
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-text--amount {
+  display: inline;
   width: auto;
-  flex: 0 0 auto;
   color: rgba(0, 0, 0, 0.56);
-  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.45;
+  vertical-align: baseline;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
@@ -1698,9 +1759,8 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
   line-height: var(--shopping-inline-expand-line-height);
   color: inherit;
   cursor: pointer;
-  flex-shrink: 0;
-  /* Match Items-page inline "text + space + chevron" optical spacing. */
-  margin-left: calc(1ch - var(--shopping-inline-expand-gap));
+  display: inline;
+  vertical-align: baseline;
 }
 
 body.shopping-list-page
@@ -2094,19 +2154,22 @@ body.shopping-editor-page .shopping-item-variant-tags-input {
   max-width: 100%;
 }
 
-body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+body.shopping-editor-page
+  .shopping-item-variant-tags-control.is-editing
   .shopping-item-variant-tags-slot {
   display: block;
 }
 
-body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+body.shopping-editor-page
+  .shopping-item-variant-tags-control.is-editing
   .shopping-item-variant-tags-slot.is-empty {
   width: 0;
   flex-basis: 0;
   overflow: visible;
 }
 
-body.shopping-editor-page .shopping-item-variant-tags-control.is-editing
+body.shopping-editor-page
+  .shopping-item-variant-tags-control.is-editing
   .shopping-item-variant-tags-slot.is-empty
   .shopping-item-variant-tags-input {
   position: absolute;
@@ -2475,12 +2538,8 @@ body.size-editor-page
   .shopping-item-toggle
   input[type='checkbox']:checked::after,
 body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after,
-.ui-dialog-panel
-  .shopping-item-toggle
-  input[type='checkbox']:checked::after,
-.ui-dialog-panel
-  .shopping-item-toggle
-  input[type='radio']:checked::after {
+.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked::after,
+.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked::after {
   content: '';
   width: 18px;
   height: 18px;
@@ -3072,6 +3131,11 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   height: 24px;
   user-select: none;
   pointer-events: none;
+}
+
+/* Keep menu/back hit targets stable; title ellipsis absorbs narrow widths. */
+.app-bar-wrapper .title-and-back .app-bar-icon-button {
+  flex-shrink: 0;
 }
 
 .app-bar-wrapper {
@@ -4229,8 +4293,8 @@ body.ingredient-master-link-mode
 /* --- Tier 2: Snug (≤ 500px) ---------------------------------------- */
 @media (max-width: 500px) {
   :root {
-    --list-page-gutter-left: 10px;
-    --list-page-gutter-right: 4px;
+    --list-page-gutter-left: 12px;
+    --list-page-gutter-right: 8px;
     --list-filter-chip-leading-inset: 15px;
     --list-filter-chip-gap: 9px;
     --recipe-list-servings-slot-width: 96px;

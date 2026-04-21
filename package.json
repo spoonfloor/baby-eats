@@ -20,6 +20,11 @@
   },
   "build": {
     "appId": "com.spoonfloor.favoriteeats",
+    "files": [
+      "**/*",
+      "!recipe-lan-server/**",
+      "!**/.venv/**"
+    ],
     "mac": {
       "icon": "assets/app-icon.icns"
     },
