@@ -42,6 +42,20 @@ function run() {
     'tags.html should redirect to recipes.html in the web build.',
   );
 
+  const indexRedirect = readBuiltFile('index.html');
+  assert(
+    indexRedirect.includes('content="0; url=recipes.html"'),
+    'index.html should redirect to recipes.html in the web build.',
+  );
+  assert(
+    !indexRedirect.includes('welcome-page'),
+    'index.html should not ship the Electron welcome-page markup in the web build.',
+  );
+  assert(
+    !indexRedirect.includes('Load Recipes'),
+    'index.html should not ship the Electron front door in the web build.',
+  );
+
   const recipeEditorRedirect = readBuiltFile('recipeEditor.html');
   assert(
     recipeEditorRedirect.includes('content="0; url=recipes.html"'),

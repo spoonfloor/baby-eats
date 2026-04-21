@@ -277,6 +277,20 @@ body[data-force-web-mode='on'] {
   box-shadow: 0 2px 20px var(--theme-primary-transparent);
 }
 
+.welcome-card__body {
+  margin: 0;
+  max-width: 28rem;
+  text-align: center;
+}
+
+.welcome-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
 /* --- Buttons --- */
 .button {
   font-family: inherit;

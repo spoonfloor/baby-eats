@@ -65,8 +65,12 @@ function wireRecipeEditorAppBarButtons() {
   window._recipeEditorCancelBtn = document.getElementById('appBarCancelBtn');
   window._recipeEditorSaveBtn = document.getElementById('appBarSaveBtn');
 
-  if (window._recipeEditorCancelBtn)
-    window._recipeEditorCancelBtn.disabled = recipeEditorIsWebMode();
+  if (window._recipeEditorCancelBtn) {
+    // Match wireChildEditorPage: Cancel (and dirty) only when edited; web uses sync for servings.
+    window._recipeEditorCancelBtn.disabled = recipeEditorIsWebMode()
+      ? true
+      : !isDirty;
+  }
   if (window._recipeEditorSaveBtn) window._recipeEditorSaveBtn.disabled = true;
   if (
     recipeEditorIsWebMode() &&

@@ -3558,6 +3558,13 @@ const loadDbBtn = document.getElementById('loadDbBtn');
 const dbLoader = document.getElementById('dbLoader');
 
 const BUNDLED_FAVORITE_EATS_DB_PATH = 'assets/favorite_eats.db';
+const WEB_DB_LOAD_ERROR_COPY = Object.freeze({
+  title: 'Couldn’t load recipes',
+  body: 'The recipe database couldn’t be loaded. Reload to try again, or choose a database file from your device.',
+  reloadCta: 'Reload',
+  chooseFileCta: 'Choose file…',
+  chooseFileFailure: 'Couldn’t load the chosen database file.',
+});
 
 function bundledFavoriteEatsDbUrl() {
   try {
@@ -3577,6 +3584,120 @@ async function fetchBundledFavoriteEatsDbBytes() {
 
 function persistFavoriteEatsDbBytesForWeb(uints) {
   localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(uints)));
+}
+
+function clearStoredFavoriteEatsDbBytesForWeb() {
+  try {
+    localStorage.removeItem('favoriteEatsDb');
+  } catch (_) {}
+}
+
+function getStoredFavoriteEatsDbBytesForWeb() {
+  try {
+    const stored = localStorage.getItem('favoriteEatsDb');
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed) || !parsed.length) {
+      clearStoredFavoriteEatsDbBytesForWeb();
+      return null;
+    }
+    return new Uint8Array(parsed);
+  } catch (_) {
+    clearStoredFavoriteEatsDbBytesForWeb();
+    return null;
+  }
+}
+
+function readFavoriteEatsDbFileAsUint8Array(file) {
+  return new Promise((resolve, reject) => {
+    if (!(file instanceof File)) {
+      reject(new Error('No file selected.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('File read failed.'));
+    reader.onload = () => {
+      try {
+        resolve(new Uint8Array(reader.result));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function renderWebDbLoadErrorScreen() {
+  const body = document.body;
+  if (!(body instanceof HTMLElement)) return;
+
+  body.dataset.page = 'web-db-error';
+  body.className = 'web-db-error-page';
+  body.innerHTML = `
+    <div class="centered-container">
+      <div class="welcome-card">
+        <h1 class="nav-text">${WEB_DB_LOAD_ERROR_COPY.title}</h1>
+        <p class="nav-text welcome-card__body">${WEB_DB_LOAD_ERROR_COPY.body}</p>
+        <div class="welcome-card__actions">
+          <button id="reloadWebDbBtn" class="button nav-text" type="button">
+            ${WEB_DB_LOAD_ERROR_COPY.reloadCta}
+          </button>
+          <button id="chooseWebDbBtn" class="button nav-text" type="button">
+            ${WEB_DB_LOAD_ERROR_COPY.chooseFileCta}
+          </button>
+        </div>
+        <input
+          type="file"
+          id="webDbErrorFileInput"
+          accept=".db"
+          class="file-input-hidden"
+        />
+      </div>
+    </div>
+  `;
+
+  const reloadBtn = document.getElementById('reloadWebDbBtn');
+  const chooseFileBtn = document.getElementById('chooseWebDbBtn');
+  const fileInput = document.getElementById('webDbErrorFileInput');
+
+  reloadBtn?.addEventListener('click', () => {
+    window.location.reload();
+  });
+
+  chooseFileBtn?.addEventListener('click', () => {
+    if (!(fileInput instanceof HTMLInputElement)) return;
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  fileInput?.addEventListener('change', async (e) => {
+    try {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+      const uints = await readFavoriteEatsDbFileAsUint8Array(file);
+      persistFavoriteEatsDbBytesForWeb(uints);
+      window.location.href = 'recipes.html';
+    } catch (err) {
+      console.error('❌ Failed to load chosen DB file:', err);
+      uiToast(WEB_DB_LOAD_ERROR_COPY.chooseFileFailure);
+    }
+  });
+}
+
+async function ensureFavoriteEatsDbBytesForWeb() {
+  const storedBytes = getStoredFavoriteEatsDbBytesForWeb();
+  if (storedBytes) return storedBytes;
+
+  let bundledBytes = null;
+  try {
+    bundledBytes = await fetchBundledFavoriteEatsDbBytes();
+  } catch (err) {
+    console.warn('Bundled DB fetch failed:', err);
+  }
+
+  if (!bundledBytes) return null;
+  persistFavoriteEatsDbBytesForWeb(bundledBytes);
+  return bundledBytes;
 }
 
 // 🔑 Pressing Enter on the welcome screen behaves like clicking "Load Recipes"
@@ -3619,48 +3740,42 @@ if (loadDbBtn && dbLoader) {
       }
     } else {
       // --- Browser: use cached copy, else bundled asset, else file picker ---
-      if (localStorage.getItem('favoriteEatsDb')) {
-        window.location.href = 'recipes.html';
-        return;
-      }
       try {
-        const bytes = await fetchBundledFavoriteEatsDbBytes();
+        const bytes = await ensureFavoriteEatsDbBytesForWeb();
         if (bytes) {
-          persistFavoriteEatsDbBytesForWeb(bytes);
           window.location.href = 'recipes.html';
           return;
         }
       } catch (err) {
-        console.warn('Bundled DB fetch failed:', err);
+        console.error('❌ Failed to prepare browser DB:', err);
       }
-      uiToast('Could not load the default database — choose a file…');
-      dbLoader.click();
+      renderWebDbLoadErrorScreen();
     }
   });
 
   dbLoader.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const Uints = new Uint8Array(reader.result);
-      persistFavoriteEatsDbBytesForWeb(Uints);
+    try {
+      const file = e.target.files[0];
+      if (!file) return;
+      const uints = await readFavoriteEatsDbFileAsUint8Array(file);
+      persistFavoriteEatsDbBytesForWeb(uints);
       window.location.href = 'recipes.html';
-    };
-    reader.readAsArrayBuffer(file);
+    } catch (err) {
+      console.error('❌ Failed to load chosen DB file:', err);
+      uiToast(WEB_DB_LOAD_ERROR_COPY.chooseFileFailure);
+    }
   });
 
   // Public web build: if nothing is cached yet, try the bundled DB immediately (no click).
   if (FAVORITE_EATS_BUILD.target === 'web') {
     void (async () => {
       try {
-        if (localStorage.getItem('favoriteEatsDb')) return;
-        const bytes = await fetchBundledFavoriteEatsDbBytes();
+        const bytes = await ensureFavoriteEatsDbBytesForWeb();
         if (!bytes) return;
-        persistFavoriteEatsDbBytesForWeb(bytes);
         window.location.href = 'recipes.html';
-      } catch (_) {
-        /* Stay on welcome; user can use Load Recipes. */
+      } catch (err) {
+        console.error('❌ Failed to prepare browser DB:', err);
+        renderWebDbLoadErrorScreen();
       }
     })();
   }
@@ -3683,14 +3798,25 @@ async function loadRecipesPage() {
       return;
     }
   } else {
-    // Browser fallback (keeps old behavior)
-    const stored = localStorage.getItem('favoriteEatsDb');
-    if (!stored) {
-      uiToast('No database loaded. Please go back to the welcome page.');
+    let browserBytes;
+    try {
+      browserBytes = await ensureFavoriteEatsDbBytesForWeb();
+    } catch (err) {
+      console.error('❌ Failed to prepare browser DB:', err);
+      renderWebDbLoadErrorScreen();
       return;
     }
-    const Uints = new Uint8Array(JSON.parse(stored));
-    db = new SQL.Database(Uints);
+    if (!browserBytes) {
+      renderWebDbLoadErrorScreen();
+      return;
+    }
+    try {
+      db = new SQL.Database(browserBytes);
+    } catch (err) {
+      console.error('❌ Failed to open browser DB:', err);
+      renderWebDbLoadErrorScreen();
+      return;
+    }
   }
 
   // Expose DB on window so other helpers can optionally reuse it if needed
@@ -19268,7 +19394,11 @@ async function loadRecipeEditorPage() {
     if (!cancelBtn) return;
     if (!isRecipeWebMode) {
       cancelBtn.textContent = 'Cancel';
-      cancelBtn.disabled = false;
+      const dirty =
+        typeof window.recipeEditorGetIsDirty === 'function'
+          ? window.recipeEditorGetIsDirty()
+          : false;
+      cancelBtn.disabled = !dirty;
       return;
     }
     cancelBtn.textContent = 'Reset servings';
