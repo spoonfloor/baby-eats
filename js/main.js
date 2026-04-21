@@ -128,6 +128,9 @@ function readFavoriteEatsBuildConfig() {
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
 const FORCE_WEB_MODE_STORAGE_KEY = 'favoriteEatsForceWebMode';
+// Only enforced when isPublicWebExperienceLocked() (GitHub Pages / dist/web with injected
+// __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
+// is allowed on public web: dist/web ships recipeEditor.html (list → recipe detail).
 const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
   tags: 'recipes',
   'tag-editor': 'recipes',
@@ -135,7 +138,6 @@ const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
   'unit-editor': 'recipes',
   sizes: 'recipes',
   'size-editor': 'recipes',
-  'recipe-editor': 'recipes',
   'shopping-editor': 'shopping',
   'store-editor': 'stores',
   'dialog-gallery': 'recipes',
