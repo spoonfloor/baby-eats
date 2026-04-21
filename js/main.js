@@ -119,7 +119,8 @@ function readFavoriteEatsBuildConfig() {
       ...raw,
       target: target === 'web' ? 'web' : FAVORITE_EATS_BUILD_DEFAULTS.target,
       forceWebExperience: raw.forceWebExperience === true,
-      allowHiddenForceWebModeToggle: raw.allowHiddenForceWebModeToggle !== false,
+      allowHiddenForceWebModeToggle:
+        raw.allowHiddenForceWebModeToggle !== false,
     };
   } catch (_) {
     return { ...FAVORITE_EATS_BUILD_DEFAULTS };
@@ -144,7 +145,10 @@ const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
 });
 
 function isPublicWebExperienceLocked() {
-  return FAVORITE_EATS_BUILD.target === 'web' && FAVORITE_EATS_BUILD.forceWebExperience;
+  return (
+    FAVORITE_EATS_BUILD.target === 'web' &&
+    FAVORITE_EATS_BUILD.forceWebExperience
+  );
 }
 
 function isHiddenForceWebModeToggleAllowed() {
@@ -154,9 +158,13 @@ function isHiddenForceWebModeToggleAllowed() {
   );
 }
 
-function getPublicWebRedirectPageId(pageId = document.body?.dataset?.page || '') {
+function getPublicWebRedirectPageId(
+  pageId = document.body?.dataset?.page || '',
+) {
   if (!isPublicWebExperienceLocked()) return '';
-  const key = String(pageId || '').trim().toLowerCase();
+  const key = String(pageId || '')
+    .trim()
+    .toLowerCase();
   if (!key) return '';
   return PUBLIC_WEB_PAGE_REDIRECTS[key] || '';
 }
@@ -206,7 +214,9 @@ function getTopLevelPageOrder() {
 }
 
 function getTopLevelPageHref(pageId) {
-  const key = String(pageId || '').trim().toLowerCase();
+  const key = String(pageId || '')
+    .trim()
+    .toLowerCase();
   if (!key) return 'index.html';
   if (key === 'shopping-list') return 'shoppingList.html';
   return `${key}.html`;
@@ -237,7 +247,8 @@ function isAppBarSearchContext(target) {
   const active =
     document.activeElement instanceof Element ? document.activeElement : null;
   return !!(
-    el?.closest?.('#appBarSearchInput') || active?.closest?.('#appBarSearchInput')
+    el?.closest?.('#appBarSearchInput') ||
+    active?.closest?.('#appBarSearchInput')
   );
 }
 
@@ -387,7 +398,11 @@ function setTopLevelEmptyStateLayoutMode(listEl, isEmpty) {
 }
 
 function resolveTopLevelEmptyStateMessage(messageOrKey) {
-  if (messageOrKey && typeof messageOrKey === 'object' && !Array.isArray(messageOrKey)) {
+  if (
+    messageOrKey &&
+    typeof messageOrKey === 'object' &&
+    !Array.isArray(messageOrKey)
+  ) {
     return {
       diagnosis: String(messageOrKey.diagnosis || '').trim(),
       cta: String(messageOrKey.cta || '').trim(),
@@ -431,7 +446,11 @@ function normalizeRecipeTagList(rawTags) {
   const seen = new Set();
   const out = [];
   source
-    .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .replace(/\s+/g, ' '),
+    )
     .filter(Boolean)
     .forEach((tag) => {
       const clipped = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
@@ -534,7 +553,7 @@ function getNumericSizeSortMeta(value) {
   if (!label) return null;
 
   const match = label.match(
-    /^(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|g|gram|grams|kg|kilogram|kilograms|lb|lbs|pound|pounds|ml|milliliter|milliliters|l|liter|liters)$/
+    /^(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|g|gram|grams|kg|kilogram|kilograms|lb|lbs|pound|pounds|ml|milliliter|milliliters|l|liter|liters)$/,
   );
   if (!match) return null;
 
@@ -578,7 +597,7 @@ function getNumericSizeSortMeta(value) {
 
 function getSizeSortMeta(value) {
   const label = normalizeSizeSortLabel(
-    value && typeof value === 'object' ? value.name : value
+    value && typeof value === 'object' ? value.name : value,
   );
   const namedRank = getNamedSizeRank(label);
   if (namedRank != null) return { group: 0, rank: namedRank, label };
@@ -621,11 +640,15 @@ function compareSizeDisplayValues(a, b) {
 }
 
 function sortSizeNames(values) {
-  return (Array.isArray(values) ? values.slice() : []).sort(compareSizeDisplayValues);
+  return (Array.isArray(values) ? values.slice() : []).sort(
+    compareSizeDisplayValues,
+  );
 }
 
 function sortSizeRows(rows) {
-  return (Array.isArray(rows) ? rows.slice() : []).sort(compareSizeDisplayValues);
+  return (Array.isArray(rows) ? rows.slice() : []).sort(
+    compareSizeDisplayValues,
+  );
 }
 
 if (typeof window !== 'undefined') {
@@ -643,10 +666,22 @@ if (typeof window !== 'undefined') {
 
 // --- Shopping list amount helpers (tests extract this block) ---
 const SHOPPING_LIST_MEASURED_UNIT_META = Object.freeze({
-  tsp: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 4.92892159375 }),
-  tbsp: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 14.78676478125 }),
+  tsp: Object.freeze({
+    family: 'volume',
+    baseUnit: 'ml',
+    factor: 4.92892159375,
+  }),
+  tbsp: Object.freeze({
+    family: 'volume',
+    baseUnit: 'ml',
+    factor: 14.78676478125,
+  }),
   cup: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 236.5882365 }),
-  'fl oz': Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 29.5735295625 }),
+  'fl oz': Object.freeze({
+    family: 'volume',
+    baseUnit: 'ml',
+    factor: 29.5735295625,
+  }),
   pt: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 473.176473 }),
   qt: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 946.352946 }),
   gal: Object.freeze({ family: 'volume', baseUnit: 'ml', factor: 3785.411784 }),
@@ -677,8 +712,8 @@ const SHOPPING_LIST_UNIT_ALIASES = Object.freeze({
   'fl oz': 'fl oz',
   'fluid ounce': 'fl oz',
   'fluid ounces': 'fl oz',
-  'fluidounce': 'fl oz',
-  'fluidounces': 'fl oz',
+  fluidounce: 'fl oz',
+  fluidounces: 'fl oz',
   pt: 'pt',
   pint: 'pt',
   pints: 'pt',
@@ -802,7 +837,9 @@ function roundShoppingListDisplayQuantity(value, unitText = '') {
 
   if (!best) return Number(numeric.toFixed(2));
   const rounded = Number(best.value.toFixed(6));
-  return Number.isFinite(rounded) && rounded > 0 ? rounded : Number(numeric.toFixed(2));
+  return Number.isFinite(rounded) && rounded > 0
+    ? rounded
+    : Number(numeric.toFixed(2));
 }
 
 function getShoppingListMeasuredDisplayFromBase(family, baseQuantity) {
@@ -815,7 +852,7 @@ function getShoppingListMeasuredDisplayFromBase(family, baseQuantity) {
     const unitMeta = SHOPPING_LIST_MEASURED_UNIT_META[displayUnit];
     const displayQuantity = roundShoppingListDisplayQuantity(
       numeric / unitMeta.factor,
-      displayUnit
+      displayUnit,
     );
     if (!Number.isFinite(displayQuantity) || displayQuantity <= 0) return null;
     return {
@@ -832,13 +869,14 @@ function getShoppingListMeasuredDisplayFromBase(family, baseQuantity) {
     else if (cups >= 4 - 1e-9) displayUnit = 'qt';
     else if (cups >= 1 - 1e-9) displayUnit = 'cup';
     else {
-      const tablespoons = numeric / SHOPPING_LIST_MEASURED_UNIT_META.tbsp.factor;
+      const tablespoons =
+        numeric / SHOPPING_LIST_MEASURED_UNIT_META.tbsp.factor;
       if (tablespoons >= 1 - 1e-9) displayUnit = 'tbsp';
     }
     const unitMeta = SHOPPING_LIST_MEASURED_UNIT_META[displayUnit];
     const displayQuantity = roundShoppingListDisplayQuantity(
       numeric / unitMeta.factor,
-      displayUnit
+      displayUnit,
     );
     if (!Number.isFinite(displayQuantity) || displayQuantity <= 0) return null;
     return {
@@ -884,11 +922,16 @@ function getShoppingListIngredientLabel(name, variantName = '') {
   const displayFields = getShoppingListDisplayFields(name, variantName);
   const fallbackVariant =
     String(variantName || '').trim() &&
-    String(variantName || '').trim().toLowerCase() !== 'default' &&
+    String(variantName || '')
+      .trim()
+      .toLowerCase() !== 'default' &&
     !isShoppingListSizeVariant(variantName)
       ? variantName
       : '';
-  const fallback = [String(fallbackVariant || '').trim(), String(name || '').trim()]
+  const fallback = [
+    String(fallbackVariant || '').trim(),
+    String(name || '').trim(),
+  ]
     .filter(Boolean)
     .join(' ')
     .trim();
@@ -905,7 +948,10 @@ function formatShoppingListIngredientText(line) {
       return String(window.formatIngredientText(source) || '').trim();
     } catch (_) {}
   }
-  const fallbackName = [String(source.variant || '').trim(), String(source.name || '').trim()]
+  const fallbackName = [
+    String(source.variant || '').trim(),
+    String(source.name || '').trim(),
+  ]
     .filter(Boolean)
     .join(' ')
     .trim();
@@ -934,7 +980,7 @@ const SHOPPING_LIST_SIZE_VARIANT_TOKENS = Object.freeze(
     'xlarge',
     'jumbo',
     'mini',
-  ])
+  ]),
 );
 
 const SHOPPING_LIST_SINGULAR_UNIT_TOKENS = Object.freeze(
@@ -963,7 +1009,7 @@ const SHOPPING_LIST_SINGULAR_UNIT_TOKENS = Object.freeze(
     'container',
     'stick',
     'loaf',
-  ])
+  ]),
 );
 
 function formatShoppingListDisplayQuantity(quantity) {
@@ -1015,7 +1061,7 @@ function getShoppingListDisplayFields(name, variantName = '') {
         window.getIngredientDisplayCoreParts({
           name: resolvedName,
           variant: nameVariant,
-        })?.nameText || ''
+        })?.nameText || '',
       ).trim();
     } catch (_) {}
   }
@@ -1038,10 +1084,16 @@ function mergeShoppingListSizeText(prefix, sizeText = '') {
 
 function shouldUseShoppingListSingularUnit(unitText) {
   const normalizedUnit = normalizeShoppingListUnit(unitText);
-  return normalizedUnit ? SHOPPING_LIST_SINGULAR_UNIT_TOKENS.has(normalizedUnit) : false;
+  return normalizedUnit
+    ? SHOPPING_LIST_SINGULAR_UNIT_TOKENS.has(normalizedUnit)
+    : false;
 }
 
-function formatShoppingListAmountLeadText({ quantity = '', size = '', unit = '' } = {}) {
+function formatShoppingListAmountLeadText({
+  quantity = '',
+  size = '',
+  unit = '',
+} = {}) {
   const normalizedUnit = normalizeShoppingListUnit(unit);
   if (shouldUseShoppingListSingularUnit(normalizedUnit)) {
     const quantityText = formatShoppingListDisplayQuantity(quantity);
@@ -1062,7 +1114,7 @@ function formatShoppingListAmountLeadText({ quantity = '', size = '', unit = '' 
           unit,
           name: '',
           variant: '',
-        })?.leadText || ''
+        })?.leadText || '',
       ).trim();
     } catch (_) {}
   }
@@ -1101,7 +1153,7 @@ function getShoppingListBucketLeadText(bucket, options = {}) {
   if (bucket.kind === 'measured') {
     const display = getShoppingListMeasuredDisplayFromBase(
       bucket.family,
-      bucket.baseQuantity
+      bucket.baseQuantity,
     );
     if (!display) return '';
     return formatShoppingListAmountLeadText({
@@ -1117,28 +1169,45 @@ function getShoppingListBucketLeadText(bucket, options = {}) {
   });
 }
 
-function formatShoppingListDisplayDetailText({ variantName = '', buckets = [] } = {}) {
+function formatShoppingListDisplayDetailText({
+  variantName = '',
+  buckets = [],
+} = {}) {
   const displayFields = getShoppingListDisplayFields('', variantName);
   const list = Array.isArray(buckets) ? buckets.filter(Boolean) : [];
   if (!list.length) return '';
   return list
     .slice()
-    .sort((a, b) => getShoppingListBucketSortPriority(a) - getShoppingListBucketSortPriority(b))
+    .sort(
+      (a, b) =>
+        getShoppingListBucketSortPriority(a) -
+        getShoppingListBucketSortPriority(b),
+    )
     .map((bucket) =>
       getShoppingListBucketLeadText(bucket, {
         quantitySizePrefix: displayFields.quantitySizePrefix,
-      })
+      }),
     )
     .filter(Boolean)
     .join(' + ');
 }
 
-function formatShoppingListDisplayRow({ label = '', name = '', variantName = '', buckets = [] } = {}) {
+function formatShoppingListDisplayRow({
+  label = '',
+  name = '',
+  variantName = '',
+  buckets = [],
+} = {}) {
   const displayFields = getShoppingListDisplayFields(name, variantName);
   const resolvedLabel =
-    String(label || '').trim() || displayFields.displayName || getShoppingListIngredientLabel(name, variantName);
+    String(label || '').trim() ||
+    displayFields.displayName ||
+    getShoppingListIngredientLabel(name, variantName);
   if (!resolvedLabel) return '';
-  const detailText = formatShoppingListDisplayDetailText({ variantName, buckets });
+  const detailText = formatShoppingListDisplayDetailText({
+    variantName,
+    buckets,
+  });
   if (!detailText) return resolvedLabel;
   return `${resolvedLabel} (${detailText})`;
 }
@@ -1160,19 +1229,25 @@ if (typeof window !== 'undefined') {
 
 // --- Shopping browse labeling helpers (tests extract this block) ---
 function normalizeShoppingBrowseLocationId(raw) {
-  const value = String(raw || '').trim().toLowerCase();
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
   return !value || value === 'measures' ? 'none' : value;
 }
 
 function getShoppingBrowseVariantHomeRows(item) {
-  const rows = Array.isArray(item?.variantHomeLocations) ? item.variantHomeLocations : [];
+  const rows = Array.isArray(item?.variantHomeLocations)
+    ? item.variantHomeLocations
+    : [];
   const out = [];
   const byKey = new Map();
   rows.forEach((entry) => {
     const variant = String(entry?.variant || '').trim();
     if (!variant) return;
     const rowKey = variant.toLowerCase();
-    const normalizedHome = normalizeShoppingBrowseLocationId(entry?.homeLocation);
+    const normalizedHome = normalizeShoppingBrowseLocationId(
+      entry?.homeLocation,
+    );
     const existing = byKey.get(rowKey);
     if (existing) {
       if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
@@ -1197,12 +1272,16 @@ function getShoppingBrowseLocationIds(item) {
     ids.push(normalizedId);
   };
   pushId(item?.locationAtHome);
-  getShoppingBrowseVariantHomeRows(item).forEach((entry) => pushId(entry.homeLocation));
+  getShoppingBrowseVariantHomeRows(item).forEach((entry) =>
+    pushId(entry.homeLocation),
+  );
   return ids;
 }
 
 function getShoppingBrowseMatchInfo(item, options = {}) {
-  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const normalizedQuery = String(options?.searchQuery || '')
+    .trim()
+    .toLowerCase();
   const normalizedLocationIds = Array.from(
     new Set(
       (Array.isArray(options?.locationIds) ? options.locationIds : [])
@@ -1220,20 +1299,28 @@ function getShoppingBrowseMatchInfo(item, options = {}) {
     };
   }
 
-  const baseName = String(item?.name || '').trim().toLowerCase();
-  const baseLocationId = normalizeShoppingBrowseLocationId(item?.locationAtHome);
+  const baseName = String(item?.name || '')
+    .trim()
+    .toLowerCase();
+  const baseLocationId = normalizeShoppingBrowseLocationId(
+    item?.locationAtHome,
+  );
   const baseMatched =
     (!hasQuery || baseName.includes(normalizedQuery)) &&
     (!hasLocationFilters || normalizedLocationIds.includes(baseLocationId));
 
   const matchedVariantNames = getShoppingBrowseVariantHomeRows(item)
     .filter((entry) => {
-      const variantName = String(entry?.variant || '').trim().toLowerCase();
+      const variantName = String(entry?.variant || '')
+        .trim()
+        .toLowerCase();
       if (!variantName) return false;
       const searchMatches = !hasQuery || variantName.includes(normalizedQuery);
       const locationMatches =
         !hasLocationFilters ||
-        normalizedLocationIds.includes(normalizeShoppingBrowseLocationId(entry?.homeLocation));
+        normalizedLocationIds.includes(
+          normalizeShoppingBrowseLocationId(entry?.homeLocation),
+        );
       return searchMatches && locationMatches;
     })
     .map((entry) => String(entry.variant || '').trim())
@@ -1242,12 +1329,16 @@ function getShoppingBrowseMatchInfo(item, options = {}) {
   return {
     baseMatched,
     matchedVariantNames,
-    variantNameToShow: !baseMatched && matchedVariantNames.length === 1 ? matchedVariantNames[0] : '',
+    variantNameToShow:
+      !baseMatched && matchedVariantNames.length === 1
+        ? matchedVariantNames[0]
+        : '',
   };
 }
 
 function formatShoppingBrowseItemLabel(baseLabel, item, options = {}) {
-  const resolvedBaseLabel = String(baseLabel || '').trim() || String(item?.name || '').trim();
+  const resolvedBaseLabel =
+    String(baseLabel || '').trim() || String(item?.name || '').trim();
   if (!resolvedBaseLabel) return '';
   const matchInfo = getShoppingBrowseMatchInfo(item, options);
   return matchInfo.variantNameToShow
@@ -1273,7 +1364,9 @@ function tableHasColumnInMain(db, tableName, colName) {
     const cols =
       Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
         ? q[0].values
-            .map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase())
+            .map((r) =>
+              String((Array.isArray(r) ? r[1] : '') || '').toLowerCase(),
+            )
             .filter(Boolean)
         : [];
     return cols.includes(String(colName || '').toLowerCase());
@@ -1286,22 +1379,31 @@ function dropLegacyVariantAisleUniqueIndexesInMain(db) {
   if (!db) return false;
   let changed = false;
   try {
-    const listQ = db.exec(`PRAGMA index_list('ingredient_variant_store_location');`);
-    const rows = Array.isArray(listQ) && listQ.length > 0 && Array.isArray(listQ[0].values)
-      ? listQ[0].values
-      : [];
+    const listQ = db.exec(
+      `PRAGMA index_list('ingredient_variant_store_location');`,
+    );
+    const rows =
+      Array.isArray(listQ) && listQ.length > 0 && Array.isArray(listQ[0].values)
+        ? listQ[0].values
+        : [];
     rows.forEach((row) => {
       const indexName = String((Array.isArray(row) ? row[1] : '') || '').trim();
       const isUnique = Number(Array.isArray(row) ? row[2] : 0) === 1;
       if (!indexName || !isUnique) return;
       try {
-        const infoQ = db.exec(`PRAGMA index_info(${JSON.stringify(indexName)});`);
+        const infoQ = db.exec(
+          `PRAGMA index_info(${JSON.stringify(indexName)});`,
+        );
         const infoRows =
-          Array.isArray(infoQ) && infoQ.length > 0 && Array.isArray(infoQ[0].values)
+          Array.isArray(infoQ) &&
+          infoQ.length > 0 &&
+          Array.isArray(infoQ[0].values)
             ? infoQ[0].values
             : [];
         const cols = infoRows
-          .map((infoRow) => String((Array.isArray(infoRow) ? infoRow[2] : '') || '').trim())
+          .map((infoRow) =>
+            String((Array.isArray(infoRow) ? infoRow[2] : '') || '').trim(),
+          )
           .filter(Boolean);
         if (cols.length === 1 && cols[0] === 'ingredient_variant_id') {
           db.run(`DROP INDEX IF EXISTS "${indexName.replace(/"/g, '""')}";`);
@@ -1331,7 +1433,9 @@ function ensureRecipeTagsSchemaInMain(db) {
   } catch (_) {}
   try {
     if (!tableHasColumnInMain(db, 'tags', 'intended_use')) {
-      db.run("ALTER TABLE tags ADD COLUMN intended_use TEXT NOT NULL DEFAULT 'recipes';");
+      db.run(
+        "ALTER TABLE tags ADD COLUMN intended_use TEXT NOT NULL DEFAULT 'recipes';",
+      );
     }
   } catch (_) {}
   try {
@@ -1413,12 +1517,16 @@ function ensureSizesSchemaInMain(db) {
   } catch (_) {}
   try {
     if (!tableHasColumnInMain(db, 'sizes', 'is_hidden')) {
-      db.run('ALTER TABLE sizes ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;');
+      db.run(
+        'ALTER TABLE sizes ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;',
+      );
     }
   } catch (_) {}
   try {
     if (!tableHasColumnInMain(db, 'sizes', 'is_removed')) {
-      db.run('ALTER TABLE sizes ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;');
+      db.run(
+        'ALTER TABLE sizes ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;',
+      );
     }
   } catch (_) {}
   try {
@@ -1453,12 +1561,16 @@ function ensureUnitsSchemaInMain(db) {
   } catch (_) {}
   try {
     if (!tableHasColumnInMain(db, 'units', 'is_hidden')) {
-      db.run('ALTER TABLE units ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;');
+      db.run(
+        'ALTER TABLE units ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;',
+      );
     }
   } catch (_) {}
   try {
     if (!tableHasColumnInMain(db, 'units', 'is_removed')) {
-      db.run('ALTER TABLE units ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;');
+      db.run(
+        'ALTER TABLE units ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;',
+      );
     }
   } catch (_) {}
   try {
@@ -1481,13 +1593,16 @@ async function persistBinaryArrayInMain(
     isElectron = !!window.electronAPI,
     overwriteOnly = false,
     failureMessage = 'Failed to save database.',
-  } = {}
+  } = {},
 ) {
   if (isElectron) {
     const ok = await window.electronAPI.saveDB(binaryArray, { overwriteOnly });
     if (ok === false) throw new Error(failureMessage);
   } else {
-    localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
+    localStorage.setItem(
+      'favoriteEatsDb',
+      JSON.stringify(Array.from(binaryArray)),
+    );
   }
 }
 
@@ -1535,9 +1650,21 @@ function ensureIngredientBaseVariantsInMain(db) {
   ) {
     return 0;
   }
-  const hasHomeLocation = tableHasColumnInMain(db, 'ingredient_variants', 'home_location');
-  const hasSortOrder = tableHasColumnInMain(db, 'ingredient_variants', 'sort_order');
-  const hasLegacyHomeLocation = tableHasColumnInMain(db, 'ingredients', 'location_at_home');
+  const hasHomeLocation = tableHasColumnInMain(
+    db,
+    'ingredient_variants',
+    'home_location',
+  );
+  const hasSortOrder = tableHasColumnInMain(
+    db,
+    'ingredient_variants',
+    'sort_order',
+  );
+  const hasLegacyHomeLocation = tableHasColumnInMain(
+    db,
+    'ingredients',
+    'location_at_home',
+  );
   let changedCount = 0;
   let txStarted = false;
 
@@ -1550,7 +1677,9 @@ function ensureIngredientBaseVariantsInMain(db) {
        ORDER BY ID ASC;`,
     );
     const ingredientRows =
-      Array.isArray(ingredientQ) && ingredientQ.length && Array.isArray(ingredientQ[0].values)
+      Array.isArray(ingredientQ) &&
+      ingredientQ.length &&
+      Array.isArray(ingredientQ[0].values)
         ? ingredientQ[0].values
         : [];
     if (!ingredientRows.length) return 0;
@@ -1597,7 +1726,10 @@ function ensureIngredientBaseVariantsInMain(db) {
         [ingredientId],
       );
       const baseRow =
-        Array.isArray(baseQ) && baseQ.length && Array.isArray(baseQ[0].values) && baseQ[0].values.length
+        Array.isArray(baseQ) &&
+        baseQ.length &&
+        Array.isArray(baseQ[0].values) &&
+        baseQ[0].values.length
           ? baseQ[0].values[0]
           : null;
       const legacyHome = normalizeShoppingHomeLocationId(legacyHomeRaw);
@@ -1622,7 +1754,8 @@ function ensureIngredientBaseVariantsInMain(db) {
         return;
       }
 
-      const [baseIdRaw, baseVariantRaw, baseHomeRaw, baseSortOrderRaw] = baseRow;
+      const [baseIdRaw, baseVariantRaw, baseHomeRaw, baseSortOrderRaw] =
+        baseRow;
       const baseId = Number(baseIdRaw);
       if (!Number.isFinite(baseId) || baseId <= 0) return;
       const currentHome = normalizeShoppingHomeLocationId(baseHomeRaw);
@@ -1630,7 +1763,11 @@ function ensureIngredientBaseVariantsInMain(db) {
       const sets = [];
       const vals = [];
 
-      if (String(baseVariantRaw || '').trim().toLowerCase() !== INGREDIENT_BASE_VARIANT_NAME) {
+      if (
+        String(baseVariantRaw || '')
+          .trim()
+          .toLowerCase() !== INGREDIENT_BASE_VARIANT_NAME
+      ) {
         sets.push('variant = ?');
         vals.push(INGREDIENT_BASE_VARIANT_NAME);
       }
@@ -1645,10 +1782,10 @@ function ensureIngredientBaseVariantsInMain(db) {
       if (!sets.length && !legacyCleared) return;
 
       if (sets.length) {
-        db.run(`UPDATE ingredient_variants SET ${sets.join(', ')} WHERE id = ?;`, [
-          ...vals,
-          baseId,
-        ]);
+        db.run(
+          `UPDATE ingredient_variants SET ${sets.join(', ')} WHERE id = ?;`,
+          [...vals, baseId],
+        );
       }
       changedCount += legacyCleared ? 2 : 1;
     });
@@ -1674,14 +1811,16 @@ async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
   let baseVariantChangedCount = 0;
   try {
     if (typeof window.bridge?.regenerateAllIngredientLemmas === 'function') {
-      lemmaChangedCount = Number(window.bridge.regenerateAllIngredientLemmas(db)) || 0;
+      lemmaChangedCount =
+        Number(window.bridge.regenerateAllIngredientLemmas(db)) || 0;
     }
   } catch (err) {
     console.warn('⚠️ Failed to regenerate ingredient lemmas:', err);
     lemmaChangedCount = 0;
   }
   try {
-    baseVariantChangedCount = Number(ensureIngredientBaseVariantsInMain(db)) || 0;
+    baseVariantChangedCount =
+      Number(ensureIngredientBaseVariantsInMain(db)) || 0;
   } catch (err) {
     console.warn('⚠️ Failed to repair ingredient base variants:', err);
     baseVariantChangedCount = 0;
@@ -1693,10 +1832,14 @@ async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
   try {
     await persistLoadedDbInMain(db, isElectron);
     if (lemmaChangedCount > 0) {
-      console.info(`ℹ️ Regenerated ${lemmaChangedCount} ingredient lemma value(s).`);
+      console.info(
+        `ℹ️ Regenerated ${lemmaChangedCount} ingredient lemma value(s).`,
+      );
     }
     if (baseVariantChangedCount > 0) {
-      console.info(`ℹ️ Repaired ${baseVariantChangedCount} ingredient base variant row(s).`);
+      console.info(
+        `ℹ️ Repaired ${baseVariantChangedCount} ingredient base variant row(s).`,
+      );
     }
   } catch (err) {
     console.warn('⚠️ Failed to persist ingredient maintenance updates:', err);
@@ -1712,11 +1855,14 @@ function deriveIngredientLemmaInMain(rawTitle) {
 }
 
 const LAST_PAGE_SESSION_KEY = 'favoriteEats:last-page-id';
-const SHOPPING_FILTER_CHIPS_SESSION_KEY_LEGACY = 'favoriteEats:shopping-filter-chips';
-const SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX = 'favoriteEats:shopping-filter-chips';
+const SHOPPING_FILTER_CHIPS_SESSION_KEY_LEGACY =
+  'favoriteEats:shopping-filter-chips';
+const SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX =
+  'favoriteEats:shopping-filter-chips';
 /** Prefix for Items-page tag filter chip ids (avoids collisions with home location ids). */
 const SHOPPING_TAG_FILTER_PREFIX = 'tag:';
-const SHOPPING_SCROLL_RESTORE_SESSION_KEY = 'favoriteEats:shopping-scroll-restore-y';
+const SHOPPING_SCROLL_RESTORE_SESSION_KEY =
+  'favoriteEats:shopping-scroll-restore-y';
 // --- Shopping plan helpers (tests extract this block) ---
 const SHOPPING_PLAN_STORAGE_KEY = 'favoriteEats:shopping-plan:v1';
 const SHOPPING_PLAN_KEY_SEP = '\x00';
@@ -1726,10 +1872,14 @@ function loadRecipeWebServingsMap() {
   const api = window.favoriteEatsRecipeWebServings || {};
   if (typeof api.loadMap === 'function') return api.loadMap();
   try {
-    const raw = localStorage.getItem(window.favoriteEatsStorageKeys.recipeWebServings);
+    const raw = localStorage.getItem(
+      window.favoriteEatsStorageKeys.recipeWebServings,
+    );
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch (_) {
     return {};
   }
@@ -1755,16 +1905,23 @@ function getRecipeWebServingsStoredValue(recipeOrId, recipe = null) {
   if (!Number.isFinite(normalizedId) || normalizedId <= 0) return null;
   const raw = loadRecipeWebServingsMap()[String(Math.trunc(normalizedId))];
   const numeric = Number(raw);
-  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric * 2) / 2 : null;
+  return Number.isFinite(numeric) && numeric > 0
+    ? Math.round(numeric * 2) / 2
+    : null;
 }
 
 function getShoppingPlanAggregateKey(name, variantName = '') {
-  const normalizedName = String(name || '').trim().toLowerCase();
+  const normalizedName = String(name || '')
+    .trim()
+    .toLowerCase();
   const normalizedVariant = String(variantName || '')
     .trim()
     .toLowerCase();
   if (!normalizedName) return '';
-  if (!normalizedVariant || normalizedVariant === INGREDIENT_BASE_VARIANT_NAME) {
+  if (
+    !normalizedVariant ||
+    normalizedVariant === INGREDIENT_BASE_VARIANT_NAME
+  ) {
     return normalizedName;
   }
   return `${normalizedName}${SHOPPING_PLAN_KEY_SEP}${normalizedVariant}`;
@@ -1933,7 +2090,9 @@ function setShoppingPlanStoreOrder(storeIds) {
 }
 
 function getShoppingPlanSelectedStoreIds() {
-  return normalizeShoppingPlanSelectedStoreIds(getShoppingPlan()?.selectedStoreIds);
+  return normalizeShoppingPlanSelectedStoreIds(
+    getShoppingPlan()?.selectedStoreIds,
+  );
 }
 
 function setShoppingPlanSelectedStoreIds(storeIds) {
@@ -1963,7 +2122,12 @@ if (typeof window !== 'undefined') {
 }
 // --- End shopping plan helpers ---
 
-function setShoppingPlanItemSelection({ key, name = '', variantName = '', quantity = 0 }) {
+function setShoppingPlanItemSelection({
+  key,
+  name = '',
+  variantName = '',
+  quantity = 0,
+}) {
   const normalizedKey = String(key || '').trim();
   if (!normalizedKey) return getShoppingPlan();
   return updateShoppingPlan((plan) => {
@@ -1996,7 +2160,11 @@ function getShoppingPlanItemSelections() {
     : {};
 }
 
-function setShoppingPlanRecipeSelection({ recipeId, title = '', quantity = 0 }) {
+function setShoppingPlanRecipeSelection({
+  recipeId,
+  title = '',
+  quantity = 0,
+}) {
   const normalizedRecipeId = Number(recipeId);
   if (!Number.isFinite(normalizedRecipeId) || normalizedRecipeId <= 0) {
     return getShoppingPlan();
@@ -2081,7 +2249,7 @@ function getRecipeServingsMultiplierForShoppingPlan(recipeId, recipe) {
   const recipeDefaultServings = Number(
     recipe?.servings?.default != null
       ? recipe.servings.default
-      : recipe?.servingsDefault
+      : recipe?.servingsDefault,
   );
   const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
   if (
@@ -2121,7 +2289,10 @@ function walkExpandedShoppingPlanIngredientLines(
   const normalizedRecipeTitle = String(recipeTitle || '').trim();
   const normalizedOuterMultiplier = Number(outerRecipeMultiplier);
   const normalizedLinkDepth = Math.max(0, Math.trunc(Number(linkDepth) || 0));
-  if (!Number.isFinite(normalizedOuterMultiplier) || normalizedOuterMultiplier <= 0) {
+  if (
+    !Number.isFinite(normalizedOuterMultiplier) ||
+    normalizedOuterMultiplier <= 0
+  ) {
     return;
   }
 
@@ -2133,7 +2304,7 @@ function walkExpandedShoppingPlanIngredientLines(
 
   const servingsMultiplier = getRecipeServingsMultiplierForShoppingPlan(
     normalizedRecipeId,
-    recipe
+    recipe,
   );
 
   recipe.sections.forEach((section) => {
@@ -2168,11 +2339,13 @@ function walkExpandedShoppingPlanIngredientLines(
             recipeId: linkedRecipeId,
             recipeTitle: String(linkedRecipe?.title || '').trim(),
             outerRecipeMultiplier:
-              normalizedOuterMultiplier * servingsMultiplier * normalizedLinkQuantity,
+              normalizedOuterMultiplier *
+              servingsMultiplier *
+              normalizedLinkQuantity,
             linkDepth: normalizedLinkDepth + 1,
             ancestorRecipeIds: nextAncestors,
           },
-          visit
+          visit,
         );
         return;
       }
@@ -2212,7 +2385,10 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
         outerRecipeMultiplier: recipeCount,
         linkDepth: 0,
       },
-      (line, { recipeCount: expandedRecipeCount = 0, servingsMultiplier = 1 } = {}) => {
+      (
+        line,
+        { recipeCount: expandedRecipeCount = 0, servingsMultiplier = 1 } = {},
+      ) => {
         const name = String(line.name || '').trim();
         if (!name) return;
         const variantName = String(line.variant || '').trim();
@@ -2227,8 +2403,8 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
             ? Number(
                 window.normalizeActionableQuantity(
                   scaledPerRecipeQuantityRaw,
-                  line.unit || ''
-                )
+                  line.unit || '',
+                ),
               )
             : Number(scaledPerRecipeQuantityRaw.toFixed(4));
         if (
@@ -2250,7 +2426,7 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
           label: getShoppingPlanSelectionLabel({ name, variantName }),
           quantity: nextQuantity,
         });
-      }
+      },
     );
   });
 
@@ -2290,15 +2466,23 @@ function orderShoppingListSelectedStoreIds(storeOrder, selectedStoreIds) {
 function compareShoppingListAssignmentCandidates(a, b) {
   const variantRankA = Number(a?.variantRank);
   const variantRankB = Number(b?.variantRank);
-  const normalizedVariantRankA = Number.isFinite(variantRankA) ? variantRankA : -1;
-  const normalizedVariantRankB = Number.isFinite(variantRankB) ? variantRankB : -1;
+  const normalizedVariantRankA = Number.isFinite(variantRankA)
+    ? variantRankA
+    : -1;
+  const normalizedVariantRankB = Number.isFinite(variantRankB)
+    ? variantRankB
+    : -1;
   if (normalizedVariantRankA !== normalizedVariantRankB) {
     return normalizedVariantRankA - normalizedVariantRankB;
   }
   const aisleSortA = Number(a?.aisleSortOrder);
   const aisleSortB = Number(b?.aisleSortOrder);
-  const normalizedAisleSortA = Number.isFinite(aisleSortA) ? aisleSortA : 999999;
-  const normalizedAisleSortB = Number.isFinite(aisleSortB) ? aisleSortB : 999999;
+  const normalizedAisleSortA = Number.isFinite(aisleSortA)
+    ? aisleSortA
+    : 999999;
+  const normalizedAisleSortB = Number.isFinite(aisleSortB)
+    ? aisleSortB
+    : 999999;
   if (normalizedAisleSortA !== normalizedAisleSortB) {
     return normalizedAisleSortA - normalizedAisleSortB;
   }
@@ -2341,7 +2525,9 @@ function getShoppingListVariantAssignmentKey(name, variantName = '') {
   if (typeof getShoppingPlanAggregateKey === 'function') {
     return getShoppingPlanAggregateKey(name, variantName);
   }
-  const normalizedName = String(name || '').trim().toLowerCase();
+  const normalizedName = String(name || '')
+    .trim()
+    .toLowerCase();
   const normalizedVariant = String(variantName || '')
     .trim()
     .toLowerCase();
@@ -2364,14 +2550,20 @@ function mergeShoppingListAssignmentCandidates(...candidateLists) {
       const aisleId = Math.trunc(Number(candidate.aisleId));
       const aisleLabel = String(candidate.aisleLabel || '').trim();
       const dedupeKey =
-        Number.isFinite(storeId) && storeId > 0 && Number.isFinite(aisleId) && aisleId > 0
+        Number.isFinite(storeId) &&
+        storeId > 0 &&
+        Number.isFinite(aisleId) &&
+        aisleId > 0
           ? `${storeId}:${aisleId}`
           : `${storeId}:${aisleId}:${aisleLabel.toLowerCase()}`;
       if (seen.has(dedupeKey)) {
         const existingIndex = seen.get(dedupeKey);
         const existingCandidate = merged[existingIndex];
         if (
-          compareShoppingListAssignmentCandidates(candidate, existingCandidate) < 0
+          compareShoppingListAssignmentCandidates(
+            candidate,
+            existingCandidate,
+          ) < 0
         ) {
           merged[existingIndex] = candidate;
         }
@@ -2386,14 +2578,17 @@ function mergeShoppingListAssignmentCandidates(...candidateLists) {
 
 function buildOrderedVariantAssignmentCandidates(
   name,
-  {
-    variantAssignmentMap = null,
-    variantOrderMap = null,
-  } = {},
+  { variantAssignmentMap = null, variantOrderMap = null } = {},
 ) {
   const hasGetter = (value) => !!value && typeof value.get === 'function';
-  const nameKey = String(name || '').trim().toLowerCase();
-  if (!nameKey || !hasGetter(variantAssignmentMap) || !hasGetter(variantOrderMap)) {
+  const nameKey = String(name || '')
+    .trim()
+    .toLowerCase();
+  if (
+    !nameKey ||
+    !hasGetter(variantAssignmentMap) ||
+    !hasGetter(variantOrderMap)
+  ) {
     return [];
   }
   const orderedVariants = Array.isArray(variantOrderMap.get(nameKey))
@@ -2402,7 +2597,10 @@ function buildOrderedVariantAssignmentCandidates(
   if (!orderedVariants.length) return [];
   const rankedCandidates = [];
   orderedVariants.forEach((variantName, variantRank) => {
-    const assignmentKey = getShoppingListVariantAssignmentKey(nameKey, variantName);
+    const assignmentKey = getShoppingListVariantAssignmentKey(
+      nameKey,
+      variantName,
+    );
     if (!assignmentKey) return;
     const variantCandidates = variantAssignmentMap.get(assignmentKey) || [];
     variantCandidates.forEach((candidate) => {
@@ -2425,7 +2623,9 @@ function getShoppingListAssignmentCandidates(
   } = {},
 ) {
   const hasGetter = (value) => !!value && typeof value.get === 'function';
-  const nameKey = String(row?.name || '').trim().toLowerCase();
+  const nameKey = String(row?.name || '')
+    .trim()
+    .toLowerCase();
   const variantName = String(row?.variantName || '').trim();
   const variantAssignmentKey = variantName
     ? getShoppingListVariantAssignmentKey(row.name, variantName)
@@ -2436,7 +2636,9 @@ function getShoppingListAssignmentCandidates(
       : [];
   if (exactVariantCandidates.length) return exactVariantCandidates;
   const baseCandidates =
-    nameKey && hasGetter(baseAssignmentMap) ? baseAssignmentMap.get(nameKey) || [] : [];
+    nameKey && hasGetter(baseAssignmentMap)
+      ? baseAssignmentMap.get(nameKey) || []
+      : [];
   if (!variantName && baseCandidates.length) return baseCandidates;
   const orderedVariantCandidates =
     !variantName && nameKey
@@ -2450,7 +2652,10 @@ function getShoppingListAssignmentCandidates(
     nameKey && hasGetter(variantAnyAssignmentMap)
       ? variantAnyAssignmentMap.get(nameKey) || []
       : [];
-  return mergeShoppingListAssignmentCandidates(baseCandidates, anyVariantCandidates);
+  return mergeShoppingListAssignmentCandidates(
+    baseCandidates,
+    anyVariantCandidates,
+  );
 }
 
 function buildGroupedShoppingListRows(items, options = {}) {
@@ -2490,14 +2695,17 @@ function buildGroupedShoppingListRows(items, options = {}) {
       unlistedItems.push(item);
       return;
     }
-    const incomingSort = Number.isFinite(Number(chosenAssignment.aisleSortOrder))
+    const incomingSort = Number.isFinite(
+      Number(chosenAssignment.aisleSortOrder),
+    )
       ? Number(chosenAssignment.aisleSortOrder)
       : 999999;
     if (!storeGroup.aisles.has(aisleId)) {
       storeGroup.aisles.set(aisleId, {
         aisleId,
         aisleLabel:
-          String(chosenAssignment.aisleLabel || '').trim() || `Aisle ${aisleId}`,
+          String(chosenAssignment.aisleLabel || '').trim() ||
+          `Aisle ${aisleId}`,
         aisleSortOrder: incomingSort,
         items: [],
       });
@@ -2505,13 +2713,15 @@ function buildGroupedShoppingListRows(items, options = {}) {
       const bucket = storeGroup.aisles.get(aisleId);
       const curSort = bucket.aisleSortOrder;
       const curPlaceholder = !Number.isFinite(curSort) || curSort >= 999999;
-      const incomingPlaceholder = !Number.isFinite(incomingSort) || incomingSort >= 999999;
+      const incomingPlaceholder =
+        !Number.isFinite(incomingSort) || incomingSort >= 999999;
       const preferIncoming =
         incomingSort < curSort || (curPlaceholder && !incomingPlaceholder);
       if (preferIncoming) {
         bucket.aisleSortOrder = incomingSort;
         bucket.aisleLabel =
-          String(chosenAssignment.aisleLabel || '').trim() || `Aisle ${aisleId}`;
+          String(chosenAssignment.aisleLabel || '').trim() ||
+          `Aisle ${aisleId}`;
       }
     }
     storeGroup.aisles.get(aisleId).items.push(item);
@@ -2599,12 +2809,18 @@ function getShoppingPlanSelectionRows(options = {}) {
     db && typeof db.exec === 'function'
       ? new Set(
           getVisibleIngredientNamePool(db).map((name) =>
-            String(name || '').trim().toLowerCase(),
+            String(name || '')
+              .trim()
+              .toLowerCase(),
           ),
         )
       : null;
   const aggregate = new Map();
-  const ensureRow = ({ name = '', variantName = '', allowInvisible = false } = {}) => {
+  const ensureRow = ({
+    name = '',
+    variantName = '',
+    allowInvisible = false,
+  } = {}) => {
     const resolvedName = String(name || '').trim();
     const resolvedVariantName = String(variantName || '').trim();
     if (!resolvedName) return null;
@@ -2623,7 +2839,10 @@ function getShoppingPlanSelectionRows(options = {}) {
         key,
         name: resolvedName,
         variantName: resolvedVariantName,
-        label: getShoppingListIngredientLabel(resolvedName, resolvedVariantName),
+        label: getShoppingListIngredientLabel(
+          resolvedName,
+          resolvedVariantName,
+        ),
         buckets: new Map(),
         bucketOrder: [],
         contributionSources: new Map(),
@@ -2645,12 +2864,16 @@ function getShoppingPlanSelectionRows(options = {}) {
     if (!existing) return;
     if (bucket.kind === 'measured') {
       existing.baseQuantity = Number(
-        (Number(existing.baseQuantity || 0) + Number(bucket.baseQuantity || 0)).toFixed(6)
+        (
+          Number(existing.baseQuantity || 0) + Number(bucket.baseQuantity || 0)
+        ).toFixed(6),
       );
       return;
     }
     existing.quantity = Number(
-      (Number(existing.quantity || 0) + Number(bucket.quantity || 0)).toFixed(4)
+      (Number(existing.quantity || 0) + Number(bucket.quantity || 0)).toFixed(
+        4,
+      ),
     );
   };
   const ensureContributionSource = (row, source = {}) => {
@@ -2705,7 +2928,12 @@ function getShoppingPlanSelectionRows(options = {}) {
   };
   const addRecipeIngredientBucket = (
     line,
-    { recipeId = null, recipeTitle = '', recipeCount = 0, servingsMultiplier = 1 } = {},
+    {
+      recipeId = null,
+      recipeTitle = '',
+      recipeCount = 0,
+      servingsMultiplier = 1,
+    } = {},
   ) => {
     if (!line || typeof line !== 'object') return;
     if (line.rowType === 'heading' || line.isRecipe) return;
@@ -2743,20 +2971,26 @@ function getShoppingPlanSelectionRows(options = {}) {
         ? Number(
             window.normalizeActionableQuantity(
               scaledPerRecipeQuantityRaw,
-              line.unit || ''
-            )
+              line.unit || '',
+            ),
           )
         : Number(scaledPerRecipeQuantityRaw.toFixed(4));
-    if (!Number.isFinite(scaledPerRecipeQuantity) || scaledPerRecipeQuantity <= 0) return;
+    if (
+      !Number.isFinite(scaledPerRecipeQuantity) ||
+      scaledPerRecipeQuantity <= 0
+    )
+      return;
 
-    const nextQuantity = Number((scaledPerRecipeQuantity * recipeMultiplier).toFixed(4));
+    const nextQuantity = Number(
+      (scaledPerRecipeQuantity * recipeMultiplier).toFixed(4),
+    );
     if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) return;
 
     const normalizedUnit = normalizeShoppingListUnit(line.unit || '');
     const size = String(line.size || '').trim();
     const measured = convertShoppingListQuantityToMeasuredBase(
       nextQuantity,
-      normalizedUnit
+      normalizedUnit,
     );
     if (measured) {
       const bucket = {
@@ -2820,7 +3054,7 @@ function getShoppingPlanSelectionRows(options = {}) {
           outerRecipeMultiplier: recipeCount,
           linkDepth: 0,
         },
-        addRecipeIngredientBucket
+        addRecipeIngredientBucket,
       );
     });
   }
@@ -2885,11 +3119,16 @@ function getShoppingPlanSelectionRows(options = {}) {
             if (a.sourceType !== b.sourceType) {
               return a.sourceType === 'recipe' ? -1 : 1;
             }
-            const sortDelta = Number(b.sortValue || 0) - Number(a.sortValue || 0);
+            const sortDelta =
+              Number(b.sortValue || 0) - Number(a.sortValue || 0);
             if (Math.abs(sortDelta) > 1e-9) return sortDelta;
-            return String(a.title || '').localeCompare(String(b.title || ''), undefined, {
-              sensitivity: 'base',
-            });
+            return String(a.title || '').localeCompare(
+              String(b.title || ''),
+              undefined,
+              {
+                sensitivity: 'base',
+              },
+            );
           }),
       };
     })
@@ -2939,7 +3178,11 @@ function getShoppingPlanSelectionRows(options = {}) {
         orderedSelectedStoreIds,
       );
       const storeMeta = new Map();
-      if (Array.isArray(storeQ) && storeQ.length && Array.isArray(storeQ[0].values)) {
+      if (
+        Array.isArray(storeQ) &&
+        storeQ.length &&
+        Array.isArray(storeQ[0].values)
+      ) {
         storeQ[0].values.forEach(([id, chain, location]) => {
           const storeId = Math.trunc(Number(id));
           if (!Number.isFinite(storeId) || storeId <= 0) return;
@@ -2962,7 +3205,11 @@ function getShoppingPlanSelectionRows(options = {}) {
     const uniqueNameKeys = [
       ...new Set(
         rows
-          .map((row) => String(row?.name || '').trim().toLowerCase())
+          .map((row) =>
+            String(row?.name || '')
+              .trim()
+              .toLowerCase(),
+          )
           .filter(Boolean),
       ),
     ];
@@ -2987,10 +3234,22 @@ function getShoppingPlanSelectionRows(options = {}) {
             `,
             [...effectiveStoreIds, ...uniqueNameKeys],
           );
-          if (Array.isArray(baseQ) && baseQ.length && Array.isArray(baseQ[0].values)) {
+          if (
+            Array.isArray(baseQ) &&
+            baseQ.length &&
+            Array.isArray(baseQ[0].values)
+          ) {
             baseQ[0].values.forEach(
-              ([nameKey, storeIdRaw, aisleIdRaw, aisleName, aisleSortOrder]) => {
-                const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
+              ([
+                nameKey,
+                storeIdRaw,
+                aisleIdRaw,
+                aisleName,
+                aisleSortOrder,
+              ]) => {
+                const nameKeyNormalized = String(nameKey || '')
+                  .trim()
+                  .toLowerCase();
                 const storeId = Math.trunc(Number(storeIdRaw));
                 const aisleId = Math.trunc(Number(aisleIdRaw));
                 if (
@@ -3006,7 +3265,8 @@ function getShoppingPlanSelectionRows(options = {}) {
                 baseAssignmentMap.get(nameKeyNormalized).push({
                   storeId,
                   aisleId,
-                  aisleLabel: String(aisleName || '').trim() || `Aisle ${aisleId}`,
+                  aisleLabel:
+                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
                   aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
                     ? Number(aisleSortOrder)
                     : 999999,
@@ -3044,8 +3304,12 @@ function getShoppingPlanSelectionRows(options = {}) {
             Array.isArray(variantOrderQ[0].values)
           ) {
             variantOrderQ[0].values.forEach(([nameKey, variantKey]) => {
-              const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
-              const variantKeyNormalized = String(variantKey || '').trim().toLowerCase();
+              const nameKeyNormalized = String(nameKey || '')
+                .trim()
+                .toLowerCase();
+              const variantKeyNormalized = String(variantKey || '')
+                .trim()
+                .toLowerCase();
               if (!nameKeyNormalized || !variantKeyNormalized) return;
               if (!variantOrderMap.has(nameKeyNormalized)) {
                 variantOrderMap.set(nameKeyNormalized, []);
@@ -3080,8 +3344,16 @@ function getShoppingPlanSelectionRows(options = {}) {
             Array.isArray(variantAnyQ[0].values)
           ) {
             variantAnyQ[0].values.forEach(
-              ([nameKey, storeIdRaw, aisleIdRaw, aisleName, aisleSortOrder]) => {
-                const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
+              ([
+                nameKey,
+                storeIdRaw,
+                aisleIdRaw,
+                aisleName,
+                aisleSortOrder,
+              ]) => {
+                const nameKeyNormalized = String(nameKey || '')
+                  .trim()
+                  .toLowerCase();
                 const storeId = Math.trunc(Number(storeIdRaw));
                 const aisleId = Math.trunc(Number(aisleIdRaw));
                 if (
@@ -3097,7 +3369,8 @@ function getShoppingPlanSelectionRows(options = {}) {
                 variantAnyAssignmentMap.get(nameKeyNormalized).push({
                   storeId,
                   aisleId,
-                  aisleLabel: String(aisleName || '').trim() || `Aisle ${aisleId}`,
+                  aisleLabel:
+                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
                   aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
                     ? Number(aisleSortOrder)
                     : 999999,
@@ -3140,7 +3413,9 @@ function getShoppingPlanSelectionRows(options = {}) {
                 aisleName,
                 aisleSortOrder,
               ]) => {
-                const nameKeyNormalized = String(nameKey || '').trim().toLowerCase();
+                const nameKeyNormalized = String(nameKey || '')
+                  .trim()
+                  .toLowerCase();
                 const variantKeyNormalized = String(variantKey || '')
                   .trim()
                   .toLowerCase();
@@ -3165,7 +3440,8 @@ function getShoppingPlanSelectionRows(options = {}) {
                 variantAssignmentMap.get(assignmentKey).push({
                   storeId,
                   aisleId,
-                  aisleLabel: String(aisleName || '').trim() || `Aisle ${aisleId}`,
+                  aisleLabel:
+                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
                   aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
                     ? Number(aisleSortOrder)
                     : 999999,
@@ -3209,26 +3485,31 @@ function detectPageIdFromBody() {
           ? 'shopping'
           : body.classList.contains('shopping-list-page')
             ? 'shopping-list'
-          : body.classList.contains('shopping-editor-page')
-            ? 'shopping-editor'
-            : body.classList.contains('units-page')
-              ? 'units'
-              : body.classList.contains('unit-editor-page')
-                ? 'unit-editor'
-                : body.classList.contains('sizes-page')
-                  ? 'sizes'
-                  : body.classList.contains('size-editor-page')
-                    ? 'size-editor'
-                : body.classList.contains('tags-page')
-                  ? 'tags'
-                  : body.classList.contains('tag-editor-page')
-                    ? 'tag-editor'
-                : body.classList.contains('stores-page')
-                  ? 'stores'
-                  : body.classList.contains('store-editor-page')
-                    ? 'store-editor'
-                    : null)
+            : body.classList.contains('shopping-editor-page')
+              ? 'shopping-editor'
+              : body.classList.contains('units-page')
+                ? 'units'
+                : body.classList.contains('unit-editor-page')
+                  ? 'unit-editor'
+                  : body.classList.contains('sizes-page')
+                    ? 'sizes'
+                    : body.classList.contains('size-editor-page')
+                      ? 'size-editor'
+                      : body.classList.contains('tags-page')
+                        ? 'tags'
+                        : body.classList.contains('tag-editor-page')
+                          ? 'tag-editor'
+                          : body.classList.contains('stores-page')
+                            ? 'stores'
+                            : body.classList.contains('store-editor-page')
+                              ? 'store-editor'
+                              : null)
   );
+}
+
+function shouldDeferSqlBootForCurrentPage() {
+  const pageId = detectPageIdFromBody();
+  return pageId === 'welcome' || pageId === 'web-db-error';
 }
 
 function getLastVisitedPageId() {
@@ -3251,7 +3532,10 @@ function markCurrentPageAsLastVisited() {
   try {
     const current = detectPageIdFromBody();
     if (!current) return;
-    sessionStorage.setItem(LAST_PAGE_SESSION_KEY, String(current).toLowerCase());
+    sessionStorage.setItem(
+      LAST_PAGE_SESSION_KEY,
+      String(current).toLowerCase(),
+    );
   } catch (_) {}
 }
 
@@ -3260,7 +3544,8 @@ markCurrentPageAsLastVisited();
 
 function enableTopLevelListKeyboardNav(listEl, options = {}) {
   if (!(listEl instanceof Element)) return null;
-  const requireExistingSelectionForArrows = !!options.requireExistingSelectionForArrows;
+  const requireExistingSelectionForArrows =
+    !!options.requireExistingSelectionForArrows;
   const disableArrowNavigation = !!options.disableArrowNavigation;
   const disableEnterActivation = !!options.disableEnterActivation;
   const disableHoverSelection = !!options.disableHoverSelection;
@@ -3480,126 +3765,136 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
   };
 }
 
-initSqlJs({
-  locateFile: (file) => `js/${file}`, // load local sql-wasm.wasm
-}).then((sql) => {
-  SQL = sql;
+function bootFavoriteEatsAfterSqlReady() {
+  initSqlJs({
+    locateFile: (file) => `js/${file}`, // load local sql-wasm.wasm
+  }).then((sql) => {
+    SQL = sql;
 
-  // --- page load routing ---
+    // --- page load routing ---
 
-  if (redirectIfPublicWebPageIsDisallowed()) return;
+    if (redirectIfPublicWebPageIsDisallowed()) return;
 
-  const pageId = detectPageIdFromBody();
+    const pageId = detectPageIdFromBody();
 
-  // --- Cmd/Ctrl+S: invoke visible editor Save action ---
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      if (e.isComposing) return;
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      if (String(e.key || '').toLowerCase() !== 's') return;
+    // --- Cmd/Ctrl+S: invoke visible editor Save action ---
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.isComposing) return;
+        if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+        if (String(e.key || '').toLowerCase() !== 's') return;
 
-      const saveBtn = document.getElementById('appBarSaveBtn');
-      if (!(saveBtn instanceof HTMLButtonElement)) return;
-      if (saveBtn.disabled) return;
+        const saveBtn = document.getElementById('appBarSaveBtn');
+        if (!(saveBtn instanceof HTMLButtonElement)) return;
+        if (saveBtn.disabled) return;
 
-      const styles = window.getComputedStyle(saveBtn);
-      if (styles.display === 'none' || styles.visibility === 'hidden') return;
+        const styles = window.getComputedStyle(saveBtn);
+        if (styles.display === 'none' || styles.visibility === 'hidden') return;
 
-      e.preventDefault();
-      e.stopPropagation();
-      saveBtn.click();
-    },
-    { capture: true },
-  );
+        e.preventDefault();
+        e.stopPropagation();
+        saveBtn.click();
+      },
+      { capture: true },
+    );
 
-  // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages ---
-  const TOP_LEVEL_PAGES = getTopLevelPageOrder();
+    // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages ---
+    const TOP_LEVEL_PAGES = getTopLevelPageOrder();
 
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
-      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (e.isComposing) return;
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+        if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.isComposing) return;
 
-      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key))
-        return;
-      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return;
-      const idx = TOP_LEVEL_PAGES.indexOf(pageId);
-      if (idx === -1) return; // only act on top-level list pages
+        if (
+          !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
+        )
+          return;
+        if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
+          return;
+        const idx = TOP_LEVEL_PAGES.indexOf(pageId);
+        if (idx === -1) return; // only act on top-level list pages
 
-      // Stores: Cmd+↑/↓ reorders when a row has keyboard selection (red), not tab switching.
-      if (
-        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-        typeof consumeCmdVerticalArrowBeforeTopLevelNav === 'function'
-      ) {
-        try {
-          if (consumeCmdVerticalArrowBeforeTopLevelNav(e)) return;
-        } catch (_) {}
-      }
+        // Stores: Cmd+↑/↓ reorders when a row has keyboard selection (red), not tab switching.
+        if (
+          (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+          typeof consumeCmdVerticalArrowBeforeTopLevelNav === 'function'
+        ) {
+          try {
+            if (consumeCmdVerticalArrowBeforeTopLevelNav(e)) return;
+          } catch (_) {}
+        }
 
-      // Treat Up like Left, and Down like Right.
-      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-      const nextIdx =
-        (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
+        // Treat Up like Left, and Down like Right.
+        const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+        const nextIdx =
+          (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
 
-      e.preventDefault();
-      window.location.href = getTopLevelPageHref(TOP_LEVEL_PAGES[nextIdx]);
-    },
-    { capture: true },
-  );
+        e.preventDefault();
+        window.location.href = getTopLevelPageHref(TOP_LEVEL_PAGES[nextIdx]);
+      },
+      { capture: true },
+    );
 
-  // --- Cmd+↑: go to parent/back page on editor pages ---
-  const CHILD_EDITOR_PAGES = new Set([
-    'recipe-editor',
-    'shopping-editor',
-    'unit-editor',
-    'size-editor',
-    'tag-editor',
-    'store-editor',
-  ]);
+    // --- Cmd+↑: go to parent/back page on editor pages ---
+    const CHILD_EDITOR_PAGES = new Set([
+      'recipe-editor',
+      'shopping-editor',
+      'unit-editor',
+      'size-editor',
+      'tag-editor',
+      'store-editor',
+    ]);
 
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
-      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (e.isComposing) return;
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+        if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.isComposing) return;
 
-      if (e.key !== 'ArrowUp') return;
-      if (!CHILD_EDITOR_PAGES.has(pageId)) return;
-      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return;
+        if (e.key !== 'ArrowUp') return;
+        if (!CHILD_EDITOR_PAGES.has(pageId)) return;
+        if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
+          return;
 
-      const backBtn = document.getElementById('appBarBackBtn');
-      if (!backBtn) return;
+        const backBtn = document.getElementById('appBarBackBtn');
+        if (!backBtn) return;
 
-      e.preventDefault();
-      backBtn.click();
-    },
-    { capture: true },
-  );
+        e.preventDefault();
+        backBtn.click();
+      },
+      { capture: true },
+    );
 
-  const pageLoaders = {
-    recipes: loadRecipesPage,
-    'recipe-editor': loadRecipeEditorPage,
-    shopping: loadShoppingPage,
-    'shopping-list': loadShoppingListPage,
-    'shopping-editor': loadShoppingItemEditorPage,
-    units: loadUnitsPage,
-    'unit-editor': loadUnitEditorPage,
-    sizes: loadSizesPage,
-    'size-editor': loadSizeEditorPage,
-    tags: loadTagsPage,
-    'tag-editor': loadTagEditorPage,
-    stores: loadStoresPage,
-    'store-editor': loadStoreEditorPage,
-  };
+    const pageLoaders = {
+      recipes: loadRecipesPage,
+      'recipe-editor': loadRecipeEditorPage,
+      shopping: loadShoppingPage,
+      'shopping-list': loadShoppingListPage,
+      'shopping-editor': loadShoppingItemEditorPage,
+      units: loadUnitsPage,
+      'unit-editor': loadUnitEditorPage,
+      sizes: loadSizesPage,
+      'size-editor': loadSizeEditorPage,
+      tags: loadTagsPage,
+      'tag-editor': loadTagEditorPage,
+      stores: loadStoresPage,
+      'store-editor': loadStoreEditorPage,
+    };
 
-  if (pageId && pageLoaders[pageId]) {
-    pageLoaders[pageId]();
-  }
-});
+    if (pageId && pageLoaders[pageId]) {
+      pageLoaders[pageId]();
+    }
+  });
+}
+
+if (!shouldDeferSqlBootForCurrentPage()) {
+  bootFavoriteEatsAfterSqlReady();
+}
 
 // Welcome page logic
 const loadDbBtn = document.getElementById('loadDbBtn');
@@ -3665,7 +3960,8 @@ function readFavoriteEatsDbFileAsUint8Array(file) {
       return;
     }
     const reader = new FileReader();
-    reader.onerror = () => reject(reader.error || new Error('File read failed.'));
+    reader.onerror = () =>
+      reject(reader.error || new Error('File read failed.'));
     reader.onload = () => {
       try {
         resolve(new Uint8Array(reader.result));
@@ -3960,11 +4256,13 @@ async function loadRecipesPage() {
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   };
   const getRecipeQtyKey = (recipeId) => String(recipeId || '').trim();
-  const isRecipeSelected = (recipeId) => recipeSelectionKeys.has(getRecipeQtyKey(recipeId));
+  const isRecipeSelected = (recipeId) =>
+    recipeSelectionKeys.has(getRecipeQtyKey(recipeId));
   const getRecipeRowById = (recipeId) =>
     recipeRows.find((row) => Number(row?.id) === Number(recipeId)) || null;
   const primeRecipeRowServings = (recipeRow) => {
-    if (!recipeRow || typeof window.recipeWebModePrimeRecipe !== 'function') return;
+    if (!recipeRow || typeof window.recipeWebModePrimeRecipe !== 'function')
+      return;
     window.recipeWebModePrimeRecipe(recipeRow);
   };
   const getRecipeRowBounds = (recipeRow) => {
@@ -3991,9 +4289,12 @@ async function loadRecipesPage() {
   };
   const initializeRecipeRowServings = (recipeRow) => {
     const bounds = getRecipeRowBounds(recipeRow);
-    if (!bounds || typeof recipeWebServingsUi.applyToModel !== 'function') return null;
+    if (!bounds || typeof recipeWebServingsUi.applyToModel !== 'function')
+      return null;
     const initial =
-      bounds.baseDefault != null && bounds.baseDefault > 0 ? bounds.baseDefault : 1;
+      bounds.baseDefault != null && bounds.baseDefault > 0
+        ? bounds.baseDefault
+        : 1;
     return recipeWebServingsUi.applyToModel(recipeRow, initial);
   };
   const syncRecipesActionButtonState = () => {
@@ -4008,10 +4309,11 @@ async function loadRecipesPage() {
     recipesActionBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
   };
   const makeRecipeStepperDOM = () => {
-    const { stepper, minusBtn, qtySpan, plusBtn } = listRowStepper.createStepperDOM({
-      decreaseLabel: 'Decrease recipe quantity',
-      increaseLabel: 'Increase recipe quantity',
-    });
+    const { stepper, minusBtn, qtySpan, plusBtn } =
+      listRowStepper.createStepperDOM({
+        decreaseLabel: 'Decrease recipe quantity',
+        increaseLabel: 'Increase recipe quantity',
+      });
     const qtyBtn = document.createElement('button');
     qtyBtn.type = 'button';
     qtyBtn.className = 'shopping-stepper-qty shopping-stepper-qty-button';
@@ -4028,47 +4330,59 @@ async function loadRecipesPage() {
     const bounds = getRecipeRowBounds(recipeRow);
     const hasServings = !!bounds;
     const selected = isRecipeSelected(recipeId);
-    const isActive = selected && !!recipeRowStepperController?.isActive(getRecipeQtyKey(recipeId));
+    const isActive =
+      selected &&
+      !!recipeRowStepperController?.isActive(getRecipeQtyKey(recipeId));
     const icon = rowEl.querySelector('.shopping-list-row-icon');
     const stepper = rowEl.querySelector('.shopping-list-row-stepper');
     const badge = rowEl.querySelector('.shopping-list-row-badge');
-    const disabledIndicator = rowEl.querySelector('.recipe-list-servings-disabled');
+    const disabledIndicator = rowEl.querySelector(
+      '.recipe-list-servings-disabled',
+    );
     const qtyEl = stepper?.querySelector('.shopping-stepper-qty');
     const minusBtn = stepper?.querySelector('.shopping-stepper-btn');
     const minusIcon = minusBtn?.querySelector('.material-symbols-outlined');
     const displayServings = getRecipeRowDisplayServings(recipeRow);
     const formattedServings =
       displayServings == null ? '' : formatRecipeRowServings(displayServings);
-    const shouldDeleteOnDecrease =
-      !!(
-        hasServings &&
-        selected &&
-        bounds?.canAdjust &&
-        displayServings != null &&
-        Math.abs(displayServings - bounds.min) < 1e-9
-      );
+    const shouldDeleteOnDecrease = !!(
+      hasServings &&
+      selected &&
+      bounds?.canAdjust &&
+      displayServings != null &&
+      Math.abs(displayServings - bounds.min) < 1e-9
+    );
 
     rowEl.dataset.recipeServingsAvailable = hasServings ? 'true' : 'false';
-    rowEl.dataset.recipeSelected = enabled && selected && hasServings ? 'true' : 'false';
-    rowEl.classList.toggle('shopping-row-checked', enabled && selected && hasServings);
+    rowEl.dataset.recipeSelected =
+      enabled && selected && hasServings ? 'true' : 'false';
+    rowEl.classList.toggle(
+      'shopping-row-checked',
+      enabled && selected && hasServings,
+    );
 
     const servingsSlot = rowEl.querySelector('.recipe-list-servings-slot');
     if (servingsSlot) {
       servingsSlot.classList.toggle(
         'recipe-list-servings-slot--collapsed-hit',
-        !!(enabled && hasServings && !isActive)
+        !!(enabled && hasServings && !isActive),
       );
     }
 
     if (qtyEl) qtyEl.textContent = formattedServings;
-    if (badge) badge.textContent = formattedServings;
+    if (badge) {
+      listRowStepper.setShoppingListBadgeQtyLabel(badge, formattedServings);
+    }
     if (minusBtn) {
       minusBtn.setAttribute(
         'aria-label',
-        shouldDeleteOnDecrease ? 'Remove recipe selection' : 'Decrease servings'
+        shouldDeleteOnDecrease
+          ? 'Remove recipe selection'
+          : 'Decrease servings',
       );
     }
-    if (minusIcon) minusIcon.textContent = shouldDeleteOnDecrease ? 'delete' : 'remove';
+    if (minusIcon)
+      minusIcon.textContent = shouldDeleteOnDecrease ? 'delete' : 'remove';
 
     if (!enabled) {
       if (icon) icon.style.display = 'none';
@@ -4097,7 +4411,7 @@ async function loadRecipesPage() {
     if (selected) {
       if (icon) icon.style.display = 'none';
       if (stepper) stepper.style.display = 'none';
-      if (badge) badge.style.display = 'inline-block';
+      if (badge) badge.style.display = 'inline-flex';
       return;
     }
 
@@ -4105,7 +4419,11 @@ async function loadRecipesPage() {
     if (stepper) stepper.style.display = 'none';
     if (badge) badge.style.display = 'none';
   };
-  const setRecipeSelected = (recipeId, isSelected, { activate = false } = {}) => {
+  const setRecipeSelected = (
+    recipeId,
+    isSelected,
+    { activate = false } = {},
+  ) => {
     const recipeKey = getRecipeQtyKey(recipeId);
     const recipeRow = getRecipeRowById(recipeId);
     if (!recipeKey || !recipeRow) return;
@@ -4154,23 +4472,25 @@ async function loadRecipesPage() {
         SELECT ID, title, servings_default, servings_min, servings_max
         FROM recipes
         ORDER BY title COLLATE NOCASE;
-      `
+      `,
     );
     const rows = recipesQ.length ? recipesQ[0].values : [];
-    const out = rows.map(([id, title, servingsDefault, servingsMin, servingsMax]) => {
-      const normalizedDefault = toPositiveServingsOrNull(servingsDefault);
-      return {
-        id: Number(id),
-        title: String(title || ''),
-        tags: [],
-        servingsDefault: normalizedDefault,
-        servings: {
-          default: normalizedDefault,
-          min: toPositiveServingsOrNull(servingsMin),
-          max: toPositiveServingsOrNull(servingsMax),
-        },
-      };
-    });
+    const out = rows.map(
+      ([id, title, servingsDefault, servingsMin, servingsMax]) => {
+        const normalizedDefault = toPositiveServingsOrNull(servingsDefault);
+        return {
+          id: Number(id),
+          title: String(title || ''),
+          tags: [],
+          servingsDefault: normalizedDefault,
+          servings: {
+            default: normalizedDefault,
+            min: toPositiveServingsOrNull(servingsMin),
+            max: toPositiveServingsOrNull(servingsMax),
+          },
+        };
+      },
+    );
     const byRecipe = new Map();
     out.forEach((r) => byRecipe.set(r.id, r));
 
@@ -4189,7 +4509,8 @@ async function loadRecipesPage() {
           if (!row) return;
           const nextTag = String(tagNameRaw || '').trim();
           if (!nextTag) return;
-          if (row.tags.some((t) => t.toLowerCase() === nextTag.toLowerCase())) return;
+          if (row.tags.some((t) => t.toLowerCase() === nextTag.toLowerCase()))
+            return;
           row.tags.push(nextTag);
         });
       }
@@ -4205,13 +4526,17 @@ async function loadRecipesPage() {
     const seen = new Set();
     (rows || []).forEach((r) => {
       (Array.isArray(r.tags) ? r.tags : []).forEach((name) => {
-        const key = String(name || '').trim().toLowerCase();
+        const key = String(name || '')
+          .trim()
+          .toLowerCase();
         if (!key || seen.has(key)) return;
         seen.add(key);
         names.push(String(name || '').trim());
       });
     });
-    names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    names.sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' }),
+    );
     if (typeof window.renderFilterChipList !== 'function') {
       chipMountEl.innerHTML = '';
       return;
@@ -4241,7 +4566,8 @@ async function loadRecipesPage() {
       const titleText = row.title.toLowerCase();
       const tags = Array.isArray(row.tags) ? row.tags : [];
       const tagsInline = tags.join(' ').toLowerCase();
-      const searchMatches = !q || titleText.includes(q) || tagsInline.includes(q);
+      const searchMatches =
+        !q || titleText.includes(q) || tagsInline.includes(q);
       if (!searchMatches) return false;
       if (!activeTagFilters.size) return true;
       const rowKeys = new Set(tags.map((t) => t.toLowerCase()));
@@ -4275,7 +4601,7 @@ async function loadRecipesPage() {
       headerSlot.className = 'recipe-list-servings-slot';
       const headerLabel = document.createElement('span');
       headerLabel.className = 'recipe-list-servings-header-label';
-      headerLabel.textContent = 'SERVINGS';
+      headerLabel.textContent = 'svgs';
       headerSlot.appendChild(headerLabel);
       headerLi.appendChild(headerSpacer);
       headerLi.appendChild(headerSlot);
@@ -4347,7 +4673,10 @@ async function loadRecipesPage() {
           if (recipeRowEditingKey === recipeKey) {
             recipeRowEditingKey = '';
           }
-          if (shouldCommit && typeof recipeWebServingsUi.commitInputValue === 'function') {
+          if (
+            shouldCommit &&
+            typeof recipeWebServingsUi.commitInputValue === 'function'
+          ) {
             recipeWebServingsUi.commitInputValue(row, input.value, {
               fallbackValue,
             });
@@ -4356,7 +4685,9 @@ async function loadRecipesPage() {
         };
 
         input.addEventListener('click', consumeRowStepperEvent);
-        input.addEventListener('pointerdown', (event) => event.stopPropagation());
+        input.addEventListener('pointerdown', (event) =>
+          event.stopPropagation(),
+        );
         input.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
             consumeRowStepperEvent(event);
@@ -4402,7 +4733,11 @@ async function loadRecipesPage() {
         if (!isRecipeWebSelectMode()) return;
         if (!getRecipeRowBounds(row)) return;
         if (disabledIndicator.contains(event.target)) return;
-        if (stepper.style.display === 'inline-flex' && stepper.contains(event.target)) return;
+        if (
+          stepper.style.display === 'inline-flex' &&
+          stepper.contains(event.target)
+        )
+          return;
         event.stopPropagation();
       });
       disabledIndicator.addEventListener('click', consumeRowStepperEvent);
@@ -4411,7 +4746,9 @@ async function loadRecipesPage() {
         event.stopPropagation();
       });
       stepper.addEventListener('click', (event) => event.stopPropagation());
-      stepper.addEventListener('pointerdown', (event) => event.stopPropagation());
+      stepper.addEventListener('pointerdown', (event) =>
+        event.stopPropagation(),
+      );
       qtyBtn.addEventListener('click', (event) => {
         consumeRowStepperEvent(event);
         startInlineServingsEdit();
@@ -4438,7 +4775,11 @@ async function loadRecipesPage() {
           typeof recipeWebServingsUi.getNextValue === 'function'
             ? recipeWebServingsUi.getNextValue(row, -1)
             : null;
-        if (nextValue == null || typeof recipeWebServingsUi.applyToModel !== 'function') return;
+        if (
+          nextValue == null ||
+          typeof recipeWebServingsUi.applyToModel !== 'function'
+        )
+          return;
         recipeWebServingsUi.applyToModel(row, nextValue);
         rerenderFilteredRecipes();
       });
@@ -4450,7 +4791,11 @@ async function loadRecipesPage() {
           typeof recipeWebServingsUi.getNextValue === 'function'
             ? recipeWebServingsUi.getNextValue(row, 1)
             : null;
-        if (nextValue == null || typeof recipeWebServingsUi.applyToModel !== 'function') return;
+        if (
+          nextValue == null ||
+          typeof recipeWebServingsUi.applyToModel !== 'function'
+        )
+          return;
         recipeWebServingsUi.applyToModel(row, nextValue);
         rerenderFilteredRecipes();
       });
@@ -4461,12 +4806,10 @@ async function loadRecipesPage() {
         bounds &&
         displayServings != null &&
         displayServings >= bounds.max - 1e-9;
-      minusBtn.disabled = !bounds || displayServings == null || !bounds.canAdjust;
+      minusBtn.disabled =
+        !bounds || displayServings == null || !bounds.canAdjust;
       plusBtn.disabled =
-        !bounds ||
-        displayServings == null ||
-        !bounds.canAdjust ||
-        atOrAboveMax;
+        !bounds || displayServings == null || !bounds.canAdjust || atOrAboveMax;
 
       titleHit.addEventListener('click', (event) => {
         // Treat Ctrl-click / Cmd-click as "delete"
@@ -4566,7 +4909,7 @@ async function loadRecipesPage() {
     try {
       db.run(
         'INSERT INTO recipes (title, servings_min, servings_max) VALUES (?, ?, ?);',
-        [title, 0.5, 99]
+        [title, 0.5, 99],
       );
       const idQ = db.exec('SELECT last_insert_rowid();');
       if (idQ.length && idQ[0].values.length) {
@@ -4665,7 +5008,7 @@ async function loadRecipesPage() {
           return;
         }
         const previousPlan = cloneForUndo(getShoppingPlan(), () =>
-          createEmptyShoppingPlan()
+          createEmptyShoppingPlan(),
         );
         const previousRecipeSelections = new Set(recipeSelectionKeys);
         const restoreClearedRecipes = () => {
@@ -4693,7 +5036,6 @@ async function loadRecipesPage() {
       });
     }
   }
-
 }
 
 // --- Shopping / Units / Stores loaders (v0 stubs) ---
@@ -4753,20 +5095,30 @@ async function loadShoppingPage() {
   };
   const consumeShoppingNavTarget = () => {
     try {
-      const rawId = sessionStorage.getItem(window.favoriteEatsSessionKeys.shoppingNavTargetId);
-      const rawName = sessionStorage.getItem(window.favoriteEatsSessionKeys.shoppingNavTargetName);
-      sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetId);
-      sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetName);
+      const rawId = sessionStorage.getItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetId,
+      );
+      const rawName = sessionStorage.getItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetName,
+      );
+      sessionStorage.removeItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetId,
+      );
+      sessionStorage.removeItem(
+        window.favoriteEatsSessionKeys.shoppingNavTargetName,
+      );
       const targetId = Number(rawId);
-      const targetName = String(rawName || '').trim().toLowerCase();
-      if (
-        (!Number.isFinite(targetId) || targetId <= 0) &&
-        !targetName
-      ) {
+      const targetName = String(rawName || '')
+        .trim()
+        .toLowerCase();
+      if ((!Number.isFinite(targetId) || targetId <= 0) && !targetName) {
         return null;
       }
       return {
-        id: Number.isFinite(targetId) && targetId > 0 ? Math.trunc(targetId) : null,
+        id:
+          Number.isFinite(targetId) && targetId > 0
+            ? Math.trunc(targetId)
+            : null,
         name: targetName || '',
       };
     } catch (_) {
@@ -4805,7 +5157,9 @@ async function loadShoppingPage() {
               return true;
             }
             const key = String(
-              li.dataset.shoppingStepperKey || li.dataset.variantParentKey || ''
+              li.dataset.shoppingStepperKey ||
+                li.dataset.variantParentKey ||
+                '',
             )
               .trim()
               .toLowerCase();
@@ -4893,7 +5247,10 @@ async function loadShoppingPage() {
   const hasIsHiddenCol = tableHasColumn('ingredients', 'is_hidden');
   const hasIsFoodCol = tableHasColumn('ingredients', 'is_food');
   const hasLemmaCol = tableHasColumn('ingredients', 'lemma');
-  const hasPluralByDefaultCol = tableHasColumn('ingredients', 'plural_by_default');
+  const hasPluralByDefaultCol = tableHasColumn(
+    'ingredients',
+    'plural_by_default',
+  );
   const hasIsMassNounCol = tableHasColumn('ingredients', 'is_mass_noun');
   const hasPluralOverrideCol = tableHasColumn('ingredients', 'plural_override');
   const hasLegacyHideCol = tableHasColumn(
@@ -5015,7 +5372,9 @@ async function loadShoppingPage() {
     const byName = new Map();
 
     rawRows.forEach((row) => {
-      const key = String(row.name || '').trim().toLowerCase();
+      const key = String(row.name || '')
+        .trim()
+        .toLowerCase();
       if (!key) return;
 
       if (!byName.has(key)) {
@@ -5056,7 +5415,9 @@ async function loadShoppingPage() {
       byName.get(key)._lemmas.push(String(row.lemma || '').trim());
       byName.get(key)._pluralByDefaultFlags.push(!!row.pluralByDefault);
       byName.get(key)._isMassNounFlags.push(!!row.isMassNoun);
-      byName.get(key)._pluralOverrides.push(String(row.pluralOverride || '').trim());
+      byName
+        .get(key)
+        ._pluralOverrides.push(String(row.pluralOverride || '').trim());
     });
 
     // Dedupe variants, then flatten into an array.
@@ -5087,16 +5448,24 @@ async function loadShoppingPage() {
       } else {
         item.variants = [];
       }
-      if (Array.isArray(item._variantHomeLocations) && item._variantHomeLocations.length > 0) {
+      if (
+        Array.isArray(item._variantHomeLocations) &&
+        item._variantHomeLocations.length > 0
+      ) {
         const seenVariantHomes = new Map();
         item._variantHomeLocations.forEach((entry) => {
           const variantName = String(entry?.variant || '').trim();
           if (!variantName) return;
           const variantKey = variantName.toLowerCase();
-          const normalizedHomeLocation = normalizeShoppingHomeLocationId(entry?.homeLocation || 'none');
+          const normalizedHomeLocation = normalizeShoppingHomeLocationId(
+            entry?.homeLocation || 'none',
+          );
           const existing = seenVariantHomes.get(variantKey);
           if (existing) {
-            if (existing.homeLocation === 'none' && normalizedHomeLocation !== 'none') {
+            if (
+              existing.homeLocation === 'none' &&
+              normalizedHomeLocation !== 'none'
+            ) {
               existing.homeLocation = normalizedHomeLocation;
             }
             return;
@@ -5108,7 +5477,13 @@ async function loadShoppingPage() {
           seenVariantHomes.set(variantKey, nextEntry);
         });
         item.variantHomeLocations = item.variants
-          .map((variantName) => seenVariantHomes.get(String(variantName || '').trim().toLowerCase()))
+          .map((variantName) =>
+            seenVariantHomes.get(
+              String(variantName || '')
+                .trim()
+                .toLowerCase(),
+            ),
+          )
           .filter(Boolean);
       } else {
         item.variantHomeLocations = [];
@@ -5132,10 +5507,13 @@ async function loadShoppingPage() {
           : true;
       item.lemma =
         Array.isArray(item._lemmas) && item._lemmas.length > 0
-          ? String(item._lemmas.find((value) => String(value || '').trim()) || '').trim()
+          ? String(
+              item._lemmas.find((value) => String(value || '').trim()) || '',
+            ).trim()
           : '';
       item.pluralByDefault =
-        Array.isArray(item._pluralByDefaultFlags) && item._pluralByDefaultFlags.length > 0
+        Array.isArray(item._pluralByDefaultFlags) &&
+        item._pluralByDefaultFlags.length > 0
           ? item._pluralByDefaultFlags.some(Boolean)
           : false;
       item.isMassNoun =
@@ -5145,7 +5523,9 @@ async function loadShoppingPage() {
       item.pluralOverride =
         Array.isArray(item._pluralOverrides) && item._pluralOverrides.length > 0
           ? String(
-              item._pluralOverrides.find((value) => String(value || '').trim()) || '',
+              item._pluralOverrides.find((value) =>
+                String(value || '').trim(),
+              ) || '',
             ).trim()
           : '';
       delete item._deprecatedFlags;
@@ -5222,7 +5602,9 @@ async function loadShoppingPage() {
       const byKey = new Map();
       if (Array.isArray(tagQ) && tagQ.length && Array.isArray(tagQ[0].values)) {
         tagQ[0].values.forEach(([nameKey, tagName]) => {
-          const k = String(nameKey || '').trim().toLowerCase();
+          const k = String(nameKey || '')
+            .trim()
+            .toLowerCase();
           const tag = String(tagName || '').trim();
           if (!k || !tag) return;
           if (!byKey.has(k)) byKey.set(k, new Set());
@@ -5230,14 +5612,18 @@ async function loadShoppingPage() {
         });
       }
       shoppingRows.forEach((item) => {
-        const k = String(item?.name || '').trim().toLowerCase();
+        const k = String(item?.name || '')
+          .trim()
+          .toLowerCase();
         const set = byKey.get(k);
         if (!set) {
           item.tags = [];
           return;
         }
         const arr = Array.from(set);
-        arr.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        arr.sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: 'base' }),
+        );
         item.tags = arr;
       });
     } catch (err) {
@@ -5270,21 +5656,32 @@ async function loadShoppingPage() {
         ) refs
         GROUP BY name_key;
       `);
-      if (Array.isArray(recipeQ) && recipeQ.length && Array.isArray(recipeQ[0].values)) {
+      if (
+        Array.isArray(recipeQ) &&
+        recipeQ.length &&
+        Array.isArray(recipeQ[0].values)
+      ) {
         recipeQ[0].values.forEach(([nameKey, recipeCount]) => {
-          const key = String(nameKey || '').trim().toLowerCase();
+          const key = String(nameKey || '')
+            .trim()
+            .toLowerCase();
           if (!key) return;
           const count = Number(recipeCount);
           recipeCounts.set(key, Number.isFinite(count) ? count : 0);
         });
       }
     } catch (err) {
-      console.warn('buildShoppingUsageCountMaps: recipe count query failed', err);
+      console.warn(
+        'buildShoppingUsageCountMaps: recipe count query failed',
+        err,
+      );
     }
 
     try {
       const hasBaseAisleTable = tableExists('ingredient_store_location');
-      const hasVariantAisleTable = tableExists('ingredient_variant_store_location');
+      const hasVariantAisleTable = tableExists(
+        'ingredient_variant_store_location',
+      );
       const aisleSources = [];
       if (hasBaseAisleTable) {
         aisleSources.push(`
@@ -5309,9 +5706,15 @@ async function loadShoppingPage() {
           ) refs
           GROUP BY name_key;
         `);
-        if (Array.isArray(aisleQ) && aisleQ.length && Array.isArray(aisleQ[0].values)) {
+        if (
+          Array.isArray(aisleQ) &&
+          aisleQ.length &&
+          Array.isArray(aisleQ[0].values)
+        ) {
           aisleQ[0].values.forEach(([nameKey, aisleCount]) => {
-            const key = String(nameKey || '').trim().toLowerCase();
+            const key = String(nameKey || '')
+              .trim()
+              .toLowerCase();
             if (!key) return;
             const count = Number(aisleCount);
             aisleCounts.set(key, Number.isFinite(count) ? count : 0);
@@ -5319,7 +5722,10 @@ async function loadShoppingPage() {
         }
       }
     } catch (err) {
-      console.warn('buildShoppingUsageCountMaps: aisle count query failed', err);
+      console.warn(
+        'buildShoppingUsageCountMaps: aisle count query failed',
+        err,
+      );
     }
 
     return { recipeCounts, aisleCounts };
@@ -5327,8 +5733,12 @@ async function loadShoppingPage() {
 
   const shoppingUsageCounts = buildShoppingUsageCountMaps();
   shoppingRows.forEach((item) => {
-    const key = String(item?.name || '').trim().toLowerCase();
-    item.recipeUseCount = Number(shoppingUsageCounts.recipeCounts.get(key) || 0);
+    const key = String(item?.name || '')
+      .trim()
+      .toLowerCase();
+    item.recipeUseCount = Number(
+      shoppingUsageCounts.recipeCounts.get(key) || 0,
+    );
     item.aisleUseCount = Number(shoppingUsageCounts.aisleCounts.get(key) || 0);
   });
 
@@ -5375,7 +5785,9 @@ async function loadShoppingPage() {
   let filterChipRail = null;
   let suppressLocationDropdownReopen = false;
   let reopenShoppingCompoundDropdownId = '';
-  const previousPageId = String(window.__favoriteEatsPreviousPageId || '').trim();
+  const previousPageId = String(
+    window.__favoriteEatsPreviousPageId || '',
+  ).trim();
   const shouldRestoreChipState =
     previousPageId === 'shopping' || previousPageId === 'shopping-editor';
   const syncShoppingActionButtonState = () => {
@@ -5393,11 +5805,15 @@ async function loadShoppingPage() {
   };
 
   const getShoppingSelectionKey = (rawName) =>
-    String(rawName || '').trim().toLowerCase();
+    String(rawName || '')
+      .trim()
+      .toLowerCase();
   const isShoppingWebSelectMode = () => isForceWebModeEnabled();
-  const getShoppingFilterChipMode = () => (isShoppingWebSelectMode() ? 'web' : 'editor');
-  const getShoppingFilterChipStorageKey = (mode = getShoppingFilterChipMode()) =>
-    `${SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX}:${mode}`;
+  const getShoppingFilterChipMode = () =>
+    isShoppingWebSelectMode() ? 'web' : 'editor';
+  const getShoppingFilterChipStorageKey = (
+    mode = getShoppingFilterChipMode(),
+  ) => `${SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX}:${mode}`;
   // On macOS, Ctrl+primary click can emit a contextmenu event.
   // Treat that gesture like a normal click in shopping web mode.
   const isCtrlPrimaryContextMenuGesture = (event) =>
@@ -5481,7 +5897,11 @@ async function loadShoppingPage() {
       if (!key) return;
       const entry = storedSelections[rawKey];
       const quantity = Number(entry?.quantity);
-      if (!Number.isFinite(quantity) || Math.abs(quantity) < SHOPPING_QTY_EPSILON) return;
+      if (
+        !Number.isFinite(quantity) ||
+        Math.abs(quantity) < SHOPPING_QTY_EPSILON
+      )
+        return;
       shoppingQuantities.set(key, quantity);
       selectedShoppingNames.add(key);
       shoppingSelectionMeta.set(key, {
@@ -5495,7 +5915,9 @@ async function loadShoppingPage() {
   const VARIANT_KEY_SEP = '\x00';
   const getVariantQtyKey = (itemName, variantName) => {
     const base = getShoppingSelectionKey(itemName);
-    const v = String(variantName || '').trim().toLowerCase();
+    const v = String(variantName || '')
+      .trim()
+      .toLowerCase();
     return v ? `${base}${VARIANT_KEY_SEP}${v}` : base;
   };
   const getShoppingItemVariantAwareKey = (itemName, variantName = '') => {
@@ -5505,9 +5927,7 @@ async function loadShoppingPage() {
       (item) => getShoppingSelectionKey(item?.name) === itemKey,
     );
     const hasVariants =
-      !!match &&
-      Array.isArray(match.variants) &&
-      match.variants.length > 0;
+      !!match && Array.isArray(match.variants) && match.variants.length > 0;
     if (!hasVariants) return itemKey;
     return getVariantQtyKey(itemName, variantName || 'default');
   };
@@ -5533,7 +5953,11 @@ async function loadShoppingPage() {
     const base = getShoppingSelectionKey(itemName);
     let total = getShoppingQty(`${base}${VARIANT_KEY_SEP}default`);
     (variants || []).forEach((v) => {
-      total += getShoppingQty(`${base}${VARIANT_KEY_SEP}${String(v || '').trim().toLowerCase()}`);
+      total += getShoppingQty(
+        `${base}${VARIANT_KEY_SEP}${String(v || '')
+          .trim()
+          .toLowerCase()}`,
+      );
     });
     return total;
   };
@@ -5542,7 +5966,9 @@ async function loadShoppingPage() {
     const m = new Map();
     m.set('default', getShoppingQty(`${base}${VARIANT_KEY_SEP}default`));
     (variants || []).forEach((v) => {
-      const vKey = String(v || '').trim().toLowerCase();
+      const vKey = String(v || '')
+        .trim()
+        .toLowerCase();
       m.set(v, getShoppingQty(`${base}${VARIANT_KEY_SEP}${vKey}`));
     });
     return m;
@@ -5553,7 +5979,11 @@ async function loadShoppingPage() {
     const base = getShoppingSelectionKey(itemName);
     let total = getRecipeShoppingQty(`${base}${VARIANT_KEY_SEP}default`);
     (variants || []).forEach((v) => {
-      total += getRecipeShoppingQty(`${base}${VARIANT_KEY_SEP}${String(v || '').trim().toLowerCase()}`);
+      total += getRecipeShoppingQty(
+        `${base}${VARIANT_KEY_SEP}${String(v || '')
+          .trim()
+          .toLowerCase()}`,
+      );
     });
     return total;
   }
@@ -5613,7 +6043,9 @@ async function loadShoppingPage() {
     listRowStepper.syncRowVisuals(rowEl, {
       enabled: isShoppingWebSelectMode(),
       qty: getShoppingQty(getShoppingSelectionKey(itemName)),
-      isActive: shoppingRowStepperController.isActive(getShoppingSelectionKey(itemName)),
+      isActive: shoppingRowStepperController.isActive(
+        getShoppingSelectionKey(itemName),
+      ),
       selectedDatasetKey: 'shoppingSelected',
     });
   };
@@ -5644,10 +6076,15 @@ async function loadShoppingPage() {
     const qty = getShoppingQty(key);
     const nextQty = getNextShoppingStepQty(qty, delta);
     setShoppingQty(key, nextQty, { itemName });
-    if (!hasPositiveShoppingQty(nextQty) && shoppingRowStepperController.isActive(key)) {
+    if (
+      !hasPositiveShoppingQty(nextQty) &&
+      shoppingRowStepperController.isActive(key)
+    ) {
       shoppingRowStepperController.collapseActive();
     }
-    refreshShoppingSelectionUi({ activeKey: hasPositiveShoppingQty(nextQty) ? key : '' });
+    refreshShoppingSelectionUi({
+      activeKey: hasPositiveShoppingQty(nextQty) ? key : '',
+    });
   };
   const attachShoppingQtyManualEdit = ({
     qtyEl,
@@ -5767,21 +6204,31 @@ async function loadShoppingPage() {
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
-      const knownIds = new Set(getActiveShoppingFilterChipDefs().map((c) => String(c.id)));
+      const knownIds = new Set(
+        getActiveShoppingFilterChipDefs().map((c) => String(c.id)),
+      );
       shoppingLocationChipDefs.forEach((locationDef) => {
-        const locationId = String(locationDef?.id || '').trim().toLowerCase();
+        const locationId = String(locationDef?.id || '')
+          .trim()
+          .toLowerCase();
         if (locationId) knownIds.add(locationId);
       });
       shoppingMoreChipOptionDefs.forEach((optionDef) => {
-        const optionId = String(optionDef?.id || '').trim().toLowerCase();
+        const optionId = String(optionDef?.id || '')
+          .trim()
+          .toLowerCase();
         if (optionId) knownIds.add(optionId);
       });
       shoppingTagChipOptionDefs.forEach((def) => {
-        const tid = String(def?.id || '').trim().toLowerCase();
+        const tid = String(def?.id || '')
+          .trim()
+          .toLowerCase();
         if (tid) knownIds.add(tid);
       });
       parsed.forEach((chipId) => {
-        const id = String(chipId || '').trim().toLowerCase();
+        const id = String(chipId || '')
+          .trim()
+          .toLowerCase();
         // Back-compat: old "hidden" chip represented deprecated/removed.
         if (id === 'hidden' && knownIds.has('removed')) {
           activeFilterChips.add('removed');
@@ -5794,24 +6241,34 @@ async function loadShoppingPage() {
         shouldPersistMigratedState = true;
       }
       if (shouldPersistMigratedState) {
-        sessionStorage.setItem(storageKey, JSON.stringify(Array.from(activeFilterChips)));
+        sessionStorage.setItem(
+          storageKey,
+          JSON.stringify(Array.from(activeFilterChips)),
+        );
       }
     } catch (_) {}
   };
 
-  const normalizeLocationForChip = (raw) => normalizeShoppingHomeLocationId(raw);
+  const normalizeLocationForChip = (raw) =>
+    normalizeShoppingHomeLocationId(raw);
   const getShoppingRowLocationIdsForBrowse = (item) =>
-    getShoppingBrowseLocationIds(item).map((locationId) => normalizeLocationForChip(locationId));
+    getShoppingBrowseLocationIds(item).map((locationId) =>
+      normalizeLocationForChip(locationId),
+    );
 
   const recomputeShoppingChipCounts = () => {
     const counts = new Map();
     getActiveShoppingFilterChipDefs().forEach((c) => counts.set(c.id, 0));
     shoppingMoreChipOptionDefs.forEach((optionDef) => {
-      const optionId = String(optionDef?.id || '').trim().toLowerCase();
+      const optionId = String(optionDef?.id || '')
+        .trim()
+        .toLowerCase();
       if (optionId) counts.set(optionId, 0);
     });
     shoppingTagChipOptionDefs.forEach((def) => {
-      const tid = String(def?.id || '').trim().toLowerCase();
+      const tid = String(def?.id || '')
+        .trim()
+        .toLowerCase();
       if (tid) counts.set(tid, 0);
     });
     counts.set('recent', shoppingRows.length);
@@ -5845,7 +6302,9 @@ async function loadShoppingPage() {
       }
       const tagSeen = new Set();
       (Array.isArray(item.tags) ? item.tags : []).forEach((raw) => {
-        const key = String(raw || '').trim().toLowerCase();
+        const key = String(raw || '')
+          .trim()
+          .toLowerCase();
         if (!key) return;
         const chipId = `${SHOPPING_TAG_FILTER_PREFIX}${key}`;
         if (tagSeen.has(chipId)) return;
@@ -5870,12 +6329,20 @@ async function loadShoppingPage() {
 
   const getActiveShoppingLocationFilterIds = (chipIds = activeFilterChips) =>
     shoppingLocationChipDefs
-      .map((c) => String(c?.id || '').trim().toLowerCase())
+      .map((c) =>
+        String(c?.id || '')
+          .trim()
+          .toLowerCase(),
+      )
       .filter((id) => id && chipIds.has(id));
 
   const getActiveShoppingTagKeysFromChipIds = (chipIds = activeFilterChips) =>
     Array.from(chipIds)
-      .map((id) => String(id || '').trim().toLowerCase())
+      .map((id) =>
+        String(id || '')
+          .trim()
+          .toLowerCase(),
+      )
       .filter((id) => id.startsWith(SHOPPING_TAG_FILTER_PREFIX))
       .map((id) => id.slice(SHOPPING_TAG_FILTER_PREFIX.length));
 
@@ -5897,7 +6364,13 @@ async function loadShoppingPage() {
       ? forcedLocationIds
       : getActiveShoppingLocationFilterIds(chipIds);
     const activeTagKeys = Array.isArray(forcedTagKeys)
-      ? forcedTagKeys.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean)
+      ? forcedTagKeys
+          .map((k) =>
+            String(k || '')
+              .trim()
+              .toLowerCase(),
+          )
+          .filter(Boolean)
       : getActiveShoppingTagKeysFromChipIds(chipIds);
     return (item) => {
       const name = String(item?.name || '').toLowerCase();
@@ -5905,9 +6378,17 @@ async function loadShoppingPage() {
       const matchesSearch =
         !query ||
         name.includes(query) ||
-        variants.some((v) => String(v || '').toLowerCase().includes(query));
-      const matchesRemoved = removedOnly ? item?.isDeprecated === true : item?.isDeprecated !== true;
-      const matchesHidden = hiddenOnly ? item?.isHidden === true : item?.isHidden !== true;
+        variants.some((v) =>
+          String(v || '')
+            .toLowerCase()
+            .includes(query),
+        );
+      const matchesRemoved = removedOnly
+        ? item?.isDeprecated === true
+        : item?.isDeprecated !== true;
+      const matchesHidden = hiddenOnly
+        ? item?.isHidden === true
+        : item?.isHidden !== true;
       const matchesFood = foodOnly
         ? item?.isFood === true
         : notFoodOnly
@@ -5918,8 +6399,12 @@ async function loadShoppingPage() {
         getShoppingRowLocationIdsForBrowse(item).some((locationId) =>
           activeLocationIds.includes(locationId),
         );
-      const matchesNoRecipe = noRecipeOnly ? Number(item?.recipeUseCount || 0) <= 0 : true;
-      const matchesNoAisle = noAisleOnly ? Number(item?.aisleUseCount || 0) <= 0 : true;
+      const matchesNoRecipe = noRecipeOnly
+        ? Number(item?.recipeUseCount || 0) <= 0
+        : true;
+      const matchesNoAisle = noAisleOnly
+        ? Number(item?.aisleUseCount || 0) <= 0
+        : true;
       const matchesSelected = selectedOnly
         ? hasPositiveShoppingQty(getShoppingRowTotalQty(item))
         : true;
@@ -5930,7 +6415,12 @@ async function loadShoppingPage() {
         activeTagKeys.length === 0 ||
         (Array.isArray(item.tags) &&
           activeTagKeys.some((tk) =>
-            item.tags.some((t) => String(t || '').trim().toLowerCase() === tk),
+            item.tags.some(
+              (t) =>
+                String(t || '')
+                  .trim()
+                  .toLowerCase() === tk,
+            ),
           ));
       return (
         matchesSearch &&
@@ -5948,7 +6438,9 @@ async function loadShoppingPage() {
   };
 
   const isShoppingLocationOptionUnavailable = (rawLocationId) => {
-    const locationId = String(rawLocationId || '').trim().toLowerCase();
+    const locationId = String(rawLocationId || '')
+      .trim()
+      .toLowerCase();
     if (!locationId) return true;
     // Keep selected options enabled so users can always unselect them.
     if (activeFilterChips.has(locationId)) return false;
@@ -5960,7 +6452,9 @@ async function loadShoppingPage() {
   };
 
   const isShoppingTagOptionUnavailable = (rawChipId) => {
-    const id = String(rawChipId || '').trim().toLowerCase();
+    const id = String(rawChipId || '')
+      .trim()
+      .toLowerCase();
     if (!id.startsWith(SHOPPING_TAG_FILTER_PREFIX)) return true;
     const keyOnly = id.slice(SHOPPING_TAG_FILTER_PREFIX.length);
     if (!keyOnly) return true;
@@ -5981,7 +6475,8 @@ async function loadShoppingPage() {
     }
     const reopenCompoundDropdown =
       !suppressLocationDropdownReopen &&
-      chipMountEl.querySelector('.app-filter-chip-dropdown-wrap.is-open') != null;
+      chipMountEl.querySelector('.app-filter-chip-dropdown-wrap.is-open') !=
+        null;
     const reopenCompoundDropdownId = reopenCompoundDropdown
       ? reopenShoppingCompoundDropdownId
       : '';
@@ -5990,22 +6485,34 @@ async function loadShoppingPage() {
     const chips = getActiveShoppingFilterChipDefs()
       .filter((chipDef) => chipDef?.kind !== 'location')
       .map((chipDef) => {
-      const chipId = String(chipDef?.id || '').toLowerCase();
-      const count = Number(shoppingChipCounts.get(chipId) || 0);
-      return {
-        id: chipId,
-        label: chipDef?.label || chipId,
-        disabled: count <= 0,
-      };
-    });
+        const chipId = String(chipDef?.id || '').toLowerCase();
+        const count = Number(shoppingChipCounts.get(chipId) || 0);
+        return {
+          id: chipId,
+          label: chipDef?.label || chipId,
+          disabled: count <= 0,
+        };
+      });
     const locationSelectedIds = shoppingLocationChipDefs
-      .map((locationDef) => String(locationDef?.id || '').trim().toLowerCase())
+      .map((locationDef) =>
+        String(locationDef?.id || '')
+          .trim()
+          .toLowerCase(),
+      )
       .filter((locationId) => locationId && activeFilterChips.has(locationId));
     const moreSelectedIds = shoppingMoreChipOptionDefs
-      .map((optionDef) => String(optionDef?.id || '').trim().toLowerCase())
+      .map((optionDef) =>
+        String(optionDef?.id || '')
+          .trim()
+          .toLowerCase(),
+      )
       .filter((optionId) => optionId && activeFilterChips.has(optionId));
     const tagSelectedIds = shoppingTagChipOptionDefs
-      .map((def) => String(def?.id || '').trim().toLowerCase())
+      .map((def) =>
+        String(def?.id || '')
+          .trim()
+          .toLowerCase(),
+      )
       .filter((tid) => tid && activeFilterChips.has(tid));
     window.renderFilterChipList({
       mountEl: chipMountEl,
@@ -6018,7 +6525,9 @@ async function loadShoppingPage() {
           id: 'home-locations',
           label: 'location',
           options: shoppingLocationChipDefs.map((locationDef) => {
-            const locationId = String(locationDef?.id || '').trim().toLowerCase();
+            const locationId = String(locationDef?.id || '')
+              .trim()
+              .toLowerCase();
             return {
               id: locationId,
               label: String(locationDef?.label || locationId),
@@ -6029,7 +6538,11 @@ async function loadShoppingPage() {
           onToggleOption: (locationId) => {
             const key = String(locationId || '').toLowerCase();
             if (!key) return;
-            if (!activeFilterChips.has(key) && isShoppingLocationOptionUnavailable(key)) return;
+            if (
+              !activeFilterChips.has(key) &&
+              isShoppingLocationOptionUnavailable(key)
+            )
+              return;
             if (activeFilterChips.has(key)) {
               activeFilterChips.delete(key);
             } else {
@@ -6044,7 +6557,9 @@ async function loadShoppingPage() {
             suppressLocationDropdownReopen = true;
             reopenShoppingCompoundDropdownId = '';
             shoppingLocationChipDefs.forEach((locationDef) => {
-              const id = String(locationDef?.id || '').trim().toLowerCase();
+              const id = String(locationDef?.id || '')
+                .trim()
+                .toLowerCase();
               if (id) activeFilterChips.delete(id);
             });
             persistShoppingChipState();
@@ -6058,7 +6573,9 @@ async function loadShoppingPage() {
           label: 'tags',
           disabled: shoppingTagChipOptionDefs.length === 0,
           options: shoppingTagChipOptionDefs.map((def) => {
-            const optionId = String(def?.id || '').trim().toLowerCase();
+            const optionId = String(def?.id || '')
+              .trim()
+              .toLowerCase();
             return {
               id: optionId,
               label: String(def?.label || optionId),
@@ -6069,7 +6586,11 @@ async function loadShoppingPage() {
           onToggleOption: (optionId) => {
             const key = String(optionId || '').toLowerCase();
             if (!key.startsWith(SHOPPING_TAG_FILTER_PREFIX)) return;
-            if (!activeFilterChips.has(key) && isShoppingTagOptionUnavailable(key)) return;
+            if (
+              !activeFilterChips.has(key) &&
+              isShoppingTagOptionUnavailable(key)
+            )
+              return;
             if (activeFilterChips.has(key)) {
               activeFilterChips.delete(key);
             } else {
@@ -6084,7 +6605,9 @@ async function loadShoppingPage() {
             suppressLocationDropdownReopen = true;
             reopenShoppingCompoundDropdownId = '';
             shoppingTagChipOptionDefs.forEach((def) => {
-              const tid = String(def?.id || '').trim().toLowerCase();
+              const tid = String(def?.id || '')
+                .trim()
+                .toLowerCase();
               if (tid) activeFilterChips.delete(tid);
             });
             persistShoppingChipState();
@@ -6097,7 +6620,9 @@ async function loadShoppingPage() {
           id: 'shopping-more-filters',
           label: 'more',
           options: shoppingMoreChipOptionDefs.map((optionDef) => {
-            const optionId = String(optionDef?.id || '').trim().toLowerCase();
+            const optionId = String(optionDef?.id || '')
+              .trim()
+              .toLowerCase();
             const count = Number(shoppingChipCounts.get(optionId) || 0);
             return {
               id: optionId,
@@ -6125,7 +6650,9 @@ async function loadShoppingPage() {
             suppressLocationDropdownReopen = true;
             reopenShoppingCompoundDropdownId = '';
             shoppingMoreChipOptionDefs.forEach((optionDef) => {
-              const optionId = String(optionDef?.id || '').trim().toLowerCase();
+              const optionId = String(optionDef?.id || '')
+                .trim()
+                .toLowerCase();
               if (optionId) activeFilterChips.delete(optionId);
             });
             persistShoppingChipState();
@@ -6141,7 +6668,8 @@ async function loadShoppingPage() {
         if (!key) return;
         const count = Number(shoppingChipCounts.get(key) || 0);
         if (count <= 0) return;
-        const isSelectedFamilyChip = key === 'selected' || key === 'for recipes';
+        const isSelectedFamilyChip =
+          key === 'selected' || key === 'for recipes';
         const isFoodFamilyChip = key === 'food' || key === 'not food';
         if (activeFilterChips.has(key)) {
           activeFilterChips.delete(key);
@@ -6190,7 +6718,9 @@ async function loadShoppingPage() {
   };
 
   const getFilteredShoppingRows = () => {
-    const rowMatchesFilters = buildShoppingRowFilterMatcher({ chipIds: activeFilterChips });
+    const rowMatchesFilters = buildShoppingRowFilterMatcher({
+      chipIds: activeFilterChips,
+    });
     const recentFirst = activeFilterChips.has('recent');
     const filtered = shoppingRows.filter((item) => rowMatchesFilters(item));
     filtered.sort((a, b) => {
@@ -6443,7 +6973,8 @@ async function loadShoppingPage() {
   function getShoppingItemDisplayName(item) {
     const fallbackName = String(item?.name || '').trim();
     if (!fallbackName) return '';
-    if (typeof window?.getIngredientNounDisplay !== 'function') return fallbackName;
+    if (typeof window?.getIngredientNounDisplay !== 'function')
+      return fallbackName;
 
     const displayName = window.getIngredientNounDisplay({
       name: fallbackName,
@@ -6551,7 +7082,8 @@ async function loadShoppingPage() {
       let parts = [];
       if (anySelected) {
         const defaultQty = (variantQtyMap && variantQtyMap.get('default')) || 0;
-        if (defaultQty > 0) parts.push(`${fmtVariantQtyForLabel(defaultQty)} any`);
+        if (defaultQty > 0)
+          parts.push(`${fmtVariantQtyForLabel(defaultQty)} any`);
         const counted = [];
         const uncounted = [];
         vs.forEach((v) => {
@@ -6649,7 +7181,8 @@ async function loadShoppingPage() {
       const baseDisplayName = getShoppingItemDisplayName(item);
       const displayName = getShoppingBrowseDisplayName(item);
       const hasVariantDisplayHint = displayName !== baseDisplayName;
-      const hasVariants = Array.isArray(item.variants) && item.variants.length > 0;
+      const hasVariants =
+        Array.isArray(item.variants) && item.variants.length > 0;
       const webSelectMode = isShoppingWebSelectMode();
       if (Number.isFinite(Number(item?.id)) && Number(item.id) > 0) {
         li.dataset.shoppingItemId = String(Math.trunc(Number(item.id)));
@@ -6671,7 +7204,7 @@ async function loadShoppingPage() {
         badge.className = 'shopping-list-row-badge';
         // Keep the badge slot mounted to avoid parent-row layout shifts when
         // quantities transition between zero/non-zero while expanded.
-        badge.style.display = 'inline-block';
+        badge.style.display = 'inline-flex';
         badge.style.visibility = 'hidden';
 
         li.appendChild(labelSpan);
@@ -6694,10 +7227,10 @@ async function loadShoppingPage() {
                 typeof window.formatShoppingQtyForDisplay === 'function'
                   ? window.formatShoppingQtyForDisplay(totalQty)
                   : String(totalQty);
-              badge.textContent = `${label}x`;
+              listRowStepper.setShoppingListBadgeQtyLabel(badge, label);
               badge.style.visibility = 'visible';
             } else {
-              badge.textContent = '';
+              listRowStepper.setShoppingListBadgeQtyLabel(badge, '');
               badge.style.visibility = 'hidden';
             }
           } else {
@@ -6706,10 +7239,10 @@ async function loadShoppingPage() {
                 typeof window.formatShoppingQtyForDisplay === 'function'
                   ? window.formatShoppingQtyForDisplay(totalQty)
                   : String(totalQty);
-              badge.textContent = `${label}x`;
+              listRowStepper.setShoppingListBadgeQtyLabel(badge, label);
               badge.style.visibility = 'visible';
             } else {
-              badge.textContent = '';
+              listRowStepper.setShoppingListBadgeQtyLabel(badge, '');
               badge.style.visibility = 'hidden';
             }
             requestAnimationFrame(() => {
@@ -6719,7 +7252,12 @@ async function loadShoppingPage() {
                   return;
                 }
                 const qtyMap = getVariantQtyMap(baseName, item.variants);
-                const nextText = buildLineToFit(li, baseDisplayName, item.variants, qtyMap);
+                const nextText = buildLineToFit(
+                  li,
+                  baseDisplayName,
+                  item.variants,
+                  qtyMap,
+                );
                 labelSpan.textContent = `${nextText} \u25BE`;
               } catch (_) {}
             });
@@ -6731,7 +7269,9 @@ async function loadShoppingPage() {
         const allVariantNames = ['default', ...item.variants];
         const clearVariantChildStepperExpansion = () => {
           allVariantNames.forEach((variantName) => {
-            expandedVariantChildSteppers.delete(getVariantQtyKey(baseName, variantName));
+            expandedVariantChildSteppers.delete(
+              getVariantQtyKey(baseName, variantName),
+            );
           });
           childRows.forEach((row) => {
             const varKey = String(row.dataset.variantQtyKey || '');
@@ -6764,14 +7304,21 @@ async function loadShoppingPage() {
 
           const childLabel = document.createElement('span');
           childLabel.className = 'shopping-list-row-label';
-          childLabel.textContent = variantName === 'default' ? 'any' : variantName;
+          childLabel.textContent =
+            variantName === 'default' ? 'any' : variantName;
 
           const childIcon = document.createElement('span');
-          childIcon.className = 'material-symbols-outlined shopping-list-row-icon';
+          childIcon.className =
+            'material-symbols-outlined shopping-list-row-icon';
           childIcon.textContent = 'add_box';
           childIcon.setAttribute('aria-hidden', 'true');
 
-          const { stepper: childStepper, minusBtn, plusBtn, qtySpan } = makeStepperDOM();
+          const {
+            stepper: childStepper,
+            minusBtn,
+            plusBtn,
+            qtySpan,
+          } = makeStepperDOM();
 
           childLi.appendChild(childLabel);
           childLi.appendChild(childIcon);
@@ -6945,15 +7492,24 @@ async function loadShoppingPage() {
         event.preventDefault();
         event.stopPropagation();
         if (!isShoppingWebSelectMode()) return;
-        shoppingRowStepperController.activate(getShoppingSelectionKey(baseName));
+        shoppingRowStepperController.activate(
+          getShoppingSelectionKey(baseName),
+        );
         syncAllVisibleShoppingRowStates();
       });
 
       minusBtn.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (isShoppingWebSelectMode() && getShoppingQty(getShoppingSelectionKey(baseName)) <= 0) {
-          if (shoppingRowStepperController.isActive(getShoppingSelectionKey(baseName))) {
+        if (
+          isShoppingWebSelectMode() &&
+          getShoppingQty(getShoppingSelectionKey(baseName)) <= 0
+        ) {
+          if (
+            shoppingRowStepperController.isActive(
+              getShoppingSelectionKey(baseName),
+            )
+          ) {
             shoppingRowStepperController.collapseActive();
             syncAllVisibleShoppingRowStates();
           }
@@ -6988,7 +7544,9 @@ async function loadShoppingPage() {
           // If this click only served to collapse an expanded variant group,
           // do not also auto-expand a simple-row stepper at qty 0.
           if (hadExpandedVariants) return;
-          shoppingRowStepperController.toggle(getShoppingSelectionKey(baseName));
+          shoppingRowStepperController.toggle(
+            getShoppingSelectionKey(baseName),
+          );
           syncAllVisibleShoppingRowStates();
           return;
         }
@@ -7029,7 +7587,12 @@ async function loadShoppingPage() {
               const qtyMap = isShoppingWebSelectMode()
                 ? getVariantQtyMap(baseName, item.variants)
                 : null;
-              const nextText = buildLineToFit(li, baseDisplayName, item.variants, qtyMap);
+              const nextText = buildLineToFit(
+                li,
+                baseDisplayName,
+                item.variants,
+                qtyMap,
+              );
               labelSpan.textContent = nextText;
               li.title = `${displayName}\n\nAll variants: ${item.variants.join(', ')}`;
             } catch (_) {}
@@ -7072,7 +7635,7 @@ async function loadShoppingPage() {
     try {
       // Reuse existing ingredient if one with this name already exists.
       const existQ = db.exec(
-        `SELECT ID FROM ingredients WHERE lower(name) = lower('${name.replace(/'/g, "''")}') LIMIT 1;`
+        `SELECT ID FROM ingredients WHERE lower(name) = lower('${name.replace(/'/g, "''")}') LIMIT 1;`,
       );
       if (existQ.length && existQ[0].values.length) {
         newId = existQ[0].values[0][0];
@@ -7095,7 +7658,10 @@ async function loadShoppingPage() {
         }
 
         const ph = insCols.map(() => '?').join(', ');
-        db.run(`INSERT INTO ingredients (${insCols.join(', ')}) VALUES (${ph});`, insVals);
+        db.run(
+          `INSERT INTO ingredients (${insCols.join(', ')}) VALUES (${ph});`,
+          insVals,
+        );
         const idQ = db.exec('SELECT last_insert_rowid();');
         if (idQ.length && idQ[0].values.length) {
           newId = idQ[0].values[0][0];
@@ -7142,16 +7708,18 @@ async function loadShoppingPage() {
           return;
         }
         const previousPlan = cloneForUndo(getShoppingPlan(), () =>
-          createEmptyShoppingPlan()
+          createEmptyShoppingPlan(),
         );
         const previousShoppingQuantities = new Map(shoppingQuantities);
-        const previousShoppingRecipeQuantities = new Map(shoppingRecipeQuantities);
+        const previousShoppingRecipeQuantities = new Map(
+          shoppingRecipeQuantities,
+        );
         const previousSelectedShoppingNames = new Set(selectedShoppingNames);
         const previousShoppingSelectionMeta = new Map(
           Array.from(shoppingSelectionMeta.entries(), ([key, value]) => [
             key,
             cloneForUndo(value, () => value),
-          ])
+          ]),
         );
         const restoreClearedSelections = () => {
           persistShoppingPlan(previousPlan);
@@ -7169,7 +7737,10 @@ async function loadShoppingPage() {
           });
           shoppingSelectionMeta.clear();
           previousShoppingSelectionMeta.forEach((meta, key) => {
-            shoppingSelectionMeta.set(key, cloneForUndo(meta, () => meta));
+            shoppingSelectionMeta.set(
+              key,
+              cloneForUndo(meta, () => meta),
+            );
           });
           collapseExpandedVariantRows();
           shoppingRowStepperController?.collapseAll?.();
@@ -7185,7 +7756,10 @@ async function loadShoppingPage() {
         shoppingRowStepperController?.collapseAll?.();
         refreshShoppingSelectionUi();
         syncShoppingActionButtonState();
-        uiToastUndo('All shopping selections cleared.', restoreClearedSelections);
+        uiToastUndo(
+          'All shopping selections cleared.',
+          restoreClearedSelections,
+        );
       });
     } else {
       addBtn.addEventListener('click', () => {
@@ -7214,7 +7788,9 @@ function createEmptyShoppingListDoc() {
 
 function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
   const source =
-    rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow) ? rawRow : {};
+    rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow)
+      ? rawRow
+      : {};
   const text = String(source.text || '').trim();
   if (!text) return null;
   const rawOrder = Number(source.order);
@@ -7222,7 +7798,8 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
   const rawAisleId = Math.trunc(Number(source.aisleId));
   const rawAisleSortOrder = Number(source.aisleSortOrder);
   const hasExplicitAisleSortOrder =
-    source.aisleSortOrder != null && String(source.aisleSortOrder).trim() !== '';
+    source.aisleSortOrder != null &&
+    String(source.aisleSortOrder).trim() !== '';
   const sourceKey = String(source.sourceKey || '').trim();
   const sourceText = String(source.sourceText || '').trim();
   const sourceStoreLabel = String(source.sourceStoreLabel || '').trim();
@@ -7255,7 +7832,9 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
       ? sourceBucketLabel || String(source.bucketLabel || '').trim()
       : '',
     userEdited: sourceKey
-      ? (hasExplicitUserEdited ? !!source.userEdited || inferredUserEdited : inferredUserEdited)
+      ? hasExplicitUserEdited
+        ? !!source.userEdited || inferredUserEdited
+        : inferredUserEdited
       : false,
     order: Number.isFinite(rawOrder) ? rawOrder : fallbackOrder,
   };
@@ -7263,7 +7842,9 @@ function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
 
 function normalizeShoppingListDoc(rawDoc) {
   const source =
-    rawDoc && typeof rawDoc === 'object' && !Array.isArray(rawDoc) ? rawDoc : {};
+    rawDoc && typeof rawDoc === 'object' && !Array.isArray(rawDoc)
+      ? rawDoc
+      : {};
   const rawRows = Array.isArray(source.rows) ? source.rows : [];
   const rows = rawRows
     .map((row, index) => normalizeShoppingListDocRow(row, index))
@@ -7296,7 +7877,10 @@ function loadShoppingListDocFromStorage() {
 function persistShoppingListDoc(doc) {
   const normalized = normalizeShoppingListDoc(doc);
   try {
-    localStorage.setItem(SHOPPING_LIST_DOC_STORAGE_KEY, JSON.stringify(normalized));
+    localStorage.setItem(
+      SHOPPING_LIST_DOC_STORAGE_KEY,
+      JSON.stringify(normalized),
+    );
   } catch (_) {}
   return normalized;
 }
@@ -7316,15 +7900,19 @@ function hydrateLegacyShoppingListDocSources(storedDoc, generatedDoc) {
   const storedRows = normalizedStoredDoc.rows;
   const generatedRows = normalizedGeneratedDoc.rows;
   const allRowsNeedSourceKeys =
-    storedRows.length > 0 && storedRows.every((row) => !String(row?.sourceKey || '').trim());
+    storedRows.length > 0 &&
+    storedRows.every((row) => !String(row?.sourceKey || '').trim());
   if (!allRowsNeedSourceKeys) return normalizedStoredDoc;
   if (storedRows.length !== generatedRows.length) return normalizedStoredDoc;
   const canHydrateByOrder = storedRows.every((row, index) => {
     const generatedRow = generatedRows[index];
-    if (!generatedRow || !String(generatedRow.sourceKey || '').trim()) return false;
+    if (!generatedRow || !String(generatedRow.sourceKey || '').trim())
+      return false;
     return (
-      String(row.storeLabel || '').trim() === String(generatedRow.storeLabel || '').trim() &&
-      String(row.bucketLabel || '').trim() === String(generatedRow.bucketLabel || '').trim()
+      String(row.storeLabel || '').trim() ===
+        String(generatedRow.storeLabel || '').trim() &&
+      String(row.bucketLabel || '').trim() ===
+        String(generatedRow.bucketLabel || '').trim()
     );
   });
   if (!canHydrateByOrder) return normalizedStoredDoc;
@@ -7339,7 +7927,9 @@ function hydrateLegacyShoppingListDocSources(storedDoc, generatedDoc) {
         sourceText: generatedText,
         sourceStoreLabel: String(generatedRow?.sourceStoreLabel || '').trim(),
         sourceBucketLabel: String(generatedRow?.sourceBucketLabel || '').trim(),
-        userEdited: generatedText ? String(row?.text || '').trim() !== generatedText : false,
+        userEdited: generatedText
+          ? String(row?.text || '').trim() !== generatedText
+          : false,
       };
     }),
   });
@@ -7367,7 +7957,8 @@ function buildShoppingListDocFromPlanRows(rows) {
       if (!text) return;
       if (className.includes('shopping-list-section--store')) {
         currentStoreLabel = text;
-        currentStoreId = Number.isFinite(rowStoreId) && rowStoreId > 0 ? rowStoreId : null;
+        currentStoreId =
+          Number.isFinite(rowStoreId) && rowStoreId > 0 ? rowStoreId : null;
         currentBucketLabel = '';
         currentAisleId = null;
         currentAisleSortOrder = null;
@@ -7382,8 +7973,11 @@ function buildShoppingListDocFromPlanRows(rows) {
         return;
       }
       currentBucketLabel = text;
-      currentAisleId = Number.isFinite(rowAisleId) && rowAisleId > 0 ? rowAisleId : null;
-      currentAisleSortOrder = Number.isFinite(rowAisleSortOrder) ? rowAisleSortOrder : null;
+      currentAisleId =
+        Number.isFinite(rowAisleId) && rowAisleId > 0 ? rowAisleId : null;
+      currentAisleSortOrder = Number.isFinite(rowAisleSortOrder)
+        ? rowAisleSortOrder
+        : null;
       return;
     }
 
@@ -7414,7 +8008,10 @@ function buildShoppingListDocFromPlanRows(rows) {
 
 function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
   const normalizedGeneratedDoc = normalizeShoppingListDoc(generatedDoc);
-  const normalizedStoredDoc = hydrateLegacyShoppingListDocSources(storedDoc, normalizedGeneratedDoc);
+  const normalizedStoredDoc = hydrateLegacyShoppingListDocSources(
+    storedDoc,
+    normalizedGeneratedDoc,
+  );
   const generatedRows = normalizedGeneratedDoc.rows;
   const storedRows = normalizedStoredDoc.rows;
   const storedRowsBySourceKey = new Map();
@@ -7447,7 +8044,8 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
 
     const hasUserOverride = doesShoppingListRowHaveUserOverride(storedRow);
     const sourceChanged =
-      String(storedRow.sourceText || '').trim() !== String(generatedRow.sourceText || '').trim() ||
+      String(storedRow.sourceText || '').trim() !==
+        String(generatedRow.sourceText || '').trim() ||
       String(storedRow.sourceStoreLabel || '').trim() !==
         String(generatedRow.sourceStoreLabel || '').trim() ||
       String(storedRow.sourceBucketLabel || '').trim() !==
@@ -7474,7 +8072,9 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
 
     mergedRows.push({
       ...storedRow,
-      text: hasUserOverride ? String(storedRow.text || '').trim() : String(generatedRow.text || '').trim(),
+      text: hasUserOverride
+        ? String(storedRow.text || '').trim()
+        : String(generatedRow.text || '').trim(),
       checked: !!storedRow.checked,
       storeLabel: String(generatedRow.storeLabel || '').trim(),
       storeId: generatedRow.storeId,
@@ -7526,7 +8126,9 @@ function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
 function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
   const normalizedDoc = normalizeShoppingListDoc(doc);
   const rows = normalizedDoc.rows.slice();
-  const rowIndex = rows.findIndex((row) => String(row?.id || '') === String(conflict?.rowId || ''));
+  const rowIndex = rows.findIndex(
+    (row) => String(row?.id || '') === String(conflict?.rowId || ''),
+  );
   if (rowIndex === -1) return normalizedDoc;
   const row = rows[rowIndex];
   const mode = resolution === 'replace' ? 'replace' : 'keep';
@@ -7566,10 +8168,14 @@ function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
       ...row,
       text: nextGeneratedText,
       storeLabel: nextStoreLabel,
-      storeId: Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
+      storeId:
+        Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
       bucketLabel: nextBucketLabel,
-      aisleId: Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
-      aisleSortOrder: Number.isFinite(nextAisleSortOrder) ? nextAisleSortOrder : null,
+      aisleId:
+        Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
+      aisleSortOrder: Number.isFinite(nextAisleSortOrder)
+        ? nextAisleSortOrder
+        : null,
       sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
       sourceText: nextGeneratedText,
       sourceStoreLabel: nextStoreLabel,
@@ -7580,10 +8186,14 @@ function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
     rows[rowIndex] = {
       ...row,
       storeLabel: nextStoreLabel,
-      storeId: Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
+      storeId:
+        Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
       bucketLabel: nextBucketLabel,
-      aisleId: Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
-      aisleSortOrder: Number.isFinite(nextAisleSortOrder) ? nextAisleSortOrder : null,
+      aisleId:
+        Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
+      aisleSortOrder: Number.isFinite(nextAisleSortOrder)
+        ? nextAisleSortOrder
+        : null,
       sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
       sourceText: nextGeneratedText,
       sourceStoreLabel: nextStoreLabel,
@@ -7615,13 +8225,17 @@ function shoppingListCompletedCollapseKey(storeLabel) {
 }
 
 function toShoppingListAisleTitleCase(value) {
-  const normalized = String(value || '').trim().toLowerCase();
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
   if (!normalized) return '';
   return normalized.replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }
 
 function normalizeShoppingListBucketKey(bucketLabel) {
-  return String(bucketLabel || '').trim().toLowerCase();
+  return String(bucketLabel || '')
+    .trim()
+    .toLowerCase();
 }
 
 function getShoppingListDocBucketKey(row) {
@@ -7642,7 +8256,9 @@ function getShoppingListBucketDescriptors(rows) {
     const hasExplicitSortOrder =
       row?.aisleSortOrder != null && String(row.aisleSortOrder).trim() !== '';
     const sortOrder =
-      hasExplicitSortOrder && Number.isFinite(rawSortOrder) ? rawSortOrder : 999999;
+      hasExplicitSortOrder && Number.isFinite(rawSortOrder)
+        ? rawSortOrder
+        : 999999;
     if (!buckets.has(key)) {
       buckets.set(key, {
         key,
@@ -7663,7 +8279,9 @@ function getShoppingListBucketDescriptors(rows) {
     if (
       Number.isFinite(aisleId) &&
       aisleId > 0 &&
-      (!Number.isFinite(bucket.aisleId) || bucket.aisleId == null || aisleId < bucket.aisleId)
+      (!Number.isFinite(bucket.aisleId) ||
+        bucket.aisleId == null ||
+        aisleId < bucket.aisleId)
     ) {
       bucket.aisleId = aisleId;
     }
@@ -7678,15 +8296,21 @@ function getShoppingListBucketDescriptors(rows) {
       return aisleIdA - aisleIdB;
     }
     const hasExplicitOrderA =
-      (Number.isFinite(a.sortOrder) && a.sortOrder < 999999) || Number.isFinite(a.aisleId);
+      (Number.isFinite(a.sortOrder) && a.sortOrder < 999999) ||
+      Number.isFinite(a.aisleId);
     const hasExplicitOrderB =
-      (Number.isFinite(b.sortOrder) && b.sortOrder < 999999) || Number.isFinite(b.aisleId);
+      (Number.isFinite(b.sortOrder) && b.sortOrder < 999999) ||
+      Number.isFinite(b.aisleId);
     if (!hasExplicitOrderA && !hasExplicitOrderB) {
       return a.firstIndex - b.firstIndex;
     }
-    const labelDelta = String(a.label || '').localeCompare(String(b.label || ''), undefined, {
-      sensitivity: 'base',
-    });
+    const labelDelta = String(a.label || '').localeCompare(
+      String(b.label || ''),
+      undefined,
+      {
+        sensitivity: 'base',
+      },
+    );
     if (labelDelta !== 0) {
       return labelDelta;
     }
@@ -7695,8 +8319,9 @@ function getShoppingListBucketDescriptors(rows) {
 }
 
 function formatShoppingListPlainText(docRows) {
-  const rows = normalizeShoppingListDoc({ rows: docRows })
-    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
+    (row) => !row?.checked && String(row?.text || '').trim(),
+  );
   if (!rows.length) return '';
 
   const storeOrder = [];
@@ -7710,7 +8335,9 @@ function formatShoppingListPlainText(docRows) {
 
   const lines = [];
   storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    const storeRows = rows.filter(
+      (row) => String(row?.storeLabel || '') === storeLabel,
+    );
     if (!storeRows.length) return;
     if (lines.length) lines.push('');
     const normalizedStoreLabel = String(storeLabel || '').trim();
@@ -7720,14 +8347,18 @@ function formatShoppingListPlainText(docRows) {
     const soleUnlistedPseudo =
       !normalizedStoreLabel &&
       bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
+        'unlisted';
 
     bucketDescriptors.forEach((bucket) => {
       const bucketLabel = String(bucket?.label || '').trim();
       const normalizedBucketLabel = bucketLabel;
       if (
         normalizedBucketLabel &&
-        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted')
+        !(
+          soleUnlistedPseudo &&
+          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
+        )
       ) {
         lines.push(toShoppingListAisleTitleCase(normalizedBucketLabel));
       }
@@ -7743,8 +8374,9 @@ function formatShoppingListPlainText(docRows) {
 }
 
 function formatShoppingListHtml(docRows) {
-  const rows = normalizeShoppingListDoc({ rows: docRows })
-    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
+    (row) => !row?.checked && String(row?.text || '').trim(),
+  );
   if (!rows.length) return '';
 
   const escapeHtml = (value) =>
@@ -7764,29 +8396,41 @@ function formatShoppingListHtml(docRows) {
 
   const blocks = [];
   storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    const storeRows = rows.filter(
+      (row) => String(row?.storeLabel || '') === storeLabel,
+    );
     if (!storeRows.length) return;
     if (blocks.length) blocks.push('<br>');
 
     const normalizedStoreLabel = String(storeLabel || '').trim();
-    blocks.push(`<p>${escapeHtml((normalizedStoreLabel || 'Unlisted').toUpperCase())}</p>`);
+    blocks.push(
+      `<p>${escapeHtml((normalizedStoreLabel || 'Unlisted').toUpperCase())}</p>`,
+    );
 
     const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
     const soleUnlistedPseudo =
       !normalizedStoreLabel &&
       bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
+        'unlisted';
 
     bucketDescriptors.forEach((bucket) => {
       const bucketLabel = String(bucket?.label || '').trim();
       const normalizedBucketLabel = bucketLabel;
       const shouldShowBucketLabel =
         normalizedBucketLabel &&
-        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted');
+        !(
+          soleUnlistedPseudo &&
+          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
+        );
       if (shouldShowBucketLabel) {
-        blocks.push(`<p>${escapeHtml(toShoppingListAisleTitleCase(normalizedBucketLabel))}</p>`);
+        blocks.push(
+          `<p>${escapeHtml(toShoppingListAisleTitleCase(normalizedBucketLabel))}</p>`,
+        );
       }
-      const bucketItems = storeRows.filter((row) => getShoppingListDocBucketKey(row) === bucket.key);
+      const bucketItems = storeRows.filter(
+        (row) => getShoppingListDocBucketKey(row) === bucket.key,
+      );
       if (!bucketItems.length) return;
       blocks.push('<ul>');
       bucketItems.forEach((row) => {
@@ -7800,8 +8444,9 @@ function formatShoppingListHtml(docRows) {
 }
 
 function buildShoppingListExportPayload(docRows, options = {}) {
-  const rows = normalizeShoppingListDoc({ rows: docRows })
-    .rows.filter((row) => !row?.checked && String(row?.text || '').trim());
+  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
+    (row) => !row?.checked && String(row?.text || '').trim(),
+  );
   const title = String(options?.title || '').trim() || 'Shopping List';
   if (!rows.length) {
     return { title, stores: [] };
@@ -7818,7 +8463,9 @@ function buildShoppingListExportPayload(docRows, options = {}) {
 
   const stores = [];
   storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter((row) => String(row?.storeLabel || '') === storeLabel);
+    const storeRows = rows.filter(
+      (row) => String(row?.storeLabel || '') === storeLabel,
+    );
     if (!storeRows.length) return;
 
     const normalizedStoreLabel = String(storeLabel || '').trim();
@@ -7831,18 +8478,28 @@ function buildShoppingListExportPayload(docRows, options = {}) {
     const soleUnlistedPseudo =
       !normalizedStoreLabel &&
       bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
+        'unlisted';
 
     bucketDescriptors.forEach((bucket) => {
-      const bucketRows = storeRows.filter((row) => getShoppingListDocBucketKey(row) === bucket.key);
+      const bucketRows = storeRows.filter(
+        (row) => getShoppingListDocBucketKey(row) === bucket.key,
+      );
       if (!bucketRows.length) return;
       const normalizedBucketLabel = String(bucket?.label || '').trim();
       const shouldShowBucketLabel =
         normalizedBucketLabel &&
-        !(soleUnlistedPseudo && normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted');
+        !(
+          soleUnlistedPseudo &&
+          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
+        );
       storeEntry.aisles.push({
-        label: shouldShowBucketLabel ? toShoppingListAisleTitleCase(normalizedBucketLabel) : '',
-        items: bucketRows.map((row) => String(row?.text || '').trim()).filter(Boolean),
+        label: shouldShowBucketLabel
+          ? toShoppingListAisleTitleCase(normalizedBucketLabel)
+          : '',
+        items: bucketRows
+          .map((row) => String(row?.text || '').trim())
+          .filter(Boolean),
       });
     });
 
@@ -7854,7 +8511,10 @@ function buildShoppingListExportPayload(docRows, options = {}) {
   return { title, stores };
 }
 
-function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) {
+function filterShoppingListChecklistRowsForCollapse(
+  displayRows,
+  collapsedKeys,
+) {
   const collapsed = new Set(
     collapsedKeys == null
       ? []
@@ -7908,7 +8568,10 @@ function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) 
       if (topCollapsed) {
         return;
       }
-      if (row.completedSectionKey && collapsed.has(String(row.completedSectionKey || ''))) {
+      if (
+        row.completedSectionKey &&
+        collapsed.has(String(row.completedSectionKey || ''))
+      ) {
         return;
       }
       if (aisleCollapsed) {
@@ -7922,7 +8585,8 @@ function filterShoppingListChecklistRowsForCollapse(displayRows, collapsedKeys) 
 }
 
 const SHOPPING_LIST_HOME_LOCATION_DEFS =
-  typeof window !== 'undefined' && typeof window.getHomeLocationDefs === 'function'
+  typeof window !== 'undefined' &&
+  typeof window.getHomeLocationDefs === 'function'
     ? window.getHomeLocationDefs()
     : [
         { id: 'fridge', label: 'fridge' },
@@ -7938,10 +8602,15 @@ const SHOPPING_LIST_HOME_LOCATION_DEFS =
 const SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP = '\x00';
 
 function normalizeShoppingHomeLocationId(raw) {
-  if (typeof window !== 'undefined' && typeof window.normalizeHomeLocationId === 'function') {
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.normalizeHomeLocationId === 'function'
+  ) {
     return window.normalizeHomeLocationId(raw);
   }
-  const value = String(raw || '').trim().toLowerCase();
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
   if (!value || value === 'measures') return 'none';
   return SHOPPING_LIST_HOME_LOCATION_DEFS.some((entry) => entry.id === value)
     ? value
@@ -7949,7 +8618,9 @@ function normalizeShoppingHomeLocationId(raw) {
 }
 
 function normalizeIngredientVariantRows(rows, options = {}) {
-  const fallbackBaseHome = normalizeShoppingHomeLocationId(options?.fallbackBaseHome || 'none');
+  const fallbackBaseHome = normalizeShoppingHomeLocationId(
+    options?.fallbackBaseHome || 'none',
+  );
   const normalizeRowTags = (rawTags) =>
     normalizeRecipeTagList(
       Array.isArray(rawTags)
@@ -8027,7 +8698,12 @@ function normalizeIngredientVariantRows(rows, options = {}) {
   });
 
   return [
-    baseRow || { isBase: true, value: '', homeLocation: fallbackBaseHome, tags: [] },
+    baseRow || {
+      isBase: true,
+      value: '',
+      homeLocation: fallbackBaseHome,
+      tags: [],
+    },
     ...namedRows,
   ];
 }
@@ -8045,7 +8721,9 @@ function serializeIngredientVariantRows(rows, options = {}) {
 }
 
 function parseIngredientVariantRowsSerialized(rawValue, options = {}) {
-  const fallbackBaseHome = normalizeShoppingHomeLocationId(options?.fallbackBaseHome || 'none');
+  const fallbackBaseHome = normalizeShoppingHomeLocationId(
+    options?.fallbackBaseHome || 'none',
+  );
   const serialized = String(rawValue || '').trim();
   if (!serialized) {
     return normalizeIngredientVariantRows([], { fallbackBaseHome });
@@ -8059,14 +8737,21 @@ function parseIngredientVariantRowsSerialized(rawValue, options = {}) {
   } catch (_) {}
 
   return normalizeIngredientVariantRows(
-    serialized
-      .split('\n')
-      .map((value) => ({ isBase: false, value, homeLocation: 'none', tags: [] })),
+    serialized.split('\n').map((value) => ({
+      isBase: false,
+      value,
+      homeLocation: 'none',
+      tags: [],
+    })),
     { fallbackBaseHome },
   );
 }
 
-function loadIngredientVariantRowsForIngredientInMain(db, ingredientId, options = {}) {
+function loadIngredientVariantRowsForIngredientInMain(
+  db,
+  ingredientId,
+  options = {},
+) {
   const iid = Number(ingredientId);
   if (!db || !Number.isFinite(iid) || iid <= 0) {
     return normalizeIngredientVariantRows([], {
@@ -8074,7 +8759,11 @@ function loadIngredientVariantRowsForIngredientInMain(db, ingredientId, options 
     });
   }
   ensureIngredientVariantTagsSchemaInMain(db);
-  const hasHomeLocation = tableHasColumnInMain(db, 'ingredient_variants', 'home_location');
+  const hasHomeLocation = tableHasColumnInMain(
+    db,
+    'ingredient_variants',
+    'home_location',
+  );
   const rows = [];
   const rowsByVariantId = new Map();
   try {
@@ -8100,9 +8789,15 @@ function loadIngredientVariantRowsForIngredientInMain(db, ingredientId, options 
     if (Array.isArray(q) && q.length && Array.isArray(q[0].values)) {
       q[0].values.forEach((entry) => {
         const variantId = Number(Array.isArray(entry) ? entry[0] : NaN);
-        const variantName = String((Array.isArray(entry) ? entry[1] : '') || '');
-        const homeLocation = String((Array.isArray(entry) ? entry[2] : 'none') || 'none');
-        const tagName = String((Array.isArray(entry) ? entry[3] : '') || '').trim();
+        const variantName = String(
+          (Array.isArray(entry) ? entry[1] : '') || '',
+        );
+        const homeLocation = String(
+          (Array.isArray(entry) ? entry[2] : 'none') || 'none',
+        );
+        const tagName = String(
+          (Array.isArray(entry) ? entry[3] : '') || '',
+        ).trim();
         if (!Number.isFinite(variantId) || variantId <= 0) return;
         let row = rowsByVariantId.get(variantId);
         if (!row) {
@@ -8129,7 +8824,9 @@ function loadIngredientVariantRowsForIngredientInMain(db, ingredientId, options 
 }
 
 function getShoppingListSourceBaseKey(sourceKey) {
-  const normalized = String(sourceKey || '').trim().toLowerCase();
+  const normalized = String(sourceKey || '')
+    .trim()
+    .toLowerCase();
   if (!normalized) return '';
   const sepIndex = normalized.indexOf(SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP);
   return sepIndex === -1 ? normalized : normalized.slice(0, sepIndex);
@@ -8144,9 +8841,13 @@ function shoppingListHomeCompletedCollapseKey() {
 }
 
 function shoppingListRowMatchesSearch(row, query) {
-  const normalizedQuery = String(query || '').trim().toLowerCase();
+  const normalizedQuery = String(query || '')
+    .trim()
+    .toLowerCase();
   if (!normalizedQuery) return true;
-  return String(row?.text || '').toLowerCase().includes(normalizedQuery);
+  return String(row?.text || '')
+    .toLowerCase()
+    .includes(normalizedQuery);
 }
 
 function createShoppingListDisplayItemRow(row, extra = {}) {
@@ -8164,7 +8865,9 @@ function createShoppingListDisplayItemRow(row, extra = {}) {
 }
 
 function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
-  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const normalizedQuery = String(options?.searchQuery || '')
+    .trim()
+    .toLowerCase();
   const isSearchActive = !!normalizedQuery;
   const visibleRows = isSearchActive
     ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
@@ -8187,7 +8890,9 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
   };
 
   storeOrder.forEach((storeLabel) => {
-    const storeRows = visibleRows.filter((row) => String(row.storeLabel || '') === storeLabel);
+    const storeRows = visibleRows.filter(
+      (row) => String(row.storeLabel || '') === storeLabel,
+    );
     if (!storeRows.length) return;
 
     const activeRows = storeRows.filter((row) => !row.checked);
@@ -8199,7 +8904,8 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
     const soleUnlistedPseudo =
       !storeLabel &&
       bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) === 'unlisted';
+      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
+        'unlisted';
 
     if (storeLabel) {
       out.push({
@@ -8231,7 +8937,10 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
         return;
       }
       if (!storeLabel) {
-        if (soleUnlistedPseudo && normalizeShoppingListBucketKey(label) === 'unlisted') {
+        if (
+          soleUnlistedPseudo &&
+          normalizeShoppingListBucketKey(label) === 'unlisted'
+        ) {
           if (!list.length) return;
           pushItemRows(list);
           return;
@@ -8273,7 +8982,7 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
       const completedSectionKey = shoppingListCompletedCollapseKey(storeLabel);
       out.push({
         rowType: 'section',
-        text: 'Excluded',
+        text: 'completed',
         className: 'shopping-list-section--completed',
         sectionKey: completedSectionKey,
         sectionCollapseKey: completedSectionKey,
@@ -8294,7 +9003,9 @@ function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
 }
 
 function getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) {
-  const sourceKey = String(row?.sourceKey || '').trim().toLowerCase();
+  const sourceKey = String(row?.sourceKey || '')
+    .trim()
+    .toLowerCase();
   const lookup =
     homeLocationBySourceKey instanceof Map
       ? homeLocationBySourceKey
@@ -8310,7 +9021,9 @@ function getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) {
 }
 
 function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
-  const normalizedQuery = String(options?.searchQuery || '').trim().toLowerCase();
+  const normalizedQuery = String(options?.searchQuery || '')
+    .trim()
+    .toLowerCase();
   const visibleRows = normalizedQuery
     ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
     : rows;
@@ -8325,7 +9038,8 @@ function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
   SHOPPING_LIST_HOME_LOCATION_DEFS.forEach((locationDef) => {
     const locationRows = activeRows.filter(
       (row) =>
-        getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) === locationDef.id,
+        getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) ===
+        locationDef.id,
     );
     if (!locationRows.length) return;
     out.push({
@@ -8350,7 +9064,7 @@ function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
     const completedSectionKey = shoppingListHomeCompletedCollapseKey();
     out.push({
       rowType: 'section',
-      text: 'Excluded',
+      text: 'completed',
       className: 'shopping-list-section--completed',
       sectionKey: completedSectionKey,
       sectionCollapseKey: completedSectionKey,
@@ -8375,14 +9089,21 @@ function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
 
 function getShoppingListChecklistDisplayRows(docRows, options = {}) {
   const rows = normalizeShoppingListDoc({ rows: docRows }).rows;
-  const mode = String(options?.mode || 'stores').trim().toLowerCase();
+  const mode = String(options?.mode || 'stores')
+    .trim()
+    .toLowerCase();
   if (mode === 'home') {
     return buildShoppingListChecklistHomeDisplayRows(rows, options);
   }
   return buildShoppingListChecklistStoreDisplayRows(rows, options);
 }
 
-function createSectionToggleButton({ label = '', expanded = true, onToggle, completed = false }) {
+function createSectionToggleButton({
+  label = '',
+  expanded = true,
+  onToggle,
+  completed = false,
+}) {
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className = completed
@@ -8394,7 +9115,8 @@ function createSectionToggleButton({ label = '', expanded = true, onToggle, comp
   toggleLabel.textContent = String(label || '').trim();
   toggleBtn.appendChild(toggleLabel);
   const toggleIcon = document.createElement('span');
-  toggleIcon.className = 'material-symbols-outlined shopping-list-section-toggle__icon';
+  toggleIcon.className =
+    'material-symbols-outlined shopping-list-section-toggle__icon';
   toggleIcon.setAttribute('aria-hidden', 'true');
   toggleIcon.textContent = 'expand_more';
   toggleBtn.appendChild(toggleIcon);
@@ -8408,9 +9130,12 @@ function createSectionToggleButton({ label = '', expanded = true, onToggle, comp
   return toggleBtn;
 }
 
-function getShoppingListSelectedRecipeSummaryRows({ db = window.dbInstance } = {}) {
-  const selections = Object.values(getShoppingPlanRecipeSelections())
-    .filter((entry) => Number(entry?.recipeId) > 0);
+function getShoppingListSelectedRecipeSummaryRows({
+  db = window.dbInstance,
+} = {}) {
+  const selections = Object.values(getShoppingPlanRecipeSelections()).filter(
+    (entry) => Number(entry?.recipeId) > 0,
+  );
   if (!selections.length) return [];
   const formatServingsValue = (rawValue) => {
     const numeric = Number(rawValue);
@@ -8418,22 +9143,31 @@ function getShoppingListSelectedRecipeSummaryRows({ db = window.dbInstance } = {
     if (typeof window.formatShoppingQtyForDisplay === 'function') {
       return String(window.formatShoppingQtyForDisplay(numeric) || '').trim();
     }
-    return Number.isInteger(numeric) ? String(numeric) : String(Number(numeric.toFixed(2)));
+    return Number.isInteger(numeric)
+      ? String(numeric)
+      : String(Number(numeric.toFixed(2)));
   };
   return selections
     .map((selection) => {
       const recipeId = Math.trunc(Number(selection?.recipeId));
       if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
       const recipe =
-        db && typeof db.exec === 'function' ? loadShoppingPlanRecipeFromDB(db, recipeId) : null;
+        db && typeof db.exec === 'function'
+          ? loadShoppingPlanRecipeFromDB(db, recipeId)
+          : null;
       const title =
         String(selection?.title || '').trim() ||
         String(recipe?.title || '').trim() ||
         `Recipe ${recipeId}`;
       const recipeDefaultServings = Number(
-        recipe?.servings?.default != null ? recipe.servings.default : recipe?.servingsDefault,
+        recipe?.servings?.default != null
+          ? recipe.servings.default
+          : recipe?.servingsDefault,
       );
-      const selectedServings = getRecipeWebServingsStoredValue(recipeId, recipe);
+      const selectedServings = getRecipeWebServingsStoredValue(
+        recipeId,
+        recipe,
+      );
       const servingsValue =
         Number.isFinite(selectedServings) && selectedServings > 0
           ? selectedServings
@@ -8441,19 +9175,21 @@ function getShoppingListSelectedRecipeSummaryRows({ db = window.dbInstance } = {
             ? recipeDefaultServings
             : null;
       const formattedServings = formatServingsValue(servingsValue);
-      const servingsSuffix =
-        formattedServings && Number(servingsValue) === 1 ? 'serving' : 'servings';
       return {
         recipeId,
         title,
-        servingsText: formattedServings ? `${formattedServings} ${servingsSuffix}` : '',
+        servingsText: formattedServings ? `${formattedServings} svg` : '',
       };
     })
     .filter(Boolean)
     .sort((a, b) => {
-      const titleDelta = String(a?.title || '').localeCompare(String(b?.title || ''), undefined, {
-        sensitivity: 'base',
-      });
+      const titleDelta = String(a?.title || '').localeCompare(
+        String(b?.title || ''),
+        undefined,
+        {
+          sensitivity: 'base',
+        },
+      );
       if (titleDelta !== 0) return titleDelta;
       return Number(a?.recipeId || 0) - Number(b?.recipeId || 0);
     });
@@ -8541,7 +9277,9 @@ async function loadShoppingListPage() {
     getGeneratedShoppingListDoc(),
   );
   const pageWrapper =
-    list.closest('.page-wrapper') instanceof HTMLElement ? list.closest('.page-wrapper') : null;
+    list.closest('.page-wrapper') instanceof HTMLElement
+      ? list.closest('.page-wrapper')
+      : null;
 
   let controls = null;
   if (!shoppingListWebMode) {
@@ -8593,7 +9331,9 @@ async function loadShoppingListPage() {
     const generatedDoc = nextDoc || getGeneratedShoppingListDoc();
     const currentComparable = toResetComparableRows(shoppingListDoc);
     const generatedComparable = toResetComparableRows(generatedDoc);
-    return JSON.stringify(currentComparable) === JSON.stringify(generatedComparable);
+    return (
+      JSON.stringify(currentComparable) === JSON.stringify(generatedComparable)
+    );
   };
 
   const syncShoppingListResetButtonState = (nextDoc) => {
@@ -8608,7 +9348,9 @@ async function loadShoppingListPage() {
   };
 
   const syncShoppingListCopyButtonState = () => {
-    const shouldDisable = !formatShoppingListPlainText(shoppingListDoc?.rows).trim();
+    const shouldDisable = !formatShoppingListPlainText(
+      shoppingListDoc?.rows,
+    ).trim();
     if (!(webCopyBtn instanceof HTMLButtonElement)) return;
     webCopyBtn.disabled = shouldDisable;
     webCopyBtn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
@@ -8616,7 +9358,8 @@ async function loadShoppingListPage() {
 
   const syncShoppingListExportButtonState = () => {
     if (!shoppingListExportEnabled) return;
-    const hasItems = buildShoppingListExportPayload(shoppingListDoc?.rows).stores.length > 0;
+    const hasItems =
+      buildShoppingListExportPayload(shoppingListDoc?.rows).stores.length > 0;
     const isAvailable = !!window.electronAPI?.googleDocsExportShoppingList;
     const shouldDisable = !hasItems || !isAvailable || exportingShoppingList;
     const syncBtn = (btn) => {
@@ -8642,12 +9385,26 @@ async function loadShoppingListPage() {
     });
   };
 
-  const updateRow = (rowId, mutator, { message = '', undoMessage = '' } = {}) => {
-    const currentRows = Array.isArray(shoppingListDoc?.rows) ? shoppingListDoc.rows : [];
-    const rowIndex = currentRows.findIndex((row) => String(row?.id || '') === String(rowId || ''));
+  const updateRow = (
+    rowId,
+    mutator,
+    { message = '', undoMessage = '' } = {},
+  ) => {
+    const currentRows = Array.isArray(shoppingListDoc?.rows)
+      ? shoppingListDoc.rows
+      : [];
+    const rowIndex = currentRows.findIndex(
+      (row) => String(row?.id || '') === String(rowId || ''),
+    );
     if (rowIndex === -1) return;
-    const previousRow = cloneForUndo(currentRows[rowIndex], () => currentRows[rowIndex]);
-    const nextRowDraft = cloneForUndo(currentRows[rowIndex], () => currentRows[rowIndex]);
+    const previousRow = cloneForUndo(
+      currentRows[rowIndex],
+      () => currentRows[rowIndex],
+    );
+    const nextRowDraft = cloneForUndo(
+      currentRows[rowIndex],
+      () => currentRows[rowIndex],
+    );
     if (!nextRowDraft || typeof mutator !== 'function') return;
     mutator(nextRowDraft);
     const nextText = String(nextRowDraft.text || '').trim();
@@ -8666,7 +9423,9 @@ async function loadShoppingListPage() {
     renderChecklist();
     if (message || undoMessage) {
       uiToastUndo(message || undoMessage, () => {
-        const restoreRows = Array.isArray(shoppingListDoc?.rows) ? shoppingListDoc.rows.slice() : [];
+        const restoreRows = Array.isArray(shoppingListDoc?.rows)
+          ? shoppingListDoc.rows.slice()
+          : [];
         const restoreIndex = restoreRows.findIndex(
           (row) => String(row?.id || '') === String(rowId || ''),
         );
@@ -8693,8 +9452,11 @@ async function loadShoppingListPage() {
     const previewLimit = 3;
     const previewLines = [];
     list.slice(0, previewLimit).forEach((conflict, index) => {
-      const currentText = String(conflict?.currentText || '').trim() || '(empty)';
-      const nextGeneratedText = String(conflict?.nextGeneratedText || '').trim();
+      const currentText =
+        String(conflict?.currentText || '').trim() || '(empty)';
+      const nextGeneratedText = String(
+        conflict?.nextGeneratedText || '',
+      ).trim();
       const nextGeneratedDisplayText = String(
         conflict?.nextGeneratedDisplayText || nextGeneratedText,
       ).trim();
@@ -8788,7 +9550,11 @@ async function loadShoppingListPage() {
     const sourceKeys = Array.from(
       new Set(
         normalizedRows
-          .map((row) => String(row?.sourceKey || '').trim().toLowerCase())
+          .map((row) =>
+            String(row?.sourceKey || '')
+              .trim()
+              .toLowerCase(),
+          )
           .filter(Boolean),
       ),
     );
@@ -8799,7 +9565,11 @@ async function loadShoppingListPage() {
 
     const nextMap = new Map(sourceKeys.map((sourceKey) => [sourceKey, 'none']));
     const baseNameKeys = Array.from(
-      new Set(sourceKeys.map((sourceKey) => getShoppingListSourceBaseKey(sourceKey)).filter(Boolean)),
+      new Set(
+        sourceKeys
+          .map((sourceKey) => getShoppingListSourceBaseKey(sourceKey))
+          .filter(Boolean),
+      ),
     );
 
     if (baseNameKeys.length && db && typeof db.exec === 'function') {
@@ -8821,15 +9591,23 @@ async function loadShoppingListPage() {
           baseNameKeys,
         );
         const locationBySourceKey = new Map();
-        if (Array.isArray(result) && result.length && Array.isArray(result[0].values)) {
+        if (
+          Array.isArray(result) &&
+          result.length &&
+          Array.isArray(result[0].values)
+        ) {
           result[0].values.forEach(([nameKey, variantName, rawLocation]) => {
-            const normalizedNameKey = String(nameKey || '').trim().toLowerCase();
+            const normalizedNameKey = String(nameKey || '')
+              .trim()
+              .toLowerCase();
             if (!normalizedNameKey) return;
-            const normalizedVariant = normalizeNamedIngredientVariant(variantName).toLowerCase();
+            const normalizedVariant =
+              normalizeNamedIngredientVariant(variantName).toLowerCase();
             const sourceKey = normalizedVariant
               ? `${normalizedNameKey}${SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP}${normalizedVariant}`
               : normalizedNameKey;
-            const normalizedLocation = normalizeShoppingHomeLocationId(rawLocation);
+            const normalizedLocation =
+              normalizeShoppingHomeLocationId(rawLocation);
             if (!locationBySourceKey.has(sourceKey)) {
               locationBySourceKey.set(sourceKey, normalizedLocation);
               return;
@@ -8843,17 +9621,27 @@ async function loadShoppingListPage() {
           });
         }
         sourceKeys.forEach((sourceKey) => {
-          const normalizedSourceKey = String(sourceKey || '').trim().toLowerCase();
-          if (normalizedSourceKey && locationBySourceKey.has(normalizedSourceKey)) {
+          const normalizedSourceKey = String(sourceKey || '')
+            .trim()
+            .toLowerCase();
+          if (
+            normalizedSourceKey &&
+            locationBySourceKey.has(normalizedSourceKey)
+          ) {
             nextMap.set(
               sourceKey,
-              normalizeShoppingHomeLocationId(locationBySourceKey.get(normalizedSourceKey)),
+              normalizeShoppingHomeLocationId(
+                locationBySourceKey.get(normalizedSourceKey),
+              ),
             );
             return;
           }
           const baseKey = getShoppingListSourceBaseKey(normalizedSourceKey);
           if (!baseKey) return;
-          nextMap.set(sourceKey, normalizeShoppingHomeLocationId(locationBySourceKey.get(baseKey)));
+          nextMap.set(
+            sourceKey,
+            normalizeShoppingHomeLocationId(locationBySourceKey.get(baseKey)),
+          );
         });
       } catch (_) {}
     }
@@ -8876,11 +9664,14 @@ async function loadShoppingListPage() {
   const renderChecklist = () => {
     const searchQuery = String(searchInput?.value || '').trim();
     const isSearchActive = !!searchQuery;
-    const displayRows = getShoppingListChecklistDisplayRows(shoppingListDoc?.rows || [], {
-      mode: shoppingListViewMode,
-      searchQuery,
-      homeLocationBySourceKey: getShoppingListHomeLocationMap(),
-    });
+    const displayRows = getShoppingListChecklistDisplayRows(
+      shoppingListDoc?.rows || [],
+      {
+        mode: shoppingListViewMode,
+        searchQuery,
+        homeLocationBySourceKey: getShoppingListHomeLocationMap(),
+      },
+    );
     const planRowsByKey = new Map(
       getShoppingPlanSelectionRows({ db })
         .filter((row) => String(row?.key || '').trim())
@@ -8892,13 +9683,16 @@ async function loadShoppingListPage() {
       sampleKeys: planRowKeysSample,
     });
     const shoppingNavKeys =
-      window.favoriteEatsSessionKeys && typeof window.favoriteEatsSessionKeys === 'object'
+      window.favoriteEatsSessionKeys &&
+      typeof window.favoriteEatsSessionKeys === 'object'
         ? window.favoriteEatsSessionKeys
         : {
             shoppingNavTargetId: 'favoriteEats:shopping-nav-target-id',
             shoppingNavTargetName: 'favoriteEats:shopping-nav-target-name',
           };
-    const selectedRecipes = isSearchActive ? [] : getShoppingListSelectedRecipeSummaryRows({ db });
+    const selectedRecipes = isSearchActive
+      ? []
+      : getShoppingListSelectedRecipeSummaryRows({ db });
     list.innerHTML = '';
 
     if (!displayRows.length && !selectedRecipes.length) {
@@ -8916,26 +9710,31 @@ async function loadShoppingListPage() {
 
     const visibleRows = isSearchActive
       ? displayRows
-      : filterShoppingListChecklistRowsForCollapse(displayRows, collapsedShoppingListSections);
+      : filterShoppingListChecklistRowsForCollapse(
+          displayRows,
+          collapsedShoppingListSections,
+        );
 
     let shoppingListChecklistItemDebugCount = 0;
     const SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX = 12;
 
     if (selectedRecipes.length) {
       const recipesSectionKey = 'sl-recipes';
-      const recipesExpanded = !collapsedShoppingListSections.has(recipesSectionKey);
+      const recipesExpanded =
+        !collapsedShoppingListSections.has(recipesSectionKey);
       const recipeSection = document.createElement('li');
-      recipeSection.className = 'list-section-label shopping-list-section--recipes';
+      recipeSection.className =
+        'list-section-label shopping-list-section--recipes';
       const toggleBtn = createSectionToggleButton({
         label: 'RECIPES',
         expanded: recipesExpanded,
         onToggle: () => {
-        if (collapsedShoppingListSections.has(recipesSectionKey)) {
-          collapsedShoppingListSections.delete(recipesSectionKey);
-        } else {
-          collapsedShoppingListSections.add(recipesSectionKey);
-        }
-        renderChecklist();
+          if (collapsedShoppingListSections.has(recipesSectionKey)) {
+            collapsedShoppingListSections.delete(recipesSectionKey);
+          } else {
+            collapsedShoppingListSections.add(recipesSectionKey);
+          }
+          renderChecklist();
         },
       });
       recipeSection.appendChild(toggleBtn);
@@ -8943,13 +9742,15 @@ async function loadShoppingListPage() {
       if (recipesExpanded) {
         selectedRecipes.forEach((recipe) => {
           const li = document.createElement('li');
-          li.className = 'shopping-list-doc-item shopping-list-doc-item--recipe-summary';
+          li.className =
+            'shopping-list-doc-item shopping-list-doc-item--recipe-summary';
           const headline = document.createElement('div');
           headline.className =
             'shopping-list-doc-headline shopping-list-doc-headline--recipe-summary';
           const recipeLink = document.createElement('a');
           recipeLink.href = 'recipeEditor.html';
-          recipeLink.className = 'shopping-list-doc-contribution-link shopping-list-doc-recipe-summary-link';
+          recipeLink.className =
+            'shopping-list-doc-contribution-link shopping-list-doc-recipe-summary-link';
           recipeLink.textContent = String(recipe.title || '').trim();
           recipeLink.addEventListener('click', (event) => {
             event.preventDefault();
@@ -8958,15 +9759,22 @@ async function loadShoppingListPage() {
               window.openRecipe(recipe.recipeId);
               return;
             }
-            sessionStorage.setItem('selectedRecipeId', String(recipe.recipeId || ''));
+            sessionStorage.setItem(
+              'selectedRecipeId',
+              String(recipe.recipeId || ''),
+            );
             window.location.href = 'recipeEditor.html';
           });
           headline.appendChild(recipeLink);
           if (recipe.servingsText) {
+            const tail = document.createElement('span');
+            tail.className = 'shopping-list-doc-tail';
+            tail.appendChild(document.createTextNode('\u00a0'));
             const detail = document.createElement('span');
             detail.className = 'shopping-list-doc-contribution-detail';
             detail.textContent = `(${recipe.servingsText})`;
-            headline.appendChild(detail);
+            tail.appendChild(detail);
+            headline.appendChild(tail);
           }
           li.appendChild(headline);
           list.appendChild(li);
@@ -8977,25 +9785,28 @@ async function loadShoppingListPage() {
     visibleRows.forEach((row) => {
       const li = document.createElement('li');
       if (row?.rowType === 'section') {
-        li.className = `list-section-label ${String(row?.className || '').trim()}`.trim();
+        li.className =
+          `list-section-label ${String(row?.className || '').trim()}`.trim();
         const sectionToggleKey = String(row?.sectionCollapseKey || '').trim();
-        const isCollapsible = !isSearchActive && !!row.collapsible && !!sectionToggleKey;
+        const isCollapsible =
+          !isSearchActive && !!row.collapsible && !!sectionToggleKey;
         if (isCollapsible) {
           const isCompleted = String(row?.className || '').includes(
             'shopping-list-section--completed',
           );
-          const isExpanded = !collapsedShoppingListSections.has(sectionToggleKey);
+          const isExpanded =
+            !collapsedShoppingListSections.has(sectionToggleKey);
           const toggleBtn = createSectionToggleButton({
             label: row.text || row.label || '',
             expanded: isExpanded,
             completed: isCompleted,
             onToggle: () => {
-            if (collapsedShoppingListSections.has(sectionToggleKey)) {
-              collapsedShoppingListSections.delete(sectionToggleKey);
-            } else {
-              collapsedShoppingListSections.add(sectionToggleKey);
-            }
-            renderChecklist();
+              if (collapsedShoppingListSections.has(sectionToggleKey)) {
+                collapsedShoppingListSections.delete(sectionToggleKey);
+              } else {
+                collapsedShoppingListSections.add(sectionToggleKey);
+              }
+              renderChecklist();
             },
           });
           li.appendChild(toggleBtn);
@@ -9009,7 +9820,10 @@ async function loadShoppingListPage() {
       li.className = String(row?.className || '').trim();
       li.dataset.shoppingListRowId = String(row?.id || '');
       const isPendingChecked = pendingCheckedRowIds.has(String(row?.id || ''));
-      li.classList.toggle('shopping-list-doc-item--checked', !!row?.checked || isPendingChecked);
+      li.classList.toggle(
+        'shopping-list-doc-item--checked',
+        !!row?.checked || isPendingChecked,
+      );
       const sourceKey = String(row?.sourceKey || '').trim();
       const planRow = sourceKey ? planRowsByKey.get(sourceKey) || null : null;
       const contributionRows = Array.isArray(planRow?.contributionRows)
@@ -9018,26 +9832,39 @@ async function loadShoppingListPage() {
       const hasRecipeContributions = contributionRows.some(
         (entry) => String(entry?.sourceType || '') === 'recipe',
       );
-      const supportsExpansion = !!sourceKey && !!planRow && hasRecipeContributions;
-      if (shoppingListChecklistItemDebugCount < SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
+      const supportsExpansion =
+        !!sourceKey && !!planRow && hasRecipeContributions;
+      if (
+        shoppingListChecklistItemDebugCount <
+        SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX
+      ) {
         shoppingListChecklistItemDebugCount += 1;
         console.log('[shopping list checklist] row', {
           sourceKey: JSON.stringify(sourceKey),
           planRow: !!planRow,
           hasRecipeContributions,
           supportsExpansion,
-          rowTextSample: String(row?.text || '').trim().slice(0, 80),
+          rowTextSample: String(row?.text || '')
+            .trim()
+            .slice(0, 80),
         });
-      } else if (shoppingListChecklistItemDebugCount === SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
+      } else if (
+        shoppingListChecklistItemDebugCount ===
+        SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX
+      ) {
         shoppingListChecklistItemDebugCount += 1;
-        const totalItems = visibleRows.filter((r) => r?.rowType !== 'section').length;
+        const totalItems = visibleRows.filter(
+          (r) => r?.rowType !== 'section',
+        ).length;
         if (totalItems > SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX) {
           console.log(
             `[shopping list checklist] … ${totalItems - SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX} more item rows (omit per-row debug)`,
           );
         }
       }
-      const isExpanded = supportsExpansion && expandedShoppingListContributionRows.has(sourceKey);
+      const isExpanded =
+        supportsExpansion &&
+        expandedShoppingListContributionRows.has(sourceKey);
       const toggleContributionExpansion = () => {
         if (!supportsExpansion) return false;
         if (expandedShoppingListContributionRows.has(sourceKey)) {
@@ -9056,12 +9883,17 @@ async function loadShoppingListPage() {
         'aria-label',
         row?.checked || isPendingChecked ? 'Include item' : 'Exclude item',
       );
-      checkbox.setAttribute('aria-pressed', row?.checked || isPendingChecked ? 'true' : 'false');
+      checkbox.setAttribute(
+        'aria-pressed',
+        row?.checked || isPendingChecked ? 'true' : 'false',
+      );
       const checkboxIcon = document.createElement('span');
       checkboxIcon.className = 'material-symbols-outlined';
       checkboxIcon.setAttribute('aria-hidden', 'true');
       checkboxIcon.textContent =
-        row?.checked || isPendingChecked ? 'check_box' : 'check_box_outline_blank';
+        row?.checked || isPendingChecked
+          ? 'check_box'
+          : 'check_box_outline_blank';
       checkbox.appendChild(checkboxIcon);
       checkbox.addEventListener('click', (event) => {
         event.preventDefault();
@@ -9073,7 +9905,7 @@ async function loadShoppingListPage() {
             draft.checked = !draft.checked;
           },
           {
-            message: row?.checked ? 'Item included.' : 'Item excluded.',
+            message: row?.checked ? 'Item included.' : 'Item completed.',
           },
         );
       });
@@ -9090,7 +9922,11 @@ async function loadShoppingListPage() {
           if (editingRowId !== row.id) return;
           const nextValue = String(input.value || '').trim();
           editingRowId = '';
-          if (mode === 'commit' && nextValue && nextValue !== String(row?.text || '').trim()) {
+          if (
+            mode === 'commit' &&
+            nextValue &&
+            nextValue !== String(row?.text || '').trim()
+          ) {
             updateRow(
               row.id,
               (draft) => {
@@ -9122,13 +9958,24 @@ async function loadShoppingListPage() {
       } else {
         const headline = document.createElement('div');
         headline.className = 'shopping-list-doc-headline';
+        let tail = null;
+
+        const getTail = () => {
+          if (tail) return tail;
+          tail = document.createElement('span');
+          tail.className = 'shopping-list-doc-tail';
+          tail.appendChild(document.createTextNode('\u00a0'));
+          headline.appendChild(tail);
+          return tail;
+        };
 
         if (planRow && !row?.userEdited) {
           const ingredientLink = document.createElement('a');
           ingredientLink.href = 'shopping.html';
           ingredientLink.className = 'shopping-list-doc-link';
           ingredientLink.textContent =
-            String(planRow?.label || '').trim() || String(row?.text || '').trim();
+            String(planRow?.label || '').trim() ||
+            String(row?.text || '').trim();
           ingredientLink.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -9136,7 +9983,8 @@ async function loadShoppingListPage() {
               sessionStorage.removeItem(shoppingNavKeys.shoppingNavTargetId);
               sessionStorage.setItem(
                 shoppingNavKeys.shoppingNavTargetName,
-                String(planRow?.name || '').trim() || String(planRow?.label || '').trim(),
+                String(planRow?.name || '').trim() ||
+                  String(planRow?.label || '').trim(),
               );
             } catch (_) {}
             window.location.href = 'shopping.html';
@@ -9147,7 +9995,8 @@ async function loadShoppingListPage() {
           if (detailText) {
             const amountBtn = document.createElement('button');
             amountBtn.type = 'button';
-            amountBtn.className = 'shopping-list-doc-text shopping-list-doc-text--amount';
+            amountBtn.className =
+              'shopping-list-doc-text shopping-list-doc-text--amount';
             amountBtn.textContent = `(${detailText})`;
             amountBtn.addEventListener('click', (event) => {
               event.preventDefault();
@@ -9156,7 +10005,7 @@ async function loadShoppingListPage() {
               editingRowId = row.id;
               renderChecklist();
             });
-            headline.appendChild(amountBtn);
+            getTail().appendChild(amountBtn);
           }
         } else {
           const textBtn = document.createElement('button');
@@ -9176,15 +10025,25 @@ async function loadShoppingListPage() {
           const toggleBtn = document.createElement('button');
           toggleBtn.type = 'button';
           toggleBtn.className = 'shopping-list-doc-expand';
-          toggleBtn.setAttribute('aria-label', isExpanded ? 'Collapse recipe details' : 'Expand recipe details');
-          toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+          toggleBtn.setAttribute(
+            'aria-label',
+            isExpanded ? 'Collapse recipe details' : 'Expand recipe details',
+          );
+          toggleBtn.setAttribute(
+            'aria-expanded',
+            isExpanded ? 'true' : 'false',
+          );
           toggleBtn.textContent = isExpanded ? '\u25B4' : '\u25BE';
           toggleBtn.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
             toggleContributionExpansion();
           });
-          headline.appendChild(toggleBtn);
+          const tailEl = getTail();
+          if (tailEl.childNodes.length > 1) {
+            tailEl.appendChild(document.createTextNode('\u00a0'));
+          }
+          tailEl.appendChild(toggleBtn);
         }
 
         textWrap.appendChild(headline);
@@ -9197,7 +10056,11 @@ async function loadShoppingListPage() {
           const target = event.target;
           if (!(target instanceof Element)) return;
           if (target.closest('.shopping-list-doc-link')) return;
-          if (target.closest('.shopping-list-doc-text:not(.shopping-list-doc-text--amount)')) {
+          if (
+            target.closest(
+              '.shopping-list-doc-text:not(.shopping-list-doc-text--amount)',
+            )
+          ) {
             return;
           }
           if (target.closest('.shopping-list-doc-input')) return;
@@ -9236,7 +10099,8 @@ async function loadShoppingListPage() {
           contextHeadline.className =
             'shopping-list-doc-headline shopping-list-doc-headline--contribution-context';
           const contextText = document.createElement('span');
-          contextText.className = 'shopping-list-doc-contribution-context-label';
+          contextText.className =
+            'shopping-list-doc-contribution-context-label';
           contextText.textContent = 'Recipes';
           contextHeadline.appendChild(contextText);
           contextTextWrap.appendChild(contextHeadline);
@@ -9245,7 +10109,8 @@ async function loadShoppingListPage() {
         }
         contributionRows.forEach((entry, contributionIndex) => {
           const childLi = document.createElement('li');
-          childLi.className = 'shopping-list-doc-item shopping-list-doc-item--contribution';
+          childLi.className =
+            'shopping-list-doc-item shopping-list-doc-item--contribution';
           if (contributionIndex === contributionRows.length - 1) {
             childLi.classList.add('shopping-list-doc-item--contribution-last');
           }
@@ -9260,7 +10125,8 @@ async function loadShoppingListPage() {
             const recipeLink = document.createElement('a');
             recipeLink.href = 'recipeEditor.html';
             recipeLink.className = 'shopping-list-doc-contribution-link';
-            recipeLink.textContent = String(entry?.title || '').trim() || 'Recipe';
+            recipeLink.textContent =
+              String(entry?.title || '').trim() || 'Recipe';
             recipeLink.addEventListener('click', (event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -9268,14 +10134,18 @@ async function loadShoppingListPage() {
                 window.openRecipe(entry.recipeId);
                 return;
               }
-              sessionStorage.setItem('selectedRecipeId', String(entry.recipeId || ''));
+              sessionStorage.setItem(
+                'selectedRecipeId',
+                String(entry.recipeId || ''),
+              );
               window.location.href = 'recipeEditor.html';
             });
             headlineChild.appendChild(recipeLink);
           } else {
             const label = document.createElement('span');
             label.className = 'shopping-list-doc-contribution-label';
-            label.textContent = String(entry?.title || '').trim() || 'Directly added';
+            label.textContent =
+              String(entry?.title || '').trim() || 'Directly added';
             headlineChild.appendChild(label);
           }
 
@@ -9309,7 +10179,10 @@ async function loadShoppingListPage() {
   };
 
   const handleShoppingListReset = async () => {
-    const previousDoc = cloneForUndo(shoppingListDoc, createEmptyShoppingListDoc);
+    const previousDoc = cloneForUndo(
+      shoppingListDoc,
+      createEmptyShoppingListDoc,
+    );
     const nextDoc = getGeneratedShoppingListDoc();
     if (isShoppingListResetNoOp(nextDoc)) {
       syncShoppingListResetButtonState(nextDoc);
@@ -9317,7 +10190,8 @@ async function loadShoppingListPage() {
     }
     const confirmed = await uiConfirm({
       title: 'Reset shopping list?',
-      message: 'Replace manual checklist edits with the latest generated shopping list.',
+      message:
+        'Replace manual checklist edits with the latest generated shopping list.',
       confirmText: 'Reset',
       cancelText: 'Cancel',
     });
@@ -9344,7 +10218,8 @@ async function loadShoppingListPage() {
       uiToast('No unchecked shopping items to copy.');
       return;
     }
-    const canWritePlainText = typeof navigator?.clipboard?.writeText === 'function';
+    const canWritePlainText =
+      typeof navigator?.clipboard?.writeText === 'function';
     const canWriteRich =
       typeof navigator?.clipboard?.write === 'function' &&
       typeof ClipboardItem === 'function' &&
@@ -9372,7 +10247,10 @@ async function loadShoppingListPage() {
           return;
         } catch (fallbackErr) {
           console.error('❌ Failed to copy shopping list:', err);
-          console.error('❌ Failed plain text clipboard fallback:', fallbackErr);
+          console.error(
+            '❌ Failed plain text clipboard fallback:',
+            fallbackErr,
+          );
         }
       } else {
         console.error('❌ Failed to copy shopping list:', err);
@@ -9395,7 +10273,8 @@ async function loadShoppingListPage() {
     }
     const confirmed = await uiConfirm({
       title: 'Export shopping list?',
-      message: 'Create a Google Doc checklist from your unchecked shopping items.',
+      message:
+        'Create a Google Doc checklist from your unchecked shopping items.',
       confirmText: 'Export',
       cancelText: 'Cancel',
     });
@@ -9404,7 +10283,8 @@ async function loadShoppingListPage() {
     exportingShoppingList = true;
     syncShoppingListExportButtonState();
     try {
-      const result = await window.electronAPI.googleDocsExportShoppingList(exportPayload);
+      const result =
+        await window.electronAPI.googleDocsExportShoppingList(exportPayload);
       if (result?.ok) {
         uiToast('Shopping list exported to Google Docs.');
         return;
@@ -9437,7 +10317,8 @@ async function loadShoppingListPage() {
     }
     resetBtn = document.createElement('button');
     resetBtn.type = 'button';
-    resetBtn.className = 'button shopping-list-controls__action shopping-list-controls__reset';
+    resetBtn.className =
+      'button shopping-list-controls__action shopping-list-controls__reset';
     resetBtn.textContent = 'Reset List';
     controls.appendChild(resetBtn);
     resetBtn.addEventListener('click', () => {
@@ -9455,7 +10336,8 @@ async function loadShoppingListPage() {
           isElectron &&
           window.electronAPI?.googleDocsExportShoppingList
         ) {
-          const existingWebExportBtn = document.getElementById('appBarExportBtn');
+          const existingWebExportBtn =
+            document.getElementById('appBarExportBtn');
           if (existingWebExportBtn instanceof HTMLButtonElement) {
             webExportBtn = existingWebExportBtn;
           } else {
@@ -9581,7 +10463,9 @@ function wireChildEditorPage({
     const subtitleRaw = (lastCommittedSubtitle || '').trim()
       ? lastCommittedSubtitle
       : '';
-    const titleForSubtitleCompare = normalizeTitle(bodyTitleEl.textContent || '');
+    const titleForSubtitleCompare = normalizeTitle(
+      bodyTitleEl.textContent || '',
+    );
     const subtitleMatchesTitle =
       hideSubtitleWhenMatchesTitle &&
       !!subtitleRaw &&
@@ -10217,7 +11101,9 @@ function loadShoppingItemEditorPage() {
     </div>
   `;
 
-  const variantRowsHiddenInput = document.getElementById('shoppingItemVariantRowsHiddenInput');
+  const variantRowsHiddenInput = document.getElementById(
+    'shoppingItemVariantRowsHiddenInput',
+  );
   const variantRowsEl = document.getElementById('shoppingItemVariantRows');
   const editorTitleEl = document.getElementById('childEditorTitle');
   let variantRowsDraft = [];
@@ -10248,7 +11134,10 @@ function loadShoppingItemEditorPage() {
       rowIndex: normalizedRowIndex,
       reason: String(reason || ''),
     };
-    logVariantTagDebug('suppress next tags blur cleanup', pendingVariantTagBlurCleanupSuppression);
+    logVariantTagDebug(
+      'suppress next tags blur cleanup',
+      pendingVariantTagBlurCleanupSuppression,
+    );
   };
 
   const confirmShoppingVariantTagRemoval = async (tagLabel) => {
@@ -10275,7 +11164,11 @@ function loadShoppingItemEditorPage() {
     return Number.isFinite(rowIndex) ? rowIndex : -1;
   };
 
-  const setActiveVariantTagEditorState = (rowIndex, draft = '', options = {}) => {
+  const setActiveVariantTagEditorState = (
+    rowIndex,
+    draft = '',
+    options = {},
+  ) => {
     const normalizedRowIndex = Number(rowIndex);
     if (!Number.isFinite(normalizedRowIndex) || normalizedRowIndex < 0) {
       activeVariantTagEditorState = null;
@@ -10285,7 +11178,9 @@ function loadShoppingItemEditorPage() {
     activeVariantTagEditorState = {
       rowIndex: normalizedRowIndex,
       draft: String(draft || ''),
-      insertAfterTagIndex: Number.isFinite(insertAfterTagIndex) ? Math.trunc(insertAfterTagIndex) : -1,
+      insertAfterTagIndex: Number.isFinite(insertAfterTagIndex)
+        ? Math.trunc(insertAfterTagIndex)
+        : -1,
     };
   };
 
@@ -10299,7 +11194,11 @@ function loadShoppingItemEditorPage() {
     return interaction;
   };
 
-  const getVariantTagInsertAfterIndexForPoint = (pillElements, clientX, clientY) => {
+  const getVariantTagInsertAfterIndexForPoint = (
+    pillElements,
+    clientX,
+    clientY,
+  ) => {
     const pills = Array.isArray(pillElements)
       ? pillElements
           .filter((el) => el instanceof HTMLElement)
@@ -10309,12 +11208,15 @@ function loadShoppingItemEditorPage() {
           }))
       : [];
     if (!pills.length) return -1;
-    if (typeof clientX !== 'number' || typeof clientY !== 'number') return pills[pills.length - 1].index;
+    if (typeof clientX !== 'number' || typeof clientY !== 'number')
+      return pills[pills.length - 1].index;
 
     const rows = [];
     const rowTolerancePx = 6;
     pills.forEach((pill) => {
-      const existingRow = rows.find((row) => Math.abs(row.top - pill.rect.top) <= rowTolerancePx);
+      const existingRow = rows.find(
+        (row) => Math.abs(row.top - pill.rect.top) <= rowTolerancePx,
+      );
       if (existingRow) {
         existingRow.items.push(pill);
         existingRow.top = Math.min(existingRow.top, pill.rect.top);
@@ -10331,13 +11233,25 @@ function loadShoppingItemEditorPage() {
     rows.forEach((row) => row.items.sort((a, b) => a.rect.left - b.rect.left));
 
     const targetRow =
-      rows.find((row) => clientY >= row.top - rowTolerancePx && clientY <= row.bottom + rowTolerancePx) ||
+      rows.find(
+        (row) =>
+          clientY >= row.top - rowTolerancePx &&
+          clientY <= row.bottom + rowTolerancePx,
+      ) ||
       rows.reduce((bestRow, row) => {
         if (!bestRow) return row;
         const bestDistance =
-          clientY < bestRow.top ? bestRow.top - clientY : clientY > bestRow.bottom ? clientY - bestRow.bottom : 0;
+          clientY < bestRow.top
+            ? bestRow.top - clientY
+            : clientY > bestRow.bottom
+              ? clientY - bestRow.bottom
+              : 0;
         const rowDistance =
-          clientY < row.top ? row.top - clientY : clientY > row.bottom ? clientY - row.bottom : 0;
+          clientY < row.top
+            ? row.top - clientY
+            : clientY > row.bottom
+              ? clientY - row.bottom
+              : 0;
         return rowDistance < bestDistance ? row : bestRow;
       }, null);
     if (!targetRow) return pills[pills.length - 1].index;
@@ -10353,7 +11267,9 @@ function loadShoppingItemEditorPage() {
   const getVariantRowsSignature = (rows) =>
     normalizeIngredientVariantRows(Array.isArray(rows) ? rows : [])
       .map((row) => {
-        const homeLocation = normalizeShoppingHomeLocationId(row?.homeLocation || 'none');
+        const homeLocation = normalizeShoppingHomeLocationId(
+          row?.homeLocation || 'none',
+        );
         const tagKey = normalizeRecipeTagList(row?.tags || []).join('|');
         if (row?.isBase) return `base:${homeLocation}:${tagKey}`;
         return `variant:${String(row?.value || '')}:${homeLocation}:${tagKey}`;
@@ -10366,12 +11282,15 @@ function loadShoppingItemEditorPage() {
       .map((row) => ({
         isBase: false,
         value: normalizeNamedIngredientVariant(row.value),
-        homeLocation: normalizeShoppingHomeLocationId(row.homeLocation || 'none'),
+        homeLocation: normalizeShoppingHomeLocationId(
+          row.homeLocation || 'none',
+        ),
         tags: normalizeRecipeTagList(row.tags || []),
       }))
       .filter((row) => row.value);
 
-  const getVariantRowsForEditing = (rows) => normalizeIngredientVariantRows(rows);
+  const getVariantRowsForEditing = (rows) =>
+    normalizeIngredientVariantRows(rows);
   const ensureBaseVariantRowPresent = () => {
     if (variantRowsDraft[0]?.isBase) return;
     const existingBaseRow = variantRowsDraft.find((row) => row?.isBase);
@@ -10389,32 +11308,42 @@ function loadShoppingItemEditorPage() {
     ];
   };
   const homeLocationDefsForEditor = SHOPPING_LIST_HOME_LOCATION_DEFS.filter(
-    (locationDef) => normalizeShoppingHomeLocationId(locationDef?.id || 'none') !== 'none',
+    (locationDef) =>
+      normalizeShoppingHomeLocationId(locationDef?.id || 'none') !== 'none',
   );
   const homeLocationLabelById = new Map();
   const homeLocationIdByLookupKey = new Map();
   homeLocationDefsForEditor.forEach((locationDef) => {
-    const normalizedId = normalizeShoppingHomeLocationId(locationDef?.id || 'none');
+    const normalizedId = normalizeShoppingHomeLocationId(
+      locationDef?.id || 'none',
+    );
     if (normalizedId === 'none') return;
-    const label = String(locationDef?.label || normalizedId).trim() || normalizedId;
+    const label =
+      String(locationDef?.label || normalizedId).trim() || normalizedId;
     homeLocationLabelById.set(normalizedId, label);
     homeLocationIdByLookupKey.set(normalizedId, normalizedId);
     homeLocationIdByLookupKey.set(label.toLowerCase(), normalizedId);
   });
 
   const getCurrentItemNameForBaseRow = () => {
-    const raw = String(editorTitleEl?.textContent || titleText || storedName || 'item').trim();
+    const raw = String(
+      editorTitleEl?.textContent || titleText || storedName || 'item',
+    ).trim();
     return raw || 'item';
   };
 
   const getHomeLocationDisplayText = (homeLocationId) => {
-    const normalizedId = normalizeShoppingHomeLocationId(homeLocationId || 'none');
+    const normalizedId = normalizeShoppingHomeLocationId(
+      homeLocationId || 'none',
+    );
     if (normalizedId === 'none') return '';
     return homeLocationLabelById.get(normalizedId) || normalizedId;
   };
 
   const resolveHomeLocationIdFromInput = (rawValue) => {
-    const normalized = String(rawValue || '').trim().toLowerCase();
+    const normalized = String(rawValue || '')
+      .trim()
+      .toLowerCase();
     if (!normalized) return 'none';
     return homeLocationIdByLookupKey.get(normalized) || '';
   };
@@ -10426,8 +11355,12 @@ function loadShoppingItemEditorPage() {
     variantRowsHiddenInput.value = nextValue;
     if (!emit || nextValue === previousValue) return;
     try {
-      variantRowsHiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-      variantRowsHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      variantRowsHiddenInput.dispatchEvent(
+        new Event('input', { bubbles: true }),
+      );
+      variantRowsHiddenInput.dispatchEvent(
+        new Event('change', { bubbles: true }),
+      );
     } catch (_) {}
     refreshVariantEditorDirty();
   };
@@ -10443,12 +11376,16 @@ function loadShoppingItemEditorPage() {
     }
     const nextTag = normalizeRecipeTagList([rawTag])[0] || '';
     if (!nextTag) return false;
-    const currentTags = normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []);
+    const currentTags = normalizeRecipeTagList(
+      variantRowsDraft[normalizedIndex].tags || [],
+    );
     const nextTags = normalizeRecipeTagList([...currentTags, nextTag]);
     const previousKey = JSON.stringify(
       currentTags.map((value) => String(value || '').toLowerCase()),
     );
-    const nextKey = JSON.stringify(nextTags.map((value) => String(value || '').toLowerCase()));
+    const nextKey = JSON.stringify(
+      nextTags.map((value) => String(value || '').toLowerCase()),
+    );
     if (previousKey === nextKey) return false;
     variantRowsDraft[normalizedIndex].tags = nextTags;
     syncVariantHiddenInput({ emit });
@@ -10471,18 +11408,27 @@ function loadShoppingItemEditorPage() {
     }
     const nextTag = normalizeRecipeTagList([rawTag])[0] || '';
     if (!nextTag) return false;
-    const currentTags = normalizeRecipeTagList(variantRowsDraft[normalizedIndex].tags || []);
+    const currentTags = normalizeRecipeTagList(
+      variantRowsDraft[normalizedIndex].tags || [],
+    );
     const normalizedInsertAfter = Number.isFinite(Number(insertAfterTagIndex))
       ? Math.trunc(Number(insertAfterTagIndex))
       : currentTags.length - 1;
-    const insertAt = Math.max(0, Math.min(currentTags.length, normalizedInsertAfter + 1));
+    const insertAt = Math.max(
+      0,
+      Math.min(currentTags.length, normalizedInsertAfter + 1),
+    );
     const nextTags = normalizeRecipeTagList([
       ...currentTags.slice(0, insertAt),
       nextTag,
       ...currentTags.slice(insertAt),
     ]);
-    const previousKey = JSON.stringify(currentTags.map((value) => String(value || '').toLowerCase()));
-    const nextKey = JSON.stringify(nextTags.map((value) => String(value || '').toLowerCase()));
+    const previousKey = JSON.stringify(
+      currentTags.map((value) => String(value || '').toLowerCase()),
+    );
+    const nextKey = JSON.stringify(
+      nextTags.map((value) => String(value || '').toLowerCase()),
+    );
     if (previousKey === nextKey) return false;
     variantRowsDraft[normalizedIndex].tags = nextTags;
     syncVariantHiddenInput({ emit });
@@ -10493,7 +11439,9 @@ function loadShoppingItemEditorPage() {
     if (!activeVariantTagEditorState) return false;
     const rowIndex = Number(activeVariantTagEditorState.rowIndex);
     const draft = String(activeVariantTagEditorState.draft || '').trim();
-    const insertAfterTagIndex = Number(activeVariantTagEditorState.insertAfterTagIndex);
+    const insertAfterTagIndex = Number(
+      activeVariantTagEditorState.insertAfterTagIndex,
+    );
     const changed = draft
       ? insertVariantTagToRow(rowIndex, draft, insertAfterTagIndex, { emit })
       : false;
@@ -10520,20 +11468,20 @@ function loadShoppingItemEditorPage() {
     const idx = Number(activeVariantTagEditorState.rowIndex);
     const draftRaw = String(activeVariantTagEditorState.draft || '').trim();
     const nextTag = normalizeRecipeTagList([draftRaw])[0] || '';
-    const insertAfterTagIndex = Number(activeVariantTagEditorState.insertAfterTagIndex);
-    if (
-      !Number.isFinite(idx) ||
-      idx < 0 ||
-      idx >= rows.length ||
-      !nextTag
-    ) {
+    const insertAfterTagIndex = Number(
+      activeVariantTagEditorState.insertAfterTagIndex,
+    );
+    if (!Number.isFinite(idx) || idx < 0 || idx >= rows.length || !nextTag) {
       return rows;
     }
     const cur = normalizeRecipeTagList(rows[idx].tags || []);
     const normalizedInsertAfter = Number.isFinite(insertAfterTagIndex)
       ? Math.trunc(insertAfterTagIndex)
       : cur.length - 1;
-    const insertAt = Math.max(0, Math.min(cur.length, normalizedInsertAfter + 1));
+    const insertAt = Math.max(
+      0,
+      Math.min(cur.length, normalizedInsertAfter + 1),
+    );
     const merged = normalizeRecipeTagList([
       ...cur.slice(0, insertAt),
       nextTag,
@@ -10556,26 +11504,29 @@ function loadShoppingItemEditorPage() {
   };
 
   const removeEmptyNamedVariantRows = () => {
-    const baseRow =
-      variantRowsDraft.find((row) => row?.isBase) || {
-        isBase: true,
-        value: '',
-        homeLocation: 'none',
-      };
+    const baseRow = variantRowsDraft.find((row) => row?.isBase) || {
+      isBase: true,
+      value: '',
+      homeLocation: 'none',
+    };
     const namedRows = variantRowsDraft
       .filter((row) => row && !row.isBase)
       .filter((row) => String(row?.value || '').trim())
       .map((row) => ({
         isBase: false,
         value: String(row?.value || ''),
-        homeLocation: normalizeShoppingHomeLocationId(row?.homeLocation || 'none'),
+        homeLocation: normalizeShoppingHomeLocationId(
+          row?.homeLocation || 'none',
+        ),
         tags: normalizeRecipeTagList(row?.tags || []),
       }));
     variantRowsDraft = [
       {
         isBase: true,
         value: '',
-        homeLocation: normalizeShoppingHomeLocationId(baseRow.homeLocation || 'none'),
+        homeLocation: normalizeShoppingHomeLocationId(
+          baseRow.homeLocation || 'none',
+        ),
         tags: normalizeRecipeTagList(baseRow.tags || []),
       },
       ...namedRows,
@@ -10641,7 +11592,9 @@ function loadShoppingItemEditorPage() {
           value: normalizedValue,
           homeLocation:
             nextRows.length === 0
-              ? normalizeShoppingHomeLocationId(currentRow.homeLocation || 'none')
+              ? normalizeShoppingHomeLocationId(
+                  currentRow.homeLocation || 'none',
+                )
               : 'none',
           tags: [],
         });
@@ -10652,7 +11605,10 @@ function loadShoppingItemEditorPage() {
       return true;
     }
 
-    if (variantRowsDraft[targetIndex] && !variantRowsDraft[targetIndex].isBase) {
+    if (
+      variantRowsDraft[targetIndex] &&
+      !variantRowsDraft[targetIndex].isBase
+    ) {
       variantRowsDraft.splice(targetIndex, 1, ...nextRows);
     } else {
       variantRowsDraft.splice(targetIndex, 0, ...nextRows);
@@ -10690,10 +11646,12 @@ function loadShoppingItemEditorPage() {
     const currentIndex = Number(rowIndex);
     if (!Number.isFinite(currentIndex) || currentIndex <= 0) return false;
     const targetIndex = currentIndex + Number(delta || 0);
-    if (targetIndex <= 0 || targetIndex >= variantRowsDraft.length) return false;
+    if (targetIndex <= 0 || targetIndex >= variantRowsDraft.length)
+      return false;
     const currentRow = variantRowsDraft[currentIndex];
     const targetRow = variantRowsDraft[targetIndex];
-    if (!currentRow || currentRow.isBase || !targetRow || targetRow.isBase) return false;
+    if (!currentRow || currentRow.isBase || !targetRow || targetRow.isBase)
+      return false;
     variantRowsDraft.splice(currentIndex, 1);
     variantRowsDraft.splice(targetIndex, 0, currentRow);
     syncVariantHiddenInput({ emit: true });
@@ -10707,7 +11665,10 @@ function loadShoppingItemEditorPage() {
     variantActionDialogOpen = true;
     try {
       if (row.isBase) {
-        if (normalizeShoppingHomeLocationId(row.homeLocation || 'none') === 'none') return;
+        if (
+          normalizeShoppingHomeLocationId(row.homeLocation || 'none') === 'none'
+        )
+          return;
         const ok = await uiConfirm({
           title: 'Clear home location',
           message: `Clear the home location for Base item (${getCurrentItemNameForBaseRow()})?`,
@@ -10717,11 +11678,14 @@ function loadShoppingItemEditorPage() {
         if (!ok) return;
         row.homeLocation = 'none';
         syncVariantHiddenInput({ emit: true });
-        renderVariantRows({ focusCell: { rowIndex: 0, column: 'home', caretAtStart: true } });
+        renderVariantRows({
+          focusCell: { rowIndex: 0, column: 'home', caretAtStart: true },
+        });
         return;
       }
 
-      const variantLabel = normalizeNamedIngredientVariant(row.value) || 'variant';
+      const variantLabel =
+        normalizeNamedIngredientVariant(row.value) || 'variant';
       if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
         const choice = await window.ui.dialogThreeChoice({
           title: variantLabel,
@@ -10735,7 +11699,11 @@ function loadShoppingItemEditorPage() {
           row.homeLocation = 'none';
           syncVariantHiddenInput({ emit: true });
           renderVariantRows({
-            focusCell: { rowIndex: normalizedIndex, column: 'home', caretAtStart: true },
+            focusCell: {
+              rowIndex: normalizedIndex,
+              column: 'home',
+              caretAtStart: true,
+            },
           });
           return;
         }
@@ -10794,7 +11762,8 @@ function loadShoppingItemEditorPage() {
 
   const applyPendingVariantCellFocus = () => {
     if (!variantRowsEl || !pendingVariantCellFocus) return;
-    const { rowIndex, column, caretAtStart, openTypeahead } = pendingVariantCellFocus;
+    const { rowIndex, column, caretAtStart, openTypeahead } =
+      pendingVariantCellFocus;
     pendingVariantCellFocus = null;
     requestAnimationFrame(() => {
       const selector =
@@ -10802,7 +11771,7 @@ function loadShoppingItemEditorPage() {
           ? `.shopping-item-variant-home-input[data-row-index="${rowIndex}"]`
           : column === 'tags'
             ? `.shopping-item-variant-tags-input[data-row-index="${rowIndex}"]`
-          : `.shopping-item-variant-name-input[data-row-index="${rowIndex}"]`;
+            : `.shopping-item-variant-name-input[data-row-index="${rowIndex}"]`;
       const target =
         variantRowsEl.querySelector(selector) ||
         variantRowsEl.querySelector(
@@ -10810,7 +11779,7 @@ function loadShoppingItemEditorPage() {
             ? '.shopping-item-variant-home-input[data-row-index]'
             : column === 'tags'
               ? '.shopping-item-variant-tags-input[data-row-index]'
-            : '.shopping-item-variant-name-input[data-row-index]',
+              : '.shopping-item-variant-name-input[data-row-index]',
         );
       if (!(target instanceof HTMLInputElement)) return;
       try {
@@ -10849,14 +11818,19 @@ function loadShoppingItemEditorPage() {
       activeVariantTagEditorState = null;
     }
     if (focusCell && Number.isFinite(Number(focusCell.rowIndex))) {
-      setPendingVariantCellFocus(focusCell.rowIndex, focusCell.column, focusCell);
+      setPendingVariantCellFocus(
+        focusCell.rowIndex,
+        focusCell.column,
+        focusCell,
+      );
     }
     variantRowsEl.innerHTML = '';
     const gridEl = document.createElement('div');
     gridEl.className = 'shopping-item-variant-grid';
 
     const headerRowEl = document.createElement('div');
-    headerRowEl.className = 'shopping-item-variant-grid-row shopping-item-variant-grid-row--header';
+    headerRowEl.className =
+      'shopping-item-variant-grid-row shopping-item-variant-grid-row--header';
     headerRowEl.setAttribute('aria-hidden', 'true');
 
     const nameHeaderEl = document.createElement('div');
@@ -10954,11 +11928,17 @@ function loadShoppingItemEditorPage() {
             if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
               event.preventDefault();
               event.stopPropagation();
-              const moved = moveVariantRow(index, event.key === 'ArrowDown' ? 1 : -1);
+              const moved = moveVariantRow(
+                index,
+                event.key === 'ArrowDown' ? 1 : -1,
+              );
               if (moved) {
                 renderVariantRows({
                   focusCell: {
-                    rowIndex: Math.max(1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+                    rowIndex: Math.max(
+                      1,
+                      index + (event.key === 'ArrowDown' ? 1 : -1),
+                    ),
                     column: 'variant',
                     caretAtStart: true,
                   },
@@ -10984,7 +11964,10 @@ function loadShoppingItemEditorPage() {
             input.blur();
             return;
           }
-          if (event.key === 'Backspace' && String(input.value || '').trim() === '') {
+          if (
+            event.key === 'Backspace' &&
+            String(input.value || '').trim() === ''
+          ) {
             event.preventDefault();
             event.stopPropagation();
             variantRowsDraft.splice(index, 1);
@@ -11000,7 +11983,9 @@ function loadShoppingItemEditorPage() {
           }
         });
         input.addEventListener('blur', () => {
-          const previousCommittedValue = String(input.dataset.committedValue || '').trim();
+          const previousCommittedValue = String(
+            input.dataset.committedValue || '',
+          ).trim();
           const normalizedValue = normalizeNamedIngredientVariant(input.value);
           if (!normalizedValue) {
             variantRowsDraft.splice(index, 1);
@@ -11056,12 +12041,15 @@ function loadShoppingItemEditorPage() {
         input.addEventListener('contextmenu', (event) =>
           handleVariantCellContextAction(event, index),
         );
-        input.addEventListener('click', (event) => handleVariantCellContextAction(event, index));
+        input.addEventListener('click', (event) =>
+          handleVariantCellContextAction(event, index),
+        );
         variantCell.appendChild(input);
       }
 
       const homeCell = document.createElement('div');
-      homeCell.className = 'shopping-item-variant-cell shopping-item-variant-cell--home';
+      homeCell.className =
+        'shopping-item-variant-cell shopping-item-variant-cell--home';
       homeCell.dataset.rowIndex = String(index);
       homeCell.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.ctrlKey) return;
@@ -11085,7 +12073,9 @@ function loadShoppingItemEditorPage() {
       homeInput.type = 'text';
       homeInput.className = 'shopping-item-variant-home-input';
       homeInput.dataset.rowIndex = String(index);
-      homeInput.dataset.committedValue = getHomeLocationDisplayText(row?.homeLocation || 'none');
+      homeInput.dataset.committedValue = getHomeLocationDisplayText(
+        row?.homeLocation || 'none',
+      );
       homeInput.value = getHomeLocationDisplayText(row?.homeLocation || 'none');
       homeInput.placeholder = '';
       homeInput.title = homeInput.value;
@@ -11095,17 +12085,27 @@ function loadShoppingItemEditorPage() {
           ? `Home location for Base item`
           : `Home location for ${normalizeNamedIngredientVariant(row?.value) || 'variant'}`,
       );
-      if (window.favoriteEatsTypeahead && typeof window.favoriteEatsTypeahead.attach === 'function') {
+      if (
+        window.favoriteEatsTypeahead &&
+        typeof window.favoriteEatsTypeahead.attach === 'function'
+      ) {
         window.favoriteEatsTypeahead.attach({
           inputEl: homeInput,
-          getPool: async () => homeLocationDefsForEditor.map((entry) => String(entry.label || entry.id)),
+          getPool: async () =>
+            homeLocationDefsForEditor.map((entry) =>
+              String(entry.label || entry.id),
+            ),
           getItems: (pool, query) => {
-            const normalizedQuery = String(query || '').trim().toLowerCase();
+            const normalizedQuery = String(query || '')
+              .trim()
+              .toLowerCase();
             const items = (Array.isArray(pool) ? pool : [])
               .map((value) => String(value || '').trim())
               .filter(Boolean);
             if (!normalizedQuery) return items;
-            return items.filter((value) => value.toLowerCase().includes(normalizedQuery));
+            return items.filter((value) =>
+              value.toLowerCase().includes(normalizedQuery),
+            );
           },
           openOnFocus: true,
           pickOnEnterWhenQueryEmpty: false,
@@ -11125,11 +12125,17 @@ function loadShoppingItemEditorPage() {
           if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault();
             event.stopPropagation();
-            const moved = moveVariantRow(index, event.key === 'ArrowDown' ? 1 : -1);
+            const moved = moveVariantRow(
+              index,
+              event.key === 'ArrowDown' ? 1 : -1,
+            );
             if (moved) {
               renderVariantRows({
                 focusCell: {
-                  rowIndex: Math.max(1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+                  rowIndex: Math.max(
+                    1,
+                    index + (event.key === 'ArrowDown' ? 1 : -1),
+                  ),
                   column: 'home',
                   caretAtStart: true,
                   openTypeahead: true,
@@ -11192,22 +12198,32 @@ function loadShoppingItemEditorPage() {
       homeInput.addEventListener('contextmenu', (event) =>
         handleVariantCellContextAction(event, index),
       );
-      homeInput.addEventListener('click', (event) => handleVariantCellContextAction(event, index));
+      homeInput.addEventListener('click', (event) =>
+        handleVariantCellContextAction(event, index),
+      );
       homeCell.appendChild(homeInput);
 
       const tagsCell = document.createElement('div');
-      tagsCell.className = 'shopping-item-variant-cell shopping-item-variant-cell--tags';
+      tagsCell.className =
+        'shopping-item-variant-cell shopping-item-variant-cell--tags';
       tagsCell.dataset.rowIndex = String(index);
       const committedTags = normalizeRecipeTagList(row?.tags || []);
       variantRowsDraft[index].tags = committedTags;
       const tagsEditorState =
-        Number(activeVariantTagEditorState?.rowIndex) === index ? activeVariantTagEditorState : null;
+        Number(activeVariantTagEditorState?.rowIndex) === index
+          ? activeVariantTagEditorState
+          : null;
       const isEditingTags = !!tagsEditorState;
-      const activeInsertAfterTagIndex = Number.isFinite(Number(tagsEditorState?.insertAfterTagIndex))
+      const activeInsertAfterTagIndex = Number.isFinite(
+        Number(tagsEditorState?.insertAfterTagIndex),
+      )
         ? Math.trunc(Number(tagsEditorState?.insertAfterTagIndex))
         : committedTags.length - 1;
       const inputInsertBeforeIndex = isEditingTags
-        ? Math.max(0, Math.min(committedTags.length, activeInsertAfterTagIndex + 1))
+        ? Math.max(
+            0,
+            Math.min(committedTags.length, activeInsertAfterTagIndex + 1),
+          )
         : -1;
       const tagsControl = document.createElement('div');
       tagsControl.className = isEditingTags
@@ -11244,13 +12260,18 @@ function loadShoppingItemEditorPage() {
       ) {
         window.favoriteEatsTypeahead.attach({
           inputEl: tagsInput,
-          getPool: async () => getVisibleIngredientTagNamePool(window.dbInstance || null),
+          getPool: async () =>
+            getVisibleIngredientTagNamePool(window.dbInstance || null),
           openOnFocus: true,
           pickOnEnterWhenQueryEmpty: false,
           minWidth: 220,
           maxWidth: 380,
           onPick: (pickedValue, inputEl) => {
-            const inserted = insertVariantTagToRow(index, pickedValue, activeInsertAfterTagIndex);
+            const inserted = insertVariantTagToRow(
+              index,
+              pickedValue,
+              activeInsertAfterTagIndex,
+            );
             inputEl.value = '';
             syncVariantTagsInputLayout();
             if (!inserted) return;
@@ -11267,8 +12288,12 @@ function loadShoppingItemEditorPage() {
       tagsInput.addEventListener('input', () => {
         const currentInsertAfterTagIndex =
           Number(activeVariantTagEditorState?.rowIndex) === index &&
-          Number.isFinite(Number(activeVariantTagEditorState?.insertAfterTagIndex))
-            ? Math.trunc(Number(activeVariantTagEditorState.insertAfterTagIndex))
+          Number.isFinite(
+            Number(activeVariantTagEditorState?.insertAfterTagIndex),
+          )
+            ? Math.trunc(
+                Number(activeVariantTagEditorState.insertAfterTagIndex),
+              )
             : activeInsertAfterTagIndex;
         setActiveVariantTagEditorState(index, tagsInput.value || '', {
           insertAfterTagIndex: currentInsertAfterTagIndex,
@@ -11279,15 +12304,22 @@ function loadShoppingItemEditorPage() {
       tagsInput.addEventListener('keydown', (event) => {
         const getCurrentInsertAfterTagIndex = () =>
           Number(activeVariantTagEditorState?.rowIndex) === index &&
-          Number.isFinite(Number(activeVariantTagEditorState?.insertAfterTagIndex))
-            ? Math.trunc(Number(activeVariantTagEditorState.insertAfterTagIndex))
+          Number.isFinite(
+            Number(activeVariantTagEditorState?.insertAfterTagIndex),
+          )
+            ? Math.trunc(
+                Number(activeVariantTagEditorState.insertAfterTagIndex),
+              )
             : activeInsertAfterTagIndex;
 
         const tryMoveVariantTagInsertSlot = (direction) => {
           if (direction !== -1 && direction !== 1) return false;
-          if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+          if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+            return false;
           if (String(tagsInput.value || '') !== '') return false;
-          const existingTags = normalizeRecipeTagList(variantRowsDraft[index].tags || []);
+          const existingTags = normalizeRecipeTagList(
+            variantRowsDraft[index].tags || [],
+          );
           if (existingTags.length === 0) return false;
 
           event.preventDefault();
@@ -11296,7 +12328,10 @@ function loadShoppingItemEditorPage() {
           const currentInsertAfterTagIndex = getCurrentInsertAfterTagIndex();
           const nextInsertAfterTagIndex = Math.max(
             -1,
-            Math.min(existingTags.length - 1, currentInsertAfterTagIndex + direction),
+            Math.min(
+              existingTags.length - 1,
+              currentInsertAfterTagIndex + direction,
+            ),
           );
           if (nextInsertAfterTagIndex === currentInsertAfterTagIndex) {
             logVariantTagDebug('slot move no-op at boundary', {
@@ -11338,8 +12373,11 @@ function loadShoppingItemEditorPage() {
           event.stopPropagation();
           const pickedSuggestion =
             !!window.favoriteEatsTypeahead &&
-            typeof window.favoriteEatsTypeahead.pickHighlightedIfOpenForInput === 'function' &&
-            window.favoriteEatsTypeahead.pickHighlightedIfOpenForInput(tagsInput);
+            typeof window.favoriteEatsTypeahead
+              .pickHighlightedIfOpenForInput === 'function' &&
+            window.favoriteEatsTypeahead.pickHighlightedIfOpenForInput(
+              tagsInput,
+            );
           if (pickedSuggestion) {
             logVariantTagDebug('inline commit resolved via typeahead pick', {
               rowIndex: index,
@@ -11349,7 +12387,11 @@ function loadShoppingItemEditorPage() {
             });
             return true;
           }
-          const changed = insertVariantTagToRow(index, draftText, activeInsertAfterTagIndex);
+          const changed = insertVariantTagToRow(
+            index,
+            draftText,
+            activeInsertAfterTagIndex,
+          );
           tagsInput.value = '';
           syncVariantTagsInputLayout();
           setActiveVariantTagEditorState(index, '', {
@@ -11423,7 +12465,8 @@ function loadShoppingItemEditorPage() {
         if (event.key === 'Enter' && !event.shiftKey) {
           if (
             window.favoriteEatsTypeahead &&
-            typeof window.favoriteEatsTypeahead.tryPickEnterForInput === 'function' &&
+            typeof window.favoriteEatsTypeahead.tryPickEnterForInput ===
+              'function' &&
             window.favoriteEatsTypeahead.tryPickEnterForInput(tagsInput)
           ) {
             event.preventDefault();
@@ -11451,7 +12494,11 @@ function loadShoppingItemEditorPage() {
         if (event.key === ',') {
           event.preventDefault();
           event.stopPropagation();
-          const changed = insertVariantTagToRow(index, tagsInput.value || '', activeInsertAfterTagIndex);
+          const changed = insertVariantTagToRow(
+            index,
+            tagsInput.value || '',
+            activeInsertAfterTagIndex,
+          );
           tagsInput.value = '';
           syncVariantTagsInputLayout();
           setActiveVariantTagEditorState(index, '', {
@@ -11465,9 +12512,17 @@ function loadShoppingItemEditorPage() {
           }
           return;
         }
-        if (event.key === 'Backspace' && String(tagsInput.value || '').trim() === '') {
-          const existingTags = normalizeRecipeTagList(variantRowsDraft[index].tags || []);
-          const previousTagIndex = Math.min(existingTags.length - 1, activeInsertAfterTagIndex);
+        if (
+          event.key === 'Backspace' &&
+          String(tagsInput.value || '').trim() === ''
+        ) {
+          const existingTags = normalizeRecipeTagList(
+            variantRowsDraft[index].tags || [],
+          );
+          const previousTagIndex = Math.min(
+            existingTags.length - 1,
+            activeInsertAfterTagIndex,
+          );
           if (previousTagIndex < 0) return;
           event.preventDefault();
           event.stopPropagation();
@@ -11489,25 +12544,33 @@ function loadShoppingItemEditorPage() {
           rowIndex: index,
           draftText: String(tagsInput.value || ''),
           activeElementClassName:
-            document.activeElement instanceof HTMLElement ? document.activeElement.className : '',
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement.className
+              : '',
           pendingVariantCellFocus,
           pendingVariantTagPillInteraction,
         });
         window.setTimeout(() => {
           if (pendingVariantTagPillInteraction) {
-            logVariantTagDebug('blur deferred for pending tag-pill interaction', {
-              rowIndex: index,
-              pendingVariantTagPillInteraction,
-            });
+            logVariantTagDebug(
+              'blur deferred for pending tag-pill interaction',
+              {
+                rowIndex: index,
+                pendingVariantTagPillInteraction,
+              },
+            );
             if (pendingVariantTagPillInteraction.rowIndex === index) return;
             commitActiveVariantTagDraft({ clear: true });
             return;
           }
           if (pendingVariantTagBlurCleanupSuppression?.rowIndex === index) {
-            logVariantTagDebug('skip blur cleanup due to intentional tags refocus', {
-              rowIndex: index,
-              reason: pendingVariantTagBlurCleanupSuppression.reason,
-            });
+            logVariantTagDebug(
+              'skip blur cleanup due to intentional tags refocus',
+              {
+                rowIndex: index,
+                reason: pendingVariantTagBlurCleanupSuppression.reason,
+              },
+            );
             pendingVariantTagBlurCleanupSuppression = null;
             return;
           }
@@ -11515,20 +12578,28 @@ function loadShoppingItemEditorPage() {
             logVariantTagDebug('blur ignored: focus stayed inside tags cell', {
               rowIndex: index,
               activeElementClassName:
-                document.activeElement instanceof HTMLElement ? document.activeElement.className : '',
+                document.activeElement instanceof HTMLElement
+                  ? document.activeElement.className
+                  : '',
             });
             return;
           }
-          logVariantTagDebug('blur committing active draft and maybe rerendering', {
-            rowIndex: index,
-            draftText: String(tagsInput.value || ''),
-          });
+          logVariantTagDebug(
+            'blur committing active draft and maybe rerendering',
+            {
+              rowIndex: index,
+              draftText: String(tagsInput.value || ''),
+            },
+          );
           commitActiveVariantTagDraft({ clear: true });
           if (pendingVariantCellFocus) {
-            logVariantTagDebug('skip rerender after blur: pending focus exists', {
-              rowIndex: index,
-              pendingVariantCellFocus,
-            });
+            logVariantTagDebug(
+              'skip rerender after blur: pending focus exists',
+              {
+                rowIndex: index,
+                pendingVariantCellFocus,
+              },
+            );
             return;
           }
           logVariantTagDebug('rerender rows after blur', { rowIndex: index });
@@ -11544,7 +12615,8 @@ function loadShoppingItemEditorPage() {
       );
       tagsCell.addEventListener('mousedown', (event) => {
         if (event.target === tagsInput) return;
-        if (event.ctrlKey || event.metaKey || Number(event.button) !== 0) return;
+        if (event.ctrlKey || event.metaKey || Number(event.button) !== 0)
+          return;
         event.preventDefault();
       });
 
@@ -11575,12 +12647,15 @@ function loadShoppingItemEditorPage() {
           });
           variantRowsDraft[index].tags = normalizeRecipeTagList(
             committedTags.filter(
-              (value) => String(value || '').toLowerCase() !== String(tag || '').toLowerCase(),
+              (value) =>
+                String(value || '').toLowerCase() !==
+                String(tag || '').toLowerCase(),
             ),
           );
           syncVariantHiddenInput({ emit: true });
           rerenderVariantTagsEditorWithFocus(index, {
-            suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+            suppressBlurCleanup:
+              Number(activeVariantTagEditorState?.rowIndex) === index,
             reason: 'remove-tag',
           });
         };
@@ -11628,14 +12703,18 @@ function loadShoppingItemEditorPage() {
           }
           event.preventDefault();
           event.stopPropagation();
-          if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
+          if (
+            activeVariantTagEditorState &&
+            Number(activeVariantTagEditorState.rowIndex) !== index
+          ) {
             commitActiveVariantTagDraft({ clear: true });
           }
           const rect = pill.getBoundingClientRect();
           const midpoint = rect.left + rect.width / 2;
-          const insertAfterTagIndex = typeof event.clientX === 'number' && event.clientX < midpoint
-            ? tagIndex - 1
-            : tagIndex;
+          const insertAfterTagIndex =
+            typeof event.clientX === 'number' && event.clientX < midpoint
+              ? tagIndex - 1
+              : tagIndex;
           setActiveVariantTagEditorState(
             index,
             Number(activeVariantTagEditorState?.rowIndex) === index
@@ -11644,7 +12723,8 @@ function loadShoppingItemEditorPage() {
             { insertAfterTagIndex },
           );
           rerenderVariantTagsEditorWithFocus(index, {
-            suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+            suppressBlurCleanup:
+              Number(activeVariantTagEditorState?.rowIndex) === index,
             reason: 'pill-click-reposition',
           });
         });
@@ -11657,7 +12737,10 @@ function loadShoppingItemEditorPage() {
       }
       tagsCell.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
-        if (activeVariantTagEditorState && Number(activeVariantTagEditorState.rowIndex) !== index) {
+        if (
+          activeVariantTagEditorState &&
+          Number(activeVariantTagEditorState.rowIndex) !== index
+        ) {
           commitActiveVariantTagDraft({ clear: true });
         }
         setActiveVariantTagEditorState(
@@ -11674,7 +12757,8 @@ function loadShoppingItemEditorPage() {
           },
         );
         rerenderVariantTagsEditorWithFocus(index, {
-          suppressBlurCleanup: Number(activeVariantTagEditorState?.rowIndex) === index,
+          suppressBlurCleanup:
+            Number(activeVariantTagEditorState?.rowIndex) === index,
           reason: 'tags-cell-click',
         });
       });
@@ -11711,7 +12795,9 @@ function loadShoppingItemEditorPage() {
 
   const setVariantRowsFromSerialized = (rawValue) => {
     activeVariantTagEditorState = null;
-    variantRowsDraft = getVariantRowsForEditing(parseIngredientVariantRowsSerialized(rawValue));
+    variantRowsDraft = getVariantRowsForEditing(
+      parseIngredientVariantRowsSerialized(rawValue),
+    );
     syncVariantHiddenInput({ emit: false });
     renderVariantRows();
   };
@@ -11783,16 +12869,25 @@ function loadShoppingItemEditorPage() {
       const idStr = sessionStorage.getItem('selectedShoppingItemId');
       const id = Number(idStr);
       const variantRowsText =
-        (extraValues && extraValues.variant_rows) || (extraValues && extraValues.variants) || '';
+        (extraValues && extraValues.variant_rows) ||
+        (extraValues && extraValues.variants) ||
+        '';
       const sizesText = (extraValues && extraValues.sizes) || '';
       const synonymsText = (extraValues && extraValues.synonyms) || '';
       const home = (extraValues && extraValues.home) || '';
-      const normalizedVariantRows = parseIngredientVariantRowsSerialized(variantRowsText, {
-        fallbackBaseHome: home,
-      });
-      const namedVariantRows = getNamedVariantRowsFromDraft(normalizedVariantRows);
+      const normalizedVariantRows = parseIngredientVariantRowsSerialized(
+        variantRowsText,
+        {
+          fallbackBaseHome: home,
+        },
+      );
+      const namedVariantRows = getNamedVariantRowsFromDraft(
+        normalizedVariantRows,
+      );
       const normalizedBaseHomeLocation = normalizeShoppingHomeLocationId(
-        normalizedVariantRows.find((row) => row?.isBase)?.homeLocation || home || 'none',
+        normalizedVariantRows.find((row) => row?.isBase)?.homeLocation ||
+          home ||
+          'none',
       );
       const isFoodRaw = (extraValues && extraValues.is_food) || '';
       const isDeprecatedRaw = (extraValues && extraValues.is_deprecated) || '';
@@ -11876,7 +12971,9 @@ function loadShoppingItemEditorPage() {
       const hasSizeTable = tableExists('ingredient_sizes');
       const hasSynonymsTable = tableExists('ingredient_synonyms');
       const hasStoreLocationTable = tableExists('ingredient_store_location');
-      const hasVariantAisleTable = tableExists('ingredient_variant_store_location');
+      const hasVariantAisleTable = tableExists(
+        'ingredient_variant_store_location',
+      );
       const hasRecipeIngredientMapTable = tableExists('recipe_ingredient_map');
       const hasRecipeIngredientSubstitutesTable = tableExists(
         'recipe_ingredient_substitutes',
@@ -11992,15 +13089,20 @@ function loadShoppingItemEditorPage() {
           ]);
         }
         if (hasStoreLocationTable) {
-          db.run('DELETE FROM ingredient_store_location WHERE ingredient_id = ?;', [
-            ingredientId,
-          ]);
+          db.run(
+            'DELETE FROM ingredient_store_location WHERE ingredient_id = ?;',
+            [ingredientId],
+          );
         }
       };
       const mergeIngredientInto = (sourceId, targetId) => {
         const fromId = Number(sourceId);
         const toId = Number(targetId);
-        if (!Number.isFinite(fromId) || !Number.isFinite(toId) || fromId === toId) {
+        if (
+          !Number.isFinite(fromId) ||
+          !Number.isFinite(toId) ||
+          fromId === toId
+        ) {
           return;
         }
         if (hasStoreLocationTable) {
@@ -12205,16 +13307,19 @@ function loadShoppingItemEditorPage() {
         // Persist variants/sizes lists to their own tables (newline-only, order preserved).
         const variantSizeTargetIds =
           currentId != null && Number.isFinite(Number(currentId))
-              ? [Number(currentId)]
-              : [];
+            ? [Number(currentId)]
+            : [];
         if (variantSizeTargetIds.length > 0) {
           if (hasVariantTable) {
             let nextTagSort = 1;
             try {
-              const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;');
+              const maxQ = db.exec(
+                'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;',
+              );
               if (maxQ.length && maxQ[0].values.length) {
                 const nextSort = Number(maxQ[0].values[0][0]);
-                if (Number.isFinite(nextSort) && nextSort > 0) nextTagSort = nextSort;
+                if (Number.isFinite(nextSort) && nextSort > 0)
+                  nextTagSort = nextSort;
               }
             } catch (_) {}
             findTagStmt = db.prepare(
@@ -12255,12 +13360,16 @@ function loadShoppingItemEditorPage() {
                 }
               }
 
-              db.run('DELETE FROM ingredient_variants WHERE ingredient_id = ?;', [
-                iid,
-              ]);
-              const variantRowsToPersist = normalizeIngredientVariantRows(normalizedVariantRows, {
-                fallbackBaseHome: normalizedBaseHomeLocation,
-              });
+              db.run(
+                'DELETE FROM ingredient_variants WHERE ingredient_id = ?;',
+                [iid],
+              );
+              const variantRowsToPersist = normalizeIngredientVariantRows(
+                normalizedVariantRows,
+                {
+                  fallbackBaseHome: normalizedBaseHomeLocation,
+                },
+              );
               variantRowsToPersist.forEach((row, idx) => {
                 const sortOrder = idx === 0 ? 0 : idx;
                 const variantName = row?.isBase
@@ -12274,7 +13383,9 @@ function loadShoppingItemEditorPage() {
                       iid,
                       variantName,
                       sortOrder,
-                      normalizeShoppingHomeLocationId(row?.homeLocation || 'none'),
+                      normalizeShoppingHomeLocationId(
+                        row?.homeLocation || 'none',
+                      ),
                     ],
                   );
                 } else {
@@ -12288,33 +13399,60 @@ function loadShoppingItemEditorPage() {
                   variantIdQ.length && variantIdQ[0].values.length
                     ? Number(variantIdQ[0].values[0][0])
                     : NaN;
-                if (!Number.isFinite(insertedVariantId) || insertedVariantId <= 0) return;
-                normalizeRecipeTagList(row?.tags || []).forEach((tagName, tagIndex) => {
-                  let tagId = null;
-                  try {
-                    findTagStmt.bind([tagName]);
-                    if (findTagStmt.step()) {
-                      const foundRow = findTagStmt.getAsObject();
-                      const foundId = Number(foundRow && foundRow.id != null ? foundRow.id : NaN);
-                      if (Number.isFinite(foundId) && foundId > 0) tagId = foundId;
+                if (
+                  !Number.isFinite(insertedVariantId) ||
+                  insertedVariantId <= 0
+                )
+                  return;
+                normalizeRecipeTagList(row?.tags || []).forEach(
+                  (tagName, tagIndex) => {
+                    let tagId = null;
+                    try {
+                      findTagStmt.bind([tagName]);
+                      if (findTagStmt.step()) {
+                        const foundRow = findTagStmt.getAsObject();
+                        const foundId = Number(
+                          foundRow && foundRow.id != null ? foundRow.id : NaN,
+                        );
+                        if (Number.isFinite(foundId) && foundId > 0)
+                          tagId = foundId;
+                      }
+                    } finally {
+                      findTagStmt.reset();
                     }
-                  } finally {
-                    findTagStmt.reset();
-                  }
-                  if (tagId == null) {
-                    insertTagStmt.run([tagName, nextTagSort++, 'ingredients']);
-                    const insertedTagQ = db.exec('SELECT last_insert_rowid();');
-                    if (insertedTagQ.length && insertedTagQ[0].values.length) {
-                      const insertedTagId = Number(insertedTagQ[0].values[0][0]);
-                      if (Number.isFinite(insertedTagId) && insertedTagId > 0) {
-                        tagId = insertedTagId;
+                    if (tagId == null) {
+                      insertTagStmt.run([
+                        tagName,
+                        nextTagSort++,
+                        'ingredients',
+                      ]);
+                      const insertedTagQ = db.exec(
+                        'SELECT last_insert_rowid();',
+                      );
+                      if (
+                        insertedTagQ.length &&
+                        insertedTagQ[0].values.length
+                      ) {
+                        const insertedTagId = Number(
+                          insertedTagQ[0].values[0][0],
+                        );
+                        if (
+                          Number.isFinite(insertedTagId) &&
+                          insertedTagId > 0
+                        ) {
+                          tagId = insertedTagId;
+                        }
                       }
                     }
-                  }
-                  if (tagId != null) {
-                    insertVariantTagStmt.run([insertedVariantId, tagId, tagIndex + 1]);
-                  }
-                });
+                    if (tagId != null) {
+                      insertVariantTagStmt.run([
+                        insertedVariantId,
+                        tagId,
+                        tagIndex + 1,
+                      ]);
+                    }
+                  },
+                );
               });
 
               if (
@@ -12376,8 +13514,8 @@ function loadShoppingItemEditorPage() {
         // Verify writes before COMMIT so any mismatch can rollback atomically.
         const verifyIds =
           currentId != null && Number.isFinite(Number(currentId))
-              ? [Number(currentId)]
-              : [];
+            ? [Number(currentId)]
+            : [];
         const normalizedNext = String(next || '')
           .trim()
           .toLowerCase();
@@ -12420,13 +13558,23 @@ function loadShoppingItemEditorPage() {
             }
           }
           if (hasVariantTable) {
-            const dbVariantRows = loadIngredientVariantRowsForIngredientInMain(db, iid, {
-              fallbackBaseHome: normalizedBaseHomeLocation,
-            });
-            const expectedVariantRows = normalizeIngredientVariantRows(normalizedVariantRows, {
-              fallbackBaseHome: normalizedBaseHomeLocation,
-            });
-            if (JSON.stringify(dbVariantRows) !== JSON.stringify(expectedVariantRows)) {
+            const dbVariantRows = loadIngredientVariantRowsForIngredientInMain(
+              db,
+              iid,
+              {
+                fallbackBaseHome: normalizedBaseHomeLocation,
+              },
+            );
+            const expectedVariantRows = normalizeIngredientVariantRows(
+              normalizedVariantRows,
+              {
+                fallbackBaseHome: normalizedBaseHomeLocation,
+              },
+            );
+            if (
+              JSON.stringify(dbVariantRows) !==
+              JSON.stringify(expectedVariantRows)
+            ) {
               throw new Error(`shopping-save-verify-variant-rows:${iid}`);
             }
           }
@@ -12718,7 +13866,9 @@ function loadShoppingItemEditorPage() {
                 [iid],
               );
               if (sq.length && sq[0].values.length) {
-                sq[0].values.forEach((r) => rows.push(String((r && r[0]) || '')));
+                sq[0].values.forEach((r) =>
+                  rows.push(String((r && r[0]) || '')),
+                );
               }
             });
             const cleaned = dedupeStable(rows);
@@ -12729,7 +13879,9 @@ function loadShoppingItemEditorPage() {
 
           try {
             const rows = [];
-            if (tableHasColumnInMain(db, 'ingredient_variants', 'home_location')) {
+            if (
+              tableHasColumnInMain(db, 'ingredient_variants', 'home_location')
+            ) {
               targetIngredientIds.forEach((iid) => {
                 const hq = db.exec(
                   `SELECT COALESCE(home_location, 'none')
@@ -12741,7 +13893,9 @@ function loadShoppingItemEditorPage() {
                   [iid],
                 );
                 if (hq.length && hq[0].values.length) {
-                  rows.push(String((hq[0].values[0] && hq[0].values[0][0]) || 'none'));
+                  rows.push(
+                    String((hq[0].values[0] && hq[0].values[0][0]) || 'none'),
+                  );
                 }
               });
             }
@@ -12754,9 +13908,12 @@ function loadShoppingItemEditorPage() {
           } catch (_) {
             baselineHome = normalizeShoppingHomeLocationId(baselineHome);
           }
-          baselineVariantRows = normalizeIngredientVariantRows(baselineVariantRows, {
-            fallbackBaseHome: baselineHome,
-          });
+          baselineVariantRows = normalizeIngredientVariantRows(
+            baselineVariantRows,
+            {
+              fallbackBaseHome: baselineHome,
+            },
+          );
 
           try {
             const rows = [];
@@ -12769,7 +13926,9 @@ function loadShoppingItemEditorPage() {
                 [iid],
               );
               if (synQ.length && synQ[0].values.length) {
-                synQ[0].values.forEach((r) => rows.push(String((r && r[0]) || '')));
+                synQ[0].values.forEach((r) =>
+                  rows.push(String((r && r[0]) || '')),
+                );
               }
             });
             const cleaned = dedupeStable(rows);
@@ -12796,7 +13955,9 @@ function loadShoppingItemEditorPage() {
               fallbackBaseHome: baselineHome,
             }),
             getValue: () =>
-              serializeIngredientVariantRows(getVariantRowsDraftWithMergedActiveTagDraft()),
+              serializeIngredientVariantRows(
+                getVariantRowsDraftWithMergedActiveTagDraft(),
+              ),
             setValue: (value) => {
               setVariantRowsFromSerialized(value);
             },
@@ -12929,7 +14090,8 @@ function loadUnitEditorPage() {
   const storedPlural = sessionStorage.getItem('selectedUnitNamePlural') || '';
   const code = sessionStorage.getItem('selectedUnitCode') || '';
   const initialHidden = sessionStorage.getItem('selectedUnitIsHidden') === '1';
-  const initialRemoved = sessionStorage.getItem('selectedUnitIsRemoved') === '1';
+  const initialRemoved =
+    sessionStorage.getItem('selectedUnitIsRemoved') === '1';
   const titleDisplay = storedName || (isNew ? 'New unit' : 'Unit');
   const initialTitle = storedName
     ? (storedName || '').trim().toLowerCase()
@@ -13050,9 +14212,17 @@ function loadUnitEditorPage() {
           ensureUnitsSchemaInMain(db);
 
           const newCode = (nextCode ?? '').trim().toLowerCase();
-          const pluralForm = (document.getElementById('unitPluralInput')?.value || '').trim();
-          const isHidden = document.getElementById('unitIsHiddenToggle')?.checked ? 1 : 0;
-          const isRemoved = document.getElementById('unitIsRemovedToggle')?.checked ? 1 : 0;
+          const pluralForm = (
+            document.getElementById('unitPluralInput')?.value || ''
+          ).trim();
+          const isHidden = document.getElementById('unitIsHiddenToggle')
+            ?.checked
+            ? 1
+            : 0;
+          const isRemoved = document.getElementById('unitIsRemovedToggle')
+            ?.checked
+            ? 1
+            : 0;
 
           if (oldCode && newCode !== oldCode) {
             const safe = (x) => String(x || '').replace(/'/g, "''");
@@ -13183,7 +14353,15 @@ async function loadUnitsPage() {
     `);
     if (!result.length) return [];
     return result[0].values.map(
-      ([code, nameSingular, namePlural, category, sortOrder, isHidden, isRemoved]) => ({
+      ([
+        code,
+        nameSingular,
+        namePlural,
+        category,
+        sortOrder,
+        isHidden,
+        isRemoved,
+      ]) => ({
         code,
         nameSingular,
         namePlural,
@@ -13218,7 +14396,8 @@ async function loadUnitsPage() {
     unitRows.forEach((row) => {
       const state = getUnitSizeRowState(row);
       if (state.isHidden) counts.set('hidden', (counts.get('hidden') || 0) + 1);
-      if (state.isRemoved) counts.set('removed', (counts.get('removed') || 0) + 1);
+      if (state.isRemoved)
+        counts.set('removed', (counts.get('removed') || 0) + 1);
     });
     unitChipCounts = counts;
   };
@@ -13270,7 +14449,12 @@ async function loadUnitsPage() {
     const query = (searchInput?.value || '').trim().toLowerCase();
     return unitRows.filter((u) => {
       if (!shouldShowUnitSizeRow(u, activeUnitFilterChips)) return false;
-      const haystack = [u.code || '', u.nameSingular || '', u.namePlural || '', u.category || '']
+      const haystack = [
+        u.code || '',
+        u.nameSingular || '',
+        u.namePlural || '',
+        u.category || '',
+      ]
         .join(' ')
         .toLowerCase();
       return !query || haystack.includes(query);
@@ -13296,7 +14480,11 @@ async function loadUnitsPage() {
       const code = (unit.code || '').trim();
       const nameSingular = (unit.nameSingular || '').trim();
       let line = nameSingular || code;
-      if (nameSingular && code && nameSingular.toLowerCase() !== code.toLowerCase()) {
+      if (
+        nameSingular &&
+        code &&
+        nameSingular.toLowerCase() !== code.toLowerCase()
+      ) {
         line = `${nameSingular} (${code})`;
       }
 
@@ -13412,8 +14600,14 @@ async function loadUnitsPage() {
         );
         sessionStorage.setItem('selectedUnitNamePlural', unit.namePlural || '');
         sessionStorage.setItem('selectedUnitCategory', unit.category || '');
-        sessionStorage.setItem('selectedUnitIsHidden', state.isHidden ? '1' : '0');
-        sessionStorage.setItem('selectedUnitIsRemoved', state.isRemoved ? '1' : '0');
+        sessionStorage.setItem(
+          'selectedUnitIsHidden',
+          state.isHidden ? '1' : '0',
+        );
+        sessionStorage.setItem(
+          'selectedUnitIsRemoved',
+          state.isRemoved ? '1' : '0',
+        );
         sessionStorage.removeItem('selectedUnitIsNew');
 
         window.location.href = 'unitEditor.html';
@@ -13535,7 +14729,6 @@ async function loadUnitsPage() {
       void openCreateUnitDialog();
     });
   }
-
 }
 
 async function loadTagsPage() {
@@ -13624,7 +14817,14 @@ async function loadTagsPage() {
     `);
     if (!q.length) return [];
     return q[0].values.map(
-      ([id, name, sortOrder, intendedUse, hasRecipeUsage, hasIngredientUsage]) => ({
+      ([
+        id,
+        name,
+        sortOrder,
+        intendedUse,
+        hasRecipeUsage,
+        hasIngredientUsage,
+      ]) => ({
         id: Number(id),
         name: String(name || ''),
         sortOrder: Number(sortOrder),
@@ -13673,7 +14873,12 @@ async function loadTagsPage() {
       return;
     }
     setTopLevelEmptyStateLayoutMode(list, false);
-    const appendSection = (label, collapseKey, headerModifierClass, sectionRows) => {
+    const appendSection = (
+      label,
+      collapseKey,
+      headerModifierClass,
+      sectionRows,
+    ) => {
       const expanded = !collapsedTagsSections.has(collapseKey);
       const header = document.createElement('li');
       header.className = `list-section-label ${headerModifierClass}`;
@@ -13681,12 +14886,12 @@ async function loadTagsPage() {
         label,
         expanded,
         onToggle: () => {
-        if (collapsedTagsSections.has(collapseKey)) {
-          collapsedTagsSections.delete(collapseKey);
-        } else {
-          collapsedTagsSections.add(collapseKey);
-        }
-        renderTags(applyTagSearchFilter(tagRows));
+          if (collapsedTagsSections.has(collapseKey)) {
+            collapsedTagsSections.delete(collapseKey);
+          } else {
+            collapsedTagsSections.add(collapseKey);
+          }
+          renderTags(applyTagSearchFilter(tagRows));
         },
       });
       header.appendChild(toggleBtn);
@@ -13738,7 +14943,8 @@ async function loadTagsPage() {
       items.filter(
         (tag) =>
           tag.hasRecipeUsage ||
-          (!tag.hasIngredientUsage && (tag.intendedUse || 'recipes') !== 'ingredients'),
+          (!tag.hasIngredientUsage &&
+            (tag.intendedUse || 'recipes') !== 'ingredients'),
       ),
     );
     appendSection(
@@ -13748,7 +14954,8 @@ async function loadTagsPage() {
       items.filter(
         (tag) =>
           tag.hasIngredientUsage ||
-          (!tag.hasRecipeUsage && (tag.intendedUse || 'recipes') === 'ingredients'),
+          (!tag.hasRecipeUsage &&
+            (tag.intendedUse || 'recipes') === 'ingredients'),
       ),
     );
     listNav?.syncAfterRender?.();
@@ -13758,7 +14965,9 @@ async function loadTagsPage() {
     const q = (searchInput?.value || '').trim().toLowerCase();
     if (!q) return rows;
     return (rows || []).filter((row) =>
-      String(row.name || '').toLowerCase().includes(q)
+      String(row.name || '')
+        .toLowerCase()
+        .includes(q),
     );
   };
 
@@ -13798,7 +15007,10 @@ async function loadTagsPage() {
           required: true,
           normalize: (v) => String(v || '').trim(),
           validate: (nameVal) => {
-            const clipped = String(nameVal || '').trim().slice(0, 48).trim();
+            const clipped = String(nameVal || '')
+              .trim()
+              .slice(0, 48)
+              .trim();
             if (!clipped) return '';
             const dupId = findDuplicateTagIdByName(clipped);
             if (!Number.isFinite(dupId)) return '';
@@ -13819,27 +15031,33 @@ async function loadTagsPage() {
       confirmText: 'Create',
       cancelText: 'Cancel',
       validate: (v) => {
-        const clipped = String(v.name || '').trim().slice(0, 48).trim();
+        const clipped = String(v.name || '')
+          .trim()
+          .slice(0, 48)
+          .trim();
         if (!clipped) return 'Name is required.';
         return '';
       },
     });
     if (!vals) return;
-    const name = String(vals.name || '').trim().slice(0, 48).trim();
+    const name = String(vals.name || '')
+      .trim()
+      .slice(0, 48)
+      .trim();
     if (!name) return;
-    const useFor =
-      vals.useFor === 'ingredients' ? 'ingredients' : 'recipes';
+    const useFor = vals.useFor === 'ingredients' ? 'ingredients' : 'recipes';
     try {
-      const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;');
+      const maxQ = db.exec(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;',
+      );
       const nextSort =
         maxQ.length && maxQ[0].values.length
           ? Number(maxQ[0].values[0][0]) || 1
           : 1;
-      db.run('INSERT INTO tags (name, sort_order, intended_use) VALUES (?, ?, ?);', [
-        name,
-        nextSort,
-        useFor,
-      ]);
+      db.run(
+        'INSERT INTO tags (name, sort_order, intended_use) VALUES (?, ?, ?);',
+        [name, nextSort, useFor],
+      );
       const idQ = db.exec('SELECT last_insert_rowid();');
       const newId =
         idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
@@ -13877,7 +15095,10 @@ function navigateShoppingListToIngredient({ id, name }) {
   const n = String(name || '').trim();
   try {
     if (Number.isFinite(ingId) && ingId > 0) {
-      sessionStorage.setItem(keys.shoppingNavTargetId, String(Math.trunc(ingId)));
+      sessionStorage.setItem(
+        keys.shoppingNavTargetId,
+        String(Math.trunc(ingId)),
+      );
       sessionStorage.setItem(keys.shoppingNavTargetName, n);
     } else if (n) {
       sessionStorage.removeItem(keys.shoppingNavTargetId);
@@ -14105,9 +15326,15 @@ function loadTagEditorPage() {
       bodyTitleEl: document.getElementById('childEditorTitle'),
       initialTitle,
       backHref: 'tags.html',
-      normalizeTitle: (s) => String(s || '').trim().slice(0, 48),
+      normalizeTitle: (s) =>
+        String(s || '')
+          .trim()
+          .slice(0, 48),
       onSave: async ({ title: next }) => {
-        const name = String(next || '').trim().slice(0, 48).trim();
+        const name = String(next || '')
+          .trim()
+          .slice(0, 48)
+          .trim();
         if (!name) {
           uiToast('Tag name is required.');
           throw new Error('Tag name required');
@@ -14132,11 +15359,15 @@ function loadTagEditorPage() {
           `SELECT id FROM tags
            WHERE lower(trim(name)) = lower(trim(?))
              AND (? IS NULL OR id != ?)
-           LIMIT 1;`
+           LIMIT 1;`,
         );
         let hasDup = false;
         try {
-          dupStmt.bind([name, Number.isFinite(tagId) ? tagId : null, Number.isFinite(tagId) ? tagId : null]);
+          dupStmt.bind([
+            name,
+            Number.isFinite(tagId) ? tagId : null,
+            Number.isFinite(tagId) ? tagId : null,
+          ]);
           if (dupStmt.step()) hasDup = true;
         } finally {
           dupStmt.free();
@@ -14150,7 +15381,7 @@ function loadTagEditorPage() {
           db.run('UPDATE tags SET name = ? WHERE id = ?;', [name, tagId]);
         } else {
           const maxQ = db.exec(
-            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;'
+            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tags;',
           );
           const nextSort =
             maxQ.length && maxQ[0].values.length
@@ -14162,7 +15393,10 @@ function loadTagEditorPage() {
           ]);
           const idQ = db.exec('SELECT last_insert_rowid();');
           if (idQ.length && idQ[0].values.length) {
-            sessionStorage.setItem('selectedTagId', String(idQ[0].values[0][0]));
+            sessionStorage.setItem(
+              'selectedTagId',
+              String(idQ[0].values[0][0]),
+            );
           }
         }
 
@@ -14258,7 +15492,7 @@ async function loadSizesPage() {
         sortOrder: Number(sortOrder),
         isHidden: Number(isHidden || 0) === 1,
         isRemoved: Number(isRemoved || 0) === 1,
-      }))
+      })),
     );
   };
 
@@ -14278,7 +15512,8 @@ async function loadSizesPage() {
     sizeRows.forEach((row) => {
       const state = getUnitSizeRowState(row);
       if (state.isHidden) counts.set('hidden', (counts.get('hidden') || 0) + 1);
-      if (state.isRemoved) counts.set('removed', (counts.get('removed') || 0) + 1);
+      if (state.isRemoved)
+        counts.set('removed', (counts.get('removed') || 0) + 1);
     });
     sizeChipCounts = counts;
   };
@@ -14332,7 +15567,9 @@ async function loadSizesPage() {
       const cols =
         Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
           ? q[0].values
-              .map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase())
+              .map((r) =>
+                String((Array.isArray(r) ? r[1] : '') || '').toLowerCase(),
+              )
               .filter(Boolean)
           : [];
       return cols.includes(String(colName || '').toLowerCase());
@@ -14551,7 +15788,8 @@ async function loadSizesPage() {
     setTopLevelEmptyStateLayoutMode(list, false);
     items.forEach((sizeRow) => {
       const li = document.createElement('li');
-      if (getUnitSizeRowState(sizeRow).isRemoved) li.classList.add('list-item--removed');
+      if (getUnitSizeRowState(sizeRow).isRemoved)
+        li.classList.add('list-item--removed');
       li.textContent = sizeRow.name || '';
       li.addEventListener('click', (event) => {
         if (event.ctrlKey || event.metaKey) {
@@ -14569,8 +15807,14 @@ async function loadSizesPage() {
         }
         sessionStorage.setItem('selectedSizeId', String(sizeRow.id));
         sessionStorage.setItem('selectedSizeName', sizeRow.name || '');
-        sessionStorage.setItem('selectedSizeIsHidden', sizeRow.isHidden ? '1' : '0');
-        sessionStorage.setItem('selectedSizeIsRemoved', sizeRow.isRemoved ? '1' : '0');
+        sessionStorage.setItem(
+          'selectedSizeIsHidden',
+          sizeRow.isHidden ? '1' : '0',
+        );
+        sessionStorage.setItem(
+          'selectedSizeIsRemoved',
+          sizeRow.isRemoved ? '1' : '0',
+        );
         sessionStorage.removeItem('selectedSizeIsNew');
         window.location.href = 'sizeEditor.html';
       });
@@ -14594,7 +15838,12 @@ async function loadSizesPage() {
     const q = (searchInput?.value || '').trim().toLowerCase();
     return (rows || []).filter((row) => {
       if (!shouldShowUnitSizeRow(row, activeSizeFilterChips)) return false;
-      return !q || String(row.name || '').toLowerCase().includes(q);
+      return (
+        !q ||
+        String(row.name || '')
+          .toLowerCase()
+          .includes(q)
+      );
     });
   };
 
@@ -14608,30 +15857,42 @@ async function loadSizesPage() {
           label: 'Name',
           value: '',
           required: true,
-          normalize: (v) => String(v || '').trim().replace(/\s+/g, ' '),
+          normalize: (v) =>
+            String(v || '')
+              .trim()
+              .replace(/\s+/g, ' '),
         },
       ],
       confirmText: 'Create',
       cancelText: 'Cancel',
       validate: (v) => {
-        const clipped = String(v.name || '').trim().slice(0, 64).trim();
+        const clipped = String(v.name || '')
+          .trim()
+          .slice(0, 64)
+          .trim();
         if (!clipped) return 'Name is required.';
         return '';
       },
     });
     if (!vals) return;
-    const name = String(vals.name || '').trim().replace(/\s+/g, ' ').slice(0, 64).trim();
+    const name = String(vals.name || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, 64)
+      .trim();
     if (!name) return;
     try {
-      const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;');
+      const maxQ = db.exec(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;',
+      );
       const nextSort =
         maxQ.length && maxQ[0].values.length
           ? Number(maxQ[0].values[0][0]) || 1
           : 1;
-      db.run('INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, 0, 0);', [
-        name,
-        nextSort,
-      ]);
+      db.run(
+        'INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, 0, 0);',
+        [name, nextSort],
+      );
       const idQ = db.exec('SELECT last_insert_rowid();');
       const newId =
         idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
@@ -14678,7 +15939,8 @@ function loadSizeEditorPage() {
   const sizeId = Number(idStr);
   const storedName = sessionStorage.getItem('selectedSizeName') || '';
   const initialHidden = sessionStorage.getItem('selectedSizeIsHidden') === '1';
-  const initialRemoved = sessionStorage.getItem('selectedSizeIsRemoved') === '1';
+  const initialRemoved =
+    sessionStorage.getItem('selectedSizeIsRemoved') === '1';
   const titleDisplay = storedName || (isNew ? 'New size' : 'Size');
   const initialTitle = storedName || (isNew ? 'new size' : 'size');
 
@@ -14712,9 +15974,16 @@ function loadSizeEditorPage() {
       initialTitle,
       backHref: 'sizes.html',
       normalizeTitle: (s) =>
-        String(s || '').trim().replace(/\s+/g, ' ').slice(0, 64),
+        String(s || '')
+          .trim()
+          .replace(/\s+/g, ' ')
+          .slice(0, 64),
       onSave: async ({ title: next }) => {
-        const name = String(next || '').trim().replace(/\s+/g, ' ').slice(0, 64).trim();
+        const name = String(next || '')
+          .trim()
+          .replace(/\s+/g, ' ')
+          .slice(0, 64)
+          .trim();
         if (!name) {
           uiToast('Size name is required.');
           throw new Error('Size name required');
@@ -14739,7 +16008,11 @@ function loadSizeEditorPage() {
             const cols =
               Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
                 ? q[0].values
-                    .map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase())
+                    .map((r) =>
+                      String(
+                        (Array.isArray(r) ? r[1] : '') || '',
+                      ).toLowerCase(),
+                    )
                     .filter(Boolean)
                 : [];
             return cols.includes(String(colName || '').toLowerCase());
@@ -14752,7 +16025,7 @@ function loadSizeEditorPage() {
           `SELECT id FROM sizes
            WHERE lower(trim(name)) = lower(trim(?))
              AND (? IS NULL OR id != ?)
-           LIMIT 1;`
+           LIMIT 1;`,
         );
         let hasDup = false;
         try {
@@ -14771,30 +16044,36 @@ function loadSizeEditorPage() {
         }
 
         const oldName = String(storedName || '').trim();
-        const isHidden = document.getElementById('sizeIsHiddenToggle')?.checked ? 1 : 0;
-        const isRemoved = document.getElementById('sizeIsRemovedToggle')?.checked ? 1 : 0;
+        const isHidden = document.getElementById('sizeIsHiddenToggle')?.checked
+          ? 1
+          : 0;
+        const isRemoved = document.getElementById('sizeIsRemovedToggle')
+          ?.checked
+          ? 1
+          : 0;
         if (Number.isFinite(sizeId) && sizeId > 0) {
-          db.run('UPDATE sizes SET name = ?, is_hidden = ?, is_removed = ? WHERE id = ?;', [
-            name,
-            isHidden,
-            isRemoved,
-            sizeId,
-          ]);
+          db.run(
+            'UPDATE sizes SET name = ?, is_hidden = ?, is_removed = ? WHERE id = ?;',
+            [name, isHidden, isRemoved, sizeId],
+          );
         } else {
-          const maxQ = db.exec('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;');
+          const maxQ = db.exec(
+            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM sizes;',
+          );
           const nextSort =
             maxQ.length && maxQ[0].values.length
               ? Number(maxQ[0].values[0][0]) || 1
               : 1;
-          db.run('INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, ?, ?);', [
-            name,
-            nextSort,
-            isHidden,
-            isRemoved,
-          ]);
+          db.run(
+            'INSERT INTO sizes (name, sort_order, is_hidden, is_removed) VALUES (?, ?, ?, ?);',
+            [name, nextSort, isHidden, isRemoved],
+          );
           const idQ = db.exec('SELECT last_insert_rowid();');
           if (idQ.length && idQ[0].values.length) {
-            sessionStorage.setItem('selectedSizeId', String(idQ[0].values[0][0]));
+            sessionStorage.setItem(
+              'selectedSizeId',
+              String(idQ[0].values[0][0]),
+            );
           }
         }
 
@@ -14805,7 +16084,7 @@ function loadSizeEditorPage() {
                 `UPDATE ingredients
                  SET size = ?
                  WHERE lower(trim(size)) = lower(trim(?));`,
-                [name, oldName]
+                [name, oldName],
               );
             }
           } catch (_) {}
@@ -14815,7 +16094,7 @@ function loadSizeEditorPage() {
                 `UPDATE ingredient_sizes
                  SET size = ?
                  WHERE lower(trim(size)) = lower(trim(?));`,
-                [name, oldName]
+                [name, oldName],
               );
             }
           } catch (_) {}
@@ -14825,7 +16104,7 @@ function loadSizeEditorPage() {
                 `UPDATE recipe_ingredient_substitutes
                  SET size = ?
                  WHERE lower(trim(size)) = lower(trim(?));`,
-                [name, oldName]
+                [name, oldName],
               );
             }
           } catch (_) {}
@@ -15047,7 +16326,10 @@ async function loadStoresPage() {
   const syncStoreRowVisualState = (rowEl, storeId) => {
     if (!(rowEl instanceof HTMLElement)) return;
     const isChecked = checkedStoreIds.has(Number(storeId));
-    rowEl.classList.toggle('shopping-row-checked', isStoreWebSelectMode() && isChecked);
+    rowEl.classList.toggle(
+      'shopping-row-checked',
+      isStoreWebSelectMode() && isChecked,
+    );
     const icon = rowEl.querySelector('.shopping-list-row-icon');
     if (icon) {
       icon.textContent = isChecked ? 'check_box' : 'check_box_outline_blank';
@@ -15055,11 +16337,18 @@ async function loadStoresPage() {
   };
 
   const swapStoreRowsById = (sourceId, targetId) => {
-    const sourceIdx = storeRows.findIndex((row) => Number(row?.id) === Number(sourceId));
-    const targetIdx = storeRows.findIndex((row) => Number(row?.id) === Number(targetId));
+    const sourceIdx = storeRows.findIndex(
+      (row) => Number(row?.id) === Number(sourceId),
+    );
+    const targetIdx = storeRows.findIndex(
+      (row) => Number(row?.id) === Number(targetId),
+    );
     if (sourceIdx < 0 || targetIdx < 0 || sourceIdx === targetIdx) return false;
     const nextRows = storeRows.slice();
-    [nextRows[sourceIdx], nextRows[targetIdx]] = [nextRows[targetIdx], nextRows[sourceIdx]];
+    [nextRows[sourceIdx], nextRows[targetIdx]] = [
+      nextRows[targetIdx],
+      nextRows[sourceIdx],
+    ];
     storeRows = nextRows;
     persistCurrentStoreOrder();
     return true;
@@ -15141,7 +16430,9 @@ async function loadStoresPage() {
           return false;
         }
 
-        storeRows = storeRows.filter((row) => Number(row?.id) !== Number(storeId));
+        storeRows = storeRows.filter(
+          (row) => Number(row?.id) !== Number(storeId),
+        );
         checkedStoreIds.delete(Number(storeId));
         persistCurrentStoreOrder();
         persistCheckedStoreSelections();
@@ -15226,7 +16517,11 @@ async function loadStoresPage() {
   const getSelectedVisibleStoreId = () => {
     const selectedIdx = Number(listNav?.getSelectedIdx?.() ?? -1);
     const visibleRows = getFilteredStoreRows();
-    if (!Number.isFinite(selectedIdx) || selectedIdx < 0 || selectedIdx >= visibleRows.length) {
+    if (
+      !Number.isFinite(selectedIdx) ||
+      selectedIdx < 0 ||
+      selectedIdx >= visibleRows.length
+    ) {
       return null;
     }
     const storeId = Number(visibleRows[selectedIdx]?.id);
@@ -15297,13 +16592,15 @@ async function loadStoresPage() {
 
       let newStoreId = null;
       try {
-        db.run('INSERT INTO stores (chain_name, location_name) VALUES (?, ?);', [
-          chain,
-          location,
-        ]);
+        db.run(
+          'INSERT INTO stores (chain_name, location_name) VALUES (?, ?);',
+          [chain, location],
+        );
         const idQ = db.exec('SELECT last_insert_rowid();');
         newStoreId =
-          idQ.length && idQ[0].values.length ? Number(idQ[0].values[0][0]) : null;
+          idQ.length && idQ[0].values.length
+            ? Number(idQ[0].values[0][0])
+            : null;
         if (!Number.isFinite(newStoreId) || newStoreId <= 0) {
           uiToast('Failed to create store. See console for details.');
           return;
@@ -15337,7 +16634,11 @@ async function loadStoresPage() {
     if (!shouldUseStorePlanOrder) return false;
     const items = getFilteredStoreRows();
     const selectedIdx = Number(listNav?.getSelectedIdx?.() ?? -1);
-    if (!Number.isFinite(selectedIdx) || selectedIdx < 0 || selectedIdx >= items.length) {
+    if (
+      !Number.isFinite(selectedIdx) ||
+      selectedIdx < 0 ||
+      selectedIdx >= items.length
+    ) {
       return false;
     }
     const targetIdx = selectedIdx + Number(delta || 0);
@@ -15356,7 +16657,8 @@ async function loadStoresPage() {
     if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return false;
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
     if (e.isComposing) return false;
-    if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return false;
+    if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
+      return false;
     if (isModalOpen()) return false;
     if (document.activeElement?.closest?.('.bottom-nav')) return false;
 
@@ -15426,7 +16728,10 @@ function loadStoreEditorPage() {
     let ingredientCatalog = { byName: new Map(), hasVariantAisleTable: false };
     let activeVariantPicker = null;
 
-    const normItemKey = (s) => String(s || '').trim().toLowerCase();
+    const normItemKey = (s) =>
+      String(s || '')
+        .trim()
+        .toLowerCase();
 
     const parseUniqueItemLines = (raw) => {
       const seen = new Set();
@@ -15442,7 +16747,10 @@ function loadStoreEditorPage() {
       return out;
     };
 
-    const normVariantKey = (s) => String(s || '').trim().toLowerCase();
+    const normVariantKey = (s) =>
+      String(s || '')
+        .trim()
+        .toLowerCase();
     const splitLineIntoBaseAndParen = (line) => {
       const t = String(line || '').trim();
       if (!t) return null;
@@ -15551,18 +16859,25 @@ function loadStoreEditorPage() {
           : [],
       }));
     const specsToDisplayLines = (specs, opts = {}) => {
-      const pickerKey = String(opts.pickerBaseKey || '').trim().toLowerCase();
+      const pickerKey = String(opts.pickerBaseKey || '')
+        .trim()
+        .toLowerCase();
       const expandAll = opts.expandAll === true;
       return (Array.isArray(specs) ? specs : []).map((spec) => {
         if (pickerKey && spec.baseKey === pickerKey) return spec.baseName || '';
         if (expandAll) {
           const base = String(spec.baseName || '').trim();
           const variants = Array.isArray(spec.selectedVariants)
-            ? spec.selectedVariants.map((v) => String(v || '').trim()).filter(Boolean)
+            ? spec.selectedVariants
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
             : [];
           return variants.length ? `${base} (${variants.join(', ')})` : base;
         }
-        return collapseVariantSummary(spec.baseName || '', spec.selectedVariants);
+        return collapseVariantSummary(
+          spec.baseName || '',
+          spec.selectedVariants,
+        );
       });
     };
     const syncDisplayLinesFromSpecs = (aid, opts = {}) => {
@@ -15611,7 +16926,9 @@ function loadStoreEditorPage() {
         }
         if (known && Array.isArray(known.variants)) {
           // Keep DB order first, then append any valid ad-hoc variants the user typed.
-          const dbOrdered = known.variants.map((v) => String(v?.name || '').trim());
+          const dbOrdered = known.variants.map((v) =>
+            String(v?.name || '').trim(),
+          );
           const dbKeys = new Set(dbOrdered.map((v) => normVariantKey(v)));
           const selectedBeforeNormalize = [...selected];
           const extras = selected.filter((v) => !dbKeys.has(normVariantKey(v)));
@@ -15623,7 +16940,9 @@ function loadStoreEditorPage() {
             if (wanted.has(normVariantKey(name))) selected.push(name);
           });
           extras.forEach((name) => {
-            if (!selected.some((v) => normVariantKey(v) === normVariantKey(name))) {
+            if (
+              !selected.some((v) => normVariantKey(v) === normVariantKey(name))
+            ) {
               selected.push(name);
             }
           });
@@ -15657,10 +16976,14 @@ function loadStoreEditorPage() {
         seenBase.add(baseKey);
         const known = catalog?.byName?.get?.(baseKey) || null;
         let selected = Array.isArray(spec?.selectedVariants)
-          ? spec.selectedVariants.map((v) => String(v || '').trim()).filter(isSupportedVariantName)
+          ? spec.selectedVariants
+              .map((v) => String(v || '').trim())
+              .filter(isSupportedVariantName)
           : [];
         if (known && Array.isArray(known.variants)) {
-          const dbOrdered = known.variants.map((v) => String(v?.name || '').trim());
+          const dbOrdered = known.variants.map((v) =>
+            String(v?.name || '').trim(),
+          );
           const dbKeys = new Set(dbOrdered.map((v) => normVariantKey(v)));
           const selectedBeforeNormalize = [...selected];
           const extras = selected.filter((v) => !dbKeys.has(normVariantKey(v)));
@@ -15672,7 +16995,9 @@ function loadStoreEditorPage() {
             if (wanted.has(normVariantKey(name))) selected.push(name);
           });
           extras.forEach((name) => {
-            if (!selected.some((v) => normVariantKey(v) === normVariantKey(name))) {
+            if (
+              !selected.some((v) => normVariantKey(v) === normVariantKey(name))
+            ) {
               selected.push(name);
             }
           });
@@ -15707,7 +17032,10 @@ function loadStoreEditorPage() {
         [...aisleItemsByAisle.entries()].map(([k, v]) => [String(k), [...v]]),
       ),
       specs: Object.fromEntries(
-        [...aisleItemSpecsByAisle.entries()].map(([k, v]) => [String(k), cloneSpecs(v)]),
+        [...aisleItemSpecsByAisle.entries()].map(([k, v]) => [
+          String(k),
+          cloneSpecs(v),
+        ]),
       ),
       deletedIds: [...deletedAisleIds],
     });
@@ -15743,7 +17071,10 @@ function loadStoreEditorPage() {
         const sa = aa[i] || {};
         const sb = bb[i] || {};
         if (normItemKey(sa.baseName) !== normItemKey(sb.baseName)) return false;
-        if ((sa.selectedVariants || []).length !== (sb.selectedVariants || []).length)
+        if (
+          (sa.selectedVariants || []).length !==
+          (sb.selectedVariants || []).length
+        )
           return false;
         for (let j = 0; j < (sa.selectedVariants || []).length; j++) {
           if (
@@ -15866,7 +17197,9 @@ function loadStoreEditorPage() {
             const item = byId.get(Number(ingredientId));
             if (!item) return;
             if (
-              item.variants.some((v) => normVariantKey(v.name) === normVariantKey(vv))
+              item.variants.some(
+                (v) => normVariantKey(v.name) === normVariantKey(vv),
+              )
             )
               return;
             item.variants.push({ id: Number(variantId), name: vv });
@@ -15933,7 +17266,10 @@ function loadStoreEditorPage() {
               selectedVariants: [],
               knownVariants:
                 known && Array.isArray(known.variants)
-                  ? known.variants.map((v) => ({ id: Number(v.id), name: v.name }))
+                  ? known.variants.map((v) => ({
+                      id: Number(v.id),
+                      name: v.name,
+                    }))
                   : [],
             });
           }
@@ -15966,11 +17302,16 @@ function loadStoreEditorPage() {
                 spec = {
                   baseName: name,
                   baseKey: key,
-                  ingredientId: Number.isFinite(ingredientId) ? ingredientId : null,
+                  ingredientId: Number.isFinite(ingredientId)
+                    ? ingredientId
+                    : null,
                   selectedVariants: [],
                   knownVariants:
                     known && Array.isArray(known.variants)
-                      ? known.variants.map((v) => ({ id: Number(v.id), name: v.name }))
+                      ? known.variants.map((v) => ({
+                          id: Number(v.id),
+                          name: v.name,
+                        }))
                       : [],
                 };
                 specs.push(spec);
@@ -16031,7 +17372,7 @@ function loadStoreEditorPage() {
       try {
         return Boolean(
           window.matchMedia &&
-            window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+          window.matchMedia('(hover: hover) and (pointer: fine)').matches,
         );
       } catch (_) {
         return false;
@@ -16069,7 +17410,11 @@ function loadStoreEditorPage() {
       const pos =
         caretPos != null && Number.isFinite(caretPos)
           ? Number(caretPos)
-          : Number(textarea && textarea.selectionStart != null ? textarea.selectionStart : 0);
+          : Number(
+              textarea && textarea.selectionStart != null
+                ? textarea.selectionStart
+                : 0,
+            );
       const prevNl = value.lastIndexOf('\n', Math.max(0, pos - 1));
       const lineStart = prevNl === -1 ? 0 : prevNl + 1;
       const nextNl = value.indexOf('\n', pos);
@@ -16080,7 +17425,10 @@ function loadStoreEditorPage() {
     const getTextareaLineTextAtCaret = (textarea) => {
       if (!(textarea instanceof HTMLTextAreaElement)) return '';
       const caretPos = Number(textarea.selectionStart ?? 0);
-      const { lineStart, lineEnd } = getTextareaLineBoundsAtCaret(textarea, caretPos);
+      const { lineStart, lineEnd } = getTextareaLineBoundsAtCaret(
+        textarea,
+        caretPos,
+      );
       return String(textarea.value || '').slice(lineStart, lineEnd);
     };
 
@@ -16149,8 +17497,15 @@ function loadStoreEditorPage() {
 
     const navigateToShoppingMatch = (match) => {
       const normalizedId = Number(match && match.id);
-      const normalizedName = String(match && match.name ? match.name : '').trim();
-      if (!Number.isFinite(normalizedId) || normalizedId <= 0 || !normalizedName) return;
+      const normalizedName = String(
+        match && match.name ? match.name : '',
+      ).trim();
+      if (
+        !Number.isFinite(normalizedId) ||
+        normalizedId <= 0 ||
+        !normalizedName
+      )
+        return;
       sessionStorage.setItem('selectedShoppingItemId', String(normalizedId));
       sessionStorage.setItem('selectedShoppingItemName', normalizedName);
       sessionStorage.removeItem('selectedShoppingItemIsNew');
@@ -16165,11 +17520,15 @@ function loadStoreEditorPage() {
 
     let storeEditorSearchQuery = '';
     const normalizeStoreEditorSearchQuery = (value) =>
-      String(value || '').trim().toLowerCase();
+      String(value || '')
+        .trim()
+        .toLowerCase();
     const lineMatchesStoreEditorSearch = (line, query) => {
       const q = normalizeStoreEditorSearchQuery(query);
       if (!q) return true;
-      return String(line || '').toLowerCase().includes(q);
+      return String(line || '')
+        .toLowerCase()
+        .includes(q);
     };
     const getStoreEditorFilteredLines = (aid, query) => {
       const q = normalizeStoreEditorSearchQuery(query);
@@ -16182,30 +17541,47 @@ function loadStoreEditorPage() {
     const aisleMatchesStoreEditorSearch = (aisleName, aid, query) => {
       const q = normalizeStoreEditorSearchQuery(query);
       if (!q) return true;
-      if (String(aisleName || '').toLowerCase().includes(q)) return true;
+      if (
+        String(aisleName || '')
+          .toLowerCase()
+          .includes(q)
+      )
+        return true;
       return getStoreEditorFilteredLines(aid, q).length > 0;
     };
     const applyStoreEditorSearch = (query = storeEditorSearchQuery) => {
       storeEditorSearchQuery = normalizeStoreEditorSearchQuery(query);
       const isSearchActive = !!storeEditorSearchQuery;
       if (isSearchActive) closeActiveVariantPicker({ commit: true });
-      document.body.classList.toggle('store-editor-search-active', isSearchActive);
+      document.body.classList.toggle(
+        'store-editor-search-active',
+        isSearchActive,
+      );
 
       const list = document.getElementById('storeAislesList');
       if (!list) return;
-      const slotEls = Array.from(list.querySelectorAll(`.${STORE_AISLE_SLOT_CLASS}`));
+      const slotEls = Array.from(
+        list.querySelectorAll(`.${STORE_AISLE_SLOT_CLASS}`),
+      );
       slotEls.forEach((slotEl) => {
         const cardEl = slotEl.querySelector('.store-aisle-card');
         const aid = Number(cardEl?.dataset?.aisleId);
         const aisle = aisleRows.find((row) => row.id === aid);
         const showSlot = aisle
-          ? aisleMatchesStoreEditorSearch(aisle.name, aisle.id, storeEditorSearchQuery)
+          ? aisleMatchesStoreEditorSearch(
+              aisle.name,
+              aisle.id,
+              storeEditorSearchQuery,
+            )
           : !isSearchActive;
         slotEl.hidden = !showSlot;
         slotEl.setAttribute('aria-hidden', showSlot ? 'false' : 'true');
 
         if (!(cardEl instanceof HTMLElement)) return;
-        cardEl.classList.toggle('store-aisle-card--search-active', isSearchActive);
+        cardEl.classList.toggle(
+          'store-aisle-card--search-active',
+          isSearchActive,
+        );
 
         const itemsFieldEl = cardEl.querySelector('.store-aisle-items-field');
         if (itemsFieldEl instanceof HTMLElement) {
@@ -16237,14 +17613,16 @@ function loadStoreEditorPage() {
       });
     };
 
-
     let lastPointerClientX = -1;
     let lastPointerClientY = -1;
 
     const getHoveredSlot = () => {
       try {
         if (lastPointerClientX < 0) return null;
-        const el = document.elementFromPoint(lastPointerClientX, lastPointerClientY);
+        const el = document.elementFromPoint(
+          lastPointerClientX,
+          lastPointerClientY,
+        );
         if (!el) return null;
         return el.closest ? el.closest(`.${STORE_AISLE_SLOT_CLASS}`) : null;
       } catch (_) {
@@ -16290,7 +17668,11 @@ function loadStoreEditorPage() {
         document.removeEventListener('pointermove', onPointerMove, true);
       } catch (_) {}
       try {
-        document.removeEventListener('keydown', syncAddAisleHoverModifier, true);
+        document.removeEventListener(
+          'keydown',
+          syncAddAisleHoverModifier,
+          true,
+        );
       } catch (_) {}
       try {
         document.removeEventListener('keyup', syncAddAisleHoverModifier, true);
@@ -16385,8 +17767,8 @@ function loadStoreEditorPage() {
         if (inParenBySelection) {
           // Selection reaches into the open-paren segment (e.g. triple-click line select).
         } else {
-        // Support in-progress variant text (e.g. "apple (Fuji") before closing ")".
-        return;
+          // Support in-progress variant text (e.g. "apple (Fuji") before closing ")".
+          return;
         }
       }
       const specs = parseSpecsFromRaw(
@@ -16442,7 +17824,8 @@ function loadStoreEditorPage() {
       baseLabel.textContent = spec.baseName || '';
       inlineLine.appendChild(baseLabel);
       const pillsWrap = document.createElement('div');
-      pillsWrap.className = 'store-variant-picker-pills store-variant-picker-pills--inline';
+      pillsWrap.className =
+        'store-variant-picker-pills store-variant-picker-pills--inline';
       const pillButtons = [];
       let addAllBtn = null;
       const syncAllPillStates = () => {
@@ -16460,7 +17843,10 @@ function loadStoreEditorPage() {
             );
           addAllBtn.disabled = allSelected;
           addAllBtn.classList.toggle('is-unavailable', allSelected);
-          addAllBtn.setAttribute('aria-disabled', allSelected ? 'true' : 'false');
+          addAllBtn.setAttribute(
+            'aria-disabled',
+            allSelected ? 'true' : 'false',
+          );
         }
       };
       if (knownVariants.length >= 5) {
@@ -16494,7 +17880,8 @@ function loadStoreEditorPage() {
         const key = normVariantKey(vn);
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'ui-unknown-items-suggestion-pill store-variant-picker-pill';
+        btn.className =
+          'ui-unknown-items-suggestion-pill store-variant-picker-pill';
         btn.textContent = vn;
         pillButtons.push({ btn, key });
         btn.addEventListener('click', () => {
@@ -16723,10 +18110,7 @@ function loadStoreEditorPage() {
           const restore = () => {
             try {
               if (wasPersisted) deletedAisleIds.delete(snapshot.id);
-              const insertAt = Math.min(
-                Math.max(0, idx),
-                aisleRows.length,
-              );
+              const insertAt = Math.min(Math.max(0, idx), aisleRows.length);
               aisleRows.splice(insertAt, 0, {
                 id: snapshot.id,
                 name: snapshot.name,
@@ -16779,7 +18163,8 @@ function loadStoreEditorPage() {
         moveUpBtn.className = 'store-aisle-move-btn';
         moveUpBtn.type = 'button';
         const moveUpIcon = document.createElement('span');
-        moveUpIcon.className = 'material-symbols-outlined store-aisle-move-icon';
+        moveUpIcon.className =
+          'material-symbols-outlined store-aisle-move-icon';
         moveUpIcon.setAttribute('aria-hidden', 'true');
         moveUpIcon.textContent = 'arrow_upward_alt';
         moveUpBtn.appendChild(moveUpIcon);
@@ -16798,7 +18183,8 @@ function loadStoreEditorPage() {
         moveDownBtn.className = 'store-aisle-move-btn';
         moveDownBtn.type = 'button';
         const moveDownIcon = document.createElement('span');
-        moveDownIcon.className = 'material-symbols-outlined store-aisle-move-icon';
+        moveDownIcon.className =
+          'material-symbols-outlined store-aisle-move-icon';
         moveDownIcon.setAttribute('aria-hidden', 'true');
         moveDownIcon.textContent = 'arrow_downward_alt';
         moveDownBtn.appendChild(moveDownIcon);
@@ -16903,7 +18289,7 @@ function loadStoreEditorPage() {
               const pos =
                 caretPos != null && Number.isFinite(caretPos)
                   ? Number(caretPos)
-                  : textarea.selectionStart ?? 0;
+                  : (textarea.selectionStart ?? 0);
               const prevNl = v.lastIndexOf('\n', pos - 1);
               const lineStart = prevNl === -1 ? 0 : prevNl + 1;
               const nextNl = v.indexOf('\n', pos);
@@ -16964,7 +18350,9 @@ function loadStoreEditorPage() {
                 };
               }
 
-              const baseName = String(vSlice(lineText, 0, openParenIdx) || '').trim();
+              const baseName = String(
+                vSlice(lineText, 0, openParenIdx) || '',
+              ).trim();
               if (!baseName) {
                 return {
                   mode: 'name',
@@ -16975,12 +18363,17 @@ function loadStoreEditorPage() {
               }
 
               const tokenAnchor = beforeCaret.lastIndexOf(',');
-              const tokenStartInLine = tokenAnchor >= openParenIdx ? tokenAnchor + 1 : openParenIdx + 1;
+              const tokenStartInLine =
+                tokenAnchor >= openParenIdx
+                  ? tokenAnchor + 1
+                  : openParenIdx + 1;
 
               const afterCaret = vSlice(lineText, caretInLine, lineText.length);
               const tokenEndRel = afterCaret.search(/[,\)]/);
               const tokenEndInLine =
-                tokenEndRel === -1 ? lineText.length : caretInLine + tokenEndRel;
+                tokenEndRel === -1
+                  ? lineText.length
+                  : caretInLine + tokenEndRel;
 
               let tokenTextStartInLine = tokenStartInLine;
               while (
@@ -17015,7 +18408,8 @@ function loadStoreEditorPage() {
               // Query is context-aware:
               // - name mode: current line text
               // - variant mode: current token inside parentheses
-              getQuery: (textarea) => String(getLineTypeaheadContext(textarea).query || ''),
+              getQuery: (textarea) =>
+                String(getLineTypeaheadContext(textarea).query || ''),
               // Replace either:
               // - full line (name mode), or
               // - active variant token only (variant mode)
@@ -17026,12 +18420,20 @@ function loadStoreEditorPage() {
                   const start = Number(ctx.tokenTextStartAbs);
                   const end = Number(ctx.tokenEndAbs);
                   const before = vSlice(textarea.value, 0, start);
-                  const after = vSlice(textarea.value, end, textarea.value.length);
+                  const after = vSlice(
+                    textarea.value,
+                    end,
+                    textarea.value.length,
+                  );
                   textarea.value = before + canonical + after;
                   return { caretPos: start + canonical.length };
                 }
                 const before = vSlice(textarea.value, 0, ctx.lineStart);
-                const after = vSlice(textarea.value, ctx.lineEnd, textarea.value.length);
+                const after = vSlice(
+                  textarea.value,
+                  ctx.lineEnd,
+                  textarea.value.length,
+                );
                 textarea.value = before + canonical + after;
                 return { caretPos: ctx.lineStart + canonical.length };
               },
@@ -17054,7 +18456,8 @@ function loadStoreEditorPage() {
             // Caret changes without typing can leave stale suggestions; close on click to force refresh on typing.
             ta.addEventListener('click', () => {
               try {
-                if (typeof taTypeahead.close === 'function') taTypeahead.close();
+                if (typeof taTypeahead.close === 'function')
+                  taTypeahead.close();
               } catch (_) {}
             });
           }
@@ -17107,7 +18510,8 @@ function loadStoreEditorPage() {
             }
           }
           if (Number(e?.detail || 0) < 3) return;
-          if (activeVariantPicker && activeVariantPicker.textarea === ta) return;
+          if (activeVariantPicker && activeVariantPicker.textarea === ta)
+            return;
           // Let native selection/caret settle first, then inspect caret context.
           window.setTimeout(() => {
             maybeOpenVariantPickerFromCaret(ta, a.id);
@@ -17184,7 +18588,8 @@ function loadStoreEditorPage() {
 
         ta.addEventListener('blur', () => {
           window.setTimeout(() => {
-            if (activeVariantPicker && activeVariantPicker.textarea === ta) return;
+            if (activeVariantPicker && activeVariantPicker.textarea === ta)
+              return;
             const nextSpecs = parseSpecsFromRaw(
               ta.value,
               aisleItemSpecsByAisle.get(a.id) || [],
@@ -17247,7 +18652,11 @@ function loadStoreEditorPage() {
 
       const tid = nextTempAisleId--;
       const newRow = { id: tid, name };
-      if (insertAfterIndex != null && insertAfterIndex >= 0 && insertAfterIndex < aisleRows.length) {
+      if (
+        insertAfterIndex != null &&
+        insertAfterIndex >= 0 &&
+        insertAfterIndex < aisleRows.length
+      ) {
         aisleRows.splice(insertAfterIndex + 1, 0, newRow);
       } else {
         aisleRows.push(newRow);
@@ -17316,7 +18725,9 @@ function loadStoreEditorPage() {
 
       const normalizeAllAisleSpecs = () => {
         for (const r of aisleRows) {
-          const currentSpecs = cloneSpecs(aisleItemSpecsByAisle.get(r.id) || []);
+          const currentSpecs = cloneSpecs(
+            aisleItemSpecsByAisle.get(r.id) || [],
+          );
           const specs = currentSpecs.length
             ? normalizeSpecsWithCatalog(currentSpecs, ingredientCatalog)
             : parseSpecsFromRaw(
@@ -17423,7 +18834,7 @@ function loadStoreEditorPage() {
           try {
             // Skip if ingredient already exists by name.
             const existQ = db.exec(
-              `SELECT 1 FROM ingredients WHERE lower(name) = lower('${n.replace(/'/g, "''")}') LIMIT 1;`
+              `SELECT 1 FROM ingredients WHERE lower(name) = lower('${n.replace(/'/g, "''")}') LIMIT 1;`,
             );
             if (existQ.length && existQ[0].values.length) continue;
 
@@ -17461,7 +18872,9 @@ function loadStoreEditorPage() {
             if (!base) continue;
             const ingredientId = Number(getVisibleCanonicalId(base));
             if (!Number.isFinite(ingredientId) || ingredientId <= 0) continue;
-            const selected = (spec.selectedVariants || []).filter(isSupportedVariantName);
+            const selected = (spec.selectedVariants || []).filter(
+              isSupportedVariantName,
+            );
             for (const variantName of selected) {
               if (anyVariantForIngredient(ingredientId, variantName)) continue;
               const key = `${ingredientId}::${normVariantKey(variantName)}`;
@@ -17498,7 +18911,9 @@ function loadStoreEditorPage() {
                 const original = String(variantName || '').trim();
                 if (!isSupportedVariantName(original)) return;
                 const key = `${ingredientId}::${normVariantKey(original)}`;
-                const replacement = String(replacementMap.get(key) || original).trim();
+                const replacement = String(
+                  replacementMap.get(key) || original,
+                ).trim();
                 if (!isSupportedVariantName(replacement)) return;
                 const replacementKey = normVariantKey(replacement);
                 if (!replacementKey || seenSelected.has(replacementKey)) return;
@@ -17573,10 +18988,14 @@ function loadStoreEditorPage() {
         });
         if (byBase !== 0) return byBase;
 
-        const variantsA = (Array.isArray(a?.selectedVariants) ? a.selectedVariants : [])
+        const variantsA = (
+          Array.isArray(a?.selectedVariants) ? a.selectedVariants : []
+        )
           .map((v) => String(v || '').trim())
           .filter(Boolean);
-        const variantsB = (Array.isArray(b?.selectedVariants) ? b.selectedVariants : [])
+        const variantsB = (
+          Array.isArray(b?.selectedVariants) ? b.selectedVariants : []
+        )
           .map((v) => String(v || '').trim())
           .filter(Boolean);
         const byVariants = variantsA
@@ -17623,7 +19042,8 @@ function loadStoreEditorPage() {
             [iid, vv, nextSort],
           );
           const idQ = db.exec('SELECT last_insert_rowid();');
-          if (idQ.length && idQ[0].values.length) return Number(idQ[0].values[0][0]);
+          if (idQ.length && idQ[0].values.length)
+            return Number(idQ[0].values[0][0]);
           return null;
         };
         db.run(
@@ -17639,12 +19059,15 @@ function loadStoreEditorPage() {
         for (const spec of specs) {
           const iid = getVisibleCanonicalId(spec.baseName);
           if (!Number.isFinite(iid)) continue;
-          const selected = (spec.selectedVariants || []).filter(isSupportedVariantName);
+          const selected = (spec.selectedVariants || []).filter(
+            isSupportedVariantName,
+          );
           if (!seenGenericId.has(iid)) {
             seenGenericId.add(iid);
             resolvedGenericIds.push(iid);
           }
-          if (!selected.length || !hasVariantTable || !hasVariantAisleTable) continue;
+          if (!selected.length || !hasVariantTable || !hasVariantAisleTable)
+            continue;
           const seenVariantKey = new Set();
           for (const vn of selected) {
             const vk = normVariantKey(vn);
@@ -17678,8 +19101,10 @@ function loadStoreEditorPage() {
 
     await waitForAppBarReady();
     if (hasPersistedStore) {
-      const storeEditorSearchInput = document.getElementById('appBarSearchInput');
-      const storeEditorSearchClearBtn = document.getElementById('appBarSearchClear');
+      const storeEditorSearchInput =
+        document.getElementById('appBarSearchInput');
+      const storeEditorSearchClearBtn =
+        document.getElementById('appBarSearchClear');
       wireAppBarSearch(storeEditorSearchInput, {
         clearBtn: storeEditorSearchClearBtn,
         onQueryChange: (query) => {
@@ -17715,8 +19140,7 @@ function loadStoreEditorPage() {
         : null,
       onSave: async ({ title: next, subtitle: nextLoc }) => {
         const sid = sessionStorage.getItem('selectedStoreId');
-        const isNewStore =
-          sessionStorage.getItem('selectedStoreIsNew') === '1';
+        const isNewStore = sessionStorage.getItem('selectedStoreIsNew') === '1';
 
         const db = await openStoreEditorDb();
         const id = Number(sid);
@@ -17736,7 +19160,9 @@ function loadStoreEditorPage() {
               }
               const ta = card.querySelector('textarea');
               if (ta) {
-                const currentSpecs = cloneSpecs(aisleItemSpecsByAisle.get(aid) || []);
+                const currentSpecs = cloneSpecs(
+                  aisleItemSpecsByAisle.get(aid) || [],
+                );
                 const nextSpecs = currentSpecs.length
                   ? normalizeSpecsWithCatalog(currentSpecs, ingredientCatalog)
                   : parseSpecsFromRaw(
@@ -17867,7 +19293,9 @@ function initBottomNav() {
     shoppingListPill.className = 'bottom-nav-pill';
     shoppingListPill.dataset.tab = 'shopping-list';
     shoppingListPill.textContent = 'Shopping List';
-    const shoppingPill = pillRow.querySelector('.bottom-nav-pill[data-tab="shopping"]');
+    const shoppingPill = pillRow.querySelector(
+      '.bottom-nav-pill[data-tab="shopping"]',
+    );
     if (shoppingPill?.nextSibling) {
       pillRow.insertBefore(shoppingListPill, shoppingPill.nextSibling);
     } else {
@@ -17921,8 +19349,12 @@ function initBottomNav() {
     const next = !isForceWebModeEnabled();
     setForceWebModeEnabled(next);
     const nextPages = getTopLevelPageOrder();
-    const currentPage = String(activeTab || detectPageIdFromBody() || '').trim().toLowerCase();
-    const targetPage = nextPages.includes(currentPage) ? currentPage : 'recipes';
+    const currentPage = String(activeTab || detectPageIdFromBody() || '')
+      .trim()
+      .toLowerCase();
+    const targetPage = nextPages.includes(currentPage)
+      ? currentPage
+      : 'recipes';
     window.location.href = getTopLevelPageHref(targetPage);
   };
 
@@ -18017,7 +19449,11 @@ function getIngredientTableColumnSet(db) {
   try {
     const q = db.exec('PRAGMA table_info(ingredients);');
     const rows = Array.isArray(q) && q.length > 0 ? q[0].values : [];
-    return new Set(rows.map((r) => String((Array.isArray(r) ? r[1] : '') || '').toLowerCase()));
+    return new Set(
+      rows.map((r) =>
+        String((Array.isArray(r) ? r[1] : '') || '').toLowerCase(),
+      ),
+    );
   } catch (_) {
     return new Set();
   }
@@ -18046,9 +19482,10 @@ function getVisibleIngredientNamePool(db) {
         AND trim(name) != ''
         AND ${visibilitySql}
       ORDER BY name COLLATE NOCASE;
-      `
+      `,
     );
-    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values))
+      return [];
     return q[0].values
       .map((row) => (Array.isArray(row) ? row[0] : null))
       .map((v) => String(v || '').trim())
@@ -18073,7 +19510,7 @@ function createIngredientLookupHelpers(db) {
         CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
         ID ASC
       LIMIT 1;
-      `
+      `,
     );
     stmt.bind([name]);
     let id = null;
@@ -18095,7 +19532,7 @@ function createIngredientLookupHelpers(db) {
           CASE WHEN TRIM(COALESCE(i.size, '')) = '' THEN 0 ELSE 1 END,
           i.ID ASC
         LIMIT 1;
-        `
+        `,
       );
       synStmt.bind([name]);
       let synId = null;
@@ -18109,7 +19546,7 @@ function createIngredientLookupHelpers(db) {
 
   const anyIngredientNamed = (name) => {
     const stmt = db.prepare(
-      `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1;`
+      `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1;`,
     );
     stmt.bind([name]);
     const ok = stmt.step();
@@ -18119,7 +19556,7 @@ function createIngredientLookupHelpers(db) {
     // Fall back to synonym lookup.
     try {
       const synStmt = db.prepare(
-        `SELECT 1 FROM ingredient_synonyms WHERE lower(trim(synonym)) = lower(trim(?)) LIMIT 1;`
+        `SELECT 1 FROM ingredient_synonyms WHERE lower(trim(synonym)) = lower(trim(?)) LIMIT 1;`,
       );
       synStmt.bind([name]);
       const synOk = synStmt.step();
@@ -18142,7 +19579,11 @@ function normalizeRecipeTagDraftList(rawTags) {
   const seen = new Set();
   const out = [];
   source
-    .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .replace(/\s+/g, ' '),
+    )
     .filter(Boolean)
     .forEach((tag) => {
       const clipped = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
@@ -18165,7 +19606,8 @@ function getVisibleTagNamePool(db) {
         AND COALESCE(is_hidden, 0) = 0
       ORDER BY name COLLATE NOCASE;
     `);
-    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values))
+      return [];
     return q[0].values
       .map((row) => (Array.isArray(row) ? row[0] : null))
       .map((v) => String(v || '').trim())
@@ -18196,7 +19638,8 @@ function getVisibleIngredientTagNamePool(db) {
         )
       ORDER BY t.name COLLATE NOCASE;
     `);
-    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values))
+      return [];
     return q[0].values
       .map((row) => (Array.isArray(row) ? row[0] : null))
       .map((v) => String(v || '').trim())
@@ -18219,7 +19662,11 @@ function normalizeRecipeSizeNameList(rawSizes) {
   const seen = new Set();
   const out = [];
   source
-    .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .replace(/\s+/g, ' '),
+    )
     .filter(Boolean)
     .forEach((size) => {
       const clipped = size.length > 64 ? size.slice(0, 64).trim() : size;
@@ -18274,7 +19721,7 @@ function createSizeLookupHelpers(db) {
          FROM sizes
          WHERE lower(trim(name)) = lower(trim(?))
            AND COALESCE(is_removed, 0) = 0
-         LIMIT 1;`
+         LIMIT 1;`,
       );
       stmt.bind([name]);
       const ok = stmt.step();
@@ -18296,7 +19743,11 @@ function normalizeRecipeUnitCodeList(rawUnits) {
   const seen = new Set();
   const out = [];
   source
-    .map((v) => String(v || '').trim().replace(/\s+/g, ' '))
+    .map((v) =>
+      String(v || '')
+        .trim()
+        .replace(/\s+/g, ' '),
+    )
     .filter(Boolean)
     .forEach((code) => {
       const key = code.toLowerCase();
@@ -18319,7 +19770,8 @@ function getVisibleUnitCodePool(db) {
       ORDER BY COALESCE(sort_order, 999999) ASC,
                code COLLATE NOCASE;
     `);
-    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
+    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values))
+      return [];
     return q[0].values
       .map((row) => (Array.isArray(row) ? row[0] : null))
       .map((v) => String(v || '').trim())
@@ -18337,7 +19789,7 @@ function createUnitLookupHelpers(db) {
          FROM units
          WHERE lower(trim(code)) = lower(trim(?))
            AND COALESCE(is_removed, 0) = 0
-         LIMIT 1;`
+         LIMIT 1;`,
       );
       stmt.bind([code]);
       const ok = stmt.step();
@@ -18358,7 +19810,7 @@ function createTagLookupHelpers(db) {
          FROM tags
          WHERE lower(trim(name)) = lower(trim(?))
            AND COALESCE(is_hidden, 0) = 0
-         LIMIT 1;`
+         LIMIT 1;`,
       );
       stmt.bind([name]);
       const ok = stmt.step();
@@ -18377,9 +19829,14 @@ function createVariantLookupHelpers(db) {
   const hasVariantTable = (() => {
     try {
       const q = db.exec(
-        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredient_variants' LIMIT 1;`
+        `SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredient_variants' LIMIT 1;`,
       );
-      return !!(Array.isArray(q) && q.length && q[0].values && q[0].values.length);
+      return !!(
+        Array.isArray(q) &&
+        q.length &&
+        q[0].values &&
+        q[0].values.length
+      );
     } catch (_) {
       return false;
     }
@@ -18394,7 +19851,7 @@ function createVariantLookupHelpers(db) {
          FROM ingredients
          WHERE ID = ?
            AND ${visibilitySql}
-         LIMIT 1;`
+         LIMIT 1;`,
       );
       stmt.bind([iid]);
       let out = '';
@@ -18420,7 +19877,7 @@ function createVariantLookupHelpers(db) {
            AND lower(trim(iv.variant)) != '${INGREDIENT_BASE_VARIANT_NAME}'
            AND ${visibilitySql.replaceAll('COALESCE(', 'COALESCE(i.')}
          ORDER BY COALESCE(iv.sort_order, 999999) ASC, iv.id ASC;`,
-        [iid]
+        [iid],
       );
       const rows = Array.isArray(q) && q.length ? q[0].values : [];
       const out = [];
@@ -18443,7 +19900,8 @@ function createVariantLookupHelpers(db) {
     const iid = Number(ingredientId);
     const vv = String(variantName || '').trim();
     if (!Number.isFinite(iid) || iid <= 0 || !vv) return false;
-    if (isIngredientBaseVariantName(vv) || isReservedIngredientVariantName(vv)) return true;
+    if (isIngredientBaseVariantName(vv) || isReservedIngredientVariantName(vv))
+      return true;
     if (hasVariantTable) {
       try {
         const stmt = db.prepare(
@@ -18453,7 +19911,7 @@ function createVariantLookupHelpers(db) {
            WHERE iv.ingredient_id = ?
              AND lower(trim(iv.variant)) = lower(trim(?))
              AND ${visibilitySql.replaceAll('COALESCE(', 'COALESCE(i.')}
-           LIMIT 1;`
+           LIMIT 1;`,
         );
         stmt.bind([iid, vv]);
         const ok = stmt.step();
@@ -18468,7 +19926,7 @@ function createVariantLookupHelpers(db) {
          WHERE ID = ?
            AND lower(trim(COALESCE(variant, ''))) = lower(trim(?))
            AND ${visibilitySql}
-         LIMIT 1;`
+         LIMIT 1;`,
       );
       stmt.bind([iid, vv]);
       const ok = stmt.step();
@@ -18496,7 +19954,7 @@ function createVariantLookupHelpers(db) {
       if (anyVariantForIngredient(iid, vv)) return false;
       const maxQ = db.exec(
         `SELECT COALESCE(MAX(sort_order), 0) FROM ingredient_variants WHERE ingredient_id = ?;`,
-        [iid]
+        [iid],
       );
       const nextSort =
         maxQ.length && maxQ[0].values.length
@@ -18505,7 +19963,7 @@ function createVariantLookupHelpers(db) {
       db.run(
         `INSERT INTO ingredient_variants (ingredient_id, variant, sort_order)
          VALUES (?, ?, ?);`,
-        [iid, vv, nextSort]
+        [iid, vv, nextSort],
       );
       return true;
     } catch (_) {
@@ -18556,7 +20014,9 @@ async function resolveUnknownIngredientNames({
   const finalNames = [];
   const seenFinal = new Set();
   result.rows.forEach((row) => {
-    const key = String(row?.original || '').trim().toLowerCase();
+    const key = String(row?.original || '')
+      .trim()
+      .toLowerCase();
     const replacement = String(row?.value || '').trim();
     if (!key || !replacement) return;
     map.set(key, replacement);
@@ -18673,7 +20133,9 @@ async function resolveUnknownTagNames({ db, tags, title = '', message = '' }) {
   const finalNames = [];
   const seenFinal = new Set();
   result.rows.forEach((row) => {
-    const key = String(row?.original || '').trim().toLowerCase();
+    const key = String(row?.original || '')
+      .trim()
+      .toLowerCase();
     const replacementRaw = String(row?.value || '').trim();
     const replacement = replacementRaw
       ? normalizeRecipeTagDraftList([replacementRaw])[0] || ''
@@ -18722,7 +20184,9 @@ async function resolveUnknownSizeNames({
   const finalNames = [];
   const seenFinal = new Set();
   result.rows.forEach((row) => {
-    const key = String(row?.original || '').trim().toLowerCase();
+    const key = String(row?.original || '')
+      .trim()
+      .toLowerCase();
     const replacementRaw = String(row?.value || '').trim();
     const replacement = replacementRaw
       ? normalizeRecipeSizeNameList([replacementRaw])[0] || ''
@@ -18771,7 +20235,9 @@ async function resolveUnknownUnitCodes({
   const finalCodes = [];
   const seenFinal = new Set();
   result.rows.forEach((row) => {
-    const key = String(row?.original || '').trim().toLowerCase();
+    const key = String(row?.original || '')
+      .trim()
+      .toLowerCase();
     const replacementRaw = String(row?.value || '').trim();
     const replacement = replacementRaw
       ? normalizeRecipeUnitCodeList([replacementRaw])[0] || ''
@@ -18885,7 +20351,8 @@ async function loadRecipeEditorPage() {
   const shouldSeedStepPlaceholder =
     !isRecipeWebMode && (isNewRecipe || !hasAnySteps);
 
-  const shouldSeedIngredientPlaceholder = !isRecipeWebMode && !hasAnyIngredients;
+  const shouldSeedIngredientPlaceholder =
+    !isRecipeWebMode && !hasAnyIngredients;
 
   if (shouldSeedStepPlaceholder || shouldSeedIngredientPlaceholder) {
     if (isNewRecipe) {
@@ -18959,7 +20426,10 @@ async function loadRecipeEditorPage() {
       const goRecipes = () => {
         window.location.href = 'recipes.html';
       };
-      if (!isRecipeWebMode && typeof window.recipeEditorAttemptExit === 'function') {
+      if (
+        !isRecipeWebMode &&
+        typeof window.recipeEditorAttemptExit === 'function'
+      ) {
         void window.recipeEditorAttemptExit({
           reason: 'back',
           onClean: goRecipes,
@@ -19017,16 +20487,20 @@ async function loadRecipeEditorPage() {
             const unknownUnique = [];
             const seenUnknown = new Set();
             recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+              const rows = Array.isArray(sec?.ingredients)
+                ? sec.ingredients
+                : [];
               rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                if (!row || row.isPlaceholder || row.rowType === 'heading')
+                  return;
                 const linkedRecipeId = Number(row.linkedRecipeId);
                 const currentRecipeId = Number(recipeModel.id);
                 const isLinkedSubrecipe =
                   !!row.isRecipe &&
                   Number.isFinite(linkedRecipeId) &&
                   linkedRecipeId > 0 &&
-                  (!Number.isFinite(currentRecipeId) || linkedRecipeId !== currentRecipeId);
+                  (!Number.isFinite(currentRecipeId) ||
+                    linkedRecipeId !== currentRecipeId);
                 if (isLinkedSubrecipe) return;
                 const rawName = String(row.name || '').trim();
                 if (!rawName) return;
@@ -19055,16 +20529,24 @@ async function loadRecipeEditorPage() {
               }
               const replacementMap = resolved.map;
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                const rows = Array.isArray(sec?.ingredients)
+                  ? sec.ingredients
+                  : [];
                 rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
-                  const key = String(row.name || '').trim().toLowerCase();
+                  if (!row || row.isPlaceholder || row.rowType === 'heading')
+                    return;
+                  const key = String(row.name || '')
+                    .trim()
+                    .toLowerCase();
                   if (!key) return;
                   const nextName = replacementMap.get(key);
                   if (nextName) row.name = nextName;
                 });
               });
-              if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+              if (
+                typeof window.recipeEditorRerenderIngredientsFromModel ===
+                'function'
+              ) {
                 window.recipeEditorRerenderIngredientsFromModel();
               }
             }
@@ -19073,22 +20555,27 @@ async function loadRecipeEditorPage() {
               const unknownVariantUnique = [];
               const seenUnknownVariants = new Set();
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                const rows = Array.isArray(sec?.ingredients)
+                  ? sec.ingredients
+                  : [];
                 rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                  if (!row || row.isPlaceholder || row.rowType === 'heading')
+                    return;
                   const linkedRecipeId = Number(row.linkedRecipeId);
                   const currentRecipeId = Number(recipeModel.id);
                   const isLinkedSubrecipe =
                     !!row.isRecipe &&
                     Number.isFinite(linkedRecipeId) &&
                     linkedRecipeId > 0 &&
-                    (!Number.isFinite(currentRecipeId) || linkedRecipeId !== currentRecipeId);
+                    (!Number.isFinite(currentRecipeId) ||
+                      linkedRecipeId !== currentRecipeId);
                   if (isLinkedSubrecipe) return;
                   const rawName = String(row.name || '').trim();
                   const rawVariant = String(row.variant || '').trim();
                   if (!rawName || !rawVariant) return;
                   const ingredientId = Number(getVisibleCanonicalId(rawName));
-                  if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                  if (!Number.isFinite(ingredientId) || ingredientId <= 0)
+                    return;
                   if (anyVariantForIngredient(ingredientId, rawVariant)) return;
                   const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
                   if (seenUnknownVariants.has(key)) return;
@@ -19102,33 +20589,40 @@ async function loadRecipeEditorPage() {
                 });
               });
               if (unknownVariantUnique.length) {
-                const resolvedVariants = await resolveUnknownIngredientVariants({
-                  db,
-                  entries: unknownVariantUnique,
-                });
+                const resolvedVariants = await resolveUnknownIngredientVariants(
+                  {
+                    db,
+                    entries: unknownVariantUnique,
+                  },
+                );
                 if (!resolvedVariants) {
                   uiToast('Save cancelled.');
                   return;
                 }
                 const variantReplacementMap = resolvedVariants.map;
                 recipeModel.sections.forEach((sec) => {
-                  const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                  const rows = Array.isArray(sec?.ingredients)
+                    ? sec.ingredients
+                    : [];
                   rows.forEach((row) => {
-                    if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                    if (!row || row.isPlaceholder || row.rowType === 'heading')
+                      return;
                     const rawName = String(row.name || '').trim();
                     const rawVariant = String(row.variant || '').trim();
                     if (!rawName || !rawVariant) return;
                     const ingredientId = Number(getVisibleCanonicalId(rawName));
-                    if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                    if (!Number.isFinite(ingredientId) || ingredientId <= 0)
+                      return;
                     const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
                     const nextVariant = String(
-                      variantReplacementMap.get(key) || ''
+                      variantReplacementMap.get(key) || '',
                     ).trim();
                     if (nextVariant) row.variant = nextVariant;
                   });
                 });
                 if (
-                  typeof window.recipeEditorRerenderIngredientsFromModel === 'function'
+                  typeof window.recipeEditorRerenderIngredientsFromModel ===
+                  'function'
                 ) {
                   window.recipeEditorRerenderIngredientsFromModel();
                 }
@@ -19136,14 +20630,18 @@ async function loadRecipeEditorPage() {
 
               const ensuredVariantKeys = new Set();
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                const rows = Array.isArray(sec?.ingredients)
+                  ? sec.ingredients
+                  : [];
                 rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                  if (!row || row.isPlaceholder || row.rowType === 'heading')
+                    return;
                   const rawName = String(row.name || '').trim();
                   const rawVariant = String(row.variant || '').trim();
                   if (!rawName || !rawVariant) return;
                   const ingredientId = Number(getVisibleCanonicalId(rawName));
-                  if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
+                  if (!Number.isFinite(ingredientId) || ingredientId <= 0)
+                    return;
                   const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
                   if (ensuredVariantKeys.has(key)) return;
                   ensuredVariantKeys.add(key);
@@ -19157,9 +20655,12 @@ async function loadRecipeEditorPage() {
             const unknownUnitUnique = [];
             const seenUnknownUnits = new Set();
             recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+              const rows = Array.isArray(sec?.ingredients)
+                ? sec.ingredients
+                : [];
               rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                if (!row || row.isPlaceholder || row.rowType === 'heading')
+                  return;
                 const rawUnit = String(row.unit || '').trim();
                 if (!rawUnit) return;
                 const key = rawUnit.toLowerCase();
@@ -19185,16 +20686,24 @@ async function loadRecipeEditorPage() {
               }
               const replacementMap = resolvedUnits.map;
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                const rows = Array.isArray(sec?.ingredients)
+                  ? sec.ingredients
+                  : [];
                 rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
-                  const key = String(row.unit || '').trim().toLowerCase();
+                  if (!row || row.isPlaceholder || row.rowType === 'heading')
+                    return;
+                  const key = String(row.unit || '')
+                    .trim()
+                    .toLowerCase();
                   if (!key) return;
                   const nextUnit = replacementMap.get(key);
                   if (nextUnit) row.unit = nextUnit;
                 });
               });
-              if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+              if (
+                typeof window.recipeEditorRerenderIngredientsFromModel ===
+                'function'
+              ) {
                 window.recipeEditorRerenderIngredientsFromModel();
               }
             }
@@ -19202,9 +20711,12 @@ async function loadRecipeEditorPage() {
             const unknownSizeUnique = [];
             const seenUnknownSizes = new Set();
             recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+              const rows = Array.isArray(sec?.ingredients)
+                ? sec.ingredients
+                : [];
               rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading') return;
+                if (!row || row.isPlaceholder || row.rowType === 'heading')
+                  return;
                 const rawSize = String(row.size || '').trim();
                 if (!rawSize) return;
                 const key = rawSize.toLowerCase();
@@ -19230,10 +20742,15 @@ async function loadRecipeEditorPage() {
               }
               const replacementMap = resolvedSizes.map;
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
+                const rows = Array.isArray(sec?.ingredients)
+                  ? sec.ingredients
+                  : [];
                 rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading') return;
-                  const key = String(row.size || '').trim().toLowerCase();
+                  if (!row || row.isPlaceholder || row.rowType === 'heading')
+                    return;
+                  const key = String(row.size || '')
+                    .trim()
+                    .toLowerCase();
                   if (key) {
                     const nextSize = replacementMap.get(key);
                     if (nextSize) row.size = nextSize;
@@ -19241,23 +20758,32 @@ async function loadRecipeEditorPage() {
                   if (!Array.isArray(row.substitutes)) return;
                   row.substitutes.forEach((sub) => {
                     if (!sub) return;
-                    const subKey = String(sub.size || '').trim().toLowerCase();
+                    const subKey = String(sub.size || '')
+                      .trim()
+                      .toLowerCase();
                     if (!subKey) return;
                     const nextSubSize = replacementMap.get(subKey);
                     if (nextSubSize) sub.size = nextSubSize;
                   });
                 });
               });
-              if (typeof window.recipeEditorRerenderIngredientsFromModel === 'function') {
+              if (
+                typeof window.recipeEditorRerenderIngredientsFromModel ===
+                'function'
+              ) {
                 window.recipeEditorRerenderIngredientsFromModel();
               }
             }
 
-            const normalizedDraftTags = normalizeRecipeTagDraftList(recipeModel.tags);
+            const normalizedDraftTags = normalizeRecipeTagDraftList(
+              recipeModel.tags,
+            );
             const unknownTagUnique = [];
             const seenUnknownTags = new Set();
             normalizedDraftTags.forEach((tag) => {
-              const key = String(tag || '').trim().toLowerCase();
+              const key = String(tag || '')
+                .trim()
+                .toLowerCase();
               if (!key || seenUnknownTags.has(key)) return;
               seenUnknownTags.add(key);
               if (anyVisibleTagNamed(tag)) return;
@@ -19280,14 +20806,15 @@ async function loadRecipeEditorPage() {
               const replacementMap = resolvedTags.map;
               recipeModel.tags = normalizeRecipeTagDraftList(
                 normalizedDraftTags.map((tag) => {
-                  const key = String(tag || '').trim().toLowerCase();
+                  const key = String(tag || '')
+                    .trim()
+                    .toLowerCase();
                   return replacementMap.get(key) || tag;
-                })
+                }),
               );
             } else {
               recipeModel.tags = normalizedDraftTags;
             }
-
           }
         } catch (unknownErr) {
           console.warn('Unknown-item resolution skipped:', unknownErr);
@@ -19376,10 +20903,14 @@ async function loadRecipeEditorPage() {
         }
       };
       if (recipeWebServingsChangedEventName) {
-        window.addEventListener(recipeWebServingsChangedEventName, syncFromStorage);
+        window.addEventListener(
+          recipeWebServingsChangedEventName,
+          syncFromStorage,
+        );
       }
       window.addEventListener('storage', (event) => {
-        if (event.key !== window.favoriteEatsStorageKeys?.recipeWebServings) return;
+        if (event.key !== window.favoriteEatsStorageKeys?.recipeWebServings)
+          return;
         syncFromStorage();
       });
     }
