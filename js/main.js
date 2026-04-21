@@ -16435,6 +16435,11 @@ async function loadStoresPage() {
 
   const finishActiveStoreDrag = ({ suppressClick = false } = {}) => {
     if (!activeStoreDrag) return;
+    try {
+      activeStoreDrag.dragSourceEl?.releasePointerCapture?.(
+        activeStoreDrag.pointerId,
+      );
+    } catch (_) {}
     detachStoreDragListeners();
     clearStoreDragVisualState();
     if (suppressClick) suppressStoreListClickUntil = Date.now() + 250;
@@ -16507,6 +16512,7 @@ async function loadStoresPage() {
     activeStoreDrag = {
       pointerId: event.pointerId,
       storeId: Number(storeId),
+      dragSourceEl: rowEl,
       baselineY: event.clientY,
       offsetY: 0,
       thresholdPx: Math.max(rowEl.getBoundingClientRect().height * 0.5, 24),
@@ -16520,6 +16526,9 @@ async function loadStoresPage() {
     document.addEventListener('pointerup', onStoreDragPointerUp, true);
     document.addEventListener('pointercancel', onStoreDragPointerCancel, true);
     window.addEventListener('blur', onStoreDragWindowBlur);
+    try {
+      rowEl.setPointerCapture(event.pointerId);
+    } catch (_) {}
     event.preventDefault();
     event.stopPropagation();
     syncActiveStoreDragVisualState();

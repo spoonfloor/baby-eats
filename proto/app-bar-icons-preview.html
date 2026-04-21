@@ -18,6 +18,11 @@
         --text: #f2f2f4;
         --muted: #9898a4;
         --accent: #a78bfa;
+        /* Material Symbols — same axis tokens as `css/styles.css` (prototype uses wght 400) */
+        --material-symbols-fill: 0;
+        --material-symbols-wght: 400;
+        --material-symbols-grad: 0;
+        --material-symbols-opsz: 24;
       }
       * {
         box-sizing: border-box;
@@ -63,10 +68,10 @@
       .material-symbols-outlined {
         font-size: 40px;
         font-variation-settings:
-          'FILL' 0,
-          'wght' 400,
-          'GRAD' 0,
-          'opsz' 24;
+          'FILL' var(--material-symbols-fill),
+          'wght' var(--material-symbols-wght),
+          'GRAD' var(--material-symbols-grad),
+          'opsz' var(--material-symbols-opsz);
         color: var(--accent);
         line-height: 1;
       }
