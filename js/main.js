@@ -1470,13 +1470,29 @@ function ensureUnitsSchemaInMain(db) {
 
 async function persistLoadedDbInMain(db, isElectron) {
   if (!db) return;
-  const binaryArray = db.export();
+  await persistBinaryArrayInMain(db.export(), { isElectron });
+}
+
+async function persistBinaryArrayInMain(
+  binaryArray,
+  {
+    isElectron = !!window.electronAPI,
+    overwriteOnly = false,
+    failureMessage = 'Failed to save database.',
+  } = {}
+) {
   if (isElectron) {
-    const ok = await window.electronAPI.saveDB(binaryArray);
-    if (ok === false) throw new Error('Failed to save database.');
+    const ok = await window.electronAPI.saveDB(binaryArray, { overwriteOnly });
+    if (ok === false) throw new Error(failureMessage);
   } else {
     localStorage.setItem('favoriteEatsDb', JSON.stringify(Array.from(binaryArray)));
   }
+}
+
+async function persistDbForCurrentRuntime(db, options = {}) {
+  if (!db) return;
+  const binaryArray = db.export();
+  await persistBinaryArrayInMain(binaryArray, options);
 }
 
 function ensureIngredientBaseVariantsInMain(db) {
@@ -4504,22 +4520,10 @@ async function loadRecipesPage() {
 
     // Persist DB so editor + list can see the new recipe
     try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) {
-          window.ui.toast({
-            message: 'Failed to save database after creating recipe.',
-          });
-          return;
-        }
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save database after creating recipe.',
+      });
     } catch (err) {
       console.error('❌ Failed to persist DB after creating recipe:', err);
       window.ui.toast({
@@ -4576,22 +4580,10 @@ async function loadRecipesPage() {
     }
 
     try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        const okSave = await window.electronAPI.saveDB(binaryArray);
-        if (okSave === false) {
-          window.ui.toast({
-            message: 'Failed to save database after deleting recipe.',
-          });
-          return;
-        }
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save database after deleting recipe.',
+      });
     } catch (err) {
       console.error('❌ Failed to persist DB after deleting recipe:', err);
       window.ui.toast({
@@ -6372,21 +6364,17 @@ async function loadShoppingPage() {
 
     // Persist DB after remove/hide.
     try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        window.electronAPI.saveDB(binaryArray);
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save database after removing shopping item.',
+      });
     } catch (err) {
       console.error(
         '❌ Failed to persist DB after removing shopping item:',
         err,
       );
+      uiToast('Failed to save database after removing shopping item.');
+      return false;
     }
 
     return true;
@@ -7061,20 +7049,10 @@ async function loadShoppingPage() {
     }
 
     try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) {
-          uiToast('Failed to save database after creating shopping item.');
-          return;
-        }
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save database after creating shopping item.',
+      });
     } catch (err) {
       console.error(
         '❌ Failed to persist DB after creating shopping item:',
@@ -12475,16 +12453,10 @@ function loadShoppingItemEditorPage() {
     }
 
     try {
-      const binaryArray = db.export();
-      if (isElectron) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) throw new Error('electronAPI.saveDB returned false');
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron,
+        failureMessage: 'Failed to save database after shopping edit.',
+      });
     } catch (err) {
       console.error('❌ Failed to persist DB after shopping edit:', err);
       uiToast('Failed to save database. See console for details.');
@@ -13065,17 +13037,10 @@ function loadUnitEditorPage() {
               sessionStorage.setItem('selectedUnitCode', newCode);
           }
 
-          const binaryArray = db.export();
-          if (isElectron) {
-            const ok = await window.electronAPI.saveDB(binaryArray);
-            if (ok === false)
-              throw new Error('Failed to save DB for unit editor.');
-          } else {
-            localStorage.setItem(
-              'favoriteEatsDb',
-              JSON.stringify(Array.from(binaryArray)),
-            );
-          }
+          await persistDbForCurrentRuntime(db, {
+            isElectron,
+            failureMessage: 'Failed to save DB for unit editor.',
+          });
 
           sessionStorage.setItem('selectedUnitNameSingular', next || '');
           sessionStorage.setItem('selectedUnitNamePlural', pluralForm);
@@ -13181,21 +13146,11 @@ async function loadUnitsPage() {
 
   let unitRows = queryUnits();
 
-  const persistDb = () => {
-    try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        window.electronAPI.saveDB(binaryArray);
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
-    } catch (err) {
-      console.error('❌ Failed to persist DB:', err);
-    }
+  const persistDb = async () => {
+    await persistDbForCurrentRuntime(db, {
+      isElectron: !!window.electronAPI,
+      failureMessage: 'Failed to save database after updating units.',
+    });
   };
 
   const unitFilterChipDefs = [
@@ -13371,7 +13326,13 @@ async function loadUnitsPage() {
         }
 
         // Persist DB after remove/hide.
-        persistDb();
+        try {
+          await persistDb();
+        } catch (err) {
+          console.error('❌ Failed to persist DB after removing unit:', err);
+          uiToast('Failed to save database after removing unit.');
+          return false;
+        }
 
         return true;
       };
@@ -13498,20 +13459,10 @@ async function loadUnitsPage() {
     }
 
     try {
-      const binaryArray = db.export();
-      const isElectronEnv = !!window.electronAPI;
-      if (isElectronEnv) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) {
-          uiToast('Failed to save database after creating unit.');
-          return;
-        }
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save database after creating unit.',
+      });
     } catch (err) {
       console.error('❌ Failed to persist DB after creating unit:', err);
       uiToast('Failed to save database after creating unit.');
@@ -13595,16 +13546,10 @@ async function loadTagsPage() {
   ensureIngredientVariantTagsSchemaInMain(db);
 
   const persistDb = async () => {
-    const binaryArray = db.export();
-    if (isElectron) {
-      const ok = await window.electronAPI.saveDB(binaryArray);
-      if (ok === false) throw new Error('Failed to save DB.');
-    } else {
-      localStorage.setItem(
-        'favoriteEatsDb',
-        JSON.stringify(Array.from(binaryArray))
-      );
-    }
+    await persistDbForCurrentRuntime(db, {
+      isElectron,
+      failureMessage: 'Failed to save DB.',
+    });
   };
 
   const queryTags = () => {
@@ -14176,16 +14121,10 @@ function loadTagEditorPage() {
           }
         }
 
-        const binaryArray = db.export();
-        if (isElectron) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) throw new Error('Failed to save DB.');
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
+        await persistDbForCurrentRuntime(db, {
+          isElectron,
+          failureMessage: 'Failed to save DB.',
+        });
         sessionStorage.setItem('selectedTagName', name);
         sessionStorage.removeItem('selectedTagIsNew');
       },
@@ -14249,16 +14188,10 @@ async function loadSizesPage() {
   ensureSizesSchemaInMain(db);
 
   const persistDb = async () => {
-    const binaryArray = db.export();
-    if (isElectron) {
-      const ok = await window.electronAPI.saveDB(binaryArray);
-      if (ok === false) throw new Error('Failed to save DB.');
-    } else {
-      localStorage.setItem(
-        'favoriteEatsDb',
-        JSON.stringify(Array.from(binaryArray))
-      );
-    }
+    await persistDbForCurrentRuntime(db, {
+      isElectron,
+      failureMessage: 'Failed to save DB.',
+    });
   };
 
   const querySizes = () => {
@@ -14855,16 +14788,10 @@ function loadSizeEditorPage() {
           } catch (_) {}
         }
 
-        const binaryArray = db.export();
-        if (isElectron) {
-          const ok = await window.electronAPI.saveDB(binaryArray);
-          if (ok === false) throw new Error('Failed to save DB.');
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray))
-          );
-        }
+        await persistDbForCurrentRuntime(db, {
+          isElectron,
+          failureMessage: 'Failed to save DB.',
+        });
         sessionStorage.setItem('selectedSizeName', name);
         sessionStorage.setItem('selectedSizeIsHidden', String(isHidden));
         sessionStorage.setItem('selectedSizeIsRemoved', String(isRemoved));
@@ -15052,16 +14979,10 @@ async function loadStoresPage() {
     );
   const persistStoresDb = async (reasonLabel) => {
     try {
-      const binaryArray = db.export();
-      if (isElectron) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) throw new Error('Failed to save DB.');
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron,
+        failureMessage: `Failed to save DB after ${reasonLabel}.`,
+      });
       return true;
     } catch (err) {
       console.error(`❌ Failed to persist DB after ${reasonLabel}:`, err);
@@ -15839,16 +15760,10 @@ function loadStoreEditorPage() {
     };
 
     const persistStoreEditorDb = async (db) => {
-      const binaryArray = db.export();
-      if (window.electronAPI) {
-        const ok = await window.electronAPI.saveDB(binaryArray);
-        if (ok === false) throw new Error('Failed to save DB for store editor.');
-      } else {
-        localStorage.setItem(
-          'favoriteEatsDb',
-          JSON.stringify(Array.from(binaryArray)),
-        );
-      }
+      await persistDbForCurrentRuntime(db, {
+        isElectron: !!window.electronAPI,
+        failureMessage: 'Failed to save DB for store editor.',
+      });
     };
 
     const tableExistsLocal = (db, name) => {
@@ -19349,18 +19264,12 @@ async function loadRecipeEditorPage() {
         const binaryArray = window.dbInstance.export();
         const isElectron = !!window.electronAPI;
 
-        if (isElectron) {
-          const ok = await window.electronAPI.saveDB(binaryArray, {
-            overwriteOnly: false,
-          });
-          if (ok) uiToast('Database saved successfully.');
-          else uiToast('Save failed — check console for details.');
-        } else {
-          localStorage.setItem(
-            'favoriteEatsDb',
-            JSON.stringify(Array.from(binaryArray)),
-          );
-        }
+        await persistBinaryArrayInMain(binaryArray, {
+          isElectron,
+          overwriteOnly: false,
+          failureMessage: 'Save failed — check console for details.',
+        });
+        if (isElectron) uiToast('Database saved successfully.');
 
         // Refresh Cancel baseline after a successful save
         if (window.bridge && typeof bridge.loadRecipeFromDB === 'function') {

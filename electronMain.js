@@ -53,6 +53,10 @@ function shouldMirrorDbToRepoAssets() {
   return process.env.FAVORITE_EATS_MIRROR_ASSETS !== '0';
 }
 
+function getRepoAssetDbPath() {
+  return path.join(__dirname, 'assets', 'favorite_eats.db');
+}
+
 /**
  * After a successful save to the user's DB, copy the file into `assets/favorite_eats.db`
  * for the web bundle (default on). Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable.
@@ -60,26 +64,60 @@ function shouldMirrorDbToRepoAssets() {
  * to `assets/archive/` first.
  */
 function mirrorDbToRepoAssets(sourcePath) {
-  if (!shouldMirrorDbToRepoAssets()) return;
-  if (!sourcePath || typeof sourcePath !== 'string') return;
-  try {
-    const dest = path.join(__dirname, 'assets', 'favorite_eats.db');
-    const resolvedSource = path.resolve(sourcePath);
-    const resolvedDest = path.resolve(dest);
-    if (resolvedSource === resolvedDest) {
-      return;
-    }
-    if (fs.existsSync(dest)) {
-      const archiveDir = path.join(__dirname, 'assets', 'archive');
-      fs.mkdirSync(archiveDir, { recursive: true });
-      const ext = path.extname(dest) || '.db';
-      const archivePath = reserveBackupPath(archiveDir, 'favorite_eats', ext);
-      fs.renameSync(dest, archivePath);
-    }
-    fs.copyFileSync(resolvedSource, resolvedDest);
-  } catch (err) {
-    console.warn('⚠️ mirror DB to assets failed:', err.message);
+  if (!shouldMirrorDbToRepoAssets()) {
+    return { enabled: false, skipped: true, reason: 'disabled' };
   }
+  if (!sourcePath || typeof sourcePath !== 'string') {
+    throw new Error('Mirror source path is missing.');
+  }
+
+  const dest = getRepoAssetDbPath();
+  const resolvedSource = path.resolve(sourcePath);
+  const resolvedDest = path.resolve(dest);
+  if (resolvedSource === resolvedDest) {
+    return {
+      enabled: true,
+      skipped: true,
+      reason: 'same-path',
+      source: resolvedSource,
+      dest: resolvedDest,
+    };
+  }
+
+  const sourceStat = fs.statSync(resolvedSource);
+  if (!sourceStat.isFile()) {
+    throw new Error(`Mirror source is not a file: ${resolvedSource}`);
+  }
+
+  let archivePath = null;
+  if (fs.existsSync(dest)) {
+    const archiveDir = path.join(__dirname, 'assets', 'archive');
+    fs.mkdirSync(archiveDir, { recursive: true });
+    const ext = path.extname(dest) || '.db';
+    archivePath = reserveBackupPath(archiveDir, 'favorite_eats', ext);
+    fs.renameSync(dest, archivePath);
+  }
+
+  fs.copyFileSync(resolvedSource, resolvedDest);
+
+  const destStat = fs.statSync(resolvedDest);
+  if (!destStat.isFile()) {
+    throw new Error(`Mirror destination is not a file: ${resolvedDest}`);
+  }
+  if (destStat.size !== sourceStat.size) {
+    throw new Error(
+      `Mirror size mismatch: source=${sourceStat.size} dest=${destStat.size}`
+    );
+  }
+
+  return {
+    enabled: true,
+    skipped: false,
+    source: resolvedSource,
+    dest: resolvedDest,
+    archivePath,
+    bytes: sourceStat.size,
+  };
 }
 
 function pruneBackups(historyDir, keepCount = MAX_BACKUPS) {
@@ -195,9 +233,17 @@ ipcMain.handle('loadDB', async (event, pathArg = null) => {
 ipcMain.handle(
   'saveDB',
   async (event, bytes, options = { overwriteOnly: false }) => {
+    let targetPath = ACTIVE_DB_PATH;
+    let targetSaved = false;
     try {
       const buffer = Buffer.from(bytes);
-      const targetPath = ACTIVE_DB_PATH;
+      if (!targetPath || typeof targetPath !== 'string') {
+        throw new Error('No active database selected.');
+      }
+      targetPath = path.resolve(targetPath);
+      console.info(
+        `💾 Saving DB to ${targetPath} (overwriteOnly=${options?.overwriteOnly === true}, mirror=${shouldMirrorDbToRepoAssets() ? 'on' : 'off'})`
+      );
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
 
       // Guard: prevent edits to backups (no recursive Backup folders)
@@ -230,11 +276,34 @@ ipcMain.handle(
       const tmp = `${targetPath}.tmp`;
       fs.writeFileSync(tmp, buffer);
       fs.renameSync(tmp, targetPath);
-      mirrorDbToRepoAssets(targetPath);
+      targetSaved = true;
+      const mirrorResult = mirrorDbToRepoAssets(targetPath);
+      if (mirrorResult.enabled) {
+        if (mirrorResult.skipped) {
+          console.info(
+            `🪞 Mirror skipped (${mirrorResult.reason}) for ${mirrorResult.dest}`
+          );
+        } else {
+          console.info(
+            `🪞 Mirrored DB to ${mirrorResult.dest} from ${mirrorResult.source} (${mirrorResult.bytes} bytes)`
+          );
+          if (mirrorResult.archivePath) {
+            console.info(`🗃️ Archived previous bundled DB at ${mirrorResult.archivePath}`);
+          }
+        }
+      }
       return true;
     } catch (err) {
-      console.error('❌ Save failed:', err);
-      dialog.showErrorBox('Save Error', err.message);
+      console.error('❌ Save failed:', {
+        targetPath,
+        mirrorPath: getRepoAssetDbPath(),
+        error: err,
+      });
+      const message =
+        targetSaved && shouldMirrorDbToRepoAssets()
+          ? `Saved your database, but failed to update ${getRepoAssetDbPath()}.\n\n${err.message}`
+          : err.message;
+      dialog.showErrorBox('Save Error', message);
       return false;
     }
   }
