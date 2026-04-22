@@ -2,7 +2,7 @@
 
 // Electron main process — handles app lifecycle and real file I/O.
 
-const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { ensureGoogleDocsAccessToken } = require('./googleDocsAuth');
@@ -155,12 +155,9 @@ function pruneBackups(historyDir, keepCount = MAX_BACKUPS) {
 }
 
 function createWindow() {
-  const { width, height, x, y } = screen.getPrimaryDisplay().workArea;
   const win = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
+    width: 1200,
+    height: 800,
     icon: path.join(__dirname, 'assets', 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

@@ -5,9 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;"
     />
     <title>Favorite Eats</title>
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
 
     <!-- CSS -->
     <link rel="stylesheet" href="css/overrides.css" />
@@ -19,7 +31,6 @@
       <div class="welcome-card">
         <h1 class="nav-text">Favorite Eats!</h1>
         <button id="loadDbBtn" class="button nav-text">Load Recipes</button>
-        <p id="welcomeStatus" class="nav-text welcome-card__body" hidden></p>
         <input
           type="file"
           id="dbLoader"
@@ -29,6 +40,9 @@
       </div>
     </div>
 
-    <script src="js/welcome.js"></script>
+    <!-- ✅ Local offline SQL.js -->
+    <script src="js/sql-wasm.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/main.js"></script>
   </body>
 </html>
