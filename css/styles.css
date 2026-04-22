@@ -914,13 +914,11 @@ body.recipes-page[data-force-web-mode='on']
 
 body.recipes-page #recipeList .recipe-list-servings-header-label {
   font-family: var(--main-font);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: right;
-  /* padding-right: 4px; */
-  padding-right: 10px;
 }
 
 /* Editor mode: servings stepper column is off; hide slot so titles use full width */
@@ -1173,7 +1171,9 @@ body.stores-page #storesList .shopping-list-row-handle {
   animation: none;
 }
 
-body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-handle {
+body.stores-page[data-force-web-mode='on']
+  #storesList
+  .shopping-list-row-handle {
   display: inline-block;
   pointer-events: auto;
   cursor: grab;
@@ -3216,7 +3216,9 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
 }
 
 /* Must beat `.button.app-bar-action-icon-only { display: inline-flex }` (4 classes). */
-.app-bar-wrapper .actions .button.app-bar-search-toggle.app-bar-action-icon-only {
+.app-bar-wrapper
+  .actions
+  .button.app-bar-search-toggle.app-bar-action-icon-only {
   display: none;
 }
 
@@ -4372,7 +4374,9 @@ body.ingredient-master-link-mode
     gap: 2px;
   }
 
-  .app-bar-wrapper .actions .button.app-bar-search-toggle.app-bar-action-icon-only {
+  .app-bar-wrapper
+    .actions
+    .button.app-bar-search-toggle.app-bar-action-icon-only {
     display: inline-flex;
   }
 

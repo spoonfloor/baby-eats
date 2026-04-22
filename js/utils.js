@@ -398,14 +398,17 @@ function isCompactWebAppBarModeActive() {
   if (typeof document === 'undefined') return false;
   const body = document.body;
   if (!body) return false;
-  if (body.dataset?.forceWebMode !== 'on') return false;
   if (typeof window === 'undefined') return false;
-  if (typeof window.matchMedia === 'function') {
-    return window.matchMedia(
-      `(max-width: ${COMPACT_WEB_APP_BAR_MAX_WIDTH_PX}px)`,
-    ).matches;
-  }
-  return Number(window.innerWidth || 0) <= COMPACT_WEB_APP_BAR_MAX_WIDTH_PX;
+  const isSnugWidth =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia(
+          `(max-width: ${COMPACT_WEB_APP_BAR_MAX_WIDTH_PX}px)`,
+        ).matches
+      : Number(window.innerWidth || 0) <= COMPACT_WEB_APP_BAR_MAX_WIDTH_PX;
+  if (!isSnugWidth) return false;
+  if (body.dataset?.forceWebMode === 'on') return true;
+  // Editor/Electron: same CSS snug layout as web but without force-web presentation.
+  return !!window.electronAPI;
 }
 
 function getCompactWebAppBarSearchElements() {
