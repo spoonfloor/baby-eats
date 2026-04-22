@@ -131,6 +131,8 @@ const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
 /* '1' = planner (force-web) layout on; absent or '0' = off. Replaces legacy
    favoriteEatsForceWebMode so the default is off until the user enables Planner. */
 const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
+/** Dispatched on `window` when planner (force-web) mode flips. `detail.enabled` is a boolean. */
+const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
 // Only enforced when isPublicWebExperienceLocked() (GitHub Pages / dist/web with injected
 // __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
 // is allowed on public web: dist/web ships recipeEditor.html (list → recipe detail).
@@ -202,11 +204,23 @@ function setForceWebModeEnabled(enabled) {
   if (isPublicWebExperienceLocked()) {
     return applyForceWebModePresentation(true);
   }
+  const was = isForceWebModeEnabled();
   const next = !!enabled;
+  if (was === next) {
+    return applyForceWebModePresentation(next);
+  }
   try {
     localStorage.setItem(PLANNER_LAYOUT_STORAGE_KEY, next ? '1' : '0');
   } catch (_) {}
-  return applyForceWebModePresentation(next);
+  const result = applyForceWebModePresentation(next);
+  try {
+    window.dispatchEvent(
+      new CustomEvent(FAVORITE_EATS_FORCE_WEB_MODE_EVENT, {
+        detail: { enabled: next },
+      }),
+    );
+  } catch (_) {}
+  return result;
 }
 
 function getTopLevelPageOrder() {
@@ -5118,43 +5132,58 @@ async function loadRecipesPage() {
     rerenderFilteredRecipes();
   }
 
-  if (recipesActionBtn) {
+  const onRecipesActionClick = () => {
     if (isRecipeWebSelectMode()) {
-      ensureAppBarTextActionPair(recipesActionBtn, 'Reset', 'restart_alt');
-      recipesActionBtn.addEventListener('click', () => {
-        if (!recipeSelectionKeys.size) {
-          uiToast('No recipe selections to clear.');
-          return;
-        }
-        const previousPlan = cloneForUndo(getShoppingPlan(), () =>
-          createEmptyShoppingPlan(),
-        );
-        const previousRecipeSelections = new Set(recipeSelectionKeys);
-        const restoreClearedRecipes = () => {
-          persistShoppingPlan(previousPlan);
-          recipeSelectionKeys.clear();
-          previousRecipeSelections.forEach((key) => {
-            recipeSelectionKeys.add(key);
-          });
-          recipeRowEditingKey = '';
-          recipeRowStepperController?.collapseAll?.();
-          syncRecipesActionButtonState();
-          rerenderFilteredRecipes();
-        };
-        clearShoppingPlanSelections({ clearRecipes: true });
+      if (!recipeSelectionKeys.size) {
+        uiToast('No recipe selections to clear.');
+        return;
+      }
+      const previousPlan = cloneForUndo(getShoppingPlan(), () =>
+        createEmptyShoppingPlan(),
+      );
+      const previousRecipeSelections = new Set(recipeSelectionKeys);
+      const restoreClearedRecipes = () => {
+        persistShoppingPlan(previousPlan);
         recipeSelectionKeys.clear();
+        previousRecipeSelections.forEach((key) => {
+          recipeSelectionKeys.add(key);
+        });
         recipeRowEditingKey = '';
         recipeRowStepperController?.collapseAll?.();
         syncRecipesActionButtonState();
         rerenderFilteredRecipes();
-        uiToastUndo('Recipe selections cleared.', restoreClearedRecipes);
-      });
+      };
+      clearShoppingPlanSelections({ clearRecipes: true });
+      recipeSelectionKeys.clear();
+      recipeRowEditingKey = '';
+      recipeRowStepperController?.collapseAll?.();
+      syncRecipesActionButtonState();
+      rerenderFilteredRecipes();
+      uiToastUndo('Recipe selections cleared.', restoreClearedRecipes);
+    } else {
+      void openCreateRecipeDialog(db);
+    }
+  };
+  const syncRecipesAppBarActionChrome = () => {
+    if (!recipesActionBtn) return;
+    if (isRecipeWebSelectMode()) {
+      ensureAppBarTextActionPair(recipesActionBtn, 'Reset', 'restart_alt');
     } else {
       ensureAppBarTextActionPair(recipesActionBtn, 'Add', 'add');
-      recipesActionBtn.addEventListener('click', () => {
-        void openCreateRecipeDialog(db);
-      });
     }
+    syncRecipesActionButtonState();
+  };
+  if (recipesActionBtn) {
+    syncRecipesAppBarActionChrome();
+    recipesActionBtn.addEventListener('click', onRecipesActionClick);
+    window.addEventListener(
+      FAVORITE_EATS_FORCE_WEB_MODE_EVENT,
+      () => {
+        if (!document.body.classList.contains('recipes-page')) return;
+        syncRecipesAppBarActionChrome();
+        rerenderFilteredRecipes();
+      },
+    );
   }
 }
 
@@ -7815,78 +7844,94 @@ async function loadShoppingPage() {
     }
   }
 
-  if (addBtn) {
+  const onShoppingActionClick = () => {
     if (isShoppingWebSelectMode()) {
-      ensureAppBarTextActionPair(addBtn, 'Reset', 'restart_alt');
-      addBtn.addEventListener('click', () => {
-        const hasItemSelections =
-          Object.keys(getShoppingPlanItemSelections()).length > 0;
-        const hasRecipeSelections =
-          Object.keys(getShoppingPlanRecipeSelections()).length > 0;
-        if (!hasItemSelections && !hasRecipeSelections) {
-          uiToast('No shopping selections to clear.');
-          return;
-        }
-        const previousPlan = cloneForUndo(getShoppingPlan(), () =>
-          createEmptyShoppingPlan(),
-        );
-        const previousShoppingQuantities = new Map(shoppingQuantities);
-        const previousShoppingRecipeQuantities = new Map(
-          shoppingRecipeQuantities,
-        );
-        const previousSelectedShoppingNames = new Set(selectedShoppingNames);
-        const previousShoppingSelectionMeta = new Map(
-          Array.from(shoppingSelectionMeta.entries(), ([key, value]) => [
-            key,
-            cloneForUndo(value, () => value),
-          ]),
-        );
-        const restoreClearedSelections = () => {
-          persistShoppingPlan(previousPlan);
-          shoppingQuantities.clear();
-          previousShoppingQuantities.forEach((qty, key) => {
-            shoppingQuantities.set(key, qty);
-          });
-          shoppingRecipeQuantities.clear();
-          previousShoppingRecipeQuantities.forEach((qty, key) => {
-            shoppingRecipeQuantities.set(key, qty);
-          });
-          selectedShoppingNames.clear();
-          previousSelectedShoppingNames.forEach((name) => {
-            selectedShoppingNames.add(name);
-          });
-          shoppingSelectionMeta.clear();
-          previousShoppingSelectionMeta.forEach((meta, key) => {
-            shoppingSelectionMeta.set(
-              key,
-              cloneForUndo(meta, () => meta),
-            );
-          });
-          collapseExpandedVariantRows();
-          shoppingRowStepperController?.collapseAll?.();
-          refreshShoppingSelectionUi();
-          syncShoppingActionButtonState();
-        };
-        clearShoppingPlanSelections({ clearItems: true, clearRecipes: true });
+      const hasItemSelections =
+        Object.keys(getShoppingPlanItemSelections()).length > 0;
+      const hasRecipeSelections =
+        Object.keys(getShoppingPlanRecipeSelections()).length > 0;
+      if (!hasItemSelections && !hasRecipeSelections) {
+        uiToast('No shopping selections to clear.');
+        return;
+      }
+      const previousPlan = cloneForUndo(getShoppingPlan(), () =>
+        createEmptyShoppingPlan(),
+      );
+      const previousShoppingQuantities = new Map(shoppingQuantities);
+      const previousShoppingRecipeQuantities = new Map(
+        shoppingRecipeQuantities,
+      );
+      const previousSelectedShoppingNames = new Set(selectedShoppingNames);
+      const previousShoppingSelectionMeta = new Map(
+        Array.from(shoppingSelectionMeta.entries(), ([key, value]) => [
+          key,
+          cloneForUndo(value, () => value),
+        ]),
+      );
+      const restoreClearedSelections = () => {
+        persistShoppingPlan(previousPlan);
         shoppingQuantities.clear();
+        previousShoppingQuantities.forEach((qty, key) => {
+          shoppingQuantities.set(key, qty);
+        });
         shoppingRecipeQuantities.clear();
+        previousShoppingRecipeQuantities.forEach((qty, key) => {
+          shoppingRecipeQuantities.set(key, qty);
+        });
         selectedShoppingNames.clear();
+        previousSelectedShoppingNames.forEach((name) => {
+          selectedShoppingNames.add(name);
+        });
         shoppingSelectionMeta.clear();
+        previousShoppingSelectionMeta.forEach((meta, key) => {
+          shoppingSelectionMeta.set(
+            key,
+            cloneForUndo(meta, () => meta),
+          );
+        });
         collapseExpandedVariantRows();
         shoppingRowStepperController?.collapseAll?.();
         refreshShoppingSelectionUi();
         syncShoppingActionButtonState();
-        uiToastUndo(
-          'All shopping selections cleared.',
-          restoreClearedSelections,
-        );
-      });
+      };
+      clearShoppingPlanSelections({ clearItems: true, clearRecipes: true });
+      shoppingQuantities.clear();
+      shoppingRecipeQuantities.clear();
+      selectedShoppingNames.clear();
+      shoppingSelectionMeta.clear();
+      collapseExpandedVariantRows();
+      shoppingRowStepperController?.collapseAll?.();
+      refreshShoppingSelectionUi();
+      syncShoppingActionButtonState();
+      uiToastUndo(
+        'All shopping selections cleared.',
+        restoreClearedSelections,
+      );
+    } else {
+      void openCreateShoppingItemDialog();
+    }
+  };
+  const syncShoppingAppBarActionChrome = () => {
+    if (!addBtn) return;
+    if (isShoppingWebSelectMode()) {
+      ensureAppBarTextActionPair(addBtn, 'Reset', 'restart_alt');
     } else {
       ensureAppBarTextActionPair(addBtn, 'Add', 'add');
-      addBtn.addEventListener('click', () => {
-        void openCreateShoppingItemDialog();
-      });
     }
+    syncShoppingActionButtonState();
+  };
+  if (addBtn) {
+    syncShoppingAppBarActionChrome();
+    addBtn.addEventListener('click', onShoppingActionClick);
+    window.addEventListener(
+      FAVORITE_EATS_FORCE_WEB_MODE_EVENT,
+      () => {
+        if (!document.body.classList.contains('shopping-page')) return;
+        syncShoppingAppBarActionChrome();
+        shoppingRowStepperController?.collapseAll?.();
+        refreshShoppingSelectionUi();
+      },
+    );
   }
 }
 
@@ -9356,6 +9401,15 @@ async function loadShoppingListPage() {
     await waitForAppBarReady();
   }
   initBottomNav();
+  window.addEventListener(
+    FAVORITE_EATS_FORCE_WEB_MODE_EVENT,
+    () => {
+      if (!getTopLevelPageOrder().includes('shopping-list')) return;
+      try {
+        window.location.reload();
+      } catch (_) {}
+    },
+  );
 
   if (!list) return;
 
@@ -17017,25 +17071,39 @@ async function loadStoresPage() {
     return true;
   };
 
-  if (addBtn) {
+  const onStoresActionClick = () => {
+    if (isStoreWebSelectMode()) {
+      if (!canResetStoreSelections()) return;
+      storeRows = defaultStoreRows.slice();
+      checkedStoreIds.clear();
+      setShoppingPlanStoreOrder([]);
+      setShoppingPlanSelectedStoreIds([]);
+      listNav?.setSelectedIdx?.(-1, { source: null });
+      rerenderFilteredStores({ clearSelectionWhenMissing: true });
+    } else {
+      void openCreateStoreDialog();
+    }
+  };
+  const syncStoresAppBarActionChrome = () => {
+    if (!addBtn) return;
     if (isStoreWebSelectMode()) {
       ensureAppBarTextActionPair(addBtn, 'Reset', 'restart_alt');
-      addBtn.addEventListener('click', () => {
-        if (!canResetStoreSelections()) return;
-        storeRows = defaultStoreRows.slice();
-        checkedStoreIds.clear();
-        setShoppingPlanStoreOrder([]);
-        setShoppingPlanSelectedStoreIds([]);
-        listNav?.setSelectedIdx?.(-1, { source: null });
-        rerenderFilteredStores({ clearSelectionWhenMissing: true });
-      });
     } else {
       ensureAppBarTextActionPair(addBtn, 'Add', 'add');
-      addBtn.addEventListener('click', () => {
-        void openCreateStoreDialog();
-      });
     }
     syncStoresResetButtonState();
+  };
+  if (addBtn) {
+    syncStoresAppBarActionChrome();
+    addBtn.addEventListener('click', onStoresActionClick);
+    window.addEventListener(
+      FAVORITE_EATS_FORCE_WEB_MODE_EVENT,
+      () => {
+        if (!document.body.classList.contains('stores-page')) return;
+        syncStoresAppBarActionChrome();
+        rerenderFilteredStores();
+      },
+    );
   }
 }
 
