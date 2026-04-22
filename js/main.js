@@ -473,36 +473,36 @@ function wireAppBarSearch(searchInput, options = {}) {
 
 const TOP_LEVEL_EMPTY_STATE_MESSAGES = Object.freeze({
   recipes: Object.freeze({
-    diagnosis: 'No recipes yet.',
-    cta: 'Add a recipe.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   shoppingItems: Object.freeze({
-    diagnosis: 'No shopping items yet.',
-    cta: 'Add a shopping item.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   shoppingList: Object.freeze({
-    diagnosis: 'No shopping list yet.',
-    cta: 'Select some shopping items or recipes.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   searchNoMatch: Object.freeze({
-    diagnosis: 'No matching items.',
-    cta: 'Try a different search.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   units: Object.freeze({
-    diagnosis: 'No units yet.',
-    cta: 'Add a unit.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   tags: Object.freeze({
-    diagnosis: 'No tags yet.',
-    cta: 'Add a tag.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   sizes: Object.freeze({
-    diagnosis: 'No sizes yet.',
-    cta: 'Add a size.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
   stores: Object.freeze({
-    diagnosis: 'No stores yet.',
-    cta: 'Add a store.',
+    diagnosis: 'utter emptiness.',
+    cta: 'total bliss.',
   }),
 });
 
