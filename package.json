@@ -1,5 +1,6 @@
 {
   "name": "favorite-eats",
+  "productName": "Favorite Eats Editor",
   "version": "1.0.0",
   "main": "electronMain.js",
   "scripts": {
