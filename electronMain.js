@@ -2,7 +2,7 @@
 
 // Electron main process — handles app lifecycle and real file I/O.
 
-const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { ensureGoogleDocsAccessToken } = require('./googleDocsAuth');
@@ -50,9 +50,6 @@ function reserveBackupPath(historyDir, base, ext) {
   throw new Error('Too many backups in the same second.');
 }
 function shouldMirrorDbToRepoAssets() {
-  if (app.isPackaged) {
-    return false;
-  }
   return process.env.FAVORITE_EATS_MIRROR_ASSETS !== '0';
 }
 
@@ -62,8 +59,7 @@ function getRepoAssetDbPath() {
 
 /**
  * After a successful save to the user's DB, copy the file into `assets/favorite_eats.db`
- * for the web bundle when running unpackaged (e.g. npm start). Packaged dist builds never
- * mirror — app.asar is read-only. Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable in dev.
+ * for the web bundle (default on). Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable.
  * If the repo asset already exists and is not the same file as the active DB, it is moved
  * to `assets/archive/` first.
  */
@@ -155,12 +151,9 @@ function pruneBackups(historyDir, keepCount = MAX_BACKUPS) {
 }
 
 function createWindow() {
-  const { width, height, x, y } = screen.getPrimaryDisplay().workArea;
   const win = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
+    width: 1200,
+    height: 800,
     icon: path.join(__dirname, 'assets', 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

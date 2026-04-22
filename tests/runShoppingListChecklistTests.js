@@ -566,7 +566,7 @@ function run() {
       },
       {
         rowType: 'section',
-        text: 'completed',
+        text: 'Excluded',
         checked: false,
         className: 'shopping-list-section--completed',
       },
@@ -585,7 +585,7 @@ function run() {
       },
       {
         rowType: 'section',
-        text: 'completed',
+        text: 'Excluded',
         checked: false,
         className: 'shopping-list-section--completed',
       },
@@ -670,7 +670,7 @@ function run() {
       },
       {
         rowType: 'section',
-        text: 'completed',
+        text: 'Excluded',
         checked: false,
         className: 'shopping-list-section--completed',
       },
@@ -699,7 +699,7 @@ function run() {
     [
       { rowType: 'section', text: 'Store A' },
       { rowType: 'section', text: 'Unlisted' },
-      { rowType: 'section', text: 'completed' },
+      { rowType: 'section', text: 'Excluded' },
       { rowType: 'item', text: 'paper towels' },
     ],
     'collapsing a named store should hide its aisles/items/completed but not a sibling pseudo-unlisted group',
@@ -716,10 +716,10 @@ function run() {
       'Aisle 2',
       'chips',
       'Produce',
-      'completed',
+      'Excluded',
       '2 limes',
       'Unlisted',
-      'completed',
+      'Excluded',
       'paper towels',
     ],
     'collapsing a single aisle should hide only that aisle active items',
@@ -737,10 +737,10 @@ function run() {
       'chips',
       'Produce',
       '3 avocados',
-      'completed',
+      'Excluded',
       '2 limes',
       'Unlisted',
-      'completed',
+      'Excluded',
     ],
     'collapsing pseudo-unlisted completed should hide completed items but keep the completed header',
   );
@@ -819,7 +819,7 @@ function run() {
       },
       {
         rowType: 'section',
-        text: 'completed',
+        text: 'Excluded',
         checked: false,
         className: 'shopping-list-section--completed',
       },
@@ -839,7 +839,7 @@ function run() {
   );
   assertJsonEqual(
     fridgeCollapsed.map((row) => row.text),
-    ['fridge', 'no location', 'paper towels', 'completed', '2 limes'],
+    ['fridge', 'no location', 'paper towels', 'Excluded', '2 limes'],
     'collapsing a home section should hide only that home bucket items',
   );
 

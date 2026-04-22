@@ -2305,7 +2305,6 @@ function renderRecipe(recipe) {
   // --- Clear & rebuild container
   const container = getPageContentContainer();
   const webMode = isRecipeWebModeActive();
-  const stepPlaceholderHint = webMode ? 'Use the Force.' : 'Add a step.';
 
   container.innerHTML = `
     <h1 id="recipeTitle" class="recipe-title">${recipe.title || ''}</h1>
@@ -2484,7 +2483,7 @@ function renderRecipe(recipe) {
             'placeholder-prompt--editblue'
           );
         } else {
-          text.dataset.placeholder = stepPlaceholderHint;
+          text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
           // Placeholder step row (empty-state). Used for hiding the number pre-focus.
           line.classList.add('instruction-line--placeholder');
@@ -2586,7 +2585,7 @@ function renderRecipe(recipe) {
 
         if (isPlaceholder) {
           text.textContent = '';
-          text.dataset.placeholder = stepPlaceholderHint;
+          text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
           line.classList.add('instruction-line--placeholder');
         } else {
@@ -2665,7 +2664,7 @@ function renderRecipe(recipe) {
             'placeholder-prompt--editblue'
           );
         } else {
-          text.dataset.placeholder = stepPlaceholderHint;
+          text.dataset.placeholder = 'Add a step.';
           text.classList.add('placeholder-prompt');
           line.classList.add('instruction-line--placeholder');
         }
@@ -2769,15 +2768,13 @@ function updateServingsVisibility(recipe) {
   row.style.display = shouldShow ? '' : 'none';
 }
 
-function renderServingsRow(recipe, container, options) {
+function renderServingsRow(recipe, container) {
   const row =
     (container && container.querySelector('#servingsRow')) ||
     document.getElementById('servingsRow');
   if (!row) return;
   // Always prefer the canonical live model
   const recipeModel = window.recipeData || recipe;
-  const focusPolicy =
-    options && options.focusPolicy === 'none' ? 'none' : 'default-input';
 
   if (!recipeModel) return;
 
@@ -3120,12 +3117,10 @@ function renderServingsRow(recipe, container, options) {
       if (maxInput) maxInput.value = mx != null ? _servingsFormatInputValue(mx) : '';
     };
 
-    if (focusPolicy === 'default-input') {
-      setTimeout(() => {
-        defaultInput.focus();
-        defaultInput.select();
-      }, 0);
-    }
+    setTimeout(() => {
+      defaultInput.focus();
+      defaultInput.select();
+    }, 0);
 
     // --- Default: live-commit semantics ---
     defaultInput.addEventListener('input', () => {
@@ -3761,9 +3756,7 @@ function attachTitleEditor(titleEl) {
       window.isServingsEditing = true;
 
       if (typeof renderServingsRow === 'function') {
-        renderServingsRow(window.recipeData, null, {
-          focusPolicy: 'none',
-        });
+        renderServingsRow(window.recipeData);
 
         // Prime last-valid snapshot at start of edit mode
         if (window.recipeData) {

@@ -5,11 +5,7 @@
     <div class="title-and-back">
       <!-- LEFT: list = menu, editor = back -->
       <button class="app-bar-icon-button" id="appBarMenuBtn" aria-label="Menu">
-        <span
-          class="material-symbols-outlined app-bar-icon-font"
-          aria-hidden="true"
-          >menu</span
-        >
+        <img src="assets/menu_light.svg" alt="Menu" class="app-bar-icon" />
       </button>
 
       <button class="app-bar-icon-button" id="appBarBackBtn" aria-label="Back">
@@ -26,33 +22,12 @@
     <div class="app-bar-search-layer" id="appBarSearchLayer">
       <div class="search-bar">
         <input type="text" placeholder="Search" id="appBarSearchInput" />
-        <button
-          class="clear-search"
-          id="appBarSearchClear"
-          type="button"
-          aria-label="Clear search"
-        >
-          &times;
-        </button>
+        <span class="clear-search" id="appBarSearchClear">&times;</span>
       </div>
     </div>
 
     <div class="actions">
       <!-- RIGHT: list = Add, editor = Cancel / Save -->
-      <button
-        class="button app-bar-search-toggle app-bar-action-icon-only"
-        id="appBarSearchToggleBtn"
-        type="button"
-        aria-label="Search"
-        aria-controls="appBarSearchLayer"
-        aria-expanded="false"
-      >
-        <span
-          class="material-symbols-outlined app-bar-action-icon app-bar-icon-font"
-          aria-hidden="true"
-          >search</span
-        >
-      </button>
       <button class="button" id="appBarAddBtn">Add</button>
 
       <button class="button" id="appBarCancelBtn">Cancel</button>

@@ -89,24 +89,6 @@
     return String(Number(qty.toFixed(2)));
   }
 
-  /**
-   * Keeps collapsed qty in `.shopping-list-row-badge-qty` (last 32px column, aligned with +).
-   */
-  function setShoppingListBadgeQtyLabel(badge, text) {
-    if (!(badge instanceof HTMLElement)) return;
-    if (text == null || text === '') {
-      badge.replaceChildren();
-      return;
-    }
-    let inner = badge.querySelector(':scope > .shopping-list-row-badge-qty');
-    if (!inner) {
-      inner = document.createElement('span');
-      inner.className = 'shopping-list-row-badge-qty';
-      badge.appendChild(inner);
-    }
-    inner.textContent = String(text);
-  }
-
   function syncRowVisuals(rowEl, options = {}) {
     if (!(rowEl instanceof HTMLElement)) return;
 
@@ -132,20 +114,14 @@
     if (!enabled) {
       if (icon) icon.style.display = '';
       if (stepper) stepper.style.display = 'none';
-      if (badge) {
-        badge.style.display = 'none';
-        setShoppingListBadgeQtyLabel(badge, '');
-      }
+      if (badge) badge.style.display = 'none';
       return;
     }
 
     if (isActive) {
       if (icon) icon.style.display = 'none';
       if (stepper) stepper.style.display = '';
-      if (badge) {
-        badge.style.display = 'none';
-        setShoppingListBadgeQtyLabel(badge, '');
-      }
+      if (badge) badge.style.display = 'none';
       return;
     }
 
@@ -153,18 +129,15 @@
       if (icon) icon.style.display = 'none';
       if (stepper) stepper.style.display = 'none';
       if (badge) {
-        badge.style.display = 'inline-flex';
-        setShoppingListBadgeQtyLabel(badge, formatStepperQtyLabel(qty));
+        badge.style.display = 'inline-block';
+        badge.textContent = `${formatStepperQtyLabel(qty)}x`;
       }
       return;
     }
 
     if (icon) icon.style.display = '';
     if (stepper) stepper.style.display = 'none';
-    if (badge) {
-      badge.style.display = 'none';
-      setShoppingListBadgeQtyLabel(badge, '');
-    }
+    if (badge) badge.style.display = 'none';
   }
 
   function createController(options = {}) {
@@ -313,6 +286,5 @@
     syncRowVisuals,
     getNextStepQty,
     createController,
-    setShoppingListBadgeQtyLabel,
   };
 })();

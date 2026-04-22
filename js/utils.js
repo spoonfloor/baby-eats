@@ -300,32 +300,13 @@ function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
   });
 }
 
-function isCurrentAppBarShellMarkup(source) {
-  const requiredIds = ['appBarTitle', 'appBarSearchLayer', 'appBarSearchToggleBtn'];
-  if (typeof source === 'string') {
-    return requiredIds.every((id) => source.includes(`id="${id}"`));
-  }
-  if (source instanceof Document || source instanceof Element) {
-    return requiredIds.every((id) => source.querySelector(`#${id}`));
-  }
-  return false;
-}
-
 function ensureAppBarInjected() {
   const already = document.getElementById('appBarTitle');
+
+  if (already) return Promise.resolve(false);
+
   const mount = document.getElementById('appBarMount');
-
-  if (already && isCurrentAppBarShellMarkup(document)) return Promise.resolve(false);
-
   if (!mount) return Promise.resolve(false);
-
-  if (already) {
-    mount.innerHTML = '';
-    if (mount.dataset) {
-      mount.dataset.injected = '0';
-      mount.dataset.injecting = '0';
-    }
-  }
 
   // Fast path: session cache (avoids flash on navigation after first load).
   try {
@@ -333,15 +314,13 @@ function ensureAppBarInjected() {
       typeof sessionStorage !== 'undefined'
         ? sessionStorage.getItem('favoriteEats_appBarShell')
         : null;
-    if (cached && cached.length > 0 && isCurrentAppBarShellMarkup(cached)) {
+    if (cached && cached.length > 0) {
       mount.innerHTML = cached;
       if (mount.dataset) {
         mount.dataset.injected = '1';
         mount.dataset.injecting = '0';
       }
       return waitForAppBarReady();
-    } else if (cached && typeof sessionStorage !== 'undefined') {
-      sessionStorage.removeItem('favoriteEats_appBarShell');
     }
   } catch (_) {
     // ignore cache failures
@@ -383,206 +362,6 @@ function ensureAppBarInjected() {
       if (mount.dataset) mount.dataset.injecting = '0';
       return false;
     });
-}
-
-const COMPACT_WEB_APP_BAR_MAX_WIDTH_PX = 500;
-const COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS = 'app-bar-search-expanded';
-const COMPACT_WEB_APP_BAR_ICON_BY_LABEL = {
-  add: 'add',
-  reset: 'restart_alt',
-  copy: 'content_copy',
-  export: 'upload',
-  cancel: 'close',
-  save: 'save',
-  'reset servings': 'restart_alt',
-};
-let appBarActionIconSyncing = false;
-
-function isCompactWebAppBarModeActive() {
-  if (typeof document === 'undefined') return false;
-  const body = document.body;
-  if (!body) return false;
-  if (body.dataset?.forceWebMode !== 'on') return false;
-  if (typeof window === 'undefined') return false;
-  if (typeof window.matchMedia === 'function') {
-    return window.matchMedia(
-      `(max-width: ${COMPACT_WEB_APP_BAR_MAX_WIDTH_PX}px)`,
-    ).matches;
-  }
-  return Number(window.innerWidth || 0) <= COMPACT_WEB_APP_BAR_MAX_WIDTH_PX;
-}
-
-function getCompactWebAppBarSearchElements() {
-  return {
-    wrapper: document.querySelector('.app-bar-wrapper'),
-    searchLayer: document.getElementById('appBarSearchLayer'),
-    searchInput: document.getElementById('appBarSearchInput'),
-    searchToggleBtn: document.getElementById('appBarSearchToggleBtn'),
-    titleEl: document.getElementById('appBarTitle'),
-  };
-}
-
-function isCompactWebAppBarSearchExpanded() {
-  const { wrapper } = getCompactWebAppBarSearchElements();
-  return !!wrapper?.classList?.contains(COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS);
-}
-
-function setCompactWebAppBarSearchExpanded(expanded, options = {}) {
-  const { focusInput = false, restoreFocus = false } = options;
-  const { wrapper, searchLayer, searchInput, searchToggleBtn, titleEl } =
-    getCompactWebAppBarSearchElements();
-  if (!(wrapper instanceof HTMLElement)) return false;
-
-  const searchToggleVisible =
-    searchToggleBtn instanceof HTMLButtonElement &&
-    searchToggleBtn.style.display !== 'none';
-  const searchLayerVisible =
-    searchLayer instanceof HTMLElement && searchLayer.style.display !== 'none';
-  const nextExpanded =
-    !!expanded &&
-    isCompactWebAppBarModeActive() &&
-    searchToggleVisible &&
-    searchLayerVisible;
-
-  wrapper.classList.toggle(COMPACT_WEB_APP_BAR_SEARCH_EXPANDED_CLASS, nextExpanded);
-
-  if (searchToggleBtn instanceof HTMLButtonElement) {
-    searchToggleBtn.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
-  }
-
-  if (titleEl instanceof HTMLElement) {
-    if (nextExpanded) {
-      titleEl.setAttribute('aria-hidden', 'true');
-    } else {
-      titleEl.removeAttribute('aria-hidden');
-    }
-  }
-
-  if (nextExpanded && focusInput && searchInput instanceof HTMLInputElement) {
-    window.requestAnimationFrame(() => {
-      try {
-        searchInput.focus();
-        const caret = String(searchInput.value || '').length;
-        searchInput.setSelectionRange(caret, caret);
-      } catch (_) {}
-    });
-  } else if (
-    !nextExpanded &&
-    restoreFocus &&
-    searchToggleBtn instanceof HTMLButtonElement
-  ) {
-    window.requestAnimationFrame(() => {
-      try {
-        searchToggleBtn.focus();
-      } catch (_) {}
-    });
-  }
-
-  return nextExpanded;
-}
-
-function getCompactWebAppBarIconLabel(buttonEl) {
-  if (!(buttonEl instanceof HTMLButtonElement)) return '';
-  const iconNode = buttonEl.querySelector('.app-bar-action-icon');
-  const rawText = String(buttonEl.textContent || '').trim();
-  const iconText =
-    iconNode instanceof HTMLElement ? String(iconNode.textContent || '').trim() : '';
-  // When app bar state flips while in icon mode, button text updates can happen
-  // before we re-run sync. Capture those textual updates as the source label.
-  if (rawText && rawText !== iconText) {
-    buttonEl.dataset.appBarLabelBase = rawText;
-  }
-  const fromDataset = String(buttonEl.dataset.appBarLabelBase || '').trim();
-  return fromDataset || rawText;
-}
-
-function syncCompactWebAppBarActionIcons() {
-  if (appBarActionIconSyncing) return;
-  appBarActionIconSyncing = true;
-  try {
-    const buttonIds = [
-      'appBarAddBtn',
-      'appBarCancelBtn',
-      'appBarSaveBtn',
-      'appBarCopyBtn',
-      'appBarExportBtn',
-    ];
-    const compactModeActive = isCompactWebAppBarModeActive();
-    buttonIds.forEach((id) => {
-      const buttonEl = document.getElementById(id);
-      if (!(buttonEl instanceof HTMLButtonElement)) return;
-      const baseLabel = getCompactWebAppBarIconLabel(buttonEl);
-      const iconLigature =
-        COMPACT_WEB_APP_BAR_ICON_BY_LABEL[String(baseLabel || '').toLowerCase()] ||
-        '';
-      const iconNode = buttonEl.querySelector('.app-bar-action-icon');
-      if (compactModeActive && iconLigature) {
-        buttonEl.classList.add('app-bar-action-icon-only');
-        if (baseLabel) {
-          buttonEl.setAttribute('aria-label', baseLabel);
-          buttonEl.title = baseLabel;
-        }
-        let iconEl = iconNode;
-        if (!(iconEl instanceof HTMLElement)) {
-          iconEl = document.createElement('span');
-          iconEl.className =
-            'material-symbols-outlined app-bar-action-icon app-bar-icon-font';
-          iconEl.setAttribute('aria-hidden', 'true');
-          buttonEl.textContent = '';
-          buttonEl.appendChild(iconEl);
-        } else {
-          iconEl.classList.add('app-bar-icon-font');
-        }
-        iconEl.textContent = iconLigature;
-      } else {
-        buttonEl.classList.remove('app-bar-action-icon-only');
-        if (baseLabel) {
-          buttonEl.textContent = baseLabel;
-        }
-        if (iconNode instanceof HTMLElement) {
-          iconNode.remove();
-        }
-        buttonEl.removeAttribute('title');
-      }
-    });
-    if (!compactModeActive) {
-      setCompactWebAppBarSearchExpanded(false);
-    }
-  } finally {
-    appBarActionIconSyncing = false;
-  }
-}
-
-function ensureCompactWebAppBarActionSync() {
-  if (typeof window === 'undefined') return;
-  if (!window._compactWebAppBarResizeBound) {
-    window._compactWebAppBarResizeBound = true;
-    window.addEventListener('resize', () => {
-      syncCompactWebAppBarActionIcons();
-    });
-  }
-  const actionsRoot = document.querySelector('.app-bar-wrapper .actions');
-  if (!(actionsRoot instanceof HTMLElement)) return;
-  if (window._compactWebAppBarObserverRoot === actionsRoot) {
-    syncCompactWebAppBarActionIcons();
-    return;
-  }
-  if (window._compactWebAppBarObserver) {
-    try {
-      window._compactWebAppBarObserver.disconnect();
-    } catch (_) {}
-  }
-  const observer = new MutationObserver(() => {
-    syncCompactWebAppBarActionIcons();
-  });
-  observer.observe(actionsRoot, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-  });
-  window._compactWebAppBarObserver = observer;
-  window._compactWebAppBarObserverRoot = actionsRoot;
-  syncCompactWebAppBarActionIcons();
 }
 
 function initAppBar(options = {}) {
@@ -638,7 +417,6 @@ function initAppBar(options = {}) {
   const backBtn = document.getElementById('appBarBackBtn');
 
   const addBtn = document.getElementById('appBarAddBtn');
-  const searchToggleBtn = document.getElementById('appBarSearchToggleBtn');
 
   const cancelBtn = document.getElementById('appBarCancelBtn');
   const saveBtn = document.getElementById('appBarSaveBtn');
@@ -688,7 +466,6 @@ function initAppBar(options = {}) {
     if (menuBtn) menuBtn.style.display = '';
     if (backBtn) backBtn.style.display = 'none';
     if (searchLayer) searchLayer.style.display = showSearch ? '' : 'none';
-    if (searchToggleBtn) searchToggleBtn.style.display = showSearch ? '' : 'none';
 
     if (addBtn) addBtn.style.display = showAdd ? '' : 'none';
     if (cancelBtn) cancelBtn.style.display = 'none';
@@ -697,7 +474,6 @@ function initAppBar(options = {}) {
     if (menuBtn) menuBtn.style.display = 'none';
     if (backBtn) backBtn.style.display = '';
     if (searchLayer) searchLayer.style.display = 'none';
-    if (searchToggleBtn) searchToggleBtn.style.display = 'none';
 
     if (addBtn) addBtn.style.display = 'none';
     if (cancelBtn) {
@@ -713,10 +489,6 @@ function initAppBar(options = {}) {
   }
 
   // Search layout is handled by CSS (flex middle column) to avoid collisions.
-  setCompactWebAppBarSearchExpanded(
-    mode === 'list' && showSearch && isCompactWebAppBarSearchExpanded(),
-  );
-  ensureCompactWebAppBarActionSync();
 }
 
 /**
@@ -3033,16 +2805,10 @@ function mountTopFilterChipRail(opts = {}) {
   const sync = () => {
     if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
     const rect = anchorEl.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
     const appBarBottom = document
       .querySelector('.app-bar-wrapper')
       ?.getBoundingClientRect?.().bottom;
-    if (!rect || rect.width <= 0) {
-      if (Number.isFinite(appBarBottom) && appBarBottom > 0) {
-        dock.style.top = `${Math.round(appBarBottom + gapFromAppBarPx)}px`;
-        syncRailStackHeightVar();
-      }
-      return;
-    }
     const safeTop = Number.isFinite(appBarBottom)
       ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
       : rect.bottom + gapFromAnchorPx;

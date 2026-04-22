@@ -16,7 +16,7 @@ const api = Object.freeze({
     ipcRenderer.invoke('saveDB', bytes, options),
 
   // Optional helper: open a file picker in main and return the chosen path
-  pickDB: (lastPath = null) => ipcRenderer.invoke('pickDB', lastPath),
+  pickDB: () => ipcRenderer.invoke('pickDB'),
 
   // Optional helper: ask main for some environment info if you want (not required)
   getEnv: () => ipcRenderer.invoke('getEnv'),
