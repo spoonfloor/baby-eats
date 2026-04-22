@@ -457,6 +457,27 @@
         this.items = [];
         this.highlightIdx = 0;
       } else {
+        this.items = ranked;
+
+        // With a non-empty query, keep best match (index 0) as the single highlight
+        // target for Enter. With an empty query (e.g. open-on-focus full pool), keep
+        // the deterministic default at 0 except when the field value is an exact
+        // name already in the list — then highlight/scroll to that row.
+        const fieldVal = anchor ? norm(anchor.value) : '';
+        if (query) {
+          this.highlightIdx = 0;
+        } else if (fieldVal) {
+          const matchIdx = ranked.findIndex(
+            (item) => lower(item) === lower(fieldVal)
+          );
+          this.highlightIdx = matchIdx >= 0 ? matchIdx : 0;
+        } else {
+          this.highlightIdx = 0;
+        }
+        if (this.highlightIdx == null || this.highlightIdx < 0)
+          this.highlightIdx = 0;
+        if (this.highlightIdx >= this.items.length) this.highlightIdx = 0;
+
         const container = document.createElement('div');
         container.className = 'typeahead-list';
         // Cap visible rows; allow scroll for the rest.
@@ -473,18 +494,15 @@
           container.appendChild(row);
         });
 
-        this.items = ranked;
-        // Always ensure deterministic top highlight.
-        if (this.highlightIdx == null || this.highlightIdx < 0)
-          this.highlightIdx = 0;
-        if (this.highlightIdx >= this.items.length) this.highlightIdx = 0;
-
         // Clamp visible height to 8 rows (scroll below the fold).
         // We'll do this via CSS max-height, but set it here for safety.
         el.dataset.maxVisible = String(maxVisible);
       }
 
       this.position();
+      if (Array.isArray(this.items) && this.items.length > 0) {
+        this.setHighlight(this.highlightIdx);
+      }
     }
 
     position() {

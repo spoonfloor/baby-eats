@@ -4324,7 +4324,7 @@ body.ingredient-master-link-mode
 
 .bottom-nav-editor-switch-track:has(.bottom-nav-editor-switch-input:checked) {
   /* Pill background — on (checked) */
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .bottom-nav-editor-switch-input {
@@ -4352,15 +4352,15 @@ body.ingredient-master-link-mode
   height: 22px;
   margin-top: -11px;
   border-radius: 50%;
-  /* know off */
+  /* knob off */
   background: rgba(255, 255, 255, 0.75);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.22);
   z-index: 1;
   pointer-events: none;
   transition:
-    transform 100ms ease,
-    background-color 100ms ease,
-    box-shadow 100ms ease;
+    transform 75ms ease,
+    background-color 75ms ease,
+    box-shadow 75ms ease;
 }
 
 .bottom-nav-editor-switch-input:checked + .bottom-nav-editor-switch-knob {
