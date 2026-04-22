@@ -229,6 +229,12 @@
   --insert-hit-overhang-left: 44px;
   /* Vertical hit area for insert zones (bigger than typical between-line gaps) */
   --insert-hit-overhang-v: 18px;
+
+  /* Material Symbols (variable font): default axis values */
+  --material-symbols-fill: 0;
+  --material-symbols-wght: 100;
+  --material-symbols-grad: 0;
+  --material-symbols-opsz: 24;
 }
 
 body[data-force-web-mode='on'] {
@@ -251,6 +257,14 @@ body[data-force-web-mode='on'] {
   --app-filter-chip-bg: var(--pill-bg);
   --app-filter-chip-fg: var(--theme-primary);
   --app-filter-chip-active-bg: var(--theme-primary);
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' var(--material-symbols-fill),
+    'wght' var(--material-symbols-wght),
+    'GRAD' var(--material-symbols-grad),
+    'opsz' var(--material-symbols-opsz);
 }
 
 /* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
@@ -523,11 +537,7 @@ body.shopping-editor-page .page-wrapper {
 .app-filter-chip-dropdown-clear-icon.material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 20;
+  --material-symbols-opsz: 20;
 }
 
 .app-filter-chip-dropdown-chevron.material-symbols-outlined {
@@ -536,11 +546,6 @@ body.shopping-editor-page .page-wrapper {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 24;
   transform: translate(
     var(--app-filter-chip-dropdown-chevron-offset-x),
     var(--app-filter-chip-dropdown-chevron-offset-y)
@@ -642,11 +647,6 @@ body.shopping-editor-page .page-wrapper {
   font-size: var(--app-filter-chip-dropdown-check-size);
   line-height: 1;
   text-align: center;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 24;
 }
 
 /* Shopping list rows: keep items single-line; truncate long "(variants...)" tails. */
@@ -705,11 +705,7 @@ body.shopping-page[data-force-web-mode='on']
   height: 32px;
   box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  --material-symbols-opsz: 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -761,11 +757,7 @@ body.shopping-page[data-force-web-mode='on']
   .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  --material-symbols-opsz: 26;
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -954,11 +946,7 @@ body.recipes-page[data-force-web-mode='on']
   height: 32px;
   box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  --material-symbols-opsz: 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -1013,11 +1001,7 @@ body.recipes-page[data-force-web-mode='on']
   .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  --material-symbols-opsz: 26;
 }
 
 body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-qty {
@@ -1126,11 +1110,7 @@ body.recipes-page[data-force-web-mode='on']
   font-size: 32px;
   line-height: 1;
   color: rgba(0, 0, 0, 0.16);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  --material-symbols-opsz: 32;
 }
 
 body.recipes-page[data-force-web-mode='on']
@@ -1195,11 +1175,6 @@ body.stores-page #storesList .shopping-list-row-handle {
 
 body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-handle {
   display: inline-block;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 24;
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
@@ -1270,11 +1245,7 @@ body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-icon {
   height: 32px;
   box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  --material-symbols-opsz: 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -1402,11 +1373,7 @@ body.shopping-page[data-force-web-mode='on']
   height: 32px;
   box-sizing: border-box;
   color: rgba(0, 0, 0, 0.4);
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 32;
+  --material-symbols-opsz: 32;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -1459,11 +1426,7 @@ body.shopping-page[data-force-web-mode='on']
   .material-symbols-outlined {
   font-size: 26px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 26;
+  --material-symbols-opsz: 26;
 }
 
 body.shopping-page[data-force-web-mode='on']
@@ -1597,11 +1560,7 @@ body.tags-page #tagsList .shopping-list-section-toggle__icon {
   line-height: 1;
   color: inherit;
   opacity: 0.72;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 20;
+  --material-symbols-opsz: 20;
   transition: transform 120ms ease;
 }
 
@@ -1699,11 +1658,6 @@ body.shopping-list-page
   .material-symbols-outlined {
   font-size: 24px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 100,
-    'GRAD' 0,
-    'opsz' 24;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-text-wrap {
@@ -2505,11 +2459,7 @@ body.store-editor-page .store-aisle-move-btn {
 body.store-editor-page .store-aisle-move-icon {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 20;
+  --material-symbols-opsz: 20;
 }
 
 body.store-editor-page .store-aisle-move-btn:disabled,
@@ -2676,11 +2626,7 @@ body.recipe-editor-page .ingredient-row-move-btn {
 body.recipe-editor-page .ingredient-row-move-icon {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 20;
+  --material-symbols-opsz: 20;
 }
 
 body.recipe-editor-page .ingredient-row-move-btn:disabled,
@@ -3198,6 +3144,7 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   color: #fff;
   user-select: none;
   pointer-events: none;
+  --material-symbols-opsz: 28;
 }
 
 .app-bar-icon-button img.app-bar-icon {
@@ -3650,11 +3597,7 @@ h1.nav-text {
 .servings-line--web .shopping-stepper-btn .material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 300,
-    'GRAD' 0,
-    'opsz' 20;
+  --material-symbols-opsz: 20;
 }
 
 .servings-line--web .shopping-stepper-qty {
