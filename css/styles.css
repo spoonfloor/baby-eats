@@ -3219,6 +3219,18 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   display: none;
 }
 
+/* Add / Cancel / Save: text by default; icon strip added for snug breakpoint in media query */
+.app-bar-wrapper .actions .app-bar-text-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.app-bar-wrapper .actions .app-bar-action-icon--snug-only {
+  display: none;
+}
+
 .app-bar-wrapper .title-and-back {
   flex: 0 1 auto;
   min-width: 0; /* allow title to shrink + ellipsis instead of forcing wrap */
@@ -4379,6 +4391,60 @@ body.ingredient-master-link-mode
 
   .app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer .search-bar {
     max-width: none;
+  }
+
+  /* App bar text actions → icon-only chrome (matches search toggle) */
+  .app-bar-wrapper .actions .app-bar-text-action .app-bar-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .app-bar-wrapper .actions .app-bar-action-icon--snug-only {
+    display: inline-flex;
+  }
+
+  .app-bar-wrapper .actions #appBarCancelBtn .app-bar-cancel-icon--reset {
+    display: none;
+  }
+
+  .app-bar-wrapper
+    .actions
+    #appBarCancelBtn.app-bar-cancel--reset-servings
+    .app-bar-cancel-icon--dismiss {
+    display: none;
+  }
+
+  .app-bar-wrapper
+    .actions
+    #appBarCancelBtn.app-bar-cancel--reset-servings
+    .app-bar-cancel-icon--reset {
+    display: inline-flex;
+  }
+
+  .app-bar-wrapper .actions .app-bar-text-action {
+    position: relative;
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #fff;
+  }
+
+  .app-bar-wrapper .actions .app-bar-text-action:hover,
+  .app-bar-wrapper .actions .app-bar-text-action:focus,
+  .app-bar-wrapper .actions .app-bar-text-action:active {
+    background: transparent;
   }
 
   .you-will-need-card {

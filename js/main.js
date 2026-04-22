@@ -5116,7 +5116,7 @@ async function loadRecipesPage() {
 
   if (recipesActionBtn) {
     if (isRecipeWebSelectMode()) {
-      recipesActionBtn.textContent = 'Reset';
+      ensureAppBarTextActionPair(recipesActionBtn, 'Reset', 'restart_alt');
       recipesActionBtn.addEventListener('click', () => {
         if (!recipeSelectionKeys.size) {
           uiToast('No recipe selections to clear.');
@@ -5146,6 +5146,7 @@ async function loadRecipesPage() {
         uiToastUndo('Recipe selections cleared.', restoreClearedRecipes);
       });
     } else {
+      ensureAppBarTextActionPair(recipesActionBtn, 'Add', 'add');
       recipesActionBtn.addEventListener('click', () => {
         void openCreateRecipeDialog(db);
       });
@@ -7812,7 +7813,7 @@ async function loadShoppingPage() {
 
   if (addBtn) {
     if (isShoppingWebSelectMode()) {
-      addBtn.textContent = 'Reset';
+      ensureAppBarTextActionPair(addBtn, 'Reset', 'restart_alt');
       addBtn.addEventListener('click', () => {
         const hasItemSelections =
           Object.keys(getShoppingPlanItemSelections()).length > 0;
@@ -7877,6 +7878,7 @@ async function loadShoppingPage() {
         );
       });
     } else {
+      ensureAppBarTextActionPair(addBtn, 'Add', 'add');
       addBtn.addEventListener('click', () => {
         void openCreateShoppingItemDialog();
       });
@@ -10462,7 +10464,7 @@ async function loadShoppingListPage() {
             webExportBtn.className = 'button';
             actions.insertBefore(webExportBtn, addBtn);
           }
-          webExportBtn.textContent = 'Export';
+          ensureAppBarTextActionPair(webExportBtn, 'Export', 'upload_file');
           webExportBtn.addEventListener('click', () => {
             void handleShoppingListExport();
           });
@@ -10477,13 +10479,13 @@ async function loadShoppingListPage() {
           webCopyBtn.className = 'button';
           actions.insertBefore(webCopyBtn, addBtn);
         }
-        webCopyBtn.textContent = 'Copy';
+        ensureAppBarTextActionPair(webCopyBtn, 'Copy', 'content_copy');
         webCopyBtn.addEventListener('click', () => {
           void handleShoppingListCopy();
         });
       }
       webResetBtn = addBtn;
-      webResetBtn.textContent = 'Reset';
+      ensureAppBarTextActionPair(webResetBtn, 'Reset', 'restart_alt');
       attachSecretGalleryShortcut(webResetBtn);
       webResetBtn.addEventListener('click', () => {
         void handleShoppingListReset();
@@ -14414,6 +14416,7 @@ async function loadUnitsPage() {
     },
   });
   const addBtn = document.getElementById('appBarAddBtn');
+  if (addBtn) ensureAppBarTextActionPair(addBtn, 'Add', 'add');
 
   if (!list) return;
 
@@ -14870,6 +14873,7 @@ async function loadTagsPage() {
     },
   });
   const addBtn = document.getElementById('appBarAddBtn');
+  if (addBtn) ensureAppBarTextActionPair(addBtn, 'Add', 'add');
 
   const listNav = enableTopLevelListKeyboardNav(list);
   attachSecretGalleryShortcut(addBtn);
@@ -15550,6 +15554,7 @@ async function loadSizesPage() {
     },
   });
   const addBtn = document.getElementById('appBarAddBtn');
+  if (addBtn) ensureAppBarTextActionPair(addBtn, 'Add', 'add');
 
   const listNav = enableTopLevelListKeyboardNav(list);
   attachSecretGalleryShortcut(addBtn);
@@ -17010,7 +17015,7 @@ async function loadStoresPage() {
 
   if (addBtn) {
     if (isStoreWebSelectMode()) {
-      addBtn.textContent = 'Reset';
+      ensureAppBarTextActionPair(addBtn, 'Reset', 'restart_alt');
       addBtn.addEventListener('click', () => {
         if (!canResetStoreSelections()) return;
         storeRows = defaultStoreRows.slice();
@@ -17021,7 +17026,7 @@ async function loadStoresPage() {
         rerenderFilteredStores({ clearSelectionWhenMissing: true });
       });
     } else {
-      addBtn.textContent = 'Add';
+      ensureAppBarTextActionPair(addBtn, 'Add', 'add');
       addBtn.addEventListener('click', () => {
         void openCreateStoreDialog();
       });
@@ -21199,7 +21204,8 @@ async function loadRecipeEditorPage() {
     const cancelBtn = document.getElementById('appBarCancelBtn');
     if (!cancelBtn) return;
     if (!isRecipeWebMode) {
-      cancelBtn.textContent = 'Cancel';
+      setAppBarTextActionLabel(cancelBtn, 'Cancel');
+      cancelBtn.classList.remove('app-bar-cancel--reset-servings');
       const dirty =
         typeof window.recipeEditorGetIsDirty === 'function'
           ? window.recipeEditorGetIsDirty()
@@ -21207,7 +21213,8 @@ async function loadRecipeEditorPage() {
       cancelBtn.disabled = !dirty;
       return;
     }
-    cancelBtn.textContent = 'Reset servings';
+    setAppBarTextActionLabel(cancelBtn, 'Reset servings');
+    cancelBtn.classList.add('app-bar-cancel--reset-servings');
     cancelBtn.disabled =
       typeof window.recipeWebModeCanResetServings === 'function'
         ? !window.recipeWebModeCanResetServings(window.recipeData || recipe)

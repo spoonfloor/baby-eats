@@ -303,10 +303,17 @@ function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
 function isCurrentAppBarShellMarkup(source) {
   const requiredIds = ['appBarTitle', 'appBarSearchLayer', 'appBarSearchToggleBtn'];
   if (typeof source === 'string') {
-    return requiredIds.every((id) => source.includes(`id="${id}"`));
+    if (!requiredIds.every((id) => source.includes(`id="${id}"`))) return false;
+    // Bump when shell structure changes (invalidates stale sessionStorage cache).
+    return (
+      source.includes('app-bar-text-action') &&
+      source.includes('id="appBarAddBtn"')
+    );
   }
   if (source instanceof Document || source instanceof Element) {
-    return requiredIds.every((id) => source.querySelector(`#${id}`));
+    if (!requiredIds.every((id) => source.querySelector(`#${id}`))) return false;
+    const addBtn = source.querySelector('#appBarAddBtn');
+    return !!(addBtn && addBtn.classList.contains('app-bar-text-action'));
   }
   return false;
 }
@@ -470,6 +477,40 @@ function setCompactWebAppBarSearchExpanded(expanded, options = {}) {
   return nextExpanded;
 }
 
+/** Update label text for app bar Add/Cancel/Save without removing icon markup. */
+function setAppBarTextActionLabel(btn, text) {
+  if (!btn) return;
+  const label = btn.querySelector?.('.app-bar-action-label');
+  if (label) label.textContent = text;
+  else btn.textContent = text;
+}
+
+/**
+ * Ensure an app bar pill has `.app-bar-action-label` + one snug Material icon.
+ * Do not use for #appBarCancelBtn (dual icon markup).
+ */
+function ensureAppBarTextActionPair(btn, labelText, materialIconGlyph) {
+  if (!btn) return;
+  btn.classList.add('app-bar-text-action');
+  let label = btn.querySelector(':scope > .app-bar-action-label');
+  let icon = btn.querySelector(
+    ':scope > .app-bar-action-icon--snug-only:not(.app-bar-cancel-icon--dismiss):not(.app-bar-cancel-icon--reset)',
+  );
+  if (!label || !icon) {
+    btn.replaceChildren();
+    label = document.createElement('span');
+    label.className = 'app-bar-action-label';
+    btn.appendChild(label);
+    icon = document.createElement('span');
+    icon.className =
+      'material-symbols-outlined app-bar-action-icon app-bar-icon-font app-bar-action-icon--snug-only';
+    icon.setAttribute('aria-hidden', 'true');
+    btn.appendChild(icon);
+  }
+  label.textContent = labelText;
+  icon.textContent = materialIconGlyph;
+}
+
 function initAppBar(options = {}) {
   const {
     mode = 'list',
@@ -587,12 +628,13 @@ function initAppBar(options = {}) {
     if (addBtn) addBtn.style.display = 'none';
     if (cancelBtn) {
       cancelBtn.style.display = showCancel ? '' : 'none';
-      cancelBtn.textContent = cancelText || 'Cancel';
+      setAppBarTextActionLabel(cancelBtn, cancelText || 'Cancel');
+      cancelBtn.classList.remove('app-bar-cancel--reset-servings');
       if (onCancel) cancelBtn.onclick = onCancel;
     }
     if (saveBtn) {
       saveBtn.style.display = showSave ? '' : 'none';
-      saveBtn.textContent = saveText || 'Save';
+      setAppBarTextActionLabel(saveBtn, saveText || 'Save');
       if (onSave) saveBtn.onclick = onSave;
     }
   }
