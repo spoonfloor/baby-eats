@@ -2772,13 +2772,20 @@ function renderServingsRow(recipe, container) {
   const row =
     (container && container.querySelector('#servingsRow')) ||
     document.getElementById('servingsRow');
-  if (!row) return;
+  if (!row) {
+    window._skipServingsAutofocusOnce = false;
+    return;
+  }
   // Always prefer the canonical live model
   const recipeModel = window.recipeData || recipe;
 
-  if (!recipeModel) return;
+  if (!recipeModel) {
+    window._skipServingsAutofocusOnce = false;
+    return;
+  }
 
   if (isRecipeWebModeActive()) {
+    window._skipServingsAutofocusOnce = false;
     const bounds = getRecipeWebServingsBounds(recipeModel);
     row.classList.add('row-shell', 'servings-line', 'servings-line--web');
     row.classList.remove('editing');
@@ -2938,6 +2945,7 @@ function renderServingsRow(recipe, container) {
   pill.textContent = 'Servings';
 
   if (!window.isServingsEditing) {
+    window._skipServingsAutofocusOnce = false;
     // Rest mode: plain subtitle text, no pill
     if (hasDefaultValue && recipeModel.servingsDefault != null) {
       field.textContent = `Serves ${formatRecipeWebServingsDisplay(recipeModel.servingsDefault)}`;
@@ -3117,7 +3125,10 @@ function renderServingsRow(recipe, container) {
       if (maxInput) maxInput.value = mx != null ? _servingsFormatInputValue(mx) : '';
     };
 
+    const skipServingsAutofocus = !!window._skipServingsAutofocusOnce;
+    if (skipServingsAutofocus) window._skipServingsAutofocusOnce = false;
     setTimeout(() => {
+      if (skipServingsAutofocus) return;
       defaultInput.focus();
       defaultInput.select();
     }, 0);
@@ -3756,6 +3767,9 @@ function attachTitleEditor(titleEl) {
       window.isServingsEditing = true;
 
       if (typeof renderServingsRow === 'function') {
+        // renderServingsRow defers focus to the default input; skip that here so
+        // titleEl.focus() below keeps the caret in the title.
+        window._skipServingsAutofocusOnce = true;
         renderServingsRow(window.recipeData);
 
         // Prime last-valid snapshot at start of edit mode
