@@ -588,6 +588,21 @@ function moveStepLineByDelta({ lineEl, delta, selectionOffsets } = {}) {
 
 // --- Shared helpers for step editing (normalization + new step factory) ---
 
+function isRecipeEditorEmptyStepPromptText(t) {
+  try {
+    if (typeof window.isRecipeEditorStepPromptDisplayText === 'function') {
+      return window.isRecipeEditorStepPromptDisplayText(t);
+    }
+  } catch (_) {}
+  const s = String(t == null ? '' : t).trim();
+  return !s || s === 'Add a step.' || s === 'Use the Force.';
+}
+
+function isRecipeEditorStepRowPlaceholderLabel(s) {
+  const v = String(s == null ? '' : s).trim();
+  return v === 'Add a step.' || v === 'Use the Force.';
+}
+
 function ensureStepTextNotEmpty(el) {
   if (!el) return;
 
@@ -1028,11 +1043,11 @@ function attachStepInlineEditor(textEl) {
       !normalizeStepText(original);
     let placeholderActive = startedFromPlaceholder;
 
-    // If this is the "Add a step." placeholder, treat it like an empty field
+    // If this is the default step placeholder, treat it like an empty field
     // so clicking anywhere puts the caret at position 0 for easy typing.
     const isPlaceholder =
       textEl.classList.contains('placeholder-prompt') &&
-      (original || '').trim() === 'Add a step.';
+      isRecipeEditorEmptyStepPromptText(original);
 
     const editStartText =
       stepRecipeLinks && typeof stepRecipeLinks.toEditText === 'function'
@@ -1218,7 +1233,7 @@ function attachStepInlineEditor(textEl) {
           textEl.classList &&
           textEl.classList.contains('placeholder-prompt') &&
           textEl.dataset &&
-          String(textEl.dataset.placeholder || '').trim() === 'Add a step.';
+          isRecipeEditorStepRowPlaceholderLabel(textEl.dataset.placeholder);
 
         if (!isHeadingLine && normalizedVal !== '') {
           lineEl.classList.remove('instruction-line--placeholder');
@@ -1957,7 +1972,7 @@ function attachStepInlineEditor(textEl) {
           if (
             lineEl &&
             lineEl.classList &&
-            String(placeholderText || '').trim() === 'Add a step.' &&
+            isRecipeEditorStepRowPlaceholderLabel(placeholderText) &&
             lineEl.dataset &&
             lineEl.dataset.stepType !== 'heading'
           ) {
@@ -1967,7 +1982,7 @@ function attachStepInlineEditor(textEl) {
       }
 
       // Restore placeholder styling if we reverted back to the prompt text.
-      if ((original || '').trim() === 'Add a step.') {
+      if (isRecipeEditorEmptyStepPromptText(original)) {
         textEl.classList.add('placeholder-prompt');
         try {
           if (
@@ -2044,7 +2059,7 @@ function attachStepInlineEditor(textEl) {
         return;
       }
 
-      // Safari-style placeholder behavior for the "Add a step." row.
+      // Safari-style placeholder behavior for the default empty step row.
       const isPlaceholderMode =
         startedFromPlaceholder ||
         (textEl.classList.contains('placeholder-prompt') &&
@@ -2348,7 +2363,7 @@ function attachStepInlineEditor(textEl) {
             if (
               lineEl &&
               lineEl.classList &&
-              String(placeholderText || '').trim() === 'Add a step.' &&
+              isRecipeEditorStepRowPlaceholderLabel(placeholderText) &&
               lineEl.dataset &&
               lineEl.dataset.stepType !== 'heading'
             ) {
@@ -2359,7 +2374,7 @@ function attachStepInlineEditor(textEl) {
       }
 
       // Single-step recipes: when the only step is cleared, treat it as the
-      // "Add a step." placeholder again.
+      // default empty step placeholder again.
       if (!startedFromPlaceholder && current.length === 0) {
         const parent = lineEl && lineEl.parentElement;
         if (parent) {
@@ -2373,7 +2388,7 @@ function attachStepInlineEditor(textEl) {
               if (
                 lineEl &&
                 lineEl.classList &&
-                String(placeholderText || '').trim() === 'Add a step.' &&
+                isRecipeEditorStepRowPlaceholderLabel(placeholderText) &&
                 lineEl.dataset &&
                 lineEl.dataset.stepType !== 'heading'
               ) {

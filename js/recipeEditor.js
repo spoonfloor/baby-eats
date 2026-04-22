@@ -146,6 +146,21 @@ function isRecipeWebModeActive() {
   }
 }
 
+// Step row placeholder: default (native editor) vs web when the recipe has no real steps.
+const DEFAULT_STEP_PLACEHOLDER_TEXT = 'Add a step.';
+const WEB_MODE_NO_INSTRUCTIONS_HINT = 'Use the Force.';
+
+function isRecipeEditorStepPromptDisplayText(s) {
+  const t = String(s == null ? '' : s).trim();
+  return (
+    !t || t === DEFAULT_STEP_PLACEHOLDER_TEXT || t === WEB_MODE_NO_INSTRUCTIONS_HINT
+  );
+}
+
+try {
+  window.isRecipeEditorStepPromptDisplayText = isRecipeEditorStepPromptDisplayText;
+} catch (_) {}
+
 function getRecipeWebServingsApi() {
   return window.favoriteEatsRecipeWebServings || {};
 }
@@ -2444,6 +2459,17 @@ function renderRecipe(recipe) {
       (n.type === 'heading' ||
         n.type === (window.StepNodeType && window.StepNodeType.HEADING));
 
+    const noUserWebStepContent =
+      webMode &&
+      !nodes.some((n) => {
+        if (isHeading(n)) return false;
+        const d = String(stepDisplayText(n.text ?? '')).trim();
+        return d && !isRecipeEditorStepPromptDisplayText(d);
+      });
+    const stepRowPlaceholder = noUserWebStepContent
+      ? WEB_MODE_NO_INSTRUCTIONS_HINT
+      : DEFAULT_STEP_PLACEHOLDER_TEXT;
+
     nodes.forEach((node, idx) => {
       const line = document.createElement('div');
       line.className = 'instruction-line numbered';
@@ -2471,7 +2497,9 @@ function renderRecipe(recipe) {
 
       const rawText = node.text ?? '';
       const displayText = stepDisplayText(rawText);
-      const isPlaceholder = !displayText || displayText.trim() === 'Add a step.';
+      const isPlaceholder = isRecipeEditorStepPromptDisplayText(
+        String(displayText).trim()
+      );
 
       if (isPlaceholder) {
         text.textContent = '';
@@ -2483,7 +2511,7 @@ function renderRecipe(recipe) {
             'placeholder-prompt--editblue'
           );
         } else {
-          text.dataset.placeholder = 'Add a step.';
+          text.dataset.placeholder = stepRowPlaceholder;
           text.classList.add('placeholder-prompt');
           // Placeholder step row (empty-state). Used for hiding the number pre-focus.
           line.classList.add('instruction-line--placeholder');
@@ -2536,6 +2564,22 @@ function renderRecipe(recipe) {
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
     );
 
+    const noUserWebStepContent = webMode && (() => {
+      for (const section of sortedSections) {
+        const rawSteps = Array.isArray(section.steps) ? section.steps : [];
+        for (const step of rawSteps) {
+          if ((step.type || 'step') === 'heading') continue;
+          const displayText = stepDisplayText(step.instructions ?? '');
+          const d = String(displayText).trim();
+          if (d && !isRecipeEditorStepPromptDisplayText(d)) return false;
+        }
+      }
+      return true;
+    })();
+    const stepRowPlaceholder = noUserWebStepContent
+      ? WEB_MODE_NO_INSTRUCTIONS_HINT
+      : DEFAULT_STEP_PLACEHOLDER_TEXT;
+
     let totalSteps = 0;
 
     sortedSections.forEach((section) => {
@@ -2580,12 +2624,13 @@ function renderRecipe(recipe) {
         }
         const rawText = step.instructions ?? '';
         const displayText = stepDisplayText(rawText);
-        const isPlaceholder =
-          !displayText || String(displayText).trim() === 'Add a step.';
+        const isPlaceholder = isRecipeEditorStepPromptDisplayText(
+          String(displayText).trim()
+        );
 
         if (isPlaceholder) {
           text.textContent = '';
-          text.dataset.placeholder = 'Add a step.';
+          text.dataset.placeholder = stepRowPlaceholder;
           text.classList.add('placeholder-prompt');
           line.classList.add('instruction-line--placeholder');
         } else {
@@ -2637,6 +2682,19 @@ function renderRecipe(recipe) {
     } else {
     }
   } else if (recipe.steps && recipe.steps.length > 0) {
+    const noUserWebStepContent = webMode && (() => {
+      for (const step of recipe.steps) {
+        if ((step.type || 'step') === 'heading') continue;
+        const displayText = stepDisplayText(step.instructions ?? '');
+        const d = String(displayText).trim();
+        if (d && !isRecipeEditorStepPromptDisplayText(d)) return false;
+      }
+      return true;
+    })();
+    const stepRowPlaceholder = noUserWebStepContent
+      ? WEB_MODE_NO_INSTRUCTIONS_HINT
+      : DEFAULT_STEP_PLACEHOLDER_TEXT;
+
     // Fallback: flat list if there are no sectioned steps
     recipe.steps.forEach((step, i) => {
       const line = document.createElement('div');
@@ -2651,8 +2709,9 @@ function renderRecipe(recipe) {
 
       const rawText = step.instructions ?? '';
       const displayText = stepDisplayText(rawText);
-      const isPlaceholder =
-        !displayText || String(displayText).trim() === 'Add a step.';
+      const isPlaceholder = isRecipeEditorStepPromptDisplayText(
+        String(displayText).trim()
+      );
 
       if (isPlaceholder) {
         text.textContent = '';
@@ -2664,7 +2723,7 @@ function renderRecipe(recipe) {
             'placeholder-prompt--editblue'
           );
         } else {
-          text.dataset.placeholder = 'Add a step.';
+          text.dataset.placeholder = stepRowPlaceholder;
           text.classList.add('placeholder-prompt');
           line.classList.add('instruction-line--placeholder');
         }

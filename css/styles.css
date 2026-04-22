@@ -3415,7 +3415,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
 }
 
 /* For the placeholder row only, pull the prompt into the reserved number gutter.
-   This keeps "Add a step." truly left-aligned, while editing snaps to "1. |". */
+   This keeps the empty-step hint (e.g. "Add a step." / web "Use the Force.") left-aligned, while editing snaps to "1. |". */
 .instruction-line.instruction-line--placeholder:not(.editing) .step-text {
   margin-left: -2em;
 }
