@@ -130,6 +130,33 @@ function findYwnShoppingItemMatchByName(rawName) {
   return null;
 }
 
+/**
+ * When `ing.lemma` is set (from recipe load join to `ingredients.lemma`), use it
+ * to read the master `ingredients.name` for YWN display, even if `ing.name` is
+ * a per-line display override (e.g. "carrots" vs "carrot") that fails synonym lookup.
+ */
+function findYwnCanonicalNameByLemma(rawLemma) {
+  const t = String(rawLemma || '').trim();
+  if (!t) return null;
+  const db = window.dbInstance;
+  if (!db) return null;
+  try {
+    const q = db.exec(
+      `SELECT name
+       FROM ingredients
+       WHERE lower(trim(lemma)) = lower(trim(?))
+       ORDER BY ID
+       LIMIT 1;`,
+      [t]
+    );
+    if (q.length && q[0].values && q[0].values.length) {
+      const n = String(q[0].values[0][0] || '').trim();
+      return n || null;
+    }
+  } catch (_) {}
+  return null;
+}
+
 function isRecipeWebModeActive() {
   try {
     if (
@@ -778,24 +805,109 @@ function normalizeYwnIngredientRows(rawRows) {
   return out;
 }
 
+/**
+ * Map raw recipe `name` to the shopping/DB canonical name for YWN deduping, so
+ * e.g. "carrot" and "carrots" (synonym) merge into one line. Uses per-list cache.
+ * @param {string} rawName
+ * @param {Map<string, string>} cache  trimmed input → merge name
+ * @returns {string}
+ */
+function resolveYwnMergeNameKey(rawName, cache) {
+  const trimmed = String(rawName || '').trim();
+  if (!trimmed) return '';
+  if (cache.has(trimmed)) return cache.get(trimmed);
+  const match = findYwnShoppingItemMatchByName(trimmed);
+  const nameForMerge = match
+    ? String(match.name == null ? trimmed : match.name).trim() || trimmed
+    : trimmed;
+  cache.set(trimmed, nameForMerge);
+  return nameForMerge;
+}
+
+/**
+ * Stable merge identity + YWN line label. Prefers `ing.lemma` (from the DB join
+ * on load) so rows that share a master item merge even when `ing.name` differs
+ * in singular/plural or display text.
+ * @returns {{ nameKey: string, displayName: string }}
+ */
+function ywnNameKeyAndDisplayForRow(ing, mergeNameCache) {
+  const lemma = ing && String(ing.lemma || '').trim();
+  if (lemma) {
+    return {
+      nameKey: lemma.toLowerCase(),
+      displayName:
+        findYwnCanonicalNameByLemma(lemma) ||
+        (() => {
+          const m = findYwnShoppingItemMatchByName(
+            String(ing.name || '').trim()
+          );
+          return m
+            ? String(m.name == null ? ing.name : m.name).trim() ||
+                String(ing.name || '').trim()
+            : String(ing.name || '').trim() || lemma;
+        })(),
+    };
+  }
+  const nameKey = resolveYwnMergeNameKey(ing && ing.name, mergeNameCache);
+  return { nameKey, displayName: nameKey };
+}
+
 function mergeByIngredient(list) {
   const merged = [];
   const map = new Map();
+  const mergeNameCache = new Map();
+  const toPositiveNumberOrNull = (value) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+  const normalizedUnit = (value) => String(value == null ? '' : value).trim().toLowerCase();
 
   list.forEach((ing) => {
-    const key = `${ing.variant || ''}|${ing.name}|${ing.size || ''}|${
-      ing.locationAtHome || ''
-    }`;
+    const { nameKey, displayName } = ywnNameKeyAndDisplayForRow(
+      ing,
+      mergeNameCache
+    );
+    // Merge by ingredient identity + variant + location (not size), so singular/
+    // plural duplicates or differing size text for the same master item collapse.
+    const key = `${ing.variant || ''}|${nameKey}|${ing.locationAtHome || ''}`;
     if (!map.has(key)) {
-      map.set(key, { ...ing });
+      map.set(key, { ...ing, name: displayName });
     } else {
       const existing = map.get(key);
+      const sameUnit = normalizedUnit(existing.unit) === normalizedUnit(ing.unit);
+      if (sameUnit) {
+        const existingQty = toPositiveNumberOrNull(existing.quantity);
+        const incomingQty = toPositiveNumberOrNull(ing.quantity);
+        if (existingQty != null && incomingQty != null) {
+          existing.quantity = existingQty + incomingQty;
+        }
+
+        const existingMin = toPositiveNumberOrNull(existing.quantityMin);
+        const existingMax = toPositiveNumberOrNull(existing.quantityMax);
+        const incomingMin = toPositiveNumberOrNull(ing.quantityMin);
+        const incomingMax = toPositiveNumberOrNull(ing.quantityMax);
+        const leftForMin = existingMin ?? existingQty;
+        const rightForMin = incomingMin ?? incomingQty;
+        const leftForMax = existingMax ?? existingQty ?? existingMin;
+        const rightForMax = incomingMax ?? incomingQty ?? incomingMin;
+
+        if (leftForMin != null && rightForMin != null) {
+          existing.quantityMin = leftForMin + rightForMin;
+        }
+        if (leftForMax != null && rightForMax != null) {
+          existing.quantityMax = leftForMax + rightForMax;
+        }
+      }
       if (
-        typeof existing.quantity === 'number' &&
-        typeof ing.quantity === 'number' &&
-        existing.unit === ing.unit
+        String(existing.size || '').trim() !== String(ing.size || '').trim()
       ) {
-        existing.quantity += ing.quantity;
+        // Mixed size descriptors across merged lines should not imply one size.
+        existing.size = '';
       }
       existing.isOptional = existing.isOptional || ing.isOptional;
       existing.isDeprecated = !!(existing.isDeprecated || ing.isDeprecated);

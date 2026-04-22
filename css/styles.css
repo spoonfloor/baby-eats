@@ -4267,18 +4267,114 @@ body.ingredient-master-link-mode
   right: auto;
   bottom: auto;
   height: auto;
+  min-width: 184px;
+  box-sizing: border-box;
   background-color: var(--theme-primary);
   padding: 12px;
   border-radius: 10px;
   box-shadow: 0 8px 24px var(--theme-primary-transparent);
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: flex-start;
+  gap: 10px;
   z-index: var(--z-app-chrome);
 }
 
 .bottom-nav--hidden {
   display: none;
+}
+
+.bottom-nav-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bottom-nav-editor-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 6px 6px 22px;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+}
+
+/* Same typography as `.bottom-nav-pill` (font: inherit from body / app chrome) */
+.bottom-nav-editor-toggle > span:first-child {
+  font: inherit;
+  line-height: inherit;
+  color: white;
+  opacity: 0.9;
+}
+
+.bottom-nav-editor-switch-track {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 48px;
+  height: 26px;
+  border-radius: 9999px;
+  /* Pill background — off (unchecked) */
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 100ms ease;
+}
+
+.bottom-nav-editor-switch-track:has(.bottom-nav-editor-switch-input:checked) {
+  /* Pill background — on (checked) */
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.bottom-nav-editor-switch-input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.bottom-nav-editor-switch-input:focus {
+  outline: none;
+}
+
+.bottom-nav-editor-switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 50%;
+  /* know off */
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.22);
+  z-index: 1;
+  pointer-events: none;
+  transition:
+    transform 100ms ease,
+    background-color 100ms ease,
+    box-shadow 100ms ease;
+}
+
+.bottom-nav-editor-switch-input:checked + .bottom-nav-editor-switch-knob {
+  transform: translateX(22px);
+  /* knob on */
+  background: var(--theme-secondary);
+  box-shadow: 0 1px 3px rgb(var(--theme-secondary-rgb) / 0.35);
+}
+
+.bottom-nav-editor-separator {
+  height: 0;
+  margin: 0;
+  border: none;
+  border-top: 1px solid rgb(255 255 255 / 0.35);
 }
 
 .bottom-nav-pill-row {
@@ -4294,7 +4390,9 @@ body.ingredient-master-link-mode
   height: 44px;
   border-radius: 9999px;
   padding-left: 22px;
-  width: 120px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
   font: inherit;
   line-height: inherit;
   text-align: left;

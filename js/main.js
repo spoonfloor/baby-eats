@@ -128,7 +128,9 @@ function readFavoriteEatsBuildConfig() {
 }
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
-const FORCE_WEB_MODE_STORAGE_KEY = 'favoriteEatsForceWebMode';
+/* '1' = planner (force-web) layout on; absent or '0' = off. Replaces legacy
+   favoriteEatsForceWebMode so the default is off until the user enables Planner. */
+const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
 // Only enforced when isPublicWebExperienceLocked() (GitHub Pages / dist/web with injected
 // __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
 // is allowed on public web: dist/web ships recipeEditor.html (list → recipe detail).
@@ -179,7 +181,7 @@ function redirectIfPublicWebPageIsDisallowed() {
 function isForceWebModeEnabled() {
   if (isPublicWebExperienceLocked()) return true;
   try {
-    return localStorage.getItem(FORCE_WEB_MODE_STORAGE_KEY) === '1';
+    return localStorage.getItem(PLANNER_LAYOUT_STORAGE_KEY) === '1';
   } catch (_) {
     return false;
   }
@@ -202,7 +204,7 @@ function setForceWebModeEnabled(enabled) {
   }
   const next = !!enabled;
   try {
-    localStorage.setItem(FORCE_WEB_MODE_STORAGE_KEY, next ? '1' : '0');
+    localStorage.setItem(PLANNER_LAYOUT_STORAGE_KEY, next ? '1' : '0');
   } catch (_) {}
   return applyForceWebModePresentation(next);
 }
@@ -19608,50 +19610,94 @@ function initEditorPage({ saveBtn, cancelBtn, root }) {
   };
 }
 
+const BOTTOM_NAV_TAB_LABELS = Object.freeze({
+  recipes: 'Recipes',
+  shopping: 'Items',
+  'shopping-list': 'List',
+  stores: 'Stores',
+  tags: 'Tags',
+  sizes: 'Sizes',
+  units: 'Units',
+});
+
+function syncBottomNavPills(pillRow) {
+  if (!(pillRow instanceof HTMLElement)) return;
+  const order = getTopLevelPageOrder();
+  const existing = new Map();
+  Array.from(pillRow.querySelectorAll('.bottom-nav-pill')).forEach((p) => {
+    const tab = String(p.dataset.tab || '').trim();
+    if (tab) existing.set(tab, p);
+  });
+  const frag = document.createDocumentFragment();
+  for (const tab of order) {
+    let pill = existing.get(tab);
+    if (!pill) {
+      pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'bottom-nav-pill';
+      pill.dataset.tab = tab;
+    }
+    const label = BOTTOM_NAV_TAB_LABELS[tab];
+    if (label) pill.textContent = label;
+    frag.appendChild(pill);
+  }
+  while (pillRow.firstChild) pillRow.removeChild(pillRow.firstChild);
+  pillRow.appendChild(frag);
+}
+
+function applyBottomNavActiveState(pillRow, activeTab) {
+  if (!(pillRow instanceof HTMLElement)) return;
+  pillRow.querySelectorAll('.bottom-nav-pill').forEach((pill) => {
+    const tab = pill.dataset.tab;
+    const isActive = tab === activeTab;
+    pill.classList.toggle('bottom-nav-pill--active', isActive);
+    pill.disabled = !!isActive;
+  });
+}
+
 // --- Bottom navigation wiring (list pages only) ---
 function initBottomNav() {
   const nav = document.querySelector('.bottom-nav');
   if (!nav) return;
-  const visibleTopLevelTabs = new Set(getTopLevelPageOrder());
-  const topLevelTabLabels = {
-    recipes: 'Recipes',
-    shopping: 'Items',
-    'shopping-list': 'List',
-  };
 
   // Hidden-by-default sheet model: rely on CSS class.
   nav.classList.add('bottom-nav--hidden');
 
   const pillRow = nav.querySelector('.bottom-nav-pill-row');
-  if (
-    pillRow instanceof HTMLElement &&
-    !pillRow.querySelector('.bottom-nav-pill[data-tab="shopping-list"]')
-  ) {
-    const shoppingListPill = document.createElement('button');
-    shoppingListPill.type = 'button';
-    shoppingListPill.className = 'bottom-nav-pill';
-    shoppingListPill.dataset.tab = 'shopping-list';
-    shoppingListPill.textContent = 'Shopping List';
-    const shoppingPill = pillRow.querySelector(
-      '.bottom-nav-pill[data-tab="shopping"]',
-    );
-    if (shoppingPill?.nextSibling) {
-      pillRow.insertBefore(shoppingListPill, shoppingPill.nextSibling);
-    } else {
-      pillRow.appendChild(shoppingListPill);
-    }
+  if (pillRow instanceof HTMLElement) {
+    syncBottomNavPills(pillRow);
   }
 
-  if (pillRow instanceof HTMLElement) {
-    Array.from(pillRow.querySelectorAll('.bottom-nav-pill')).forEach((pill) => {
-      const tab = String(pill.dataset.tab || '').trim();
-      if (!visibleTopLevelTabs.has(tab)) {
-        pill.remove();
-        return;
-      }
-      const nextLabel = topLevelTabLabels[tab];
-      if (nextLabel) pill.textContent = nextLabel;
-    });
+  if (
+    isHiddenForceWebModeToggleAllowed() &&
+    pillRow instanceof HTMLElement &&
+    !nav.querySelector('.bottom-nav-editor-section')
+  ) {
+    const editorSection = document.createElement('div');
+    editorSection.className = 'bottom-nav-editor-section';
+    const editorLabel = document.createElement('label');
+    editorLabel.className = 'bottom-nav-editor-toggle';
+    const editorTitle = document.createElement('span');
+    editorTitle.textContent = 'Planner';
+    const switchTrack = document.createElement('span');
+    switchTrack.className = 'bottom-nav-editor-switch-track';
+    const editorToggle = document.createElement('input');
+    editorToggle.type = 'checkbox';
+    editorToggle.id = 'bottomNavEditorToggle';
+    editorToggle.className = 'bottom-nav-editor-switch-input';
+    editorToggle.setAttribute('aria-label', 'Planner');
+    const switchKnob = document.createElement('span');
+    switchKnob.className = 'bottom-nav-editor-switch-knob';
+    switchTrack.appendChild(editorToggle);
+    switchTrack.appendChild(switchKnob);
+    editorLabel.appendChild(editorTitle);
+    editorLabel.appendChild(switchTrack);
+    const editorSeparator = document.createElement('div');
+    editorSeparator.className = 'bottom-nav-editor-separator';
+    editorSeparator.setAttribute('role', 'presentation');
+    editorSection.appendChild(editorLabel);
+    editorSection.appendChild(editorSeparator);
+    nav.insertBefore(editorSection, pillRow);
   }
 
   const pills = Array.from(nav.querySelectorAll('.bottom-nav-pill'));
@@ -19676,26 +19722,30 @@ function initBottomNav() {
     activeTab = 'tags';
   }
 
+  const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
+  if (bottomNavEditorToggle && pillRow instanceof HTMLElement) {
+    bottomNavEditorToggle.checked = isForceWebModeEnabled();
+    bottomNavEditorToggle.addEventListener('change', () => {
+      setForceWebModeEnabled(!!bottomNavEditorToggle.checked);
+      syncBottomNavPills(pillRow);
+      applyBottomNavActiveState(pillRow, activeTab);
+      const nextPages = getTopLevelPageOrder();
+      const currentPage = String(activeTab || detectPageIdFromBody() || '')
+        .trim()
+        .toLowerCase();
+      if (!nextPages.includes(currentPage)) {
+        const targetPage = nextPages.includes('recipes')
+          ? 'recipes'
+          : nextPages[0] || 'recipes';
+        window.location.href = getTopLevelPageHref(targetPage);
+      }
+    });
+  }
+
   // Shared toggle handler for menu icon + app-bar title.
 
   const menuButton = document.getElementById('appBarMenuBtn');
   const titleToggle = document.getElementById('appBarTitle');
-  let menuClickCount = 0;
-  let menuClickResetTimer = null;
-  const MENU_TRIPLE_CLICK_WINDOW_MS = 500;
-
-  const toggleForceWebModeFromMenu = () => {
-    const next = !isForceWebModeEnabled();
-    setForceWebModeEnabled(next);
-    const nextPages = getTopLevelPageOrder();
-    const currentPage = String(activeTab || detectPageIdFromBody() || '')
-      .trim()
-      .toLowerCase();
-    const targetPage = nextPages.includes(currentPage)
-      ? currentPage
-      : 'recipes';
-    window.location.href = getTopLevelPageHref(targetPage);
-  };
 
   const isNavOpen = () => !nav.classList.contains('bottom-nav--hidden');
 
@@ -19718,27 +19768,6 @@ function initBottomNav() {
   // Menu icon toggles bottom nav visibility on list pages.
   if (menuButton) {
     menuButton.addEventListener('click', () => {
-      if (isHiddenForceWebModeToggleAllowed()) {
-        menuClickCount += 1;
-        if (menuClickResetTimer) {
-          window.clearTimeout(menuClickResetTimer);
-        }
-        menuClickResetTimer = window.setTimeout(() => {
-          menuClickCount = 0;
-          menuClickResetTimer = null;
-        }, MENU_TRIPLE_CLICK_WINDOW_MS);
-
-        if (menuClickCount >= 3) {
-          menuClickCount = 0;
-          if (menuClickResetTimer) {
-            window.clearTimeout(menuClickResetTimer);
-            menuClickResetTimer = null;
-          }
-          toggleForceWebModeFromMenu();
-          return;
-        }
-      }
-
       toggleNavVisibility();
     });
   }
@@ -19768,20 +19797,19 @@ function initBottomNav() {
     closeNav();
   });
 
-  pills.forEach((pill) => {
-    const tab = pill.dataset.tab;
-    if (!tab) return;
-
-    if (tab === activeTab) {
-      pill.classList.add('bottom-nav-pill--active');
-      pill.disabled = true;
-    }
-
-    pill.addEventListener('click', () => {
-      if (tab === activeTab) return;
+  if (pillRow instanceof HTMLElement) {
+    applyBottomNavActiveState(pillRow, activeTab);
+    pillRow.addEventListener('click', (event) => {
+      const pill =
+        event.target &&
+        typeof event.target.closest === 'function' &&
+        event.target.closest('.bottom-nav-pill');
+      if (!pill || !pillRow.contains(pill)) return;
+      const tab = pill.dataset.tab;
+      if (!tab || tab === activeTab) return;
       window.location.href = getTopLevelPageHref(tab);
     });
-  });
+  }
 }
 
 function getIngredientTableColumnSet(db) {
