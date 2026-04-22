@@ -874,15 +874,7 @@ body.recipes-page #recipeList .shopping-list-row-label {
 body.recipes-page
   #recipeList
   li[data-recipe-row-stepper-key]
-  .shopping-list-row-label {
-  cursor: default;
-}
-
-body.recipes-page
-  #recipeList
-  li[data-recipe-row-stepper-key]
   .recipe-list-title-hit {
-  cursor: pointer;
   display: inline-block;
   max-width: 100%;
   min-width: 0;

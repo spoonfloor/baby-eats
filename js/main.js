@@ -4926,7 +4926,9 @@ async function loadRecipesPage() {
       plusBtn.disabled =
         !bounds || displayServings == null || !bounds.canAdjust || atOrAboveMax;
 
-      titleHit.addEventListener('click', (event) => {
+      // Row-level hit target: open recipe from padding, label, gaps — not the servings column.
+      li.addEventListener('click', (event) => {
+        if (slot.contains(event.target)) return;
         // Treat Ctrl-click / Cmd-click as "delete"
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
