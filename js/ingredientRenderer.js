@@ -1442,6 +1442,15 @@ function openIngredientEditRow({
     } catch (_) {}
   };
 
+  const parseQtyMirrorNumber = (raw) => {
+    const t = String(raw || '').trim();
+    if (!t) return null;
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(t)) return null;
+    const n = Number(t);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  };
+
   const maybeMirrorQuantityFields = (source) => {
     if (qtyMirrorState.locked || !qtyMinInput || !qtyMaxInput) return;
 
@@ -1451,6 +1460,20 @@ function openIngredientEditRow({
     if (source === 'min') {
       // Keep syncing into untouched sibling field (don't stop on intermediate values like ".").
       if (!qtyMirrorState.maxTouched && maxVal !== minVal) {
+        if (minVal === '') {
+          setQtyFieldValue(qtyMaxInput, '');
+          return;
+        }
+        const minNum = parseQtyMirrorNumber(minVal);
+        // Partial min (e.g. "0", "0." while typing "0.5") must not overwrite max,
+        // or a mirrored ceiling like "1" is lost before min becomes valid.
+        if (minNum == null) {
+          return;
+        }
+        const maxNum = parseQtyMirrorNumber(maxVal);
+        if (maxNum != null && maxNum >= minNum) {
+          return;
+        }
         setQtyFieldValue(qtyMaxInput, minVal);
       }
       return;
