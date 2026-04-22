@@ -1,24 +1,61 @@
-function setWelcomeStatus(message = '', { isError = false } = {}) {
-  const statusEl = document.getElementById('welcomeStatus');
-  if (!(statusEl instanceof HTMLElement)) return;
-  const text = String(message || '').trim();
-  statusEl.hidden = !text;
-  statusEl.textContent = text;
-  statusEl.style.color = isError ? '#b91c1c' : '';
+function ensureWelcomeToastHost() {
+  let host = document.getElementById('typeaheadToastHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'typeaheadToastHost';
+    document.body.appendChild(host);
+  }
+  if (!host.classList.contains('ui-toast-host')) host.classList.add('ui-toast-host');
+  if (!host.classList.contains('typeahead-toast-host'))
+    host.classList.add('typeahead-toast-host');
+  return host;
 }
 
-function setWelcomeLoadingState(button, isLoading) {
-  if (!(button instanceof HTMLButtonElement)) return;
-  button.disabled = !!isLoading;
-  button.textContent = isLoading ? 'Opening…' : 'Load Recipes';
+function welcomeToast({
+  message = '',
+  timeoutMs = 5000,
+  singleSlot = true,
+} = {}) {
+  try {
+    const host = ensureWelcomeToastHost();
+    if (singleSlot) {
+      try {
+        while (host.firstChild) host.removeChild(host.firstChild);
+      } catch (_) {}
+    }
+
+    const el = document.createElement('div');
+    el.className = 'ui-toast typeahead-toast';
+
+    const msg = document.createElement('div');
+    msg.className = 'ui-toast__msg typeahead-toast__msg';
+    msg.textContent = message || '';
+    el.appendChild(msg);
+
+    host.appendChild(el);
+
+    const t = window.setTimeout(() => {
+      try {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      } catch (_) {}
+    }, Math.max(1000, Number(timeoutMs) || 5000));
+
+    el.addEventListener('mouseenter', () => {
+      try {
+        window.clearTimeout(t);
+      } catch (_) {}
+    });
+
+    return el;
+  } catch (_) {
+    return null;
+  }
 }
 
-async function handleElectronWelcomeLoad(button) {
+async function handleElectronWelcomeLoad() {
   const lastPath = localStorage.getItem('favoriteEatsDbPath');
   const dbPath = await window.electronAPI.pickDB(lastPath);
   if (!dbPath) {
-    setWelcomeStatus('');
-    setWelcomeLoadingState(button, false);
     return;
   }
 
@@ -27,16 +64,11 @@ async function handleElectronWelcomeLoad(button) {
   window.location.href = 'recipes.html';
 }
 
-function handleBrowserWelcomeLoad() {
-  setWelcomeStatus(
-    'This welcome screen is for the desktop app. Open recipes directly in the web build.',
-    { isError: true },
-  );
-}
-
 function initWelcomePage() {
   const loadDbBtn = document.getElementById('loadDbBtn');
   if (!(loadDbBtn instanceof HTMLButtonElement)) return;
+
+  let electronBusy = false;
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -45,21 +77,21 @@ function initWelcomePage() {
   });
 
   loadDbBtn.addEventListener('click', async () => {
-    if (loadDbBtn.disabled) return;
-    setWelcomeStatus('');
-    setWelcomeLoadingState(loadDbBtn, true);
-
     try {
       if (window.electronAPI && typeof window.electronAPI.pickDB === 'function') {
-        await handleElectronWelcomeLoad(loadDbBtn);
+        if (electronBusy) return;
+        electronBusy = true;
+        await handleElectronWelcomeLoad();
         return;
       }
-      handleBrowserWelcomeLoad();
     } catch (err) {
       console.error('Failed to load database:', err);
-      setWelcomeStatus('Failed to load database.', { isError: true });
+      welcomeToast({
+        message: 'Failed to load database.',
+        timeoutMs: 8000,
+      });
     } finally {
-      setWelcomeLoadingState(loadDbBtn, false);
+      electronBusy = false;
     }
   });
 }
