@@ -4378,6 +4378,10 @@ body.ingredient-master-link-mode
     flex: 1 1 auto;
   }
 
+  .app-bar-wrapper.app-bar-search-expanded .actions .app-bar-search-toggle {
+    display: none;
+  }
+
   .app-bar-wrapper.app-bar-search-expanded #appBarTitle {
     display: none;
   }

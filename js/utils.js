@@ -300,13 +300,32 @@ function waitForAppBarReady({ timeoutMs = 2000 } = {}) {
   });
 }
 
+function isCurrentAppBarShellMarkup(source) {
+  const requiredIds = ['appBarTitle', 'appBarSearchLayer', 'appBarSearchToggleBtn'];
+  if (typeof source === 'string') {
+    return requiredIds.every((id) => source.includes(`id="${id}"`));
+  }
+  if (source instanceof Document || source instanceof Element) {
+    return requiredIds.every((id) => source.querySelector(`#${id}`));
+  }
+  return false;
+}
+
 function ensureAppBarInjected() {
   const already = document.getElementById('appBarTitle');
-
-  if (already) return Promise.resolve(false);
-
   const mount = document.getElementById('appBarMount');
+
+  if (already && isCurrentAppBarShellMarkup(document)) return Promise.resolve(false);
+
   if (!mount) return Promise.resolve(false);
+
+  if (already) {
+    mount.innerHTML = '';
+    if (mount.dataset) {
+      mount.dataset.injected = '0';
+      mount.dataset.injecting = '0';
+    }
+  }
 
   // Fast path: session cache (avoids flash on navigation after first load).
   try {
@@ -314,13 +333,15 @@ function ensureAppBarInjected() {
       typeof sessionStorage !== 'undefined'
         ? sessionStorage.getItem('favoriteEats_appBarShell')
         : null;
-    if (cached && cached.length > 0) {
+    if (cached && cached.length > 0 && isCurrentAppBarShellMarkup(cached)) {
       mount.innerHTML = cached;
       if (mount.dataset) {
         mount.dataset.injected = '1';
         mount.dataset.injecting = '0';
       }
       return waitForAppBarReady();
+    } else if (cached && typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('favoriteEats_appBarShell');
     }
   } catch (_) {
     // ignore cache failures
@@ -3012,10 +3033,16 @@ function mountTopFilterChipRail(opts = {}) {
   const sync = () => {
     if (!document.body.contains(anchorEl) || !document.body.contains(dock)) return;
     const rect = anchorEl.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return;
     const appBarBottom = document
       .querySelector('.app-bar-wrapper')
       ?.getBoundingClientRect?.().bottom;
+    if (!rect || rect.width <= 0) {
+      if (Number.isFinite(appBarBottom) && appBarBottom > 0) {
+        dock.style.top = `${Math.round(appBarBottom + gapFromAppBarPx)}px`;
+        syncRailStackHeightVar();
+      }
+      return;
+    }
     const safeTop = Number.isFinite(appBarBottom)
       ? Math.max(rect.bottom + gapFromAnchorPx, appBarBottom + gapFromAppBarPx)
       : rect.bottom + gapFromAnchorPx;

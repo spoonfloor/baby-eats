@@ -365,7 +365,8 @@ function wireAppBarSearch(searchInput, options = {}) {
   const syncClearBtn = () => {
     if (!(clearBtn instanceof HTMLElement)) return;
     const compactExpanded = isCompactExpanded();
-    clearBtn.style.display = searchInput.value || compactExpanded ? 'inline' : 'none';
+    clearBtn.style.display =
+      searchInput.value || compactExpanded ? 'inline' : 'none';
     clearBtn.setAttribute(
       'aria-label',
       searchInput.value ? 'Clear search' : 'Close search',
@@ -473,35 +474,35 @@ function wireAppBarSearch(searchInput, options = {}) {
 const TOP_LEVEL_EMPTY_STATE_MESSAGES = Object.freeze({
   recipes: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   shoppingItems: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   shoppingList: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   searchNoMatch: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   units: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   tags: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   sizes: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
   stores: Object.freeze({
     diagnosis: 'Utter emptiness…',
-    cta: 'Complete bliss…',
+    cta: 'Total bliss…',
   }),
 });
 
@@ -4348,7 +4349,7 @@ async function loadRecipesPage() {
   const recipeFilterChipRail =
     typeof window.mountTopFilterChipRail === 'function' && searchInput
       ? window.mountTopFilterChipRail({
-          anchorEl: searchInput,
+          anchorEl: document.querySelector('.app-bar-wrapper') || searchInput,
           dockId: 'recipeFilterChipDock',
         })
       : null;
@@ -6823,7 +6824,7 @@ async function loadShoppingPage() {
     if (!searchInput) return;
     if (typeof window.mountTopFilterChipRail !== 'function') return;
     filterChipRail = window.mountTopFilterChipRail({
-      anchorEl: searchInput,
+      anchorEl: document.querySelector('.app-bar-wrapper') || searchInput,
       dockId: 'shoppingFilterChipDock',
     });
 
@@ -9652,7 +9653,7 @@ async function loadShoppingListPage() {
     if (!(searchInput instanceof HTMLInputElement)) return;
     if (typeof window.mountTopFilterChipRail !== 'function') return;
     shoppingListFilterChipRail = window.mountTopFilterChipRail({
-      anchorEl: searchInput,
+      anchorEl: document.querySelector('.app-bar-wrapper') || searchInput,
       dockId: 'shoppingListFilterChipDock',
     });
     rerenderShoppingListFilterChips();
@@ -14551,7 +14552,7 @@ async function loadUnitsPage() {
     if (!searchInput) return;
     if (typeof window.mountTopFilterChipRail !== 'function') return;
     unitFilterChipRail = window.mountTopFilterChipRail({
-      anchorEl: searchInput,
+      anchorEl: document.querySelector('.app-bar-wrapper') || searchInput,
       dockId: 'unitFilterChipDock',
     });
     recomputeUnitChipCounts();
@@ -15667,7 +15668,7 @@ async function loadSizesPage() {
     if (!searchInput) return;
     if (typeof window.mountTopFilterChipRail !== 'function') return;
     sizeFilterChipRail = window.mountTopFilterChipRail({
-      anchorEl: searchInput,
+      anchorEl: document.querySelector('.app-bar-wrapper') || searchInput,
       dockId: 'sizeFilterChipDock',
     });
     recomputeSizeChipCounts();
@@ -16513,7 +16514,8 @@ async function loadStoresPage() {
   const measureActiveStoreDragThreshold = () => {
     if (!activeStoreDrag) return 0;
     const rowEl = getStoreRowElementById(activeStoreDrag.storeId);
-    if (!(rowEl instanceof HTMLElement)) return activeStoreDrag.thresholdPx || 0;
+    if (!(rowEl instanceof HTMLElement))
+      return activeStoreDrag.thresholdPx || 0;
     const rect = rowEl.getBoundingClientRect();
     const nextThreshold = Math.max(rect.height * 0.5, 24);
     activeStoreDrag.thresholdPx = nextThreshold;
@@ -16538,7 +16540,11 @@ async function loadStoresPage() {
       activeStoreDrag.onPointerMove,
       true,
     );
-    document.removeEventListener('pointerup', activeStoreDrag.onPointerUp, true);
+    document.removeEventListener(
+      'pointerup',
+      activeStoreDrag.onPointerUp,
+      true,
+    );
     document.removeEventListener(
       'pointercancel',
       activeStoreDrag.onPointerCancel,
@@ -16578,7 +16584,8 @@ async function loadStoresPage() {
   };
 
   const onStoreDragPointerMove = (event) => {
-    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId)
+      return;
     if (!isStoreReorderDragEnabled()) {
       finishActiveStoreDrag({ suppressClick: activeStoreDrag.didSwap });
       return;
@@ -16598,13 +16605,15 @@ async function loadStoresPage() {
   };
 
   const onStoreDragPointerUp = (event) => {
-    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId)
+      return;
     event.preventDefault();
     finishActiveStoreDrag({ suppressClick: true });
   };
 
   const onStoreDragPointerCancel = (event) => {
-    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId) return;
+    if (!activeStoreDrag || event.pointerId !== activeStoreDrag.pointerId)
+      return;
     finishActiveStoreDrag({ suppressClick: activeStoreDrag.didSwap });
   };
 
