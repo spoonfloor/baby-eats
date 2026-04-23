@@ -2299,6 +2299,40 @@ body.store-editor-page .store-aisle-items-field {
   padding-right: 20px;
 }
 
+/* App bar search active: show match lines only (not the full scrollable list). */
+body.store-editor-page.store-editor-search-active
+  .store-aisle-items-field--search-active
+  .shopping-item-textarea {
+  display: none !important;
+}
+
+body.store-editor-page.store-editor-search-active
+  .store-aisle-items-field--search-active
+  .store-variant-picker {
+  display: none !important;
+}
+
+/* Filtered lines: same visual + typography as aisle item textarea */
+body.store-editor-page .store-aisle-search-results {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background-color: hsl(0, 0%, 98%);
+  color: var(--field-fg);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.store-editor-page .store-aisle-search-line {
+  font-family: var(--main-font);
+  font-size: var(--ingredient-editor-control-font-size);
+  line-height: 1.45;
+  color: var(--field-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 body.store-editor-page .store-variant-picker {
   margin-top: 8px;
 }

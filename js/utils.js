@@ -519,7 +519,6 @@ function initAppBar(options = {}) {
     mode = 'list',
     titleText = '',
 
-    showSearch = true,
     showAdd = true,
     showCancel = true,
     showSave = true,
@@ -534,6 +533,10 @@ function initAppBar(options = {}) {
 
     _skipEnsure = false,
   } = options;
+
+  // List: search on by default. Editor: off unless `showSearch` is passed (e.g. store editor).
+  const showSearch =
+    options.showSearch !== undefined ? options.showSearch : mode === 'list';
 
   // If a page uses the mount-based fragment, inject it before wiring.
   // IMPORTANT: do not continue wiring until the fragment exists.
@@ -625,8 +628,8 @@ function initAppBar(options = {}) {
   } else {
     if (menuBtn) menuBtn.style.display = 'none';
     if (backBtn) backBtn.style.display = '';
-    if (searchLayer) searchLayer.style.display = 'none';
-    if (searchToggleBtn) searchToggleBtn.style.display = 'none';
+    if (searchLayer) searchLayer.style.display = showSearch ? '' : 'none';
+    if (searchToggleBtn) searchToggleBtn.style.display = showSearch ? '' : 'none';
 
     if (addBtn) addBtn.style.display = 'none';
     if (cancelBtn) {
@@ -644,7 +647,7 @@ function initAppBar(options = {}) {
 
   // Search layout is handled by CSS (flex middle column) to avoid collisions.
   setCompactWebAppBarSearchExpanded(
-    mode === 'list' && showSearch && isCompactWebAppBarSearchExpanded(),
+    showSearch && isCompactWebAppBarSearchExpanded(),
   );
 }
 
