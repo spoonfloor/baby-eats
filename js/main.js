@@ -17928,6 +17928,8 @@ function loadStoreEditorPage() {
     };
 
     let storeEditorSearchQuery = '';
+    /** @type {HTMLInputElement | null} */
+    let storeEditorSearchInput = null;
     const normalizeStoreEditorSearchQuery = (value) =>
       String(value || '')
         .trim()
@@ -18019,6 +18021,75 @@ function loadStoreEditorPage() {
           'aria-hidden',
           resultsEl.hidden ? 'true' : 'false',
         );
+      });
+    };
+
+    const endStoreEditorSearchPreservingScroll = (anchorEl) => {
+      if (!normalizeStoreEditorSearchQuery(storeEditorSearchQuery)) return;
+      const anchor = anchorEl instanceof HTMLElement ? anchorEl : null;
+      const anchorTop =
+        anchor && anchor.isConnected
+          ? anchor.getBoundingClientRect().top
+          : null;
+      const se =
+        document.scrollingElement ||
+        document.documentElement ||
+        document.body;
+      const fallbackX = se ? se.scrollLeft : 0;
+      const fallbackY = se ? se.scrollTop : 0;
+
+      if (storeEditorSearchInput) {
+        storeEditorSearchInput.value = '';
+        storeEditorSearchInput.dispatchEvent(
+          new Event('input', { bubbles: true }),
+        );
+      } else {
+        applyStoreEditorSearch('');
+      }
+
+      // Raw scrollY restore is wrong when search ends: previously hidden aisles
+      // reappear *above* the current row and the layout reflows. Keep the
+      // clicked/focused aisle at the same viewport Y by nudging `scrollBy` after
+      // reflow, and re-run a few times to also beat the browser’s focus
+      // scroll-into-view for the textarea.
+      const nudgeAisleToSavedViewportY = () => {
+        if (anchor == null || anchorTop == null || !anchor.isConnected) {
+          return;
+        }
+        const newTop = anchor.getBoundingClientRect().top;
+        const delta = newTop - anchorTop;
+        if (Math.abs(delta) < 0.5) return;
+        try {
+          window.scrollBy(0, delta);
+        } catch (_) {}
+      };
+
+      const nudgeOrFallback = () => {
+        if (anchor && anchorTop != null && anchor.isConnected) {
+          nudgeAisleToSavedViewportY();
+        } else {
+          try {
+            if (se) {
+              se.scrollLeft = fallbackX;
+              se.scrollTop = fallbackY;
+            }
+            window.scrollTo(fallbackX, fallbackY);
+          } catch (_) {}
+        }
+      };
+
+      try {
+        if (anchor) void anchor.offsetHeight;
+      } catch (_) {}
+      requestAnimationFrame(() => {
+        nudgeOrFallback();
+        requestAnimationFrame(() => {
+          nudgeOrFallback();
+          setTimeout(() => {
+            nudgeOrFallback();
+            setTimeout(nudgeOrFallback, 16);
+          }, 0);
+        });
       });
     };
 
@@ -18564,6 +18635,18 @@ function loadStoreEditorPage() {
           void attemptDeleteAisle();
         });
 
+        card.addEventListener(
+          'pointerdown',
+          (e) => {
+            if (e.button !== 0) return;
+            if (e.ctrlKey || e.metaKey) return;
+            if (e.target.closest('.store-aisle-move-controls')) return;
+            if (!normalizeStoreEditorSearchQuery(storeEditorSearchQuery)) return;
+            endStoreEditorSearchPreservingScroll(card);
+          },
+          true,
+        );
+
         const moveControls = document.createElement('div');
         moveControls.className = 'store-aisle-move-controls';
         moveControls.setAttribute('aria-label', 'Reorder aisle');
@@ -18876,6 +18959,10 @@ function loadStoreEditorPage() {
         let escBaselineText = ta.value;
 
         ta.addEventListener('focus', () => {
+          if (normalizeStoreEditorSearchQuery(storeEditorSearchQuery)) {
+            const anchorCard = ta.closest('.store-aisle-card');
+            endStoreEditorSearchPreservingScroll(anchorCard);
+          }
           closeActiveVariantPicker({ commit: true });
           const nextSpecs = parseSpecsFromRaw(
             ta.value,
@@ -18906,7 +18993,7 @@ function loadStoreEditorPage() {
           if (
             e &&
             e.altKey &&
-            card.classList.contains(STORE_AISLE_HINT_ACTIVE_CLASS)
+            slot.classList.contains(STORE_AISLE_HINT_ACTIVE_CLASS)
           ) {
             const lineText = getTextareaLineTextAtCaret(ta);
             const baseName = extractMasterNameFromAisleLine(lineText);
@@ -19510,8 +19597,7 @@ function loadStoreEditorPage() {
 
     await waitForAppBarReady();
     if (hasPersistedStore) {
-      const storeEditorSearchInput =
-        document.getElementById('appBarSearchInput');
+      storeEditorSearchInput = document.getElementById('appBarSearchInput');
       const storeEditorSearchClearBtn =
         document.getElementById('appBarSearchClear');
       wireAppBarSearch(storeEditorSearchInput, {
