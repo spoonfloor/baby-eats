@@ -840,6 +840,9 @@ body.recipes-page #recipeList .recipe-list-servings-header {
   color: rgba(0, 0, 0, 0.42);
   cursor: default;
   pointer-events: none;
+  /* `.list-page li` + force-web row rules use overflow:hidden; allow SERVINGS/SVGS to extend */
+  overflow: visible;
+  text-overflow: clip;
 }
 
 body.recipes-page #recipeList .shopping-list-row-label {
@@ -890,7 +893,16 @@ body.recipes-page #recipeList .recipe-list-servings-header-label {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: right;
-  transform: translateX(2px);
+  transform: translateX(20px);
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+/* Below 620px: short label + tighter nudge (see `RECIPE_LIST_SERVINGS_HEADER_WIDE_MIN_PX` in main.js). */
+@media (max-width: 619px) {
+  body.recipes-page #recipeList .recipe-list-servings-header-label {
+    transform: translateX(2px);
+  }
 }
 
 /* Editor mode: servings stepper column is off; hide slot so titles use full width */

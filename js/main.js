@@ -190,6 +190,47 @@ function isForceWebModeEnabled() {
   }
 }
 
+/** Wide recipe-list servings header from this width; keep in sync with `css/styles.css`. */
+const RECIPE_LIST_SERVINGS_HEADER_WIDE_MIN_PX = 620;
+
+/** @type {MediaQueryList | null} */
+let recipeListServingsHeaderCompactMq = null;
+
+function recipeListServingsHeaderCompactMqList() {
+  if (recipeListServingsHeaderCompactMq) return recipeListServingsHeaderCompactMq;
+  if (typeof window.matchMedia !== 'function') return null;
+  recipeListServingsHeaderCompactMq = window.matchMedia(
+    `(max-width: ${RECIPE_LIST_SERVINGS_HEADER_WIDE_MIN_PX - 1}px)`,
+  );
+  return recipeListServingsHeaderCompactMq;
+}
+
+function syncRecipeListServingsHeaderLabelText(headerLabel) {
+  if (!headerLabel) return;
+  const mq = recipeListServingsHeaderCompactMqList();
+  const compact = mq ? mq.matches : false;
+  headerLabel.textContent = compact ? 'svgs' : 'servings';
+}
+
+let recipeListServingsHeaderLabelMqBound = false;
+
+function ensureRecipeListServingsHeaderLabelMediaListener() {
+  const mq = recipeListServingsHeaderCompactMqList();
+  if (!mq || recipeListServingsHeaderLabelMqBound) return;
+  recipeListServingsHeaderLabelMqBound = true;
+  const onChange = () => {
+    const label = document.querySelector(
+      'body.recipes-page #recipeList .recipe-list-servings-header-label',
+    );
+    syncRecipeListServingsHeaderLabelText(label);
+  };
+  try {
+    mq.addEventListener('change', onChange);
+  } catch (_) {
+    mq.addListener(onChange);
+  }
+}
+
 function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
   const body = document.body;
   if (!(body instanceof HTMLElement)) return !!enabled;
@@ -4411,6 +4452,7 @@ async function loadRecipesPage() {
 
   const list = document.getElementById('recipeList');
   if (!list) return;
+  ensureRecipeListServingsHeaderLabelMediaListener();
   ensureRecipeTagsSchemaInMain(db);
   ensureIngredientVariantTagsSchemaInMain(db);
   list.innerHTML = '';
@@ -4798,7 +4840,7 @@ async function loadRecipesPage() {
       headerSlot.className = 'recipe-list-servings-slot';
       const headerLabel = document.createElement('span');
       headerLabel.className = 'recipe-list-servings-header-label';
-      headerLabel.textContent = 'svgs';
+      syncRecipeListServingsHeaderLabelText(headerLabel);
       headerSlot.appendChild(headerLabel);
       headerLi.appendChild(headerSpacer);
       headerLi.appendChild(headerSlot);
