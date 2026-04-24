@@ -589,7 +589,7 @@ function navigateToShoppingListTarget(rawName, resolver) {
       sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetName);
     }
   } catch (_) {}
-  window.location.href = 'shopping.html';
+  window.location.href = 'recipes.html';
 }
 
 function navigateToYwnShoppingTarget(rawName) {
@@ -608,7 +608,7 @@ function navigateToYwnShoppingTarget(rawName) {
       sessionStorage.setItem('selectedShoppingItemName', String(match.name));
       sessionStorage.removeItem('selectedShoppingItemIsNew');
       const goEditor = () => {
-        window.location.href = 'shoppingEditor.html';
+        window.location.href = 'recipes.html';
       };
       if (typeof window.recipeEditorAttemptExit === 'function') {
         void window.recipeEditorAttemptExit({
@@ -625,7 +625,7 @@ function navigateToYwnShoppingTarget(rawName) {
   } catch (_) {}
 
   const fallback = () => {
-    window.location.href = 'shopping.html';
+    window.location.href = 'recipes.html';
   };
   if (typeof window.recipeEditorAttemptExit === 'function') {
     void window.recipeEditorAttemptExit({
@@ -649,7 +649,7 @@ function isYwnMasterLinkActive(linkEl, e) {
 
 function buildYwnMasterLink(label, ingredient) {
   const link = document.createElement('a');
-  link.href = 'shopping.html';
+  link.href = 'recipes.html';
   link.className = isRecipeWebModeActive()
     ? 'ingredient-shopping-link ywn-shopping-link'
     : 'ingredient-master-link ywn-master-link';
@@ -1040,13 +1040,13 @@ function rerenderIngredientsSectionFromModel() {
 
   const manageBtn = document.createElement('a');
   manageBtn.className = 'ingredients-manage-btn';
-  manageBtn.href = 'shopping.html';
+  manageBtn.href = 'recipes.html';
   manageBtn.textContent = 'Manage';
   manageBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const goShopping = () => {
-      window.location.href = 'shopping.html';
+      window.location.href = 'recipes.html';
     };
     if (typeof window.recipeEditorAttemptExit === 'function') {
       void window.recipeEditorAttemptExit({

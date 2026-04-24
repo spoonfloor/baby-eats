@@ -687,7 +687,7 @@ function navigateToShoppingItemEditor(selection) {
     sessionStorage.setItem('selectedShoppingItemId', String(normalizedId));
     sessionStorage.setItem('selectedShoppingItemName', normalizedName);
     sessionStorage.removeItem('selectedShoppingItemIsNew');
-    window.location.href = 'shoppingEditor.html';
+    window.location.href = 'recipes.html';
   };
 
   if (typeof window.recipeEditorAttemptExit === 'function') {
@@ -740,7 +740,7 @@ function navigateToShoppingListTarget(rawName) {
       sessionStorage.removeItem(window.favoriteEatsSessionKeys.shoppingNavTargetName);
     }
   } catch (_) {}
-  window.location.href = 'shopping.html';
+  window.location.href = 'recipes.html';
 }
 
 function isIngredientMasterLinkActive(linkEl, e) {
@@ -754,7 +754,7 @@ function isIngredientMasterLinkActive(linkEl, e) {
 function buildIngredientMasterLink(label, line) {
   const link = document.createElement('a');
   const webMode = isIngredientRecipeWebModeActive();
-  link.href = webMode ? 'shopping.html' : '#';
+  link.href = webMode ? 'recipes.html' : '#';
   link.className = webMode ? 'ingredient-shopping-link' : 'ingredient-master-link';
   link.textContent = label;
   link.tabIndex = webMode ? 0 : -1;
@@ -777,7 +777,7 @@ function buildIngredientMasterLink(label, line) {
     }
 
     const fallback = () => {
-      window.location.href = 'shopping.html';
+      window.location.href = 'recipes.html';
     };
     if (typeof window.recipeEditorAttemptExit === 'function') {
       void window.recipeEditorAttemptExit({
