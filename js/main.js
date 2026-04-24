@@ -1389,6 +1389,16 @@ function getShoppingBrowseVariantHomeRows(item) {
     byKey.set(rowKey, nextRow);
     out.push(nextRow);
   });
+  const baseHomeFallback = normalizeShoppingBrowseLocationId(
+    item?.locationAtHome,
+  );
+  if (baseHomeFallback !== 'none') {
+    out.forEach((row) => {
+      if (row.homeLocation === 'none') {
+        row.homeLocation = baseHomeFallback;
+      }
+    });
+  }
   return out;
 }
 
@@ -9176,14 +9186,16 @@ function getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) {
     homeLocationBySourceKey instanceof Map
       ? homeLocationBySourceKey
       : new Map(Object.entries(homeLocationBySourceKey || {}));
-  if (sourceKey && lookup.has(sourceKey)) {
-    return normalizeShoppingHomeLocationId(lookup.get(sourceKey));
-  }
   const baseKey = getShoppingListSourceBaseKey(sourceKey);
-  if (baseKey && lookup.has(baseKey)) {
-    return normalizeShoppingHomeLocationId(lookup.get(baseKey));
+
+  let resolved = 'none';
+  if (sourceKey && lookup.has(sourceKey)) {
+    resolved = normalizeShoppingHomeLocationId(lookup.get(sourceKey));
   }
-  return 'none';
+  if (resolved === 'none' && baseKey && lookup.has(baseKey)) {
+    resolved = normalizeShoppingHomeLocationId(lookup.get(baseKey));
+  }
+  return resolved;
 }
 
 function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
@@ -9373,6 +9385,7 @@ if (typeof window !== 'undefined') {
     formatShoppingListHtml,
     buildShoppingListExportPayload,
     getShoppingListChecklistDisplayRows,
+    getShoppingListHomeLocationIdForRow,
     filterShoppingListChecklistRowsForCollapse,
     normalizeShoppingHomeLocationId,
     getShoppingListSourceBaseKey,
@@ -9490,8 +9503,6 @@ async function loadShoppingListPage() {
   ];
   let shoppingListViewMode = 'stores';
   let shoppingListFilterChipRail = null;
-  let shoppingListHomeLocationCacheKey = '';
-  let shoppingListHomeLocationBySourceKey = new Map();
 
   const toResetComparableRows = (doc) =>
     normalizeShoppingListDoc(doc).rows.map((row, index) => ({
@@ -9733,10 +9744,6 @@ async function loadShoppingListPage() {
           .filter(Boolean),
       ),
     );
-    const signature = sourceKeys.join('|');
-    if (signature === shoppingListHomeLocationCacheKey) {
-      return shoppingListHomeLocationBySourceKey;
-    }
 
     const nextMap = new Map(sourceKeys.map((sourceKey) => [sourceKey, 'none']));
     const baseNameKeys = Array.from(
@@ -9818,12 +9825,20 @@ async function loadShoppingListPage() {
             normalizeShoppingHomeLocationId(locationBySourceKey.get(baseKey)),
           );
         });
+        baseNameKeys.forEach((bk) => {
+          const baseKey = String(bk || '')
+            .trim()
+            .toLowerCase();
+          if (!baseKey || !locationBySourceKey.has(baseKey)) return;
+          nextMap.set(
+            baseKey,
+            normalizeShoppingHomeLocationId(locationBySourceKey.get(baseKey)),
+          );
+        });
       } catch (_) {}
     }
 
-    shoppingListHomeLocationCacheKey = signature;
-    shoppingListHomeLocationBySourceKey = nextMap;
-    return shoppingListHomeLocationBySourceKey;
+    return nextMap;
   };
 
   if (searchInput instanceof HTMLInputElement) {

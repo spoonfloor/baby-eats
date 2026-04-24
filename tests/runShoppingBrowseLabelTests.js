@@ -111,6 +111,27 @@ function run() {
     ['fridge', 'pantry', 'freezer'],
     'browse location ids should include base and variant home locations once each',
   );
+
+  const inheritHomeItem = {
+    name: 'Milk',
+    locationAtHome: 'fridge',
+    variantHomeLocations: [{ variant: 'oat', homeLocation: 'none' }],
+  };
+
+  assertEqual(
+    helpers.formatShoppingBrowseItemLabel('Milk', inheritHomeItem, {
+      searchQuery: 'oa',
+      locationIds: ['fridge'],
+    }),
+    'Milk (oat)',
+    'named variants without their own home location should inherit the base item home for filters',
+  );
+
+  assertJsonEqual(
+    helpers.getShoppingBrowseLocationIds(inheritHomeItem),
+    ['fridge'],
+    'inherited variant homes should not add duplicate location ids',
+  );
 }
 
 run();

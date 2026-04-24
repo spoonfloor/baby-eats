@@ -938,6 +938,56 @@ function run() {
     'home mode search should work against the active home grouping and prune empty sections including completed',
   );
 
+  const variantSourceSep = '\u0000';
+  const variantHomeRows = helpers.getShoppingListChecklistDisplayRows(
+    [
+      {
+        id: 'vh1',
+        text: 'foo (bar)',
+        checked: false,
+        storeLabel: '',
+        bucketLabel: 'Unlisted',
+        sourceKey: `foo${variantSourceSep}bar`,
+        sourceText: 'foo (bar)',
+        order: 0,
+      },
+    ],
+    {
+      mode: 'home',
+      homeLocationBySourceKey: {
+        [`foo${variantSourceSep}bar`]: 'none',
+        foo: 'fridge',
+      },
+    },
+  );
+
+  assertJsonEqual(
+    variantHomeRows.map((row) => ({ rowType: row.rowType, text: row.text })),
+    [
+      { rowType: 'section', text: 'fridge' },
+      { rowType: 'item', text: 'foo (bar)' },
+    ],
+    'variant list lines should inherit the base ingredient home when the variant row has no home location',
+  );
+
+  const sep = '\u0000';
+  assertJsonEqual(
+    helpers.getShoppingListHomeLocationIdForRow(
+      { sourceKey: `bun${sep}brioche` },
+      { [`bun${sep}brioche`]: 'none' },
+    ),
+    'none',
+    'home resolver needs the base key in the lookup map when the variant home is none (production map must merge baseNameKeys)',
+  );
+  assertJsonEqual(
+    helpers.getShoppingListHomeLocationIdForRow(
+      { sourceKey: `bun${sep}brioche` },
+      { [`bun${sep}brioche`]: 'none', bun: 'fridge' },
+    ),
+    'fridge',
+    'variant lines should resolve to the base home once the lookup map includes the base ingredient key',
+  );
+
   const clipboardRows = [
     {
       id: '1',
