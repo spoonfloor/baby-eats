@@ -10295,6 +10295,16 @@ async function loadShoppingListPage() {
         amtInput.setAttribute('aria-label', 'Amount');
         amtInput.value = String(displayDetailForEdit || '');
 
+        const applyShoppingListAmountInputWidth = () => {
+          const len = String(amtInput.value || '').length;
+          const cols = Math.min(32, Math.max(2, len + 1));
+          amtInput.setAttribute('size', String(cols));
+        };
+        applyShoppingListAmountInputWidth();
+        amtInput.addEventListener('input', () => {
+          applyShoppingListAmountInputWidth();
+        });
+
         const amountSkin = document.createElement('span');
         amountSkin.className = 'shopping-list-doc-amount-skin';
         const parenOpen = document.createElement('span');
@@ -10312,7 +10322,18 @@ async function loadShoppingListPage() {
         appendTailExpansionButton(getTail);
         const finishAmountEditing = (mode) => {
           if (editingRowId !== row.id) return;
-          const nextDetail = String(amtInput.value || '').trim();
+          let nextDetail = String(amtInput.value || '').trim();
+          if (mode === 'commit' && !nextDetail) {
+            const fromSource = splitShoppingListRowTextToLabelAndDetail(
+              String(row?.sourceText || '').trim(),
+            ).detail;
+            const canonical = String(
+              planRowDetail || fromSource || '',
+            ).trim();
+            if (canonical) {
+              nextDetail = canonical;
+            }
+          }
           const nextText = joinShoppingListLabelAndDetail(
             resolvedPlanLabel,
             nextDetail,
@@ -10436,7 +10457,6 @@ async function loadShoppingListPage() {
           amountBtn.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            if (toggleContributionExpansion()) return;
             editingRowId = row.id;
             editingRowMode = 'amount';
             renderChecklist();

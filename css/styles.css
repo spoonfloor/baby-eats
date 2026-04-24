@@ -1741,6 +1741,15 @@ body.shopping-list-page
   border-radius: 6px;
 }
 
+body.shopping-list-page
+  #shoppingListOutput
+  button.shopping-list-doc-text--amount,
+body.shopping-list-page
+  #shoppingListOutput
+  button.shopping-list-doc-text--amount-diverged {
+  cursor: pointer;
+}
+
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-text--amount {
   display: inline;
   width: auto;
@@ -1772,6 +1781,7 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-skin {
   align-items: center;
   vertical-align: baseline;
   margin-left: 1px;
+  cursor: pointer;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-paren {
@@ -1780,6 +1790,7 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-paren {
   line-height: 1.45;
   flex-shrink: 0;
   transition: opacity 0.12s ease, width 0.12s ease, margin 0.12s ease;
+  cursor: pointer;
 }
 
 body.shopping-list-page
@@ -1794,33 +1805,38 @@ body.shopping-list-page
   padding: 0;
 }
 
-/* Amount inline edit: mirrors .servings-input; overrides doc-input full-bleed */
+/* Amount inline edit: light tray vs. list row hover (hsl(270,0%,96%)); tight width from `size` in JS */
 body.shopping-list-page
   #shoppingListOutput
   .shopping-list-doc-input--amount {
   width: auto;
-  min-width: 4ch;
   max-width: min(100%, 32ch);
+  min-width: 2.25ch;
+  field-sizing: content;
   height: var(--servings-field-height);
   padding: 4px 8px;
   border-radius: 8px;
-  background-color: var(--field-bg);
+  /* Clear contrast vs .list-page li:hover (≈ #f5f5f5) and vs --field-bg */
+  background-color: #fff;
   color: var(--field-fg);
-  border: 1px solid transparent;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   box-sizing: border-box;
   outline: none;
   line-height: 1.2;
   font: inherit;
   vertical-align: middle;
+  cursor: pointer;
+  box-shadow: none;
 }
 
 body.shopping-list-page
   #shoppingListOutput
   .shopping-list-doc-input--amount:focus {
   outline: none;
-  border-color: transparent;
+  border: 1px solid rgb(from var(--palette-accent) r g b / 0.2);
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
+  box-shadow: none;
 }
 
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
