@@ -825,6 +825,14 @@
       ? `AND COALESCE(hide_from_shopping_list, 0) = 0`
       : ``;
 
+    const varDepClause = tableHasColumn(
+      db,
+      'ingredient_variants',
+      'is_deprecated',
+    )
+      ? ' AND COALESCE(v.is_deprecated, 0) = 0'
+      : '';
+
     const canonicalIds = [];
     const seenCanonicalIds = new Set();
     const pushCanonicalIdsFromExec = (result) => {
@@ -878,6 +886,7 @@
            AND v.variant IS NOT NULL
            AND trim(v.variant) != ''
            AND lower(trim(v.variant)) != 'default'
+           ${varDepClause}
          ORDER BY v.variant COLLATE NOCASE;`,
         canonicalIds
       );
@@ -892,6 +901,7 @@
            AND trim(v.variant) != ''
            AND lower(trim(v.variant)) != 'default'
            ${ingVisibilityClause}
+           ${varDepClause}
          ORDER BY v.variant COLLATE NOCASE;`,
         [nameText]
       );
@@ -1296,13 +1306,31 @@
         openOnFocus: true,
       });
 
+      varInput.addEventListener('focus', (e) => {
+        if (e && e.isTrusted === false) return;
+        varInput.classList.remove('ingredient-edit-input--deprecated-variant-blur');
+      });
+      varInput.addEventListener('input', () => {
+        varInput.classList.remove('ingredient-edit-input--deprecated-variant-blur');
+      });
+
       varInput.addEventListener('blur', async () => {
         if (varInput._typeaheadSuppressNextNormalize) {
           varInput._typeaheadSuppressNextNormalize = false;
           return;
         }
-        if (!INGREDIENT_BLUR_NORMALIZATION_ENABLED) return;
         const n = getScopeName();
+        const raw = norm(varInput.value);
+        if (
+          raw &&
+          typeof window.ingredientScopedVariantIsDeprecated === 'function' &&
+          window.ingredientScopedVariantIsDeprecated(getDb(), n, raw)
+        ) {
+          varInput.classList.add('ingredient-edit-input--deprecated-variant-blur');
+          return;
+        }
+        varInput.classList.remove('ingredient-edit-input--deprecated-variant-blur');
+        if (!INGREDIENT_BLUR_NORMALIZATION_ENABLED) return;
         await maybeNormalizeOnBlur(
           varInput,
           async () => await getVariantPoolForName(n)

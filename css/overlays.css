@@ -133,6 +133,7 @@
 .ui-dialog-title {
   margin: 0 0 10px 0;
   font-size: var(--header-font-size);
+  font-weight: 600;
 }
 
 .ui-dialog-body {
@@ -210,6 +211,13 @@
   gap: 12px;
 }
 
+.shopping-remove-dialog-section-heading {
+  font-weight: 600;
+  font-size: var(--body-font-size);
+  color: var(--font-color-near-black);
+  margin: 0;
+}
+
 .shopping-remove-dialog-links {
   display: flex;
   flex-direction: column;
@@ -279,7 +287,7 @@
 .ui-unknown-items-title {
   margin: 0;
   font-size: var(--header-font-size);
-  font-weight: var(--main-font-weight);
+  font-weight: 600;
 }
 
 .ui-unknown-items-subtitle {
@@ -436,6 +444,7 @@
 .modal-content h2 {
   margin: 0 0 12px 0;
   font-size: var(--header-font-size);
+  font-weight: 600;
 }
 
 .modal-field {

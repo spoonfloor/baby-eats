@@ -19,12 +19,17 @@ function uiToast(message, opts = {}) {
   return null;
 }
 
-function uiAlert(title, message) {
+function uiAlert(title, message, options = {}) {
+  const messageNode =
+    options && options.messageNode instanceof Node
+      ? options.messageNode
+      : null;
   try {
     if (window.ui && typeof window.ui.alert === 'function') {
       return window.ui.alert({
         title: String(title || ''),
         message: String(message || ''),
+        messageNode,
       });
     }
   } catch (_) {}
@@ -2119,6 +2124,9 @@ const SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX =
 const SHOPPING_TAG_FILTER_PREFIX = 'tag:';
 const SHOPPING_SCROLL_RESTORE_SESSION_KEY =
   'favoriteEats:shopping-scroll-restore-y';
+/** One-shot: scroll this aisle card into view after store editor loads. */
+const STORE_EDITOR_FOCUS_AISLE_SESSION_KEY =
+  'favoriteEats:store-editor-focus-aisle-id';
 // --- Shopping plan helpers (tests extract this block) ---
 const SHOPPING_PLAN_STORAGE_KEY = 'favoriteEats:shopping-plan:v1';
 const SHOPPING_PLAN_KEY_SEP = '\x00';
@@ -3059,6 +3067,111 @@ if (typeof window !== 'undefined') {
 }
 // --- End shopping list grouping helpers ---
 
+/**
+ * True when `variantText` matches an ingredient_variants row for `ingredientName`
+ * (direct name or synonym) and that row is soft-deprecated.
+ */
+function ingredientScopedVariantIsDeprecated(db, ingredientName, variantText) {
+  const n = String(ingredientName || '').trim();
+  const v = String(variantText || '').trim();
+  if (!db || typeof db.exec !== 'function' || !n || !v) return false;
+  if (v.toLowerCase() === 'default') return false;
+
+  let hasVariantTable = false;
+  try {
+    const t = db.exec(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_variants';`,
+    );
+    hasVariantTable = !!(t?.length && t[0]?.values?.length);
+  } catch (_) {
+    return false;
+  }
+  if (!hasVariantTable) return false;
+
+  const pragmaHasColumn = (table, col) => {
+    try {
+      const pc = db.exec(`PRAGMA table_info(${table});`);
+      const vals = pc?.[0]?.values || [];
+      const needle = String(col || '').toLowerCase();
+      return vals.some(
+        (row) =>
+          Array.isArray(row) && String(row[1] || '').toLowerCase() === needle,
+      );
+    } catch (_) {
+      return false;
+    }
+  };
+
+  if (!pragmaHasColumn('ingredient_variants', 'is_deprecated')) return false;
+
+  const ingHasDeprecated = pragmaHasColumn('ingredients', 'is_deprecated');
+  const ingHasHide = pragmaHasColumn('ingredients', 'hide_from_shopping_list');
+  const ingVisibilityClause = ingHasDeprecated
+    ? `AND COALESCE(i.is_deprecated, 0) = 0`
+    : ingHasHide
+      ? `AND COALESCE(i.hide_from_shopping_list, 0) = 0`
+      : ``;
+
+  const canonicalIds = [];
+  const seen = new Set();
+  const pushIds = (result) => {
+    const rows = result?.[0]?.values || [];
+    rows.forEach((row) => {
+      const id = Number(Array.isArray(row) ? row[0] : NaN);
+      if (!Number.isFinite(id) || id <= 0 || seen.has(id)) return;
+      seen.add(id);
+      canonicalIds.push(id);
+    });
+  };
+
+  try {
+    pushIds(
+      db.exec(
+        `SELECT i.ID
+           FROM ingredients i
+          WHERE lower(trim(i.name)) = lower(trim(?))
+            ${ingVisibilityClause}
+          ORDER BY i.ID ASC;`,
+        [n],
+      ),
+    );
+    pushIds(
+      db.exec(
+        `SELECT i.ID
+           FROM ingredient_synonyms s
+           JOIN ingredients i ON i.ID = s.ingredient_id
+          WHERE lower(trim(s.synonym)) = lower(trim(?))
+            ${ingVisibilityClause}
+          ORDER BY i.ID ASC;`,
+        [n],
+      ),
+    );
+  } catch (_) {
+    return false;
+  }
+
+  if (!canonicalIds.length) return false;
+  const ph = canonicalIds.map(() => '?').join(',');
+  try {
+    const r = db.exec(
+      `SELECT 1
+         FROM ingredient_variants
+        WHERE ingredient_id IN (${ph})
+          AND lower(trim(variant)) = lower(trim(?))
+          AND COALESCE(is_deprecated, 0) = 1
+        LIMIT 1;`,
+      [...canonicalIds, v],
+    );
+    return !!(r?.length && r[0]?.values?.length);
+  } catch (_) {
+    return false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.ingredientScopedVariantIsDeprecated = ingredientScopedVariantIsDeprecated;
+}
+
 function getShoppingPlanSelectionRows(options = {}) {
   const db = options?.db || window.dbInstance;
   const visibleNameKeys =
@@ -3326,10 +3439,14 @@ function getShoppingPlanSelectionRows(options = {}) {
           }
           return Number(bucket.quantity || 0) > 1e-9;
         });
+      const variantIsDeprecated =
+        !!row.variantName &&
+        ingredientScopedVariantIsDeprecated(db, row.name, row.variantName);
       return {
         key: row.key,
         name: row.name,
         variantName: row.variantName,
+        variantIsDeprecated,
         label: row.label,
         detailText: formatShoppingListDisplayDetailText({
           variantName: row.variantName,
@@ -7473,6 +7590,14 @@ async function loadShoppingPage() {
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'shopping-list-row-label';
+        if (
+          item.variantDeprecatedSet instanceof Set &&
+          item.variantDeprecatedSet.size > 0
+        ) {
+          labelSpan.classList.add(
+            'shopping-list-row-label--variant-deprecated',
+          );
+        }
         labelSpan.textContent = displayName;
 
         const badge = document.createElement('span');
@@ -10452,6 +10577,11 @@ async function loadShoppingListPage() {
         const ingredientLink = document.createElement('a');
         ingredientLink.href = 'shopping.html';
         ingredientLink.className = 'shopping-list-doc-link';
+        if (planRow?.variantIsDeprecated) {
+          ingredientLink.classList.add(
+            'shopping-list-doc-link--variant-deprecated',
+          );
+        }
         ingredientLink.textContent =
           String(planRow?.label || '').trim() ||
           String(row?.text || '').trim();
@@ -10694,7 +10824,14 @@ async function loadShoppingListPage() {
         } else {
           const textBtn = document.createElement('button');
           textBtn.type = 'button';
-          textBtn.className = 'shopping-list-doc-text';
+          textBtn.className = [
+            'shopping-list-doc-text',
+            planRow?.variantIsDeprecated
+              ? 'shopping-list-doc-text--variant-deprecated'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
           textBtn.textContent = String(row?.text || '').trim();
           textBtn.addEventListener('click', (event) => {
             event.preventDefault();
@@ -12411,41 +12548,33 @@ function loadShoppingItemEditorPage() {
       variantName,
     );
     const refCount = recipes.length;
+    const aislePlacements = getAislePlacementsForIngredientVariant(
+      db,
+      ingredientId,
+      variantName,
+    );
+    const aisleCount = aislePlacements.length;
 
-    if (!row.isDeprecated && refCount > 0) {
-      const usageLine =
-        refCount === 1
-          ? 'This variant is used in this recipe:'
-          : 'This variant is used in these recipes:';
-      const details = document.createElement('div');
-      details.className = 'shopping-remove-dialog-details';
-      const linksWrap = document.createElement('div');
-      linksWrap.className = 'shopping-remove-dialog-links';
-      recipes.forEach((recipe) => {
-        const a = document.createElement('a');
-        a.href = '#';
-        a.className = 'shopping-remove-dialog-link';
-        a.textContent = recipe.title || `Recipe ${recipe.id}`;
-        a.addEventListener('click', (event) => {
-          event.preventDefault();
-          if (typeof window.openRecipe === 'function') {
-            window.openRecipe(recipe.id);
-          }
-        });
-        linksWrap.appendChild(a);
-      });
-      details.appendChild(linksWrap);
+    if (!row.isDeprecated && (refCount > 0 || aisleCount > 0)) {
+      const recipeCountLabel =
+        refCount === 1 ? '1 recipe' : `${refCount} recipes`;
+      const aisleCountLabel =
+        aisleCount === 1 ? '1 aisle' : `${aisleCount} aisles`;
+      const summaryLine = `Remove "${variantName}" from the catalog? This variant appears in ${recipeCountLabel} and ${aisleCountLabel}.`;
+      const closingNote =
+        "Recipes and store aisles will remain unchanged. The variant will be marked removed, and can be deleted once it's no longer in use.";
+
+      const details = createVariantUsageLedgerNode(recipes, aislePlacements);
       const note = document.createElement('div');
       note.className = 'shopping-remove-dialog-note';
-      note.textContent =
-        'The variant is marked removed and shown in error color. Recipe lines are unchanged until you edit them.';
+      note.textContent = closingNote;
       details.appendChild(note);
 
       let ok = false;
       if (window.ui && typeof window.ui.dialog === 'function') {
         const res = await window.ui.dialog({
           title: 'Remove variant',
-          message: `Remove "${variantName}" from the catalog? ${usageLine}`,
+          message: summaryLine,
           messageNode: details,
           confirmText: 'Remove',
           cancelText: 'Cancel',
@@ -12455,7 +12584,7 @@ function loadShoppingItemEditorPage() {
       } else {
         ok = await uiConfirm({
           title: 'Remove variant',
-          message: `Remove "${variantName}"? ${usageLine}\n\nThe variant is marked removed and shown in error color until permanently deleted or renamed.`,
+          message: `${summaryLine}${formatVariantUsageLedgerPlainText(recipes, aislePlacements)}\n\n${closingNote}`,
           confirmText: 'Remove',
           cancelText: 'Cancel',
           danger: true,
@@ -12474,11 +12603,23 @@ function loadShoppingItemEditorPage() {
       return true;
     }
 
-    if (row.isDeprecated && refCount > 0) {
-      await uiAlert(
-        'Variant still in recipes',
-        `Remove "${variantName}" from ${refCount} recipe(s) before you can delete it permanently from the catalog.`,
-      );
+    if (row.isDeprecated && (refCount > 0 || aisleCount > 0)) {
+      const recipeCountLabel =
+        refCount === 1 ? '1 recipe' : `${refCount} recipes`;
+      const aisleCountLabel =
+        aisleCount === 1 ? '1 aisle' : `${aisleCount} aisles`;
+      const blockMessage = `Remove "${variantName}" from ${recipeCountLabel} and ${aisleCountLabel} before you can delete it permanently from the catalog.`;
+      const ledger = createVariantUsageLedgerNode(recipes, aislePlacements);
+      if (window.ui && typeof window.ui.alert === 'function') {
+        await uiAlert('Cannot delete variant yet', blockMessage, {
+          messageNode: ledger,
+        });
+      } else {
+        await uiAlert(
+          'Cannot delete variant yet',
+          `${blockMessage}${formatVariantUsageLedgerPlainText(recipes, aislePlacements)}`,
+        );
+      }
       return false;
     }
 
@@ -12868,10 +13009,19 @@ function loadShoppingItemEditorPage() {
             return;
           }
           variantRowsDraft[index].value = normalizedValue;
+          variantRowsDraft[index].isDeprecated =
+            typeof ingredientScopedVariantIsDeprecated === 'function'
+              ? ingredientScopedVariantIsDeprecated(
+                  window.dbInstance || null,
+                  getCurrentItemNameForBaseRow(),
+                  normalizedValue,
+                )
+              : false;
           input.value = normalizedValue;
           input.dataset.committedValue = normalizedValue;
           input.title = normalizedValue;
           syncVariantHiddenInput({ emit: true });
+          renderVariantRows();
         });
         input.addEventListener('click', (event) => {
           if (event.ctrlKey) return;
@@ -14146,6 +14296,39 @@ function loadShoppingItemEditorPage() {
           }
         }
 
+        if (hasVariantTable && currentId != null && Number.isFinite(Number(currentId))) {
+          const iid = Number(currentId);
+          const priorRows = loadIngredientVariantRowsForIngredientInMain(
+            db,
+            iid,
+            { fallbackBaseHome: normalizedBaseHomeLocation },
+          );
+          const prevNamed = getNamedVariantRowsFromDraft(priorRows);
+          const nextKeys = new Set(
+            namedVariantRows
+              .map((r) =>
+                normalizeNamedIngredientVariant(r.value).toLowerCase(),
+              )
+              .filter(Boolean),
+          );
+          for (const prow of prevNamed) {
+            const disp = normalizeNamedIngredientVariant(prow.value);
+            const k = disp.toLowerCase();
+            if (!k || nextKeys.has(k)) continue;
+            const rCount = getRecipesForIngredientVariant(db, iid, disp).length;
+            const aCount = hasVariantAisleTable
+              ? getAislePlacementsForIngredientVariant(db, iid, disp).length
+              : 0;
+            if (rCount > 0 || aCount > 0) {
+              const err = new Error(
+                `shopping-save-blocked-variant-refs:${disp}`,
+              );
+              err.silent = true;
+              throw err;
+            }
+          }
+        }
+
         // Persist variants/sizes lists to their own tables (newline-only, order preserved).
         const variantSizeTargetIds =
           currentId != null && Number.isFinite(Number(currentId))
@@ -14199,6 +14382,39 @@ function loadShoppingItemEditorPage() {
                       : [];
                 } catch (_) {
                   priorVariantAisleIds = [];
+                }
+              }
+
+              // `DELETE FROM ingredient_variants` cascades to `ingredient_variant_store_location`.
+              // Snapshot aisle links by variant name, then re-attach to the newly inserted row ids.
+              let priorVariantIvslRows = [];
+              if (hasVariantAisleTable) {
+                try {
+                  const ivslSnap = db.exec(
+                    `SELECT ivsl.store_location_id, iv.variant
+                       FROM ingredient_variant_store_location ivsl
+                       JOIN ingredient_variants iv ON iv.id = ivsl.ingredient_variant_id
+                      WHERE iv.ingredient_id = ?;`,
+                    [iid],
+                  );
+                  if (ivslSnap.length && ivslSnap[0].values.length) {
+                    priorVariantIvslRows = ivslSnap[0].values
+                      .map((r) => ({
+                        storeLocationId: Number(
+                          Array.isArray(r) ? r[0] : NaN,
+                        ),
+                        variant: String(
+                          Array.isArray(r) && r[1] != null ? r[1] : '',
+                        ),
+                      }))
+                      .filter(
+                        (row) =>
+                          Number.isFinite(row.storeLocationId) &&
+                          row.storeLocationId > 0,
+                      );
+                  }
+                } catch (_) {
+                  priorVariantIvslRows = [];
                 }
               }
 
@@ -14319,6 +14535,33 @@ function loadShoppingItemEditorPage() {
                   },
                 );
               });
+
+              if (hasVariantAisleTable && priorVariantIvslRows.length) {
+                priorVariantIvslRows.forEach(
+                  ({ storeLocationId, variant: variantName }) => {
+                    const vname = String(variantName || '').trim();
+                    if (!vname) return;
+                    const idQ = db.exec(
+                      `SELECT id
+                         FROM ingredient_variants
+                        WHERE ingredient_id = ?
+                          AND lower(trim(variant)) = lower(trim(?))
+                        ORDER BY COALESCE(sort_order, 999999), id
+                        LIMIT 1;`,
+                      [iid, vname],
+                    );
+                    if (!idQ.length || !idQ[0].values.length) return;
+                    const newVariantId = Number(idQ[0].values[0][0]);
+                    if (!Number.isFinite(newVariantId) || newVariantId <= 0)
+                      return;
+                    db.run(
+                      `INSERT OR IGNORE INTO ingredient_variant_store_location (ingredient_variant_id, store_location_id)
+                       VALUES (?, ?);`,
+                      [newVariantId, storeLocationId],
+                    );
+                  },
+                );
+              }
 
               if (
                 variants.length === 0 &&
@@ -14520,6 +14763,20 @@ function loadShoppingItemEditorPage() {
         if (insertVariantTagStmt) insertVariantTagStmt.free();
       } catch (_) {}
     } catch (err) {
+      const msg = String(err && err.message ? err.message : '');
+      if (err && err.silent) {
+        if (msg.startsWith('shopping-save-blocked-variant-refs:')) {
+          const v = msg
+            .replace(/^shopping-save-blocked-variant-refs:/, '')
+            .trim();
+          uiToast(
+            v
+              ? `Cannot remove “${v}” while it is still used in a recipe or store aisle. Clear those references first.`
+              : 'Cannot remove this variant while it is still used in a recipe or store aisle. Clear those references first.',
+          );
+        }
+        throw err;
+      }
       console.error('❌ Failed to upsert shopping item ingredient:', err);
       uiToast('Failed to save shopping item. See console for details.');
       throw err;
@@ -17048,6 +17305,160 @@ function countRecipeRefsForIngredientVariant(db, ingredientId, variantName) {
   return getRecipesForIngredientVariant(db, ingredientId, variantName).length;
 }
 
+/**
+ * Store aisles that reference a named variant (variant–aisle links only).
+ * @returns {{ storeId: number, chainName: string, locationName: string, aisleId: number, aisleName: string }[]}
+ */
+function getAislePlacementsForIngredientVariant(db, ingredientId, variantName) {
+  const iid = Number(ingredientId);
+  const v = String(variantName || '').trim();
+  if (!db || !Number.isFinite(iid) || iid <= 0 || !v) return [];
+  try {
+    const q = db.exec(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_variant_store_location';`,
+    );
+    if (!q.length || !q[0].values || !q[0].values.length) return [];
+    const rowsQ = db.exec(
+      `
+      SELECT DISTINCT
+        s.ID AS store_id,
+        COALESCE(s.chain_name, '') AS chain_name,
+        COALESCE(s.location_name, '') AS location_name,
+        sl.ID AS aisle_id,
+        COALESCE(sl.name, '') AS aisle_name
+      FROM ingredient_variant_store_location ivsl
+      JOIN ingredient_variants iv ON iv.id = ivsl.ingredient_variant_id
+      JOIN store_locations sl ON sl.ID = ivsl.store_location_id
+      JOIN stores s ON s.ID = sl.store_id
+      WHERE iv.ingredient_id = ?
+        AND lower(trim(iv.variant)) = lower(trim(?))
+      ORDER BY COALESCE(s.chain_name, '') COLLATE NOCASE,
+               COALESCE(s.location_name, '') COLLATE NOCASE,
+               COALESCE(sl.sort_order, 999999),
+               sl.ID;
+      `,
+      [iid, v],
+    );
+    if (!rowsQ.length || !rowsQ[0].values.length) return [];
+    return rowsQ[0].values
+      .map((row) => {
+        if (!Array.isArray(row) || row.length < 5) return null;
+        const storeId = Number(row[0]);
+        const aisleId = Number(row[3]);
+        if (!Number.isFinite(storeId) || storeId <= 0) return null;
+        if (!Number.isFinite(aisleId) || aisleId <= 0) return null;
+        return {
+          storeId,
+          chainName: String(row[1] || '').trim(),
+          locationName: String(row[2] || '').trim(),
+          aisleId,
+          aisleName: String(row[4] || '').trim(),
+        };
+      })
+      .filter(Boolean);
+  } catch (err) {
+    console.warn('getAislePlacementsForIngredientVariant failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Recipes + aisles link ledger for variant usage dialogs (remove / delete blocked).
+ * @param {{ id: number, title: string }[]} recipes
+ * @param {{ storeId: number, chainName: string, locationName: string, aisleId: number, aisleName: string }[]} aislePlacements
+ * @returns {HTMLDivElement}
+ */
+function createVariantUsageLedgerNode(recipes, aislePlacements) {
+  const details = document.createElement('div');
+  details.className = 'shopping-remove-dialog-details';
+  const refCount = Array.isArray(recipes) ? recipes.length : 0;
+  const aisleCount = Array.isArray(aislePlacements) ? aislePlacements.length : 0;
+  if (refCount > 0) {
+    const recipesHeading = document.createElement('div');
+    recipesHeading.className = 'shopping-remove-dialog-section-heading';
+    recipesHeading.textContent = 'Recipes';
+    details.appendChild(recipesHeading);
+    const linksWrap = document.createElement('div');
+    linksWrap.className = 'shopping-remove-dialog-links';
+    recipes.forEach((recipe) => {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.className = 'shopping-remove-dialog-link';
+      a.textContent = recipe.title || `Recipe ${recipe.id}`;
+      a.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (typeof window.openRecipe === 'function') {
+          window.openRecipe(recipe.id);
+        }
+      });
+      linksWrap.appendChild(a);
+    });
+    details.appendChild(linksWrap);
+  }
+  if (aisleCount > 0) {
+    const aislesHeading = document.createElement('div');
+    aislesHeading.className = 'shopping-remove-dialog-section-heading';
+    aislesHeading.textContent = 'Aisles';
+    details.appendChild(aislesHeading);
+    const aisleLinksWrap = document.createElement('div');
+    aisleLinksWrap.className = 'shopping-remove-dialog-links';
+    aislePlacements.forEach((placement) => {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.className = 'shopping-remove-dialog-link';
+      const aisleLabel =
+        String(placement.aisleName || '').trim() ||
+        `Aisle ${placement.aisleId}`;
+      const storeBits = [
+        String(placement.chainName || '').trim(),
+        String(placement.locationName || '').trim(),
+      ].filter(Boolean);
+      const storeLabel = storeBits.length ? storeBits.join(', ') : 'Store';
+      a.textContent = `${aisleLabel} (${storeLabel})`;
+      a.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (typeof window.openStoreAisle === 'function') {
+          window.openStoreAisle(
+            placement.storeId,
+            placement.aisleId,
+            placement.chainName,
+            placement.locationName,
+          );
+        }
+      });
+      aisleLinksWrap.appendChild(a);
+    });
+    details.appendChild(aisleLinksWrap);
+  }
+  return details;
+}
+
+/** Plain-text fallback for variant usage ledger (native alert / no rich UI). */
+function formatVariantUsageLedgerPlainText(recipes, aislePlacements) {
+  const refCount = Array.isArray(recipes) ? recipes.length : 0;
+  const aisleCount = Array.isArray(aislePlacements) ? aislePlacements.length : 0;
+  const recipeLines =
+    refCount > 0
+      ? `\n\nRecipes\n${recipes.map((r) => `• ${r.title || `Recipe ${r.id}`}`).join('\n')}`
+      : '';
+  const aisleLines =
+    aisleCount > 0
+      ? `\n\nAisles\n${aislePlacements
+          .map((p) => {
+            const aisleLabel =
+              String(p.aisleName || '').trim() || `Aisle ${p.aisleId}`;
+            const storeBits = [
+              String(p.chainName || '').trim(),
+              String(p.locationName || '').trim(),
+            ].filter(Boolean);
+            const storeLabel = storeBits.length ? storeBits.join(', ') : 'Store';
+            return `• ${aisleLabel} (${storeLabel})`;
+          })
+          .join('\n')}`
+      : '';
+  return `${recipeLines}${aisleLines}`;
+}
+
 async function loadStoresPage() {
   initAppBar({
     mode: 'list',
@@ -18042,6 +18453,31 @@ function loadStoreEditorPage() {
         : [];
       aisleItemsByAisle.set(aid, specsToDisplayLines(specs, opts));
     };
+    const syncStoreAisleDeprecatedFieldClassForField = (aid, itemsFieldEl) => {
+      if (!(itemsFieldEl instanceof HTMLElement)) return;
+      const specs = aisleItemSpecsByAisle.get(aid) || [];
+      let bad = false;
+      for (const spec of specs) {
+        const known = ingredientCatalog?.byName?.get?.(spec.baseKey) || null;
+        if (!known?.variants?.length) continue;
+        const depKeys = new Set(
+          known.variants
+            .filter((vv) => vv.isDeprecated)
+            .map((vv) => normVariantKey(String(vv.name || ''))),
+        );
+        for (const sv of spec.selectedVariants || []) {
+          if (depKeys.has(normVariantKey(String(sv || '')))) {
+            bad = true;
+            break;
+          }
+        }
+        if (bad) break;
+      }
+      itemsFieldEl.classList.toggle(
+        'store-aisle-items-field--has-deprecated-variant',
+        bad,
+      );
+    };
     const setAisleTextareaRawDraft = (textarea, value) => {
       if (!(textarea instanceof HTMLTextAreaElement)) return;
       textarea.__feStoreRawDraftValue = String(value == null ? '' : value);
@@ -18078,6 +18514,28 @@ function loadStoreEditorPage() {
             selected = [...prev.selectedVariants];
           } else {
             selected = parseVariantNames(inside);
+          }
+        }
+        // Collapsed lines reuse prev.selectedVariants; drop soft-deprecated variants
+        // that no longer appear in the raw line (user removed them from the textarea).
+        if (
+          known &&
+          Array.isArray(known.variants) &&
+          selected.length
+        ) {
+          const depKeys = new Set(
+            known.variants
+              .filter((v) => v.isDeprecated)
+              .map((v) => normVariantKey(String(v?.name || '').trim())),
+          );
+          if (depKeys.size) {
+            const rawLineLc = String(line || '').toLowerCase();
+            selected = selected.filter((sv) => {
+              const k = normVariantKey(sv);
+              if (!depKeys.has(k)) return true;
+              const sn = String(sv || '').trim();
+              return sn && rawLineLc.includes(sn.toLowerCase());
+            });
           }
         }
         if (known && Array.isArray(known.variants)) {
@@ -18304,10 +18762,27 @@ function loadStoreEditorPage() {
       }
     };
 
+    const tableHasColumnLocal = (db, tableName, colName) => {
+      try {
+        const pc = db.exec(`PRAGMA table_info(${tableName});`);
+        const vals = pc?.length ? pc[0].values || [] : [];
+        const needle = String(colName || '').toLowerCase();
+        return vals.some(
+          (row) =>
+            Array.isArray(row) && String(row[1] || '').toLowerCase() === needle,
+        );
+      } catch (_) {
+        return false;
+      }
+    };
+
     const loadIngredientCatalog = (db) => {
       const byName = new Map();
       const byId = new Map();
       const hasVariantTable = tableExistsLocal(db, 'ingredient_variants');
+      const hasVariantDepCol =
+        hasVariantTable &&
+        tableHasColumnLocal(db, 'ingredient_variants', 'is_deprecated');
       const hasVariantAisleTable = tableExistsLocal(
         db,
         'ingredient_variant_store_location',
@@ -18338,16 +18813,24 @@ function loadStoreEditorPage() {
       } catch (_) {}
       if (hasVariantTable) {
         try {
+          const depSel = hasVariantDepCol
+            ? ', COALESCE(iv.is_deprecated, 0)'
+            : '';
           const vq = db.exec(
-            `SELECT ingredient_id, id, variant
-               FROM ingredient_variants
-              WHERE variant IS NOT NULL
-                AND trim(variant) != ''
-                AND lower(trim(variant)) != '${INGREDIENT_BASE_VARIANT_NAME}'
+            `SELECT ingredient_id, id, variant${depSel}
+               FROM ingredient_variants iv
+              WHERE iv.variant IS NOT NULL
+                AND trim(iv.variant) != ''
+                AND lower(trim(iv.variant)) != '${INGREDIENT_BASE_VARIANT_NAME}'
               ORDER BY ingredient_id ASC, COALESCE(sort_order, 999999) ASC, id ASC;`,
           );
           const rows = vq.length ? vq[0].values : [];
-          rows.forEach(([ingredientId, variantId, variant]) => {
+          rows.forEach((row) => {
+            if (!Array.isArray(row) || row.length < 3) return;
+            const ingredientId = row[0];
+            const variantId = row[1];
+            const variant = row[2];
+            const depRaw = hasVariantDepCol ? row[3] : 0;
             const vv = String(variant || '').trim();
             if (!isSupportedVariantName(vv)) return;
             const item = byId.get(Number(ingredientId));
@@ -18358,7 +18841,11 @@ function loadStoreEditorPage() {
               )
             )
               return;
-            item.variants.push({ id: Number(variantId), name: vv });
+            item.variants.push({
+              id: Number(variantId),
+              name: vv,
+              isDeprecated: hasVariantDepCol && Number(depRaw || 0) === 1,
+            });
           });
         } catch (_) {}
       }
@@ -18960,6 +19447,9 @@ function loadStoreEditorPage() {
         try {
           textarea.__feAutoGrowResize?.();
         } catch (_) {}
+        const itemsFieldEl = textarea.closest('.store-aisle-items-field');
+        if (itemsFieldEl)
+          syncStoreAisleDeprecatedFieldClassForField(aid, itemsFieldEl);
       }
       if (baseKey) refreshDirty();
     };
@@ -19098,6 +19588,8 @@ function loadStoreEditorPage() {
           try {
             textarea.__feAutoGrowResize?.();
           } catch (_) {}
+          const ifield = textarea.closest('.store-aisle-items-field');
+          if (ifield) syncStoreAisleDeprecatedFieldClassForField(aid, ifield);
           refreshDirty();
         });
         pillsWrap.appendChild(addAllBtn);
@@ -19124,6 +19616,8 @@ function loadStoreEditorPage() {
           try {
             textarea.__feAutoGrowResize?.();
           } catch (_) {}
+          const ifield = textarea.closest('.store-aisle-items-field');
+          if (ifield) syncStoreAisleDeprecatedFieldClassForField(aid, ifield);
           refreshDirty();
         });
         pillsWrap.appendChild(btn);
@@ -19138,6 +19632,10 @@ function loadStoreEditorPage() {
       try {
         textarea.__feAutoGrowResize?.();
       } catch (_) {}
+      {
+        const ifield = textarea.closest('.store-aisle-items-field');
+        if (ifield) syncStoreAisleDeprecatedFieldClassForField(aid, ifield);
+      }
 
       const outsideClickHandler = (evt) => {
         const t = evt?.target;
@@ -19555,6 +20053,7 @@ function loadStoreEditorPage() {
               const out = [];
               const seen = new Set();
               known.variants.forEach((v) => {
+                if (v?.isDeprecated) return;
                 const clean = String(v?.name || '').trim();
                 if (!clean) return;
                 const k = normVariantKey(clean);
@@ -19722,6 +20221,7 @@ function loadStoreEditorPage() {
           setAisleTextareaRawDraft(ta, ta.value);
           escBaseline = parseUniqueItemLines(ta.value);
           escBaselineText = ta.value;
+          syncStoreAisleDeprecatedFieldClassForField(a.id, itemsField);
         });
 
         ta.addEventListener('input', () => {
@@ -19733,6 +20233,7 @@ function loadStoreEditorPage() {
           );
           aisleItemSpecsByAisle.set(a.id, nextSpecs);
           aisleItemsByAisle.set(a.id, parseUniqueItemLines(ta.value));
+          syncStoreAisleDeprecatedFieldClassForField(a.id, itemsField);
           refreshDirty();
         });
 
@@ -19821,6 +20322,7 @@ function loadStoreEditorPage() {
             aisleItemSpecsByAisle.set(a.id, nextSpecs);
             syncDisplayLinesFromSpecs(a.id);
             ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
+            syncStoreAisleDeprecatedFieldClassForField(a.id, itemsField);
             try {
               ta.__feAutoGrowResize();
             } catch (_) {}
@@ -19842,6 +20344,7 @@ function loadStoreEditorPage() {
             syncDisplayLinesFromSpecs(a.id);
             ta.value = (aisleItemsByAisle.get(a.id) || []).join('\n');
             setAisleTextareaRawDraft(ta, ta.value);
+            syncStoreAisleDeprecatedFieldClassForField(a.id, itemsField);
             try {
               ta.__feAutoGrowResize?.();
             } catch (_) {}
@@ -19857,6 +20360,7 @@ function loadStoreEditorPage() {
         itemsField.appendChild(filteredResults);
 
         itemsField.appendChild(ta);
+        syncStoreAisleDeprecatedFieldClassForField(a.id, itemsField);
         card.appendChild(itemsField);
 
         slot.appendChild(card);
@@ -19875,6 +20379,30 @@ function loadStoreEditorPage() {
       });
       syncEmptyStateAisleCta();
       applyStoreEditorSearch(storeEditorSearchQuery);
+      list.querySelectorAll('.store-aisle-card').forEach((cardEl) => {
+        const aid = Number(cardEl.dataset.aisleId);
+        const field = cardEl.querySelector('.store-aisle-items-field');
+        if (Number.isFinite(aid) && field) {
+          syncStoreAisleDeprecatedFieldClassForField(aid, field);
+        }
+      });
+      try {
+        const rawFocus = sessionStorage.getItem(
+          STORE_EDITOR_FOCUS_AISLE_SESSION_KEY,
+        );
+        if (rawFocus != null && rawFocus !== '') {
+          sessionStorage.removeItem(STORE_EDITOR_FOCUS_AISLE_SESSION_KEY);
+          const focusAisleId = Number(rawFocus);
+          if (Number.isFinite(focusAisleId) && focusAisleId > 0 && list) {
+            requestAnimationFrame(() => {
+              const card = list.querySelector(
+                `.store-aisle-card[data-aisle-id="${String(focusAisleId)}"]`,
+              );
+              card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            });
+          }
+        }
+      } catch (_) {}
     };
 
     const runAddAisle = async (insertAfterIndex) => {
@@ -20414,6 +20942,11 @@ function loadStoreEditorPage() {
                     );
                 aisleItemSpecsByAisle.set(aid, nextSpecs);
                 syncDisplayLinesFromSpecs(aid);
+                const itemsFieldEl = card.querySelector(
+                  '.store-aisle-items-field',
+                );
+                if (itemsFieldEl)
+                  syncStoreAisleDeprecatedFieldClassForField(aid, itemsFieldEl);
               }
             }
             await flushStoreAislesDraft(db, id);
@@ -22264,6 +22797,51 @@ window.openRecipe = function openRecipe(recipeId) {
   if (typeof window.recipeEditorAttemptExit === 'function') {
     void window.recipeEditorAttemptExit({
       reason: 'open-recipe',
+      onClean: proceed,
+      onDiscard: proceed,
+      onSaveSuccess: proceed,
+    });
+    return;
+  }
+  proceed();
+};
+
+/**
+ * Open the store editor; optionally focus an aisle after load (see STORE_EDITOR_FOCUS_AISLE_SESSION_KEY).
+ * @param {number} storeId
+ * @param {number} [aisleId]
+ * @param {string} [chainName]
+ * @param {string} [locationName]
+ */
+window.openStoreAisle = function openStoreAisle(
+  storeId,
+  aisleId,
+  chainName,
+  locationName,
+) {
+  const sid = Number(storeId);
+  if (!Number.isFinite(sid) || sid <= 0) return;
+  const aid = Number(aisleId);
+  const proceed = () => {
+    sessionStorage.setItem('selectedStoreId', String(sid));
+    sessionStorage.removeItem('selectedStoreIsNew');
+    if (chainName != null)
+      sessionStorage.setItem('selectedStoreChain', String(chainName));
+    if (locationName != null)
+      sessionStorage.setItem('selectedStoreLocation', String(locationName));
+    if (Number.isFinite(aid) && aid > 0) {
+      sessionStorage.setItem(
+        STORE_EDITOR_FOCUS_AISLE_SESSION_KEY,
+        String(aid),
+      );
+    } else {
+      sessionStorage.removeItem(STORE_EDITOR_FOCUS_AISLE_SESSION_KEY);
+    }
+    window.location.href = 'storeEditor.html';
+  };
+  if (typeof window.recipeEditorAttemptExit === 'function') {
+    void window.recipeEditorAttemptExit({
+      reason: 'open-store-aisle',
       onClean: proceed,
       onDiscard: proceed,
       onSaveSuccess: proceed,

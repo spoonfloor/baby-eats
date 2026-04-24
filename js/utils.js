@@ -2129,10 +2129,16 @@ if (typeof window !== 'undefined') {
     });
 
   // Alert: default has *no title* (title "Alert" is redundant most of the time).
-  const alertDialog = ({ title = '', message = '', okText = 'OK' } = {}) =>
+  const alertDialog = ({
+    title = '',
+    message = '',
+    messageNode = null,
+    okText = 'OK',
+  } = {}) =>
     dialog({
       title,
       message,
+      messageNode,
       confirmText: okText,
       showCancel: false,
       closeOnBackdrop: true,

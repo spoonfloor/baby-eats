@@ -1732,6 +1732,15 @@ body.shopping-list-page
   text-decoration: none;
 }
 
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-link.shopping-list-doc-link--variant-deprecated,
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-text.shopping-list-doc-text--variant-deprecated {
+  color: var(--ingredient-deprecated-fg);
+}
+
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-link:hover,
 body.shopping-list-page
   #shoppingListOutput
@@ -2400,6 +2409,12 @@ body.store-editor-page .store-add-location-cta:hover {
 body.store-editor-page .store-aisle-items-field {
   padding-top: 4px;
   padding-right: 20px;
+}
+
+body.store-editor-page
+  .store-aisle-items-field--has-deprecated-variant
+  .shopping-item-textarea:not(:focus) {
+  color: var(--ingredient-deprecated-fg);
 }
 
 /* App bar search active: show match lines only (not the full scrollable list). */
@@ -4198,6 +4213,10 @@ body.recipe-editor-page .recipe-tags-editor-field {
   border-color: transparent;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
+}
+
+.ingredient-edit-input--deprecated-variant-blur:not(:focus) {
+  color: var(--ingredient-deprecated-fg);
 }
 
 /* Label pill — uses theme-derived pill vars */
