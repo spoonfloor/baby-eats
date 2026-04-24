@@ -1738,6 +1738,79 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-text--amount {
   vertical-align: baseline;
 }
 
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-text--amount-diverged {
+  color: var(--ingredient-deprecated-fg);
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  li.shopping-list-doc-item--checked
+  .shopping-list-doc-text--amount-diverged {
+  color: color-mix(
+    in srgb,
+    var(--ingredient-deprecated-fg) 55%,
+    rgba(0, 0, 0, 0.5)
+  );
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-skin {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  margin-left: 1px;
+}
+
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-paren {
+  color: rgba(0, 0, 0, 0.56);
+  font-size: 13px;
+  line-height: 1.45;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, width 0.12s ease, margin 0.12s ease;
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-amount-skin:focus-within
+  .shopping-list-doc-amount-paren {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* Amount inline edit: mirrors .servings-input; overrides doc-input full-bleed */
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-input--amount {
+  width: auto;
+  min-width: 4ch;
+  max-width: min(100%, 32ch);
+  height: var(--servings-field-height);
+  padding: 4px 8px;
+  border-radius: 8px;
+  background-color: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  outline: none;
+  line-height: 1.2;
+  font: inherit;
+  vertical-align: middle;
+}
+
+body.shopping-list-page
+  #shoppingListOutput
+  .shopping-list-doc-input--amount:focus {
+  outline: none;
+  border-color: transparent;
+  color: var(--edit-mode-color);
+  caret-color: var(--edit-mode-color);
+}
+
 body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
   appearance: none;
   -webkit-appearance: none;

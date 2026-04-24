@@ -1351,6 +1351,53 @@ function formatShoppingListDisplayRow({
   return `${resolvedLabel} (${detailText})`;
 }
 
+function getShoppingListPlanRowResolvedLabel(planRow) {
+  if (!planRow || typeof planRow !== 'object') return '';
+  const name = String(planRow.name || '').trim();
+  const variantName = String(planRow.variantName || '').trim();
+  const displayFields = getShoppingListDisplayFields(name, variantName);
+  return (
+    String(planRow.label || '').trim() ||
+    displayFields.displayName ||
+    getShoppingListIngredientLabel(name, variantName) ||
+    ''
+  );
+}
+
+function splitShoppingListRowTextToLabelAndDetail(text) {
+  const src = String(text || '').trim();
+  if (!src) return { label: '', detail: '' };
+  const m = src.match(/^(.+?)\s+\(([^)]*)\)\s*$/);
+  if (!m) {
+    return { label: src, detail: '' };
+  }
+  return {
+    label: String(m[1] || '').trim(),
+    detail: String(m[2] || '').trim(),
+  };
+}
+
+function joinShoppingListLabelAndDetail(label, detail) {
+  const l = String(label || '').trim();
+  const d = String(detail || '').trim();
+  if (!l) return d;
+  if (!d) return l;
+  return `${l} (${d})`;
+}
+
+function shoppingListRowAmountDetailDivergedFromSource(row) {
+  const sourceKey = String(row?.sourceKey || '').trim();
+  const sourceText = String(row?.sourceText || '').trim();
+  if (!sourceKey || !sourceText) return false;
+  const currentText = String(row?.text || '').trim();
+  const cur = splitShoppingListRowTextToLabelAndDetail(currentText);
+  const src = splitShoppingListRowTextToLabelAndDetail(sourceText);
+  if (cur.detail || src.detail) {
+    return cur.detail !== src.detail;
+  }
+  return currentText !== sourceText;
+}
+
 if (typeof window !== 'undefined') {
   window.__shoppingListAmountHelpers = {
     normalizeShoppingListUnit,
@@ -9494,6 +9541,11 @@ async function loadShoppingListPage() {
     ? initialShoppingListSync.conflicts.slice()
     : [];
   let editingRowId = '';
+  let editingRowMode = '';
+  const clearShoppingListRowEditing = () => {
+    editingRowId = '';
+    editingRowMode = '';
+  };
   let exportBtn = null;
   let webCopyBtn = null;
   let webExportBtn = null;
@@ -9630,7 +9682,7 @@ async function loadShoppingListPage() {
           ...shoppingListDoc,
           rows: restoreRows,
         });
-        editingRowId = '';
+        clearShoppingListRowEditing();
         renderChecklist();
       });
     }
@@ -9702,7 +9754,7 @@ async function loadShoppingListPage() {
           ),
         );
       });
-      editingRowId = '';
+      clearShoppingListRowEditing();
       renderChecklist();
     } finally {
       resolvingSourceConflicts = false;
@@ -10097,7 +10149,7 @@ async function loadShoppingListPage() {
       checkbox.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        editingRowId = '';
+        clearShoppingListRowEditing();
         updateRow(
           row.id,
           (draft) => {
@@ -10112,15 +10164,171 @@ async function loadShoppingListPage() {
       const textWrap = document.createElement('div');
       textWrap.className = 'shopping-list-doc-text-wrap';
 
-      if (editingRowId === row.id) {
+      const rowTextParsed = splitShoppingListRowTextToLabelAndDetail(
+        String(row?.text || '').trim(),
+      );
+      const planRowDetail = String(planRow?.detailText || '').trim();
+      const useSplitPlanLayout =
+        !!planRow &&
+        (planRowDetail || rowTextParsed.detail) &&
+        !(
+          row?.userEdited &&
+          !rowTextParsed.detail &&
+          planRowDetail
+        );
+
+      const buildPlanIngredientLink = (headlineEl) => {
+        const ingredientLink = document.createElement('a');
+        ingredientLink.href = 'shopping.html';
+        ingredientLink.className = 'shopping-list-doc-link';
+        ingredientLink.textContent =
+          String(planRow?.label || '').trim() ||
+          String(row?.text || '').trim();
+        ingredientLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            sessionStorage.removeItem(shoppingNavKeys.shoppingNavTargetId);
+            sessionStorage.setItem(
+              shoppingNavKeys.shoppingNavTargetName,
+              String(planRow?.name || '').trim() ||
+                String(planRow?.label || '').trim(),
+            );
+          } catch (_) {}
+          window.location.href = 'shopping.html';
+        });
+        headlineEl.appendChild(ingredientLink);
+        return ingredientLink;
+      };
+
+      const appendTailExpansionButton = (getTail) => {
+        if (!supportsExpansion) return;
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'shopping-list-doc-expand';
+        toggleBtn.setAttribute(
+          'aria-label',
+          isExpanded ? 'Collapse recipe details' : 'Expand recipe details',
+        );
+        toggleBtn.setAttribute(
+          'aria-expanded',
+          isExpanded ? 'true' : 'false',
+        );
+        toggleBtn.textContent = isExpanded ? '\u25B4' : '\u25BE';
+        toggleBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleContributionExpansion();
+        });
+        const tailEl = getTail();
+        if (tailEl.childNodes.length > 1) {
+          tailEl.appendChild(document.createTextNode('\u00a0'));
+        }
+        tailEl.appendChild(toggleBtn);
+      };
+
+      if (
+        editingRowId === row.id &&
+        useSplitPlanLayout &&
+        editingRowMode === 'amount'
+      ) {
+        const resolvedPlanLabel = getShoppingListPlanRowResolvedLabel(planRow);
+        const displayDetailForEdit = rowTextParsed.detail || planRowDetail;
+        const headline = document.createElement('div');
+        headline.className = 'shopping-list-doc-headline';
+        buildPlanIngredientLink(headline);
+        let tail = null;
+        const getTail = () => {
+          if (tail) return tail;
+          tail = document.createElement('span');
+          tail.className = 'shopping-list-doc-tail';
+          tail.appendChild(document.createTextNode('\u00a0'));
+          headline.appendChild(tail);
+          return tail;
+        };
+        const amtInput = document.createElement('input');
+        amtInput.type = 'text';
+        amtInput.className =
+          'shopping-list-doc-input shopping-list-doc-input--amount';
+        amtInput.setAttribute('aria-label', 'Amount');
+        amtInput.value = String(displayDetailForEdit || '');
+
+        const amountSkin = document.createElement('span');
+        amountSkin.className = 'shopping-list-doc-amount-skin';
+        const parenOpen = document.createElement('span');
+        parenOpen.className = 'shopping-list-doc-amount-paren';
+        parenOpen.setAttribute('aria-hidden', 'true');
+        parenOpen.textContent = '(';
+        const parenClose = document.createElement('span');
+        parenClose.className = 'shopping-list-doc-amount-paren';
+        parenClose.setAttribute('aria-hidden', 'true');
+        parenClose.textContent = ')';
+        amountSkin.appendChild(parenOpen);
+        amountSkin.appendChild(amtInput);
+        amountSkin.appendChild(parenClose);
+        getTail().appendChild(amountSkin);
+        appendTailExpansionButton(getTail);
+        const finishAmountEditing = (mode) => {
+          if (editingRowId !== row.id) return;
+          const nextDetail = String(amtInput.value || '').trim();
+          const nextText = joinShoppingListLabelAndDetail(
+            resolvedPlanLabel,
+            nextDetail,
+          );
+          clearShoppingListRowEditing();
+          if (
+            mode === 'commit' &&
+            nextText &&
+            nextText !== String(row?.text || '').trim()
+          ) {
+            updateRow(
+              row.id,
+              (draft) => {
+                draft.text = nextText;
+              },
+              {
+                message: 'Row updated.',
+              },
+            );
+            return;
+          }
+          renderChecklist();
+        };
+        amountSkin.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (e.target !== amtInput) {
+            try {
+              amtInput.focus();
+            } catch (_) {}
+          }
+        });
+        amtInput.addEventListener('click', (event) => event.stopPropagation());
+        amtInput.addEventListener('keydown', (event) => {
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            finishAmountEditing('commit');
+            return;
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            finishAmountEditing('cancel');
+          }
+        });
+        amtInput.addEventListener('blur', () => finishAmountEditing('commit'));
+        textWrap.appendChild(headline);
+      } else if (
+        editingRowId === row.id &&
+        (!useSplitPlanLayout || editingRowMode === 'line')
+      ) {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'shopping-list-doc-input';
         input.value = String(row?.text || '');
-        const finishEditing = (mode) => {
+        const finishLineEditing = (mode) => {
           if (editingRowId !== row.id) return;
           const nextValue = String(input.value || '').trim();
-          editingRowId = '';
+          clearShoppingListRowEditing();
           if (
             mode === 'commit' &&
             nextValue &&
@@ -10144,15 +10352,15 @@ async function loadShoppingListPage() {
           event.stopPropagation();
           if (event.key === 'Enter') {
             event.preventDefault();
-            finishEditing('commit');
+            finishLineEditing('commit');
             return;
           }
           if (event.key === 'Escape') {
             event.preventDefault();
-            finishEditing('cancel');
+            finishLineEditing('cancel');
           }
         });
-        input.addEventListener('blur', () => finishEditing('commit'));
+        input.addEventListener('blur', () => finishLineEditing('commit'));
         textWrap.appendChild(input);
       } else {
         const headline = document.createElement('div');
@@ -10168,44 +10376,30 @@ async function loadShoppingListPage() {
           return tail;
         };
 
-        if (planRow && !row?.userEdited) {
-          const ingredientLink = document.createElement('a');
-          ingredientLink.href = 'shopping.html';
-          ingredientLink.className = 'shopping-list-doc-link';
-          ingredientLink.textContent =
-            String(planRow?.label || '').trim() ||
-            String(row?.text || '').trim();
-          ingredientLink.addEventListener('click', (event) => {
+        if (useSplitPlanLayout) {
+          buildPlanIngredientLink(headline);
+          const innerDetail = rowTextParsed.detail || planRowDetail;
+          const amountBtn = document.createElement('button');
+          amountBtn.type = 'button';
+          const amountDiverged =
+            shoppingListRowAmountDetailDivergedFromSource(row);
+          amountBtn.className = [
+            'shopping-list-doc-text',
+            'shopping-list-doc-text--amount',
+            amountDiverged ? 'shopping-list-doc-text--amount-diverged' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          amountBtn.textContent = `(${innerDetail})`;
+          amountBtn.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            try {
-              sessionStorage.removeItem(shoppingNavKeys.shoppingNavTargetId);
-              sessionStorage.setItem(
-                shoppingNavKeys.shoppingNavTargetName,
-                String(planRow?.name || '').trim() ||
-                  String(planRow?.label || '').trim(),
-              );
-            } catch (_) {}
-            window.location.href = 'shopping.html';
+            if (toggleContributionExpansion()) return;
+            editingRowId = row.id;
+            editingRowMode = 'amount';
+            renderChecklist();
           });
-          headline.appendChild(ingredientLink);
-
-          const detailText = String(planRow?.detailText || '').trim();
-          if (detailText) {
-            const amountBtn = document.createElement('button');
-            amountBtn.type = 'button';
-            amountBtn.className =
-              'shopping-list-doc-text shopping-list-doc-text--amount';
-            amountBtn.textContent = `(${detailText})`;
-            amountBtn.addEventListener('click', (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (toggleContributionExpansion()) return;
-              editingRowId = row.id;
-              renderChecklist();
-            });
-            getTail().appendChild(amountBtn);
-          }
+          getTail().appendChild(amountBtn);
         } else {
           const textBtn = document.createElement('button');
           textBtn.type = 'button';
@@ -10215,12 +10409,15 @@ async function loadShoppingListPage() {
             event.preventDefault();
             event.stopPropagation();
             editingRowId = row.id;
+            editingRowMode = 'line';
             renderChecklist();
           });
           headline.appendChild(textBtn);
         }
 
-        if (supportsExpansion) {
+        if (useSplitPlanLayout) {
+          appendTailExpansionButton(getTail);
+        } else if (supportsExpansion) {
           const toggleBtn = document.createElement('button');
           toggleBtn.type = 'button';
           toggleBtn.className = 'shopping-list-doc-expand';
@@ -10238,11 +10435,11 @@ async function loadShoppingListPage() {
             event.stopPropagation();
             toggleContributionExpansion();
           });
-          const tailEl = getTail();
-          if (tailEl.childNodes.length > 1) {
-            tailEl.appendChild(document.createTextNode('\u00a0'));
-          }
-          tailEl.appendChild(toggleBtn);
+          const textBtnTail = document.createElement('span');
+          textBtnTail.className = 'shopping-list-doc-tail';
+          textBtnTail.appendChild(document.createTextNode('\u00a0'));
+          headline.appendChild(textBtnTail);
+          textBtnTail.appendChild(toggleBtn);
         }
 
         textWrap.appendChild(headline);
@@ -10255,6 +10452,7 @@ async function loadShoppingListPage() {
           const target = event.target;
           if (!(target instanceof Element)) return;
           if (target.closest('.shopping-list-doc-link')) return;
+          if (target.closest('.shopping-list-doc-amount-skin')) return;
           if (
             target.closest(
               '.shopping-list-doc-text:not(.shopping-list-doc-text--amount)',
@@ -10364,7 +10562,12 @@ async function loadShoppingListPage() {
 
     if (editingRowId) {
       requestAnimationFrame(() => {
-        const input = list.querySelector('.shopping-list-doc-input');
+        const input =
+          editingRowMode === 'amount'
+            ? list.querySelector('input.shopping-list-doc-input--amount')
+            : list.querySelector(
+                'input.shopping-list-doc-input:not(.shopping-list-doc-input--amount)',
+              );
         if (!(input instanceof HTMLInputElement)) return;
         try {
           input.focus();
@@ -10397,13 +10600,13 @@ async function loadShoppingListPage() {
     if (!confirmed) return;
     cancelAllPendingChecks();
     shoppingListDoc = persistShoppingListDoc(nextDoc);
-    editingRowId = '';
+    clearShoppingListRowEditing();
     collapsedShoppingListSections.clear();
     renderChecklist();
     uiToastUndo('Shopping list reset.', () => {
       cancelAllPendingChecks();
       shoppingListDoc = persistShoppingListDoc(previousDoc);
-      editingRowId = '';
+      clearShoppingListRowEditing();
       collapsedShoppingListSections.clear();
       renderChecklist();
     });
@@ -14283,6 +14486,9 @@ function loadShoppingItemEditorPage() {
           /* noop */
         });
       variantRowsBaselineSignature = getVariantRowsSignature(variantRowsDraft);
+      try {
+        refreshVariantEditorDirty();
+      } catch (_) {}
     });
   }
 }
