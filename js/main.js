@@ -128,8 +128,9 @@ function readFavoriteEatsBuildConfig() {
 }
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
-/* '1' = planner (force-web) layout on; absent or '0' = off. Replaces legacy
-   favoriteEatsForceWebMode so the default is off until the user enables Planner. */
+/* '1' = planner (force-web) layout on; absent or '0' = off (editing / native
+   shell). Replaces legacy favoriteEatsForceWebMode. Default is editing until the
+   user turns force-web on via the nav switch or shortcut. */
 const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
 /** Dispatched on `window` when planner (force-web) mode flips. `detail.enabled` is a boolean. */
 const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
@@ -11652,6 +11653,9 @@ function loadShoppingItemEditorPage() {
         );
       }
     }
+    try {
+      refreshVariantEditorDirty();
+    } catch (_) {}
     return changed;
   };
 
@@ -14260,10 +14264,15 @@ function loadShoppingItemEditorPage() {
           },
           onAfterSaveSuccess: () => {
             commitActiveVariantTagDraft({ clear: true, emit: false });
+            try {
+              renderVariantRows();
+            } catch (_) {}
+            // Baseline must reflect draft *after* render: ensureBaseVariantRowPresent
+            // can normalize rows and would leave an eager snapshot falsely "dirty".
             variantRowsBaselineSignature =
               getVariantRowsSignature(variantRowsDraft);
             try {
-              renderVariantRows();
+              syncVariantHiddenInput({ emit: false });
             } catch (_) {}
           },
         },
@@ -19832,6 +19841,70 @@ function applyBottomNavActiveState(pillRow, activeTab) {
   });
 }
 
+function getListPageBottomNavActiveTab() {
+  const body = document.body;
+  if (!body) return null;
+  if (body.classList.contains('recipes-page')) return 'recipes';
+  if (body.classList.contains('shopping-page')) return 'shopping';
+  if (body.classList.contains('shopping-list-page')) return 'shopping-list';
+  if (body.classList.contains('units-page')) return 'units';
+  if (body.classList.contains('sizes-page')) return 'sizes';
+  if (body.classList.contains('stores-page')) return 'stores';
+  if (body.classList.contains('tags-page')) return 'tags';
+  return null;
+}
+
+function reconcileAfterForceWebModeToggle() {
+  const pillRow = document.querySelector('.bottom-nav-pill-row');
+  const activeTab = getListPageBottomNavActiveTab();
+  if (pillRow instanceof HTMLElement) {
+    syncBottomNavPills(pillRow);
+    if (activeTab) applyBottomNavActiveState(pillRow, activeTab);
+  }
+  const nextPages = getTopLevelPageOrder();
+  const currentPage = String(activeTab || detectPageIdFromBody() || '')
+    .trim()
+    .toLowerCase();
+  if (!nextPages.includes(currentPage)) {
+    const targetPage = nextPages.includes('recipes')
+      ? 'recipes'
+      : nextPages[0] || 'recipes';
+    window.location.href = getTopLevelPageHref(targetPage);
+  }
+}
+
+function syncBottomNavEditorToggleCheckedState() {
+  const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
+  if (bottomNavEditorToggle instanceof HTMLInputElement) {
+    bottomNavEditorToggle.checked = !isForceWebModeEnabled();
+  }
+}
+
+let favoriteEatsForceWebModeShortcutWired = false;
+function wireFavoriteEatsForceWebModeShortcutOnce() {
+  if (favoriteEatsForceWebModeShortcutWired) return;
+  favoriteEatsForceWebModeShortcutWired = true;
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!isHiddenForceWebModeToggleAllowed()) return;
+      if (e.isComposing) return;
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
+      if (String(e.key || '').toLowerCase() !== 'e') return;
+      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target)) return;
+      if (isModalOpen()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setForceWebModeEnabled(!isForceWebModeEnabled());
+      syncBottomNavEditorToggleCheckedState();
+      reconcileAfterForceWebModeToggle();
+    },
+    { capture: true },
+  );
+}
+
+wireFavoriteEatsForceWebModeShortcutOnce();
+
 // --- Bottom navigation wiring (list pages only) ---
 function initBottomNav() {
   const nav = document.querySelector('.bottom-nav');
@@ -19855,14 +19928,14 @@ function initBottomNav() {
     const editorLabel = document.createElement('label');
     editorLabel.className = 'bottom-nav-editor-toggle';
     const editorTitle = document.createElement('span');
-    editorTitle.textContent = 'Planner';
+    editorTitle.textContent = 'Editing';
     const switchTrack = document.createElement('span');
     switchTrack.className = 'bottom-nav-editor-switch-track';
     const editorToggle = document.createElement('input');
     editorToggle.type = 'checkbox';
     editorToggle.id = 'bottomNavEditorToggle';
     editorToggle.className = 'bottom-nav-editor-switch-input';
-    editorToggle.setAttribute('aria-label', 'Planner');
+    editorToggle.setAttribute('aria-label', 'Editing');
     const switchKnob = document.createElement('span');
     switchKnob.className = 'bottom-nav-editor-switch-knob';
     switchTrack.appendChild(editorToggle);
@@ -19901,21 +19974,10 @@ function initBottomNav() {
 
   const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
   if (bottomNavEditorToggle && pillRow instanceof HTMLElement) {
-    bottomNavEditorToggle.checked = isForceWebModeEnabled();
+    bottomNavEditorToggle.checked = !isForceWebModeEnabled();
     bottomNavEditorToggle.addEventListener('change', () => {
-      setForceWebModeEnabled(!!bottomNavEditorToggle.checked);
-      syncBottomNavPills(pillRow);
-      applyBottomNavActiveState(pillRow, activeTab);
-      const nextPages = getTopLevelPageOrder();
-      const currentPage = String(activeTab || detectPageIdFromBody() || '')
-        .trim()
-        .toLowerCase();
-      if (!nextPages.includes(currentPage)) {
-        const targetPage = nextPages.includes('recipes')
-          ? 'recipes'
-          : nextPages[0] || 'recipes';
-        window.location.href = getTopLevelPageHref(targetPage);
-      }
+      setForceWebModeEnabled(!bottomNavEditorToggle.checked);
+      reconcileAfterForceWebModeToggle();
     });
   }
 
