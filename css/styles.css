@@ -44,6 +44,10 @@
   --theme-light-hex: var(--theme-light-hex-debug);
   --theme-secondary-muted: var(--theme-secondary-muted-debug);
 
+  /* Purple theme (live accent = *-debug): semantic error / destructive actions.
+     Not the purple accent — dialogs, validation, danger buttons, deprecated ingredients. */
+  --theme-error: #ff00e4;
+
   --font-color-near-black: #191919;
   --subtitle: #333333;
   /* --placeholder-muted: #533d8c; */
@@ -56,7 +60,7 @@
 
   --edit-mode-color: #2184ff;
   /* Master ingredient hidden in Shopping (deprecated) — recipe read-only cue */
-  --ingredient-deprecated-fg: #f33128;
+  --ingredient-deprecated-fg: var(--theme-error);
 
   /* --- Layout + spacing --- */
   --app-bar-height: 64px;
@@ -257,6 +261,7 @@ body[data-force-web-mode='on'] {
   --app-filter-chip-bg: var(--pill-bg);
   --app-filter-chip-fg: var(--theme-primary);
   --app-filter-chip-active-bg: var(--theme-primary);
+  --theme-error: #ff00e4;
 }
 
 .material-symbols-outlined {
