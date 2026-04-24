@@ -9,20 +9,9 @@
   --ingredient-editor-control-font-size: 14px;
 
   /* --- Colors: theme + surfaces + roles --- */
-  /* Canonical palette sets: keep live theme vars below pointing at these so
-     force-web-mode can swap one cluster of aliases instead of touching component CSS. */
-  /* Alternate red accent (not the default UI theme) */
-  --theme-primary-rgb-normal: 220 38 38;
-  --theme-primary-normal: #dc2626;
-  --theme-secondary-rgb-normal: 239 68 68;
-  --theme-secondary-normal: #ef4444;
-  --button-primary-hover-normal: #b91c1c;
-  --theme-light-normal: hsl(0, 100%, 97%);
-  --theme-light-hex-normal: #fef2f2;
-  --theme-secondary-muted-normal: hsl(0, 63%, 78%);
-  --placeholder-muted-normal: hsla(0, 72%, 35%, 0.5);
-
-  /* Default desktop + web / force-web-mode: purple accent */
+  /* Canonical accent palette (*-debug). Live aliases below; `body[data-force-web-mode]`
+     re-applies the same cluster without touching component CSS. */
+  /* Purple accent (default desktop + web / force-web-mode) */
   --theme-primary-rgb-debug: 109 73 255;
   --theme-primary-debug: #6d49ff;
   --theme-secondary-rgb-debug: 127 92 255;

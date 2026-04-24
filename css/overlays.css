@@ -253,8 +253,9 @@
   color: var(--font-color-near-black);
 }
 
+/* Solid confirm in dialogs: same purple as primary actions (not --theme-error). */
 .button.button--danger {
-  background: var(--theme-error);
+  background: var(--theme-secondary);
   color: #fff;
 }
 
@@ -263,7 +264,7 @@
 }
 
 .button.button--danger:hover {
-  background: color-mix(in srgb, var(--theme-error) 72%, #000);
+  background: var(--button-primary-hover);
 }
 
 /* --- Unknown Items dialog (shared by Store + Recipe editors) --- */
