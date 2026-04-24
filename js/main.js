@@ -255,9 +255,8 @@ function setForceWebModeEnabled(enabled) {
 }
 
 function getTopLevelPageOrder() {
-  return isForceWebModeEnabled()
-    ? ['recipes', 'shopping', 'shopping-list', 'stores']
-    : ['recipes', 'shopping', 'stores', 'tags', 'sizes', 'units'];
+  // Recipes-only shell: no other top-level tabs.
+  return ['recipes'];
 }
 
 function getTopLevelPageHref(pageId) {
@@ -4123,6 +4122,7 @@ function bootFavoriteEatsAfterSqlReady() {
           return;
         if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
           return;
+        if (TOP_LEVEL_PAGES.length <= 1) return;
         const idx = TOP_LEVEL_PAGES.indexOf(pageId);
         if (idx === -1) return; // only act on top-level list pages
 
@@ -4235,13 +4235,13 @@ async function loadRecipesPage() {
   initAppBar({
     mode: 'list',
     titleText: 'Recipes',
+    showMenu: false,
   });
 
   // App bar is injected async; wait before wiring menu/search/add.
   if (typeof waitForAppBarReady === 'function') {
     await waitForAppBarReady();
   }
-  initBottomNav();
 
   const addBtnRecipes = document.getElementById('appBarAddBtn');
   const recipesActionBtn = addBtnRecipes;
@@ -5094,6 +5094,12 @@ async function loadRecipesPage() {
 
 // --- Shopping / Units / Stores loaders (v0 stubs) ---
 async function loadShoppingPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   const list = document.getElementById('shoppingList');
 
   initAppBar({
@@ -9499,6 +9505,12 @@ if (typeof window !== 'undefined') {
 // --- End shopping list checklist helpers ---
 
 async function loadShoppingListPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   const list = document.getElementById('shoppingListOutput');
   const shoppingListWebMode = isForceWebModeEnabled();
   const shoppingListExportEnabled = false;
@@ -15082,6 +15094,12 @@ function loadUnitEditorPage() {
 }
 
 async function loadUnitsPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   initAppBar({
     mode: 'list',
     titleText: 'Units',
@@ -15535,6 +15553,12 @@ async function loadUnitsPage() {
 }
 
 async function loadTagsPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   initAppBar({
     mode: 'list',
     titleText: 'Tags',
@@ -16213,6 +16237,12 @@ function loadTagEditorPage() {
 }
 
 async function loadSizesPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   initAppBar({
     mode: 'list',
     titleText: 'Sizes',
@@ -17120,6 +17150,12 @@ function formatVariantUsageLedgerPlainText(recipes, aislePlacements) {
 }
 
 async function loadStoresPage() {
+  try {
+    window.location.replace('recipes.html');
+  } catch (_) {
+    window.location.href = 'recipes.html';
+  }
+  return;
   initAppBar({
     mode: 'list',
     titleText: 'Stores',

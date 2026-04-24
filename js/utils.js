@@ -538,6 +538,10 @@ function initAppBar(options = {}) {
   const showSearch =
     options.showSearch !== undefined ? options.showSearch : mode === 'list';
 
+  // List: hamburger (menu) on by default. Recipes-only shell uses `showMenu: false`.
+  const showMenu =
+    mode === 'list' ? options.showMenu !== false : false;
+
   // If a page uses the mount-based fragment, inject it before wiring.
   // IMPORTANT: do not continue wiring until the fragment exists.
 
@@ -617,7 +621,7 @@ function initAppBar(options = {}) {
 
   // Mode visibility + wiring (single shell, explicit differences)
   if (mode === 'list') {
-    if (menuBtn) menuBtn.style.display = '';
+    if (menuBtn) menuBtn.style.display = showMenu ? '' : 'none';
     if (backBtn) backBtn.style.display = 'none';
     if (searchLayer) searchLayer.style.display = showSearch ? '' : 'none';
     if (searchToggleBtn) searchToggleBtn.style.display = showSearch ? '' : 'none';

@@ -139,3 +139,21 @@ textarea::placeholder {
   -moz-user-select: none; /* Firefox */
   -ms-user-select: none; /* IE/Edge */
 }
+
+/* Recipes list: no bottom nav, no hamburger — title uses the top-left space */
+body.recipes-page .app-bar-wrapper .title-and-back {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto; /* do not grow — avoid empty flex space to the right of the title */
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 0;
+}
+body.recipes-page .app-bar-wrapper #appBarTitle {
+  margin-left: 16px;
+}
+body.recipes-page .list-view.list-page.is-top-level-empty {
+  min-height: calc(
+    100dvh - var(--app-bar-height) - (2 * var(--top-level-list-edge-gap))
+  );
+}
