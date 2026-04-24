@@ -3749,23 +3749,7 @@ function shouldDeferSqlBootForCurrentPage() {
   return pageId === 'welcome' || pageId === 'web-db-error';
 }
 
-function getLastVisitedPageId() {
-  try {
-    return String(sessionStorage.getItem(LAST_PAGE_SESSION_KEY) || '')
-      .trim()
-      .toLowerCase();
-  } catch (_) {
-    return '';
-  }
-}
-
 function markCurrentPageAsLastVisited() {
-  try {
-    const previous = getLastVisitedPageId();
-    window.__favoriteEatsPreviousPageId = previous;
-  } catch (_) {
-    window.__favoriteEatsPreviousPageId = '';
-  }
   try {
     const current = detectPageIdFromBody();
     if (!current) return;
@@ -6042,11 +6026,6 @@ async function loadShoppingPage() {
   let filterChipRail = null;
   let suppressLocationDropdownReopen = false;
   let reopenShoppingCompoundDropdownId = '';
-  const previousPageId = String(
-    window.__favoriteEatsPreviousPageId || '',
-  ).trim();
-  const shouldRestoreChipState =
-    previousPageId === 'shopping' || previousPageId === 'shopping-editor';
   const syncShoppingActionButtonState = () => {
     if (!(addBtn instanceof HTMLButtonElement)) return;
     if (!isShoppingWebSelectMode()) {
@@ -6439,17 +6418,7 @@ async function loadShoppingPage() {
     } catch (_) {}
   };
 
-  const clearShoppingChipState = () => {
-    try {
-      sessionStorage.removeItem(getShoppingFilterChipStorageKey());
-    } catch (_) {}
-  };
-
   const restoreShoppingChipState = () => {
-    if (!shouldRestoreChipState) {
-      clearShoppingChipState();
-      return;
-    }
     try {
       const storageKey = getShoppingFilterChipStorageKey();
       let raw = sessionStorage.getItem(storageKey);
@@ -8045,7 +8014,28 @@ async function loadShoppingPage() {
 
 // --- Shopping list checklist helpers (tests extract this block) ---
 const SHOPPING_LIST_DOC_STORAGE_KEY = 'favoriteEats:shopping-list-doc:v2';
+const SHOPPING_LIST_VIEW_MODE_SESSION_KEY =
+  'favoriteEats:shopping-list-view-mode';
 const SHOPPING_LIST_DOC_VERSION = 3;
+
+function readShoppingListViewModeFromSession() {
+  try {
+    const raw = String(
+      sessionStorage.getItem(SHOPPING_LIST_VIEW_MODE_SESSION_KEY) || '',
+    )
+      .trim()
+      .toLowerCase();
+    if (raw === 'home' || raw === 'stores') return raw;
+  } catch (_) {}
+  return 'stores';
+}
+
+function persistShoppingListViewMode(mode) {
+  const next = mode === 'home' ? 'home' : 'stores';
+  try {
+    sessionStorage.setItem(SHOPPING_LIST_VIEW_MODE_SESSION_KEY, next);
+  } catch (_) {}
+}
 
 function createShoppingListChecklistRowId() {
   const stamp = Date.now().toString(36);
@@ -9604,7 +9594,7 @@ async function loadShoppingListPage() {
     { id: 'stores', label: 'Stores' },
     { id: 'home', label: 'Home' },
   ];
-  let shoppingListViewMode = 'stores';
+  let shoppingListViewMode = readShoppingListViewModeFromSession();
   let shoppingListFilterChipRail = null;
 
   const toResetComparableRows = (doc) =>
@@ -9815,6 +9805,7 @@ async function loadShoppingListPage() {
         const nextMode = chipId === 'home' ? 'home' : 'stores';
         if (nextMode === shoppingListViewMode) return;
         shoppingListViewMode = nextMode;
+        persistShoppingListViewMode(nextMode);
         collapsedShoppingListSections.clear();
         rerenderShoppingListFilterChips();
         renderChecklist();
