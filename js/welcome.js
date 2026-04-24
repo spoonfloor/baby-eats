@@ -81,13 +81,18 @@ function initWelcomePage() {
   });
 
   loadDbBtn.addEventListener('click', async () => {
+    if (!window.electronAPI || typeof window.electronAPI.pickDB !== 'function') {
+      welcomeToast({
+        message:
+          'This app must run in the desktop app. From the project folder, run: npm start',
+        timeoutMs: 10000,
+      });
+      return;
+    }
     try {
-      if (window.electronAPI && typeof window.electronAPI.pickDB === 'function') {
-        if (electronBusy) return;
-        electronBusy = true;
-        await handleElectronWelcomeLoad();
-        return;
-      }
+      if (electronBusy) return;
+      electronBusy = true;
+      await handleElectronWelcomeLoad();
     } catch (err) {
       console.error('Failed to load database:', err);
       welcomeToast({
