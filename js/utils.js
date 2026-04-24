@@ -307,13 +307,20 @@ function isCurrentAppBarShellMarkup(source) {
     // Bump when shell structure changes (invalidates stale sessionStorage cache).
     return (
       source.includes('app-bar-text-action') &&
-      source.includes('id="appBarAddBtn"')
+      source.includes('id="appBarAddBtn"') &&
+      source.includes('arrow_back')
     );
   }
   if (source instanceof Document || source instanceof Element) {
     if (!requiredIds.every((id) => source.querySelector(`#${id}`))) return false;
     const addBtn = source.querySelector('#appBarAddBtn');
-    return !!(addBtn && addBtn.classList.contains('app-bar-text-action'));
+    const backIcon = source.querySelector('#appBarBackBtn .material-symbols-outlined');
+    return !!(
+      addBtn &&
+      addBtn.classList.contains('app-bar-text-action') &&
+      backIcon &&
+      backIcon.textContent.trim() === 'arrow_back'
+    );
   }
   return false;
 }

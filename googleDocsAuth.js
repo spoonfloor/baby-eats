@@ -202,7 +202,7 @@ async function requestAuthorizationCode({ clientId, scopes, openExternal, existi
     };
 
     if (error) {
-      respond('<!doctype html><title>Favorite Eats</title><p>Google sign-in was cancelled. You can return to Favorite Eats.</p>');
+      respond('<!doctype html><title>Baby Eats</title><p>Google sign-in was cancelled. You can return to Baby Eats.</p>');
       codeReject(
         new GoogleDocsAuthError(`Google authorization failed: ${error}`, {
           code: error === 'access_denied' ? 'google_docs_auth_cancelled' : 'google_docs_auth_error',
@@ -216,7 +216,7 @@ async function requestAuthorizationCode({ clientId, scopes, openExternal, existi
     }
 
     if (!code || incomingState !== state) {
-      respond('<!doctype html><title>Favorite Eats</title><p>The Google sign-in response was invalid. You can close this tab.</p>');
+      respond('<!doctype html><title>Baby Eats</title><p>The Google sign-in response was invalid. You can close this tab.</p>');
       codeReject(
         new GoogleDocsAuthError('Google authorization callback state mismatch.', {
           code: 'google_docs_auth_state_mismatch',
@@ -226,7 +226,7 @@ async function requestAuthorizationCode({ clientId, scopes, openExternal, existi
       return;
     }
 
-    respond('<!doctype html><title>Favorite Eats</title><p>Google sign-in is complete. You can return to Favorite Eats.</p>');
+    respond('<!doctype html><title>Baby Eats</title><p>Google sign-in is complete. You can return to Baby Eats.</p>');
     codeResolve(code);
   });
 

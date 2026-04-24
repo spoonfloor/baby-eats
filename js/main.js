@@ -90,20 +90,6 @@ function uiToastUndo(message, onUndo, { timeoutMs = 8000 } = {}) {
   });
 }
 
-function attachSecretGalleryShortcut(addBtn) {
-  if (!addBtn) return;
-  const handler = (e) => {
-    if (!e) return;
-    const secret = e.ctrlKey || e.metaKey;
-    if (!secret) return;
-    e.preventDefault();
-    e.stopPropagation();
-    window.location.href = 'dialog-gallery.html';
-  };
-  addBtn.addEventListener('pointerdown', handler, { capture: true });
-  addBtn.addEventListener('click', handler, { capture: true });
-}
-
 const FAVORITE_EATS_BUILD_DEFAULTS = Object.freeze({
   target: 'desktop',
   forceWebExperience: false,
@@ -151,7 +137,6 @@ const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
   'size-editor': 'recipes',
   'shopping-editor': 'shopping',
   'store-editor': 'stores',
-  'dialog-gallery': 'recipes',
 });
 
 function isPublicWebExperienceLocked() {
@@ -4245,7 +4230,6 @@ async function loadRecipesPage() {
 
   const addBtnRecipes = document.getElementById('appBarAddBtn');
   const recipesActionBtn = addBtnRecipes;
-  attachSecretGalleryShortcut(addBtnRecipes);
 
   const list = document.getElementById('recipeList');
   if (!list) return;
@@ -5236,12 +5220,9 @@ async function loadShoppingPage() {
   };
   const pendingShoppingNavTarget = consumeShoppingNavTarget();
 
-  attachSecretGalleryShortcut(addBtn);
-
   // --- Load DB (mirror recipe loaders) ---
   const isElectron = !!window.electronAPI;
   let db;
-  attachSecretGalleryShortcut(addBtn);
 
   if (isElectron) {
     try {
@@ -10888,7 +10869,6 @@ async function loadShoppingListPage() {
       }
       webResetBtn = addBtn;
       ensureAppBarTextActionPair(webResetBtn, 'Reset', 'restart_alt');
-      attachSecretGalleryShortcut(webResetBtn);
       webResetBtn.addEventListener('click', () => {
         void handleShoppingListReset();
       });
@@ -15130,8 +15110,6 @@ async function loadUnitsPage() {
   // Keyboard selection + Enter activation for list rows.
   const listNav = enableTopLevelListKeyboardNav(list);
 
-  attachSecretGalleryShortcut(addBtn);
-
   // --- Load DB (mirror recipe/shopping loaders) ---
   const isElectron = !!window.electronAPI;
   let db;
@@ -15585,7 +15563,6 @@ async function loadTagsPage() {
   if (addBtn) ensureAppBarTextActionPair(addBtn, 'Add', 'add');
 
   const listNav = enableTopLevelListKeyboardNav(list);
-  attachSecretGalleryShortcut(addBtn);
 
   const isElectron = !!window.electronAPI;
   let db;
@@ -16269,7 +16246,6 @@ async function loadSizesPage() {
   if (addBtn) ensureAppBarTextActionPair(addBtn, 'Add', 'add');
 
   const listNav = enableTopLevelListKeyboardNav(list);
-  attachSecretGalleryShortcut(addBtn);
 
   const isElectron = !!window.electronAPI;
   let db;

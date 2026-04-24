@@ -1,5 +1,4 @@
 // Reusable typeahead / type-along dropdown controller (v1)
-// Designed to satisfy docs/ux/ux_ingredient-type-ahead.md
 
 (function () {
   if (typeof window === 'undefined') return;

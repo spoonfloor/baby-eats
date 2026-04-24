@@ -3304,13 +3304,6 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   --material-symbols-opsz: 28;
 }
 
-.app-bar-icon-button img.app-bar-icon {
-  width: 24px;
-  height: 24px;
-  user-select: none;
-  pointer-events: none;
-}
-
 /* Keep menu/back hit targets stable; title ellipsis absorbs narrow widths. */
 .app-bar-wrapper .title-and-back .app-bar-icon-button {
   flex-shrink: 0;

@@ -403,7 +403,7 @@ ipcMain.handle('googleDocsExportShoppingList', async (event, payload = null) => 
 // --- App startup ---
 
 app.whenReady().then(() => {
-  app.setName('Favorite Eats Editor');
+  app.setName('Baby Eats');
 
   loadConfig();
 

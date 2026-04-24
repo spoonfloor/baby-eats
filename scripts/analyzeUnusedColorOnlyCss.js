@@ -11,7 +11,6 @@ const CSS_FILES = [
   path.join(ROOT, 'css/overlays.css'),
   path.join(ROOT, 'css/styles.css'),
   path.join(ROOT, 'css/overrides.css'),
-  path.join(ROOT, 'proto/proto.css'),
 ];
 
 const COLOR_PROPS = new Set([

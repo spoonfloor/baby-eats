@@ -3078,11 +3078,6 @@ function normalizeRecipeTagsArray(rawTags) {
   return out;
 }
 
-function formatRecipeTagsSubtitle(tags) {
-  const arr = normalizeRecipeTagsArray(tags);
-  return arr.join('\n');
-}
-
 // --- Recipe tags keyboard helpers (tests extract this block) ---
 function shouldCommitRecipeTagsEdit(event) {
   return !!(

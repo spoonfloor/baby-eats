@@ -1,6 +1,6 @@
 {
   "name": "favorite-eats",
-  "productName": "Favorite Eats Editor",
+  "productName": "Baby Eats",
   "version": "1.0.0",
   "main": "electronMain.js",
   "scripts": {
