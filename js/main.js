@@ -8707,6 +8707,140 @@ function formatShoppingListHtml(docRows) {
   return blocks.join('');
 }
 
+function formatShoppingListDisplaySectionHeaderLine(row) {
+  if (row?.rowType !== 'section') return '';
+  const boundary = String(row.collapseBoundary || '').trim();
+  const text = String(row.text || row.label || '').trim();
+  if (
+    boundary === 'store' ||
+    boundary === 'home' ||
+    boundary === 'pseudo-unlisted-root'
+  ) {
+    return (text || 'Unlisted').toUpperCase();
+  }
+  if (boundary === 'aisle' || boundary === 'plain-aisle' || boundary === 'completed') {
+    return toShoppingListAisleTitleCase(text || (boundary === 'completed' ? 'completed' : ''));
+  }
+  return toShoppingListAisleTitleCase(text) || (text || '').toUpperCase();
+}
+
+function formatShoppingListPlainTextFromViewState(visibleRows, {
+  selectedRecipes = [],
+  recipesExpanded = false,
+} = {}) {
+  const lines = [];
+  if (recipesExpanded && Array.isArray(selectedRecipes) && selectedRecipes.length) {
+    lines.push('RECIPES');
+    selectedRecipes.forEach((recipe) => {
+      const title = String(recipe?.title || '').trim();
+      if (!title) return;
+      const parts = String(recipe?.servingsText || '').trim();
+      lines.push(
+        parts ? `- ${title} (${parts})` : `- ${title}`,
+      );
+    });
+  }
+  if (!Array.isArray(visibleRows)) return lines.join('\n');
+  visibleRows.forEach((row) => {
+    if (row?.rowType === 'section') {
+      const boundary = String(row.collapseBoundary || '').trim();
+      if (
+        boundary === 'store' ||
+        boundary === 'home' ||
+        boundary === 'pseudo-unlisted-root'
+      ) {
+        if (lines.length) {
+          lines.push('');
+        }
+      }
+      const header = formatShoppingListDisplaySectionHeaderLine(row);
+      if (header) {
+        lines.push(header);
+      }
+      return;
+    }
+    if (row?.rowType === 'item') {
+      if (row.checked) return;
+      const t = String(row.text || '').trim();
+      if (!t) return;
+      lines.push(`- ${t}`);
+    }
+  });
+  return lines.join('\n');
+}
+
+function formatShoppingListHtmlFromViewState(visibleRows, {
+  selectedRecipes = [],
+  recipesExpanded = false,
+} = {}) {
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const blocks = [];
+  let openList = false;
+  const closeList = () => {
+    if (!openList) return;
+    blocks.push('</ul>');
+    openList = false;
+  };
+
+  if (recipesExpanded && Array.isArray(selectedRecipes) && selectedRecipes.length) {
+    blocks.push(`<p>${escapeHtml('RECIPES')}</p>`);
+    blocks.push('<ul>');
+    openList = true;
+    selectedRecipes.forEach((recipe) => {
+      const title = String(recipe?.title || '').trim();
+      if (!title) return;
+      const parts = String(recipe?.servingsText || '').trim();
+      const liText = parts
+        ? `${escapeHtml(title)} (${escapeHtml(parts)})`
+        : escapeHtml(title);
+      blocks.push(`<li>${liText}</li>`);
+    });
+    closeList();
+  }
+
+  if (!Array.isArray(visibleRows) || !visibleRows.length) {
+    return blocks.join('');
+  }
+
+  visibleRows.forEach((row) => {
+    if (row?.rowType === 'section') {
+      closeList();
+      const boundary = String(row.collapseBoundary || '').trim();
+      if (
+        boundary === 'store' ||
+        boundary === 'home' ||
+        boundary === 'pseudo-unlisted-root'
+      ) {
+        if (blocks.length) {
+          blocks.push('<br>');
+        }
+      }
+      const header = formatShoppingListDisplaySectionHeaderLine(row);
+      if (header) {
+        blocks.push(`<p>${escapeHtml(header)}</p>`);
+      }
+      return;
+    }
+    if (row?.rowType === 'item') {
+      if (row.checked) return;
+      const t = String(row.text || '').trim();
+      if (!t) return;
+      if (!openList) {
+        blocks.push('<ul>');
+        openList = true;
+      }
+      blocks.push(`<li>${escapeHtml(t)}</li>`);
+    }
+  });
+  closeList();
+  return blocks.join('');
+}
+
 function buildShoppingListExportPayload(docRows, options = {}) {
   const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
     (row) => !row?.checked && String(row?.text || '').trim(),
@@ -9626,15 +9760,6 @@ async function loadShoppingListPage() {
     syncBtn(webResetBtn);
   };
 
-  const syncShoppingListCopyButtonState = () => {
-    const shouldDisable = !formatShoppingListPlainText(
-      shoppingListDoc?.rows,
-    ).trim();
-    if (!(webCopyBtn instanceof HTMLButtonElement)) return;
-    webCopyBtn.disabled = shouldDisable;
-    webCopyBtn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
-  };
-
   const syncShoppingListExportButtonState = () => {
     if (!shoppingListExportEnabled) return;
     const hasItems =
@@ -9935,6 +10060,54 @@ async function loadShoppingListPage() {
     return nextMap;
   };
 
+  const getShoppingListChecklistViewState = () => {
+    const searchQuery = String(searchInput?.value || '').trim();
+    const isSearchActive = !!searchQuery;
+    const displayRows = getShoppingListChecklistDisplayRows(
+      shoppingListDoc?.rows || [],
+      {
+        mode: shoppingListViewMode,
+        searchQuery,
+        homeLocationBySourceKey: getShoppingListHomeLocationMap(),
+      },
+    );
+    const visibleRows = isSearchActive
+      ? displayRows
+      : filterShoppingListChecklistRowsForCollapse(
+          displayRows,
+          collapsedShoppingListSections,
+        );
+    const selectedRecipes = isSearchActive
+      ? []
+      : getShoppingListSelectedRecipeSummaryRows({ db });
+    const recipesSectionKey = 'sl-recipes';
+    const recipesExpanded =
+      !!selectedRecipes.length &&
+      !collapsedShoppingListSections.has(recipesSectionKey);
+    return {
+      searchQuery,
+      isSearchActive,
+      displayRows,
+      visibleRows,
+      selectedRecipes,
+      recipesExpanded,
+    };
+  };
+
+  const syncShoppingListCopyButtonState = () => {
+    const { visibleRows, selectedRecipes, recipesExpanded } =
+      getShoppingListChecklistViewState();
+    const shouldDisable = !String(
+      formatShoppingListPlainTextFromViewState(visibleRows, {
+        selectedRecipes,
+        recipesExpanded,
+      }) || '',
+    ).trim();
+    if (!(webCopyBtn instanceof HTMLButtonElement)) return;
+    webCopyBtn.disabled = shouldDisable;
+    webCopyBtn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
+  };
+
   if (searchInput instanceof HTMLInputElement) {
     wireAppBarSearch(searchInput, {
       clearBtn,
@@ -9946,16 +10119,13 @@ async function loadShoppingListPage() {
   }
 
   const renderChecklist = () => {
-    const searchQuery = String(searchInput?.value || '').trim();
-    const isSearchActive = !!searchQuery;
-    const displayRows = getShoppingListChecklistDisplayRows(
-      shoppingListDoc?.rows || [],
-      {
-        mode: shoppingListViewMode,
-        searchQuery,
-        homeLocationBySourceKey: getShoppingListHomeLocationMap(),
-      },
-    );
+    const {
+      isSearchActive,
+      displayRows,
+      visibleRows,
+      selectedRecipes,
+      recipesExpanded,
+    } = getShoppingListChecklistViewState();
     const planRowsByKey = new Map(
       getShoppingPlanSelectionRows({ db })
         .filter((row) => String(row?.key || '').trim())
@@ -9974,9 +10144,6 @@ async function loadShoppingListPage() {
             shoppingNavTargetId: 'favoriteEats:shopping-nav-target-id',
             shoppingNavTargetName: 'favoriteEats:shopping-nav-target-name',
           };
-    const selectedRecipes = isSearchActive
-      ? []
-      : getShoppingListSelectedRecipeSummaryRows({ db });
     list.innerHTML = '';
 
     if (!displayRows.length && !selectedRecipes.length) {
@@ -9992,20 +10159,11 @@ async function loadShoppingListPage() {
     }
     setTopLevelEmptyStateLayoutMode(list, false);
 
-    const visibleRows = isSearchActive
-      ? displayRows
-      : filterShoppingListChecklistRowsForCollapse(
-          displayRows,
-          collapsedShoppingListSections,
-        );
-
     let shoppingListChecklistItemDebugCount = 0;
     const SHOPPING_LIST_CHECKLIST_ITEM_DEBUG_MAX = 12;
 
     if (selectedRecipes.length) {
       const recipesSectionKey = 'sl-recipes';
-      const recipesExpanded =
-        !collapsedShoppingListSections.has(recipesSectionKey);
       const recipeSection = document.createElement('li');
       recipeSection.className =
         'list-section-label shopping-list-section--recipes';
@@ -10666,11 +10824,19 @@ async function loadShoppingListPage() {
   };
 
   const handleShoppingListCopy = async () => {
-    const plainText = formatShoppingListPlainText(shoppingListDoc?.rows);
-    const htmlText = formatShoppingListHtml(shoppingListDoc?.rows);
-    if (!plainText.trim()) {
+    const { visibleRows, selectedRecipes, recipesExpanded } =
+      getShoppingListChecklistViewState();
+    const plainText = formatShoppingListPlainTextFromViewState(visibleRows, {
+      selectedRecipes,
+      recipesExpanded,
+    });
+    const htmlText = formatShoppingListHtmlFromViewState(visibleRows, {
+      selectedRecipes,
+      recipesExpanded,
+    });
+    if (!String(plainText || '').trim()) {
       syncShoppingListCopyButtonState();
-      uiToast('No unchecked shopping items to copy.');
+      uiToast('Nothing to copy.');
       return;
     }
     const canWritePlainText =
