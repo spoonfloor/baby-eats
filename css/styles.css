@@ -3856,18 +3856,33 @@ h1.nav-text {
   font-size: var(--body-font-size);
 }
 
-body.recipe-editor-page .recipe-tags-editor-card {
-  margin-top: 0;
-  background: var(--field-bg);
-  border-radius: 14px;
-  padding: 18px 18px;
+body.recipe-editor-page .recipe-tags-select {
+  --recipe-tags-chevron-inset: 42px; /* 10px + 32px: chevron sits 32px left of the prior edge */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px var(--recipe-tags-chevron-inset) 8px 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--field-fg);
+  border: 0;
+  font-family: var(--main-font);
+  font-size: var(--ingredient-editor-control-font-size);
+  line-height: 1.35;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6l5-4.5' fill='none' stroke='%23444' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  /* Prior edge was ~10px; shift chevron 32px left: */
+  background-position: right 42px center;
 }
 
-body.recipe-editor-page .recipe-tags-editor-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0;
+body.recipe-editor-page .recipe-tags-select:focus {
+  outline: none;
+  color: var(--field-fg);
 }
 
 .recipe-tags-editor {

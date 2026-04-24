@@ -2432,433 +2432,17 @@ function renderRecipe(recipe) {
     console.warn('⚠️ Failed to update originalRecipeSnapshot:', err);
   }
 
-  // --- Clear & rebuild container
+  // --- Clear & rebuild container (title + tags only) ---
   const container = getPageContentContainer();
-  const webMode = isRecipeWebModeActive();
 
   container.innerHTML = `
     <h1 id="recipeTitle" class="recipe-title">${recipe.title || ''}</h1>
-    <div id="servingsRow" class="servings-line"></div>
-    <div id="ingredientsSection"></div>
-    <div id="stepsSection">
-      <h2 class="section-header">Instructions</h2>
-    </div>
     <div id="tagsSection"></div>
   `;
 
-  const stepsSection = container.querySelector('#stepsSection');
-
-  // Unified servings row just under the title
-  renderServingsRow(recipe, container);
-
-  // Enable inline title editing
   const titleEl = container.querySelector('#recipeTitle');
   if (typeof attachTitleEditor === 'function') {
     attachTitleEditor(titleEl);
-  }
-
-  // Ingredients list + "You will need" — delegate to the shared rerender fn.
-  if (recipe.sections && recipe.sections.length > 0) {
-    rerenderIngredientsSectionFromModel();
-  }
-
-  // --- StepNode-based instructions renderer (Phase 1) ---
-  function renderStepsFromStepNodes(stepNodes, stepsSection, recipeId) {
-    if (!Array.isArray(stepNodes) || stepNodes.length === 0 || !stepsSection) {
-      return;
-    }
-    const stepRecipeLinksRef =
-      window.StepRecipeLinks && typeof window.StepRecipeLinks === 'object'
-        ? window.StepRecipeLinks
-        : null;
-    const stepDisplayText = (raw) =>
-      stepRecipeLinksRef && typeof stepRecipeLinksRef.toDisplayText === 'function'
-        ? stepRecipeLinksRef.toDisplayText(raw)
-        : String(raw == null ? '' : raw);
-    const renderStepReadOnly = (el, raw) => {
-      if (
-        stepRecipeLinksRef &&
-        typeof stepRecipeLinksRef.renderReadOnly === 'function'
-      ) {
-        stepRecipeLinksRef.renderReadOnly(el, raw);
-      } else {
-        el.textContent = stepDisplayText(raw);
-      }
-    };
-
-    // Ensure Ctrl-held insert-mode wiring is active (shared with Ingredients).
-    try {
-      ensureIngredientSubheadInsertModeWiring();
-    } catch (_) {}
-
-    const nodes =
-      window.StepNodeModel &&
-      typeof StepNodeModel.normalizeStepNodeOrder === 'function'
-        ? StepNodeModel.normalizeStepNodeOrder(stepNodes)
-        : stepNodes.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-    const rerender = (nextNodes, focusId) => {
-      // Keep the Instructions header, clear the rest.
-      const header = stepsSection.querySelector('h2.section-header');
-      stepsSection.innerHTML = '';
-      if (header) stepsSection.appendChild(header);
-      renderStepsFromStepNodes(nextNodes, stepsSection, recipeId);
-      if (focusId != null) {
-        try {
-          const el = stepsSection.querySelector(
-            `.step-text[data-step-id="${String(focusId)}"]`
-          );
-          if (el && typeof el.click === 'function') el.click();
-        } catch (_) {}
-      }
-    };
-
-    const insertHeadingAt = (idx) => {
-      try {
-        // If a step is actively being edited, blur it first so its onBlur commit runs.
-        if (
-          window._activeStepInput &&
-          typeof window._activeStepInput.blur === 'function'
-        ) {
-          window._activeStepInput.blur();
-        }
-      } catch (_) {}
-
-      const nodesNow = Array.isArray(window.stepNodes)
-        ? window.stepNodes
-        : nodes;
-      const ordered =
-        window.StepNodeModel &&
-        typeof StepNodeModel.normalizeStepNodeOrder === 'function'
-          ? StepNodeModel.normalizeStepNodeOrder(nodesNow)
-          : nodesNow.slice();
-
-      const safeIdx = Math.max(0, Math.min(Number(idx) || 0, ordered.length));
-      const newId = `tmp-step-${Date.now()}-${Math.floor(
-        Math.random() * 100000
-      )}`;
-
-      const makeNode =
-        window.StepNodeModel &&
-        typeof StepNodeModel.createStepNode === 'function'
-          ? StepNodeModel.createStepNode
-          : null;
-
-      const StepType =
-        window.StepNodeType && typeof window.StepNodeType === 'object'
-          ? window.StepNodeType
-          : { HEADING: 'heading', STEP: 'step' };
-
-      const newNode = makeNode
-        ? makeNode({
-            id: newId,
-            type: StepType.HEADING,
-            text: '',
-            order: safeIdx + 1,
-          })
-        : { id: newId, type: StepType.HEADING, text: '', order: safeIdx + 1 };
-
-      const nextArr = ordered.slice();
-      nextArr.splice(safeIdx, 0, newNode);
-      // Renormalize order to 1..n (stable, deterministic).
-      const normalized = nextArr.map((n, i) => ({ ...n, order: i + 1 }));
-
-      window.stepNodes = normalized;
-      rerender(normalized, newId);
-    };
-
-    let displayIndex = 0;
-
-    const isHeading = (n) =>
-      n &&
-      (n.type === 'heading' ||
-        n.type === (window.StepNodeType && window.StepNodeType.HEADING));
-
-    const noUserWebStepContent =
-      webMode &&
-      !nodes.some((n) => {
-        if (isHeading(n)) return false;
-        const d = String(stepDisplayText(n.text ?? '')).trim();
-        return d && !isRecipeEditorStepPromptDisplayText(d);
-      });
-    const stepRowPlaceholder = noUserWebStepContent
-      ? WEB_MODE_NO_INSTRUCTIONS_HINT
-      : DEFAULT_STEP_PLACEHOLDER_TEXT;
-
-    nodes.forEach((node, idx) => {
-      const line = document.createElement('div');
-      line.className = 'instruction-line numbered';
-
-      // Attach identity + type for editor + renumbering.
-      line.dataset.stepId = String(node.id);
-      const type = node.type || 'step';
-      line.dataset.stepType = type;
-
-      const num = document.createElement('span');
-      num.className = 'step-num';
-
-      if (type === 'heading') {
-        // Headings: visually unnumbered and start a new numbering group.
-        num.textContent = '';
-        displayIndex = 0; // next steps under this heading start at 1
-      } else {
-        displayIndex += 1;
-        num.textContent = `${displayIndex}.`;
-      }
-
-      const text = document.createElement('span');
-      text.className = 'step-text';
-      text.dataset.stepId = String(node.id);
-
-      const rawText = node.text ?? '';
-      const displayText = stepDisplayText(rawText);
-      const isPlaceholder = isRecipeEditorStepPromptDisplayText(
-        String(displayText).trim()
-      );
-
-      if (isPlaceholder) {
-        text.textContent = '';
-        // Headings use different language than steps.
-        if (type === 'heading') {
-          text.dataset.placeholder = 'Section title';
-          text.classList.add(
-            'placeholder-prompt',
-            'placeholder-prompt--editblue'
-          );
-        } else {
-          text.dataset.placeholder = stepRowPlaceholder;
-          text.classList.add('placeholder-prompt');
-          // Placeholder step row (empty-state). Used for hiding the number pre-focus.
-          line.classList.add('instruction-line--placeholder');
-        }
-      } else {
-        renderStepReadOnly(text, rawText);
-      }
-
-      ensureStepTextNotEmpty(text);
-
-      line.appendChild(num);
-      line.appendChild(text);
-      stepsSection.appendChild(line);
-
-      if (!webMode) attachStepInlineEditor(text);
-    });
-  }
-
-  // --- Steps (instructions) ---
-
-  const hasStepNodes =
-    Array.isArray(window.stepNodes) && window.stepNodes.length > 0;
-
-  const hasSectionedSteps =
-    Array.isArray(recipe.sections) &&
-    recipe.sections.some((s) => Array.isArray(s.steps) && s.steps.length > 0);
-  const stepRecipeLinksRef =
-    window.StepRecipeLinks && typeof window.StepRecipeLinks === 'object'
-      ? window.StepRecipeLinks
-      : null;
-  const stepDisplayText = (raw) =>
-    stepRecipeLinksRef && typeof stepRecipeLinksRef.toDisplayText === 'function'
-      ? stepRecipeLinksRef.toDisplayText(raw)
-      : String(raw == null ? '' : raw);
-  const renderStepReadOnly = (el, raw) => {
-    if (
-      stepRecipeLinksRef &&
-      typeof stepRecipeLinksRef.renderReadOnly === 'function'
-    ) {
-      stepRecipeLinksRef.renderReadOnly(el, raw);
-    } else {
-      el.textContent = stepDisplayText(raw);
-    }
-  };
-
-  if (hasStepNodes) {
-    renderStepsFromStepNodes(window.stepNodes, stepsSection, recipe.id);
-  } else if (hasSectionedSteps) {
-    const sortedSections = [...recipe.sections].sort(
-      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-    );
-
-    const noUserWebStepContent = webMode && (() => {
-      for (const section of sortedSections) {
-        const rawSteps = Array.isArray(section.steps) ? section.steps : [];
-        for (const step of rawSteps) {
-          if ((step.type || 'step') === 'heading') continue;
-          const displayText = stepDisplayText(step.instructions ?? '');
-          const d = String(displayText).trim();
-          if (d && !isRecipeEditorStepPromptDisplayText(d)) return false;
-        }
-      }
-      return true;
-    })();
-    const stepRowPlaceholder = noUserWebStepContent
-      ? WEB_MODE_NO_INSTRUCTIONS_HINT
-      : DEFAULT_STEP_PLACEHOLDER_TEXT;
-
-    let totalSteps = 0;
-
-    sortedSections.forEach((section) => {
-      const rawSteps = Array.isArray(section.steps) ? section.steps : [];
-      const stepsInSection = [...rawSteps].sort(
-        (a, b) => (a.step_number ?? 0) - (b.step_number ?? 0)
-      );
-      if (!stepsInSection.length) return;
-
-      const displayName =
-        section.name && section.name !== '(unnamed)' ? section.name : null;
-
-      if (displayName) {
-        const header = document.createElement('h3');
-        header.className = 'section-subheader';
-        header.textContent = displayName;
-        stepsSection.appendChild(header);
-      }
-
-      const sectionId = section.ID ?? section.id ?? null;
-
-      stepsInSection.forEach((step, idx) => {
-        const line = document.createElement('div');
-        line.className = 'instruction-line numbered';
-        if (sectionId != null) {
-          line.dataset.sectionId = String(sectionId);
-        }
-        // Attach identity to the line itself for StepNode lookups.
-        line.dataset.stepId = String(step.ID ?? step.id);
-        // Default type is 'step' unless StepNode model says otherwise.
-        line.dataset.stepType = 'step';
-
-        const num = document.createElement('span');
-        num.className = 'step-num';
-        num.textContent = `${idx + 1}.`;
-
-        const text = document.createElement('span');
-        text.className = 'step-text';
-        text.dataset.stepId = String(step.ID ?? step.id);
-        if (sectionId != null) {
-          text.dataset.sectionId = String(sectionId);
-        }
-        const rawText = step.instructions ?? '';
-        const displayText = stepDisplayText(rawText);
-        const isPlaceholder = isRecipeEditorStepPromptDisplayText(
-          String(displayText).trim()
-        );
-
-        if (isPlaceholder) {
-          text.textContent = '';
-          text.dataset.placeholder = stepRowPlaceholder;
-          text.classList.add('placeholder-prompt');
-          line.classList.add('instruction-line--placeholder');
-        } else {
-          renderStepReadOnly(text, rawText);
-        }
-
-        // If StepNode model is present, mirror node.type → DOM.
-        try {
-          const nodes = Array.isArray(window.stepNodes)
-            ? window.stepNodes
-            : null;
-          const stepNodeTypeRef =
-            window.StepNodeType && typeof window.StepNodeType === 'object'
-              ? window.StepNodeType
-              : null;
-
-          if (nodes && stepNodeTypeRef) {
-            const idStr = String(step.ID ?? step.id);
-            const node = nodes.find((n) => String(n.id) === idStr);
-            if (node && node.type === stepNodeTypeRef.HEADING) {
-              line.dataset.stepType = 'heading';
-              // Headings are unnumbered; keep the num span for layout but clear text.
-              num.textContent = '';
-            }
-          }
-        } catch (err) {
-          console.warn(
-            'StepNode type sync failed; falling back to step type.',
-            err
-          );
-        }
-
-        ensureStepTextNotEmpty(text);
-
-        line.appendChild(num);
-        line.appendChild(text);
-        stepsSection.appendChild(line);
-
-        if (!webMode) attachStepInlineEditor(text);
-        totalSteps++;
-      });
-    });
-
-    if (totalSteps === 0) {
-      const noSteps = document.createElement('div');
-      noSteps.className = 'empty-state';
-      noSteps.textContent = 'No instructions found.';
-      stepsSection.appendChild(noSteps);
-    } else {
-    }
-  } else if (recipe.steps && recipe.steps.length > 0) {
-    const noUserWebStepContent = webMode && (() => {
-      for (const step of recipe.steps) {
-        if ((step.type || 'step') === 'heading') continue;
-        const displayText = stepDisplayText(step.instructions ?? '');
-        const d = String(displayText).trim();
-        if (d && !isRecipeEditorStepPromptDisplayText(d)) return false;
-      }
-      return true;
-    })();
-    const stepRowPlaceholder = noUserWebStepContent
-      ? WEB_MODE_NO_INSTRUCTIONS_HINT
-      : DEFAULT_STEP_PLACEHOLDER_TEXT;
-
-    // Fallback: flat list if there are no sectioned steps
-    recipe.steps.forEach((step, i) => {
-      const line = document.createElement('div');
-      line.className = 'instruction-line numbered';
-
-      const num = document.createElement('span');
-      num.className = 'step-num';
-      num.textContent = `${i + 1}.`;
-      const text = document.createElement('span');
-      text.className = 'step-text';
-      text.dataset.stepId = String(step.id);
-
-      const rawText = step.instructions ?? '';
-      const displayText = stepDisplayText(rawText);
-      const isPlaceholder = isRecipeEditorStepPromptDisplayText(
-        String(displayText).trim()
-      );
-
-      if (isPlaceholder) {
-        text.textContent = '';
-        // Headings use different language than steps.
-        if (line.dataset.stepType === 'heading') {
-          text.dataset.placeholder = 'Section title';
-          text.classList.add(
-            'placeholder-prompt',
-            'placeholder-prompt--editblue'
-          );
-        } else {
-          text.dataset.placeholder = stepRowPlaceholder;
-          text.classList.add('placeholder-prompt');
-          line.classList.add('instruction-line--placeholder');
-        }
-      } else {
-        renderStepReadOnly(text, rawText);
-      }
-
-      ensureStepTextNotEmpty(text);
-
-      line.appendChild(num);
-      line.appendChild(text);
-
-      stepsSection.appendChild(line);
-      if (!webMode) attachStepInlineEditor(text);
-    });
-  } else {
-    const noSteps = document.createElement('div');
-    noSteps.className = 'empty-state';
-    noSteps.textContent = 'No instructions found.';
-    stepsSection.appendChild(noSteps);
   }
 
   renderRecipeTagsSection(recipe, container);
@@ -3518,21 +3102,73 @@ function getVisibleRecipeTagNamePool() {
   if (!db) return [];
   try {
     const q = db.exec(`
-      SELECT DISTINCT name
+      SELECT name
       FROM tags
       WHERE name IS NOT NULL
         AND trim(name) != ''
         AND COALESCE(is_hidden, 0) = 0
-      ORDER BY name COLLATE NOCASE;
+        AND COALESCE(NULLIF(lower(trim(intended_use)), ''), 'recipes') = 'recipes'
+      ORDER BY COALESCE(sort_order, 999999), name COLLATE NOCASE;
     `);
     if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values)) return [];
-    return q[0].values
-      .map((row) => (Array.isArray(row) ? row[0] : null))
-      .map((v) => String(v || '').trim())
-      .filter(Boolean);
+    const seen = new Set();
+    const out = [];
+    q[0].values.forEach((row) => {
+      const name = String((Array.isArray(row) ? row[0] : null) || '')
+        .trim()
+        .replace(/\s+/g, ' ');
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(name);
+    });
+    return out;
   } catch (_) {
-    return [];
+    try {
+      const q2 = db.exec(`
+        SELECT name
+        FROM tags
+        WHERE name IS NOT NULL
+          AND trim(name) != ''
+          AND COALESCE(is_hidden, 0) = 0
+        ORDER BY name COLLATE NOCASE;
+      `);
+      if (!Array.isArray(q2) || !q2.length || !Array.isArray(q2[0].values)) return [];
+      const seen = new Set();
+      const out2 = [];
+      q2[0].values.forEach((row) => {
+        const name = String((Array.isArray(row) ? row[0] : null) || '')
+          .trim()
+          .replace(/\s+/g, ' ');
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out2.push(name);
+      });
+      return out2;
+    } catch (_) {
+      return [];
+    }
   }
+}
+
+/** When legacy data has multiple tags, keep only the first. */
+function normalizeToSingleRecipeTagList(rawTags) {
+  const arr = normalizeRecipeTagsArray(rawTags);
+  if (arr.length <= 1) return arr;
+  return [arr[0]];
+}
+
+function canonicalRecipeTagNameInPool(name, pool) {
+  if (!name || !Array.isArray(pool)) return '';
+  const low = String(name).trim().toLowerCase();
+  for (let i = 0; i < pool.length; i += 1) {
+    const p = pool[i];
+    if (String(p || '').trim().toLowerCase() === low) return String(p).trim();
+  }
+  return String(name).trim();
 }
 
 function renderRecipeTagsSection(recipe, container) {
@@ -3544,25 +3180,42 @@ function renderRecipeTagsSection(recipe, container) {
   const recipeModel = window.recipeData || recipe;
   if (!recipeModel) return;
 
-  const normalized = normalizeRecipeTagsArray(recipeModel.tags || []);
-  recipeModel.tags = normalized;
-
-  const previousEditorState = window._recipeTagsEditorState || {};
-  const previousDraft =
-    typeof previousEditorState.draft === 'string'
-      ? previousEditorState.draft
-      : Array.isArray(previousEditorState.draftTags)
-      ? formatRecipeTagsSubtitle(previousEditorState.draftTags)
-      : '';
-  const isEditing = !!previousEditorState.isEditing;
-  const originalTags = Array.isArray(previousEditorState.originalTags)
-    ? previousEditorState.originalTags
-    : normalized.slice();
-  const ensureVisibleOnOpen = !!previousEditorState.ensureVisibleOnOpen;
-
   try {
-    document.body.classList.toggle('recipe-tags-editing', isEditing);
+    delete window._recipeTagsEditorState;
   } catch (_) {}
+  try {
+    document.body.classList.remove('recipe-tags-editing');
+  } catch (_) {}
+
+  const before = normalizeRecipeTagsArray(recipeModel.tags || []);
+  const afterSingle = normalizeToSingleRecipeTagList(before);
+  recipeModel.tags = afterSingle;
+  if (before.length > 1 && typeof markDirty === 'function') {
+    markDirty();
+  }
+
+  const pool = getVisibleRecipeTagNamePool();
+  if (afterSingle.length) {
+    const canon = canonicalRecipeTagNameInPool(afterSingle[0], pool);
+    if (
+      canon &&
+      canon !== afterSingle[0] &&
+      pool.some(
+        (p) =>
+          String(p || '').toLowerCase() ===
+          String(afterSingle[0] || '').toLowerCase()
+      )
+    ) {
+      recipeModel.tags = [canon];
+    }
+  }
+
+  const currentTag = recipeModel.tags[0] || '';
+  const tagIsInPool =
+    !currentTag ||
+    pool.some(
+      (p) => String(p).toLowerCase() === String(currentTag).toLowerCase()
+    );
 
   section.className = 'recipe-tags-section';
   section.innerHTML = '';
@@ -3572,329 +3225,54 @@ function renderRecipeTagsSection(recipe, container) {
   header.textContent = 'Tags';
   section.appendChild(header);
 
-  const manage = document.createElement('button');
-  manage.type = 'button';
-  manage.className = 'recipe-tags-manage-btn';
-  manage.textContent = 'Manage';
-  manage.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void (async () => {
-      const db = window.dbInstance;
-      const navigate = () => {
-        sessionStorage.setItem('selectedRecipeId', String(recipeModel.id || window.recipeId || ''));
-        window.location.href = 'tags.html';
-      };
-
-      if (
-        db &&
-        typeof normalizeRecipeTagDraftList === 'function' &&
-        typeof createTagLookupHelpers === 'function' &&
-        typeof resolveUnknownTagNames === 'function'
-      ) {
-        const normalizedDraftTags = normalizeRecipeTagDraftList(recipeModel.tags);
-        const { anyVisibleTagNamed } = createTagLookupHelpers(db);
-        const unknownTags = [];
-        const seen = new Set();
-        normalizedDraftTags.forEach((tag) => {
-          const key = String(tag || '').trim().toLowerCase();
-          if (!key || seen.has(key)) return;
-          seen.add(key);
-          if (anyVisibleTagNamed(tag)) return;
-          unknownTags.push(tag);
-        });
-
-        if (unknownTags.length) {
-          const resolved = await resolveUnknownTagNames({ db, tags: unknownTags });
-          if (!resolved) return;
-          const replacementMap = resolved.map;
-          recipeModel.tags = normalizeRecipeTagDraftList(
-            normalizedDraftTags.map((tag) => {
-              const key = String(tag || '').trim().toLowerCase();
-              return replacementMap.get(key) || tag;
-            })
-          );
-          try {
-            if (typeof window.recipeEditorSave === 'function') {
-              await window.recipeEditorSave();
-            }
-          } catch (_) { return; }
-          const stillDirty =
-            typeof window.recipeEditorGetIsDirty === 'function'
-              ? window.recipeEditorGetIsDirty()
-              : false;
-          if (stillDirty) return;
-        }
-      }
-
-      navigate();
-    })();
-  });
-  section.appendChild(manage);
-  setManageButtonHiddenState(manage, normalized.length === 0);
-
   const content = document.createElement('div');
   content.className = 'recipe-tags-content';
   section.appendChild(content);
 
-  const updateModelFromDraft = (draftTags) => {
-    const prevTags = normalizeRecipeTagsArray(originalTags);
-    const nextTags = normalizeRecipeTagsArray(draftTags);
-    const prevKey = JSON.stringify(prevTags.map((t) => t.toLowerCase()));
-    const nextKey = JSON.stringify(nextTags.map((t) => t.toLowerCase()));
-    recipeModel.tags = nextTags;
-    if (prevKey !== nextKey && typeof markDirty === 'function') markDirty();
+  const selectEl = document.createElement('select');
+  selectEl.id = 'recipeTagSelect';
+  selectEl.className = 'recipe-tags-select';
+  selectEl.setAttribute('aria-label', 'Recipe tag');
+
+  const addOpt = (value, text) => {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    selectEl.appendChild(o);
   };
 
-  const confirmTagRemoval = async (tagLabel) => {
-    const cleanTag = String(tagLabel || '').trim() || 'this tag';
-    try {
-      if (window.ui && typeof window.ui.confirm === 'function') {
-        const ok = await window.ui.confirm({
-          title: 'Remove tag?',
-          message: `Remove "${cleanTag}" from this recipe?`,
-          confirmText: 'Remove',
-          cancelText: 'Cancel',
-          danger: true,
-        });
-        return !!ok;
-      }
-      return window.confirm(`Remove "${cleanTag}" from this recipe?`);
-    } catch (_) {
-      return false;
-    }
-  };
-
-  if (!isEditing) {
-    content.classList.add('recipe-tags-content--view');
-    content.addEventListener('click', () => {
-      window._recipeTagsEditorState = {
-        isEditing: true,
-        draft: formatRecipeTagsSubtitle(recipeModel.tags),
-        originalTags: normalizeRecipeTagsArray(recipeModel.tags),
-        ensureVisibleOnOpen: true,
-      };
-      renderRecipeTagsSection(recipeModel, container);
-    });
-
-    if (!normalized.length) {
-      const empty = document.createElement('div');
-      empty.className = 'recipe-tags-empty placeholder-prompt';
-      empty.textContent = 'Add a tag.';
-      content.appendChild(empty);
-      return;
-    }
-
-    const pills = document.createElement('div');
-    pills.className = 'recipe-tags-wrap';
-    normalized.forEach((tag) => {
-      const pill = document.createElement('span');
-      pill.className = 'recipe-tag-pill';
-      pill.textContent = tag;
-      pill.title = 'Ctrl-click to remove';
-      pill.addEventListener('click', async (e) => {
-        if (!(e.ctrlKey || e.metaKey)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const ok = await confirmTagRemoval(tag);
-        if (!ok) return;
-        const next = normalized.filter(
-          (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
-        );
-        updateModelFromDraft(next);
-        renderRecipeTagsSection(recipeModel, container);
-      });
-      pill.addEventListener('contextmenu', async (e) => {
-        if (!(e.ctrlKey || e.metaKey)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const ok = await confirmTagRemoval(tag);
-        if (!ok) return;
-        const next = normalized.filter(
-          (v) => String(v || '').toLowerCase() !== String(tag || '').toLowerCase()
-        );
-        updateModelFromDraft(next);
-        renderRecipeTagsSection(recipeModel, container);
-      });
-      pills.appendChild(pill);
-    });
-    content.appendChild(pills);
-    return;
+  addOpt('', 'none');
+  if (currentTag && !tagIsInPool) {
+    addOpt(currentTag, currentTag);
   }
-
-  content.classList.add('recipe-tags-content--edit');
-  const card = document.createElement('div');
-  card.className = 'shopping-item-editor-card recipe-tags-editor-card';
-  content.appendChild(card);
-
-  const field = document.createElement('div');
-  field.className = 'shopping-item-field recipe-tags-editor-field';
-  card.appendChild(field);
-
-  const textarea = document.createElement('textarea');
-  textarea.className = 'shopping-item-textarea recipe-tags-editor';
-  textarea.rows = 3;
-  textarea.placeholder = 'e.g., Mexican, Chinese, comfort food';
-  textarea.value = previousDraft || formatRecipeTagsSubtitle(normalized);
-  textarea.setAttribute('aria-label', 'Recipe tags');
-  textarea.wrap = 'soft';
-  field.appendChild(textarea);
-
-  try {
-    if (typeof attachEditorTextareaAutoGrow === 'function') {
-      attachEditorTextareaAutoGrow(textarea, { maxLines: 10 });
-    }
-  } catch (_) {}
-
-  const persistEditingState = () => {
-    window._recipeTagsEditorState = {
-      isEditing: true,
-      draft: textarea.value || '',
-      originalTags,
-      ensureVisibleOnOpen: false,
-    };
-  };
-  const draftBaseline = textarea.value || '';
-  let dirtyMarkedFromTyping = false;
-
-  const finishEdit = ({ shouldCommit }) => {
-    if (shouldCommit) updateModelFromDraft(textarea.value || '');
-    window._recipeTagsEditorState = {
-      isEditing: false,
-      draft: '',
-      originalTags: [],
-      ensureVisibleOnOpen: false,
-    };
-    renderRecipeTagsSection(recipeModel, container);
-  };
-  textarea.addEventListener('input', () => {
-    persistEditingState();
-    if (!dirtyMarkedFromTyping && (textarea.value || '') !== draftBaseline) {
-      dirtyMarkedFromTyping = true;
-      if (typeof markDirty === 'function') markDirty();
-    }
-  });
-  textarea.addEventListener('keydown', (e) => {
-    if (shouldCommitRecipeTagsEdit(e)) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof e.stopImmediatePropagation === 'function') {
-        e.stopImmediatePropagation();
-      }
-      finishEdit({ shouldCommit: true });
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      finishEdit({ shouldCommit: false });
-    }
+  pool.forEach((name) => {
+    addOpt(name, name);
   });
 
-  content.addEventListener('focusout', () => {
-    setTimeout(() => {
-      if (
-        document.activeElement &&
-        content.contains(document.activeElement)
-      ) {
-        return;
-      }
-      finishEdit({ shouldCommit: true });
-    }, 0);
-  });
-
-  if (
-    window.favoriteEatsTypeahead &&
-    typeof window.favoriteEatsTypeahead.attach === 'function'
-  ) {
-    const getCaretLineBounds = (el, caretPos) => {
-      const v = String(el.value || '');
-      const pos =
-        caretPos != null && Number.isFinite(caretPos)
-          ? Number(caretPos)
-          : el.selectionStart ?? 0;
-      const prevNl = v.lastIndexOf('\n', pos - 1);
-      const lineStart = prevNl === -1 ? 0 : prevNl + 1;
-      const nextNl = v.indexOf('\n', pos);
-      const lineEnd = nextNl === -1 ? v.length : nextNl;
-      return { lineStart, lineEnd };
-    };
-    const vSlice = (s, a, b) => String(s || '').slice(a, b);
-    const getCurrentLineText = (el) => {
-      const caretPos = el.selectionStart ?? 0;
-      const { lineStart, lineEnd } = getCaretLineBounds(el, caretPos);
-      return vSlice(el.value, lineStart, lineEnd);
-    };
-
-    window.favoriteEatsTypeahead.attach({
-      inputEl: textarea,
-      openOnFocus: true,
-      matchAnchorWidth: true,
-      placement: 'below',
-      dropdownGap: 4,
-      maxVisible: 6,
-      pickOnEnterWhenQueryEmpty: false,
-      getPool: async (el) => {
-        const active = new Set(
-          normalizeRecipeTagsArray(el && el.value ? el.value : '').map((v) =>
-            String(v || '').toLowerCase()
-          )
-        );
-        return getVisibleRecipeTagNamePool().filter(
-          (name) => !active.has(String(name || '').toLowerCase())
-        );
-      },
-      getQuery: (el) => String(getCurrentLineText(el) || '').trim(),
-      setValue: (picked, el) => {
-        const canonical = String(picked || '').trim();
-        const { lineStart, lineEnd } = getCaretLineBounds(el);
-        const before = vSlice(el.value, 0, lineStart);
-        const after = vSlice(el.value, lineEnd, String(el.value || '').length);
-        el.value = before + canonical + after;
-        return { caretPos: lineStart + canonical.length };
-      },
-      closeOnEmptyQuery: false,
-      openOnlyWhenQueryNonEmpty: false,
-    });
-  }
-
-  const ensureTagsEditorRunway = (targetEl, { minBelow = 240 } = {}) => {
-    if (!(targetEl instanceof HTMLElement)) return 0;
-    try {
-      const rect = targetEl.getBoundingClientRect();
-      const vh =
-        window.innerHeight || document.documentElement.clientHeight || 0;
-      const viewportMargin = 16;
-      const availBelow = vh - viewportMargin - rect.bottom;
-      const needed = Math.max(0, Math.ceil(minBelow - availBelow));
-      if (needed > 0) {
-        window.scrollBy({ top: needed, behavior: 'instant' });
-      }
-      return needed;
-    } catch (_) {
-      return 0;
-    }
-  };
-
-  const focusTextareaAtEnd = () => {
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  };
-
-  if (ensureVisibleOnOpen) {
-    setTimeout(() => {
-      try {
-        section.scrollIntoView({
-          block: 'nearest',
-          inline: 'nearest',
-          behavior: 'instant',
-        });
-      } catch (_) {}
-      ensureTagsEditorRunway(textarea, { minBelow: 240 });
-      requestAnimationFrame(focusTextareaAtEnd);
-    }, 0);
+  if (currentTag && tagIsInPool) {
+    const canonical = canonicalRecipeTagNameInPool(currentTag, pool);
+    selectEl.value = canonical || currentTag;
   } else {
-    setTimeout(focusTextareaAtEnd, 0);
+    selectEl.value = currentTag && !tagIsInPool ? currentTag : '';
   }
+
+  selectEl.addEventListener('change', () => {
+    const v = String(selectEl.value || '');
+    const prevKey = JSON.stringify(
+      (normalizeToSingleRecipeTagList(recipeModel.tags || [])[0] || '')
+        .toLowerCase()
+    );
+    const next = v ? [v] : [];
+    const nextKey = JSON.stringify(
+      (next[0] || '').toLowerCase()
+    );
+    recipeModel.tags = next;
+    if (prevKey !== nextKey && typeof markDirty === 'function') {
+      markDirty();
+    }
+  });
+
+  content.appendChild(selectEl);
 }
 
 // --- Title normalization helper (preserve casing + fallback to "Untitled") ---
