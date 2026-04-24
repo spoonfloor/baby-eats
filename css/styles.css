@@ -49,8 +49,16 @@
      stay visibly purple — oklch+white mixes skew hue (pink) or wash out. */
   --theme-light: color-mix(in srgb, var(--palette-accent) 10%, white);
   --theme-light-hex: color-mix(in srgb, var(--palette-accent) 10%, white);
-  --theme-secondary-muted: color-mix(in oklch, var(--palette-accent) 38%, white);
-  --placeholder-muted: color-mix(in oklch, var(--palette-accent) 52%, transparent);
+  --theme-secondary-muted: color-mix(
+    in oklch,
+    var(--palette-accent) 38%,
+    white
+  );
+  --placeholder-muted: color-mix(
+    in oklch,
+    var(--palette-accent) 52%,
+    transparent
+  );
 
   --theme-primary-transparent: rgb(from var(--palette-accent) r g b / 0.125);
 
@@ -649,6 +657,10 @@ body.shopping-page #shoppingList .shopping-list-row-label {
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.shopping-list-row-label--variant-deprecated {
+  color: var(--ingredient-deprecated-fg);
 }
 /*  */
 
@@ -1789,7 +1801,10 @@ body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-paren {
   font-size: 13px;
   line-height: 1.45;
   flex-shrink: 0;
-  transition: opacity 0.12s ease, width 0.12s ease, margin 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    width 0.12s ease,
+    margin 0.12s ease;
   cursor: pointer;
 }
 
@@ -1806,9 +1821,7 @@ body.shopping-list-page
 }
 
 /* Amount inline edit: light tray vs. list row hover (hsl(270,0%,96%)); tight width from `size` in JS */
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-input--amount {
+body.shopping-list-page #shoppingListOutput .shopping-list-doc-input--amount {
   width: auto;
   max-width: min(100%, 32ch);
   min-width: 2.25ch;
@@ -2134,6 +2147,15 @@ body.shopping-editor-page .shopping-item-variant-grid-row {
   min-width: 0;
 }
 
+body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
+  .shopping-item-variant-name-input:not(:focus),
+body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
+  .shopping-item-variant-home-input:not(:focus),
+body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
+  .shopping-item-variant-tags-input:not(:focus) {
+  color: var(--ingredient-deprecated-fg);
+}
+
 body.shopping-editor-page .shopping-item-variant-grid-row--header {
   min-height: 20px;
   margin-bottom: 4px;
@@ -2167,6 +2189,7 @@ body.shopping-editor-page .shopping-item-variant-cell--base {
 body.shopping-editor-page .shopping-item-variant-base-label {
   display: flex;
   align-items: center;
+  gap: 0.35ch;
   min-height: var(--shopping-filter-chip-height);
   min-width: 0;
   overflow: hidden;
@@ -2751,6 +2774,18 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
   .sub-recipe-link,
 #ingredientsSection
   .ingredient-line.ingredient-line--deprecated
+  .sub-recipe-link:visited {
+  color: var(--ingredient-deprecated-fg);
+}
+
+#ingredientsSection
+  .ingredient-line.ingredient-line--variant-deprecated
+  .ingredient-text,
+#ingredientsSection
+  .ingredient-line.ingredient-line--variant-deprecated
+  .sub-recipe-link,
+#ingredientsSection
+  .ingredient-line.ingredient-line--variant-deprecated
   .sub-recipe-link:visited {
   color: var(--ingredient-deprecated-fg);
 }
@@ -4149,6 +4184,11 @@ body.recipe-editor-page .recipe-tags-editor-field {
 
 /* Deprecated master ingredient: name stays red in the tray until that field is focused (blue). */
 .ingredient-edit-row--deprecated.editing
+  .ingredient-edit-input--name:not(:focus) {
+  color: var(--ingredient-deprecated-fg);
+}
+
+.ingredient-edit-row--variant-deprecated.editing
   .ingredient-edit-input--name:not(:focus) {
   color: var(--ingredient-deprecated-fg);
 }

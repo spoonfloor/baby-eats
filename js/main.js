@@ -1736,7 +1736,26 @@ function ensureIngredientVariantTagsSchemaInMain(db) {
       ON ingredient_variant_tag_map(tag_id, ingredient_variant_id);
     `);
   } catch (_) {}
+  ensureIngredientVariantIsDeprecatedColumnInMain(db);
   return true;
+}
+
+function ensureIngredientVariantIsDeprecatedColumnInMain(db) {
+  if (!db) return false;
+  try {
+    if (!tableHasColumnInMain(db, 'ingredient_variants', 'ingredient_id')) {
+      return false;
+    }
+    if (tableHasColumnInMain(db, 'ingredient_variants', 'is_deprecated')) {
+      return false;
+    }
+    db.run(
+      'ALTER TABLE ingredient_variants ADD COLUMN is_deprecated INTEGER NOT NULL DEFAULT 0;',
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function ensureSizesSchemaInMain(db) {
@@ -5484,6 +5503,12 @@ async function loadShoppingPage() {
   const hasVariantTable = tableExists('ingredient_variants');
   const hasVariantHomeLocationCol =
     hasVariantTable && tableHasColumn('ingredient_variants', 'home_location');
+  const hasVariantIsDeprecatedCol =
+    hasVariantTable &&
+    tableHasColumn('ingredient_variants', 'is_deprecated');
+  const variantRowDepExpr = hasVariantIsDeprecatedCol
+    ? 'COALESCE(v.is_deprecated, 0)'
+    : '0';
   const hasIsDeprecatedCol = tableHasColumn('ingredients', 'is_deprecated');
   const hasIsHiddenCol = tableHasColumn('ingredients', 'is_hidden');
   const hasIsFoodCol = tableHasColumn('ingredients', 'is_food');
@@ -5543,7 +5568,8 @@ async function loadShoppingPage() {
              ${lemmaExpr} AS lemma,
              ${pluralByDefaultExpr} AS plural_by_default,
              ${isMassNounExpr} AS is_mass_noun,
-             ${pluralOverrideExpr} AS plural_override
+             ${pluralOverrideExpr} AS plural_override,
+             ${variantRowDepExpr} AS v_is_deprecated
       FROM ingredients i
       LEFT JOIN ingredient_variants v ON v.ingredient_id = i.ID
     `
@@ -5559,7 +5585,8 @@ async function loadShoppingPage() {
              ${lemmaExpr} AS lemma,
              ${pluralByDefaultExpr} AS plural_by_default,
              ${isMassNounExpr} AS is_mass_noun,
-             ${pluralOverrideExpr} AS plural_override
+             ${pluralOverrideExpr} AS plural_override,
+             0 AS v_is_deprecated
       FROM ingredients i
     `;
 
@@ -5594,6 +5621,7 @@ async function loadShoppingPage() {
         pluralByDefault,
         isMassNoun,
         pluralOverride,
+        vIsDeprecated,
       ]) => ({
         id,
         name,
@@ -5607,6 +5635,7 @@ async function loadShoppingPage() {
         pluralByDefault: Number(pluralByDefault || 0) === 1,
         isMassNoun: Number(isMassNoun || 0) === 1,
         pluralOverride: String(pluralOverride || '').trim(),
+        vIsDeprecated: Number(vIsDeprecated || 0) === 1,
       }),
     );
 
@@ -5635,6 +5664,7 @@ async function loadShoppingPage() {
           _pluralByDefaultFlags: [],
           _isMassNounFlags: [],
           _pluralOverrides: [],
+          _vDepMap: new Map(),
         });
       }
 
@@ -5644,6 +5674,14 @@ async function loadShoppingPage() {
           variant: row.variant,
           homeLocation: String(row.variantLocationAtHome || ''),
         });
+        const vk = String(row.variant).trim().toLowerCase();
+        if (vk) {
+          const prev = byName.get(key)._vDepMap.get(vk) || false;
+          byName.get(key)._vDepMap.set(
+            vk,
+            prev || !!row.vIsDeprecated,
+          );
+        }
       }
       byName.get(key).recentSortId = Math.max(
         Number(byName.get(key).recentSortId) || 0,
@@ -5686,8 +5724,18 @@ async function loadShoppingPage() {
         }
 
         item.variants = uniqueStable;
+        const vDepMap = item._vDepMap;
+        const variantDeprecatedSet = new Set();
+        if (vDepMap && typeof vDepMap.get === 'function') {
+          uniqueStable.forEach((vn) => {
+            const k = String(vn || '').trim().toLowerCase();
+            if (k && vDepMap.get(k)) variantDeprecatedSet.add(k);
+          });
+        }
+        item.variantDeprecatedSet = variantDeprecatedSet;
       } else {
         item.variants = [];
+        item.variantDeprecatedSet = new Set();
       }
       if (
         Array.isArray(item._variantHomeLocations) &&
@@ -5778,6 +5826,7 @@ async function loadShoppingPage() {
       delete item._pluralByDefaultFlags;
       delete item._isMassNounFlags;
       delete item._pluralOverrides;
+      delete item._vDepMap;
 
       return item;
     });
@@ -7530,6 +7579,16 @@ async function loadShoppingPage() {
 
           const childLabel = document.createElement('span');
           childLabel.className = 'shopping-list-row-label';
+          const vdk = String(variantName || '').trim().toLowerCase();
+          if (
+            item.variantDeprecatedSet instanceof Set &&
+            vdk &&
+            item.variantDeprecatedSet.has(vdk)
+          ) {
+            childLabel.classList.add(
+              'shopping-list-row-label--variant-deprecated',
+            );
+          }
           childLabel.textContent =
             variantName === 'default' ? 'any' : variantName;
 
@@ -9054,6 +9113,8 @@ function normalizeIngredientVariantRows(rows, options = {}) {
       row.tags != null ? row.tags : row.tagNames != null ? row.tagNames : [],
     );
 
+    const depFlag = !!row.isDeprecated;
+    const vId = Number(row.variantId);
     if (isBase) {
       if (!baseRow) {
         baseRow = {
@@ -9061,12 +9122,18 @@ function normalizeIngredientVariantRows(rows, options = {}) {
           value: '',
           homeLocation: normalizedHome,
           tags: normalizedTags,
+          variantId: Number.isFinite(vId) && vId > 0 ? vId : null,
+          isDeprecated: false,
         };
-      } else if (baseRow.homeLocation === 'none' && normalizedHome !== 'none') {
-        baseRow.homeLocation = normalizedHome;
-        baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
-      } else if (normalizedTags.length) {
-        baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
+      } else {
+        if (Number.isFinite(vId) && vId > 0) baseRow.variantId = vId;
+        if (depFlag) baseRow.isDeprecated = true;
+        if (baseRow.homeLocation === 'none' && normalizedHome !== 'none') {
+          baseRow.homeLocation = normalizedHome;
+          baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
+        } else if (normalizedTags.length) {
+          baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
+        }
       }
       return;
     }
@@ -9076,6 +9143,8 @@ function normalizeIngredientVariantRows(rows, options = {}) {
     const rowKey = normalizedValue.toLowerCase();
     const existing = namedRowsByKey.get(rowKey);
     if (existing) {
+      if (depFlag) existing.isDeprecated = true;
+      if (Number.isFinite(vId) && vId > 0) existing.variantId = vId;
       if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
         existing.homeLocation = normalizedHome;
       }
@@ -9090,6 +9159,8 @@ function normalizeIngredientVariantRows(rows, options = {}) {
       value: normalizedValue,
       homeLocation: normalizedHome,
       tags: normalizedTags,
+      variantId: Number.isFinite(vId) && vId > 0 ? vId : null,
+      isDeprecated: depFlag,
     };
     namedRowsByKey.set(rowKey, normalizedRow);
     namedRows.push(normalizedRow);
@@ -9162,6 +9233,11 @@ function loadIngredientVariantRowsForIngredientInMain(
     'ingredient_variants',
     'home_location',
   );
+  const hasVariantIsDeprecated = tableHasColumnInMain(
+    db,
+    'ingredient_variants',
+    'is_deprecated',
+  );
   const rows = [];
   const rowsByVariantId = new Map();
   try {
@@ -9169,6 +9245,7 @@ function loadIngredientVariantRowsForIngredientInMain(
       `SELECT iv.id,
               COALESCE(iv.variant, '') AS variant_name,
               ${hasHomeLocation ? "COALESCE(iv.home_location, 'none')" : "'none'"} AS home_location,
+              ${hasVariantIsDeprecated ? 'COALESCE(iv.is_deprecated, 0) AS is_deprecated' : '0 AS is_deprecated'},
               t.name AS tag_name
        FROM ingredient_variants iv
        LEFT JOIN ingredient_variant_tag_map ivtm
@@ -9193,8 +9270,9 @@ function loadIngredientVariantRowsForIngredientInMain(
         const homeLocation = String(
           (Array.isArray(entry) ? entry[2] : 'none') || 'none',
         );
+        const isDepRaw = Array.isArray(entry) ? entry[3] : 0;
         const tagName = String(
-          (Array.isArray(entry) ? entry[3] : '') || '',
+          (Array.isArray(entry) ? entry[4] : '') || '',
         ).trim();
         if (!Number.isFinite(variantId) || variantId <= 0) return;
         let row = rowsByVariantId.get(variantId);
@@ -9204,6 +9282,8 @@ function loadIngredientVariantRowsForIngredientInMain(
             value: variantName,
             homeLocation,
             tags: [],
+            variantId,
+            isDeprecated: Number(isDepRaw || 0) === 1,
           };
           rowsByVariantId.set(variantId, row);
           rows.push(row);
@@ -11892,8 +11972,9 @@ function loadShoppingItemEditorPage() {
           row?.homeLocation || 'none',
         );
         const tagKey = normalizeRecipeTagList(row?.tags || []).join('|');
-        if (row?.isBase) return `base:${homeLocation}:${tagKey}`;
-        return `variant:${String(row?.value || '')}:${homeLocation}:${tagKey}`;
+        const dep = row?.isDeprecated ? '1' : '0';
+        if (row?.isBase) return `base:${homeLocation}:${tagKey}:${dep}`;
+        return `variant:${String(row?.value || '')}:${homeLocation}:${tagKey}:${dep}`;
       })
       .join('\n');
 
@@ -11907,6 +11988,10 @@ function loadShoppingItemEditorPage() {
           row.homeLocation || 'none',
         ),
         tags: normalizeRecipeTagList(row.tags || []),
+        variantId: Number.isFinite(Number(row.variantId))
+          ? Number(row.variantId)
+          : null,
+        isDeprecated: !!row.isDeprecated,
       }))
       .filter((row) => row.value);
 
@@ -12143,6 +12228,10 @@ function loadShoppingItemEditorPage() {
           row?.homeLocation || 'none',
         ),
         tags: normalizeRecipeTagList(row?.tags || []),
+        variantId: Number.isFinite(Number(row?.variantId))
+          ? Number(row.variantId)
+          : null,
+        isDeprecated: !!row?.isDeprecated,
       }));
     variantRowsDraft = [
       {
@@ -12152,6 +12241,10 @@ function loadShoppingItemEditorPage() {
           baseRow.homeLocation || 'none',
         ),
         tags: normalizeRecipeTagList(baseRow.tags || []),
+        variantId: Number.isFinite(Number(baseRow?.variantId))
+          ? Number(baseRow.variantId)
+          : null,
+        isDeprecated: !!baseRow?.isDeprecated,
       },
       ...namedRows,
     ];
@@ -12166,6 +12259,8 @@ function loadShoppingItemEditorPage() {
         value: '',
         homeLocation: 'none',
         tags: [],
+        variantId: null,
+        isDeprecated: false,
       });
     }
     syncVariantHiddenInput({ emit: true });
@@ -12221,6 +12316,8 @@ function loadShoppingItemEditorPage() {
                 )
               : 'none',
           tags: [],
+          variantId: null,
+          isDeprecated: false,
         });
       });
 
@@ -12282,6 +12379,130 @@ function loadShoppingItemEditorPage() {
     return true;
   };
 
+  /**
+   * If the variant still appears in recipes and is not yet soft-removed: mark
+   * deprecated. If it has no recipe refs: offer permanent delete (skips the
+   * soft-remove step). Deprecated + still referenced: alert only.
+   * @returns {Promise<boolean>} true if draft was mutated; false if cancelled.
+   */
+  const runCatalogVariantRemovalFlow = async (normalizedIndex) => {
+    const row = variantRowsDraft[Number(normalizedIndex)];
+    if (!row || row.isBase) return false;
+    const variantName = normalizeNamedIngredientVariant(row.value);
+    if (!variantName) return false;
+
+    let db = window.dbInstance;
+    if (!db) {
+      try {
+        const loaded = await loadDbForShoppingEditor();
+        db = loaded.db;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    const idStr = sessionStorage.getItem('selectedShoppingItemId');
+    const ingredientId = Number(idStr);
+    if (!Number.isFinite(ingredientId) || ingredientId <= 0) return false;
+
+    const recipes = getRecipesForIngredientVariant(
+      db,
+      ingredientId,
+      variantName,
+    );
+    const refCount = recipes.length;
+
+    if (!row.isDeprecated && refCount > 0) {
+      const usageLine =
+        refCount === 1
+          ? 'This variant is used in this recipe:'
+          : 'This variant is used in these recipes:';
+      const details = document.createElement('div');
+      details.className = 'shopping-remove-dialog-details';
+      const linksWrap = document.createElement('div');
+      linksWrap.className = 'shopping-remove-dialog-links';
+      recipes.forEach((recipe) => {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'shopping-remove-dialog-link';
+        a.textContent = recipe.title || `Recipe ${recipe.id}`;
+        a.addEventListener('click', (event) => {
+          event.preventDefault();
+          if (typeof window.openRecipe === 'function') {
+            window.openRecipe(recipe.id);
+          }
+        });
+        linksWrap.appendChild(a);
+      });
+      details.appendChild(linksWrap);
+      const note = document.createElement('div');
+      note.className = 'shopping-remove-dialog-note';
+      note.textContent =
+        'The variant is marked removed and shown in error color. Recipe lines are unchanged until you edit them.';
+      details.appendChild(note);
+
+      let ok = false;
+      if (window.ui && typeof window.ui.dialog === 'function') {
+        const res = await window.ui.dialog({
+          title: 'Remove variant',
+          message: `Remove "${variantName}" from the catalog? ${usageLine}`,
+          messageNode: details,
+          confirmText: 'Remove',
+          cancelText: 'Cancel',
+          danger: true,
+        });
+        ok = !!res;
+      } else {
+        ok = await uiConfirm({
+          title: 'Remove variant',
+          message: `Remove "${variantName}"? ${usageLine}\n\nThe variant is marked removed and shown in error color until permanently deleted or renamed.`,
+          confirmText: 'Remove',
+          cancelText: 'Cancel',
+          danger: true,
+        });
+      }
+      if (!ok) return false;
+      row.isDeprecated = true;
+      syncVariantHiddenInput({ emit: true });
+      renderVariantRows({
+        focusCell: {
+          rowIndex: Number(normalizedIndex),
+          column: 'variant',
+          caretAtStart: true,
+        },
+      });
+      return true;
+    }
+
+    if (row.isDeprecated && refCount > 0) {
+      await uiAlert(
+        'Variant still in recipes',
+        `Remove "${variantName}" from ${refCount} recipe(s) before you can delete it permanently from the catalog.`,
+      );
+      return false;
+    }
+
+    const hardOk = await uiConfirm({
+      title: 'Delete variant permanently',
+      message: `Permanently delete "${variantName}" from the database? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true,
+    });
+    if (!hardOk) return false;
+    variantRowsDraft.splice(normalizedIndex, 1);
+    removeEmptyNamedVariantRows();
+    syncVariantHiddenInput({ emit: true });
+    renderVariantRows({
+      focusCell: {
+        rowIndex: Math.max(1, normalizedIndex - 1),
+        column: 'variant',
+        caretAtStart: true,
+      },
+    });
+    return true;
+  };
+
   const openVariantRowActions = async (rowIndex) => {
     const normalizedIndex = Number(rowIndex);
     const row = variantRowsDraft[normalizedIndex];
@@ -12308,63 +12529,7 @@ function loadShoppingItemEditorPage() {
         return;
       }
 
-      const variantLabel =
-        normalizeNamedIngredientVariant(row.value) || 'variant';
-      if (window.ui && typeof window.ui.dialogThreeChoice === 'function') {
-        const choice = await window.ui.dialogThreeChoice({
-          title: variantLabel,
-          message: 'Choose an action for this row.',
-          fixText: 'Cancel',
-          discardText: 'Clear location',
-          createText: 'Delete variant',
-          dismissChoice: 'fix',
-        });
-        if (choice === 'discard') {
-          row.homeLocation = 'none';
-          syncVariantHiddenInput({ emit: true });
-          renderVariantRows({
-            focusCell: {
-              rowIndex: normalizedIndex,
-              column: 'home',
-              caretAtStart: true,
-            },
-          });
-          return;
-        }
-        if (choice === 'create') {
-          variantRowsDraft.splice(normalizedIndex, 1);
-          removeEmptyNamedVariantRows();
-          syncVariantHiddenInput({ emit: true });
-          renderVariantRows({
-            focusCell: {
-              rowIndex: Math.max(1, normalizedIndex - 1),
-              column: 'variant',
-              caretAtStart: true,
-            },
-          });
-        }
-        return;
-      }
-
-      const deleteVariant = await uiConfirm({
-        title: 'Delete variant',
-        message: `Delete "${variantLabel}" and its home location/tags?`,
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
-        danger: true,
-      });
-      if (deleteVariant) {
-        variantRowsDraft.splice(normalizedIndex, 1);
-        removeEmptyNamedVariantRows();
-        syncVariantHiddenInput({ emit: true });
-        renderVariantRows({
-          focusCell: {
-            rowIndex: Math.max(1, normalizedIndex - 1),
-            column: 'variant',
-            caretAtStart: true,
-          },
-        });
-      }
+      await runCatalogVariantRemovalFlow(normalizedIndex);
     } finally {
       variantActionDialogOpen = false;
     }
@@ -12477,6 +12642,9 @@ function loadShoppingItemEditorPage() {
     variantRowsDraft.forEach((row, index) => {
       const rowEl = document.createElement('div');
       rowEl.className = 'shopping-item-variant-grid-row';
+      if (!row?.isBase && row?.isDeprecated) {
+        rowEl.classList.add('shopping-item-variant-grid-row--variant-deprecated');
+      }
       rowEl.dataset.rowIndex = String(index);
 
       const variantCell = document.createElement('div');
@@ -12513,7 +12681,7 @@ function loadShoppingItemEditorPage() {
         basePrefix.textContent = getCurrentItemNameForBaseRow();
         const baseName = document.createElement('span');
         baseName.className = 'shopping-item-variant-base-name';
-        baseName.textContent = ' (base)';
+        baseName.textContent = '(base)';
         baseLabel.appendChild(basePrefix);
         baseLabel.appendChild(baseName);
         variantCell.appendChild(baseLabel);
@@ -12532,6 +12700,8 @@ function loadShoppingItemEditorPage() {
             : `Variant row ${index}`,
         );
         input.addEventListener('input', () => {
+          if (!variantRowsEl || !variantRowsEl.contains(input)) return;
+          if (!variantRowsDraft[index] || variantRowsDraft[index].isBase) return;
           variantRowsDraft[index].value = input.value;
           syncVariantHiddenInput({ emit: true });
           input.title = input.value;
@@ -12592,30 +12762,75 @@ function loadShoppingItemEditorPage() {
             event.key === 'Backspace' &&
             String(input.value || '').trim() === ''
           ) {
+            const prevC = String(input.dataset.committedValue || '').trim();
+            if (!prevC) {
+              event.preventDefault();
+              event.stopPropagation();
+              variantRowsDraft.splice(index, 1);
+              removeEmptyNamedVariantRows();
+              syncVariantHiddenInput({ emit: true });
+              renderVariantRows({
+                focusCell: {
+                  rowIndex: Math.max(1, index - 1),
+                  column: 'variant',
+                  caretAtStart: true,
+                },
+              });
+              return;
+            }
             event.preventDefault();
             event.stopPropagation();
-            variantRowsDraft.splice(index, 1);
-            removeEmptyNamedVariantRows();
-            syncVariantHiddenInput({ emit: true });
-            renderVariantRows({
-              focusCell: {
-                rowIndex: Math.max(1, index - 1),
-                column: 'variant',
-                caretAtStart: true,
-              },
-            });
+            void (async () => {
+              const ok = await runCatalogVariantRemovalFlow(index);
+              if (!ok) {
+                input.value = prevC;
+                if (variantRowsDraft[index]) {
+                  variantRowsDraft[index].value = prevC;
+                }
+                syncVariantHiddenInput({ emit: true });
+                renderVariantRows({
+                  focusCell: {
+                    rowIndex: index,
+                    column: 'variant',
+                    caretAtStart: true,
+                  },
+                });
+              }
+            })();
           }
         });
         input.addEventListener('blur', () => {
+          if (!variantRowsEl || !variantRowsEl.contains(input)) return;
+          if (!variantRowsDraft[index] || variantRowsDraft[index].isBase) return;
           const previousCommittedValue = String(
             input.dataset.committedValue || '',
           ).trim();
           const normalizedValue = normalizeNamedIngredientVariant(input.value);
           if (!normalizedValue) {
-            variantRowsDraft.splice(index, 1);
-            removeEmptyNamedVariantRows();
-            syncVariantHiddenInput({ emit: true });
-            renderVariantRows();
+            if (!previousCommittedValue) {
+              variantRowsDraft.splice(index, 1);
+              removeEmptyNamedVariantRows();
+              syncVariantHiddenInput({ emit: true });
+              renderVariantRows();
+              return;
+            }
+            void (async () => {
+              const ok = await runCatalogVariantRemovalFlow(index);
+              if (!ok) {
+                input.value = previousCommittedValue;
+                if (variantRowsDraft[index]) {
+                  variantRowsDraft[index].value = previousCommittedValue;
+                }
+                syncVariantHiddenInput({ emit: true });
+                renderVariantRows({
+                  focusCell: {
+                    rowIndex: index,
+                    column: 'variant',
+                    caretAtStart: true,
+                  },
+                });
+              }
+            })();
             return;
           }
           const duplicateIndex = variantRowsDraft.findIndex(
@@ -13591,6 +13806,9 @@ function loadShoppingItemEditorPage() {
       const hasVariantHomeLocationCol =
         hasVariantTable &&
         tableHasColumnInMain(db, 'ingredient_variants', 'home_location');
+      const hasVariantIsDeprecatedCol =
+        hasVariantTable &&
+        tableHasColumnInMain(db, 'ingredient_variants', 'is_deprecated');
       ensureIngredientVariantTagsSchemaInMain(db);
       const hasSizeTable = tableExists('ingredient_sizes');
       const hasSynonymsTable = tableExists('ingredient_synonyms');
@@ -14000,23 +14218,46 @@ function loadShoppingItemEditorPage() {
                   ? INGREDIENT_BASE_VARIANT_NAME
                   : normalizeNamedIngredientVariant(row?.value);
                 if (!row?.isBase && !variantName) return;
+                const isDep = row?.isBase ? 0 : (row?.isDeprecated ? 1 : 0);
                 if (hasVariantHomeLocationCol) {
-                  db.run(
-                    'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order, home_location) VALUES (?, ?, ?, ?);',
-                    [
-                      iid,
-                      variantName,
-                      sortOrder,
-                      normalizeShoppingHomeLocationId(
-                        row?.homeLocation || 'none',
-                      ),
-                    ],
-                  );
+                  if (hasVariantIsDeprecatedCol) {
+                    db.run(
+                      'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order, home_location, is_deprecated) VALUES (?, ?, ?, ?, ?);',
+                      [
+                        iid,
+                        variantName,
+                        sortOrder,
+                        normalizeShoppingHomeLocationId(
+                          row?.homeLocation || 'none',
+                        ),
+                        isDep,
+                      ],
+                    );
+                  } else {
+                    db.run(
+                      'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order, home_location) VALUES (?, ?, ?, ?);',
+                      [
+                        iid,
+                        variantName,
+                        sortOrder,
+                        normalizeShoppingHomeLocationId(
+                          row?.homeLocation || 'none',
+                        ),
+                      ],
+                    );
+                  }
                 } else {
-                  db.run(
-                    'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order) VALUES (?, ?, ?);',
-                    [iid, variantName, sortOrder],
-                  );
+                  if (hasVariantIsDeprecatedCol) {
+                    db.run(
+                      'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order, is_deprecated) VALUES (?, ?, ?, ?);',
+                      [iid, variantName, sortOrder, isDep],
+                    );
+                  } else {
+                    db.run(
+                      'INSERT INTO ingredient_variants (ingredient_id, variant, sort_order) VALUES (?, ?, ?);',
+                      [iid, variantName, sortOrder],
+                    );
+                  }
                 }
                 const variantIdQ = db.exec('SELECT last_insert_rowid();');
                 const insertedVariantId =
@@ -14195,9 +14436,15 @@ function loadShoppingItemEditorPage() {
                 fallbackBaseHome: normalizedBaseHomeLocation,
               },
             );
+            const stripVariantRowIds = (rows) =>
+              (Array.isArray(rows) ? rows : []).map((r) => {
+                if (!r || typeof r !== 'object') return r;
+                const { variantId, ...rest } = r;
+                return rest;
+              });
             if (
-              JSON.stringify(dbVariantRows) !==
-              JSON.stringify(expectedVariantRows)
+              JSON.stringify(stripVariantRowIds(dbVariantRows)) !==
+              JSON.stringify(stripVariantRowIds(expectedVariantRows))
             ) {
               throw new Error(`shopping-save-verify-variant-rows:${iid}`);
             }
@@ -16756,6 +17003,49 @@ function loadSizeEditorPage() {
       },
     });
   });
+}
+
+/** Recipes that reference a specific ingredient + variant (rim + substitutes). */
+function getRecipesForIngredientVariant(db, ingredientId, variantName) {
+  const iid = Number(ingredientId);
+  const v = String(variantName || '').trim();
+  if (!db || !Number.isFinite(iid) || iid <= 0 || !v) return [];
+  try {
+    const q = db.exec(
+      `
+      SELECT DISTINCT r.ID AS recipe_id, COALESCE(r.title, '') AS recipe_title
+      FROM recipes r
+      JOIN (
+        SELECT rim.recipe_id AS rid
+        FROM recipe_ingredient_map rim
+        WHERE rim.ingredient_id = ?
+          AND lower(trim(COALESCE(rim.variant, ''))) = lower(trim(?))
+        UNION
+        SELECT rim.recipe_id AS rid
+        FROM recipe_ingredient_substitutes ris
+        JOIN recipe_ingredient_map rim ON rim.ID = ris.recipe_ingredient_id
+        WHERE ris.ingredient_id = ?
+          AND lower(trim(COALESCE(ris.variant, ''))) = lower(trim(?))
+      ) refs ON refs.rid = r.ID
+      ORDER BY r.title COLLATE NOCASE;
+      `,
+      [iid, v, iid, v],
+    );
+    if (!q.length || !q[0].values.length) return [];
+    return q[0].values
+      .map(([recipeId, recipeTitle]) => ({
+        id: Number(recipeId),
+        title: String(recipeTitle || '').trim(),
+      }))
+      .filter((row) => Number.isFinite(row.id) && row.id > 0);
+  } catch (err) {
+    console.warn('getRecipesForIngredientVariant failed:', err);
+    return [];
+  }
+}
+
+function countRecipeRefsForIngredientVariant(db, ingredientId, variantName) {
+  return getRecipesForIngredientVariant(db, ingredientId, variantName).length;
 }
 
 async function loadStoresPage() {

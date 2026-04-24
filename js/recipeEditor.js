@@ -911,6 +911,9 @@ function mergeByIngredient(list) {
       }
       existing.isOptional = existing.isOptional || ing.isOptional;
       existing.isDeprecated = !!(existing.isDeprecated || ing.isDeprecated);
+      existing.variantDeprecated = !!(
+        existing.variantDeprecated || ing.variantDeprecated
+      );
       // Preserve primary status when a primary + alt collapse into one merged row.
       existing.isAlt = !!(existing.isAlt && ing.isAlt);
     }

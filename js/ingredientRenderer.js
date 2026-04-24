@@ -814,6 +814,9 @@ function renderIngredient(line) {
   if (line && line.isDeprecated) {
     div.classList.add('ingredient-line--deprecated');
   }
+  if (line && line.variantDeprecated) {
+    div.classList.add('ingredient-line--variant-deprecated');
+  }
   if (line && line.isAlt) {
     div.classList.add('ingredient-line--is-alt');
   }
@@ -1046,6 +1049,9 @@ function openIngredientEditRow({
   row.dataset.isEditing = 'true';
   if (seedLine && seedLine.isDeprecated) {
     row.classList.add('ingredient-edit-row--deprecated');
+  }
+  if (seedLine && seedLine.variantDeprecated) {
+    row.classList.add('ingredient-edit-row--variant-deprecated');
   }
 
   // Edit-mode delete gesture: ctrl/⌘-click or right-click on blank tray surface.
@@ -1964,6 +1970,7 @@ function openIngredientEditRow({
       linkedRecipeTitle: row?.linkedRecipeTitle ?? '',
       recipeText: row?.recipeText ?? '',
       isAlt: !!row?.isAlt,
+      variantDeprecated: !!row?.variantDeprecated,
     });
     const recipeLinkState = applyRecipeValidationToInputs();
     fields.recipe = recipeLinkState.linkedRecipeTitle || '';
@@ -2223,6 +2230,9 @@ function openIngredientEditRow({
 
       const beforeCommit = snapshotComparableFields(modelRef);
       const wasAltBeforeCommit = !!modelRef.isAlt;
+      const prevVariantForDep = String(modelRef.variant || '');
+      const prevNameForDep = String(modelRef.name || '');
+      const prevVariantDep = !!modelRef.variantDeprecated;
 
       // Update the model reference (the thing Save will persist).
       modelRef.quantity = quantity;
@@ -2241,6 +2251,14 @@ function openIngredientEditRow({
       modelRef.linkedRecipeId = recipeLinkState.linkedRecipeId;
       modelRef.linkedRecipeTitle = recipeLinkState.linkedRecipeTitle || '';
       modelRef.recipeText = recipeLinkState.isRecipe ? nameTrimmed : canonicalName;
+      {
+        const variantTargetUnchanged =
+          String(modelRef.variant || '') === prevVariantForDep &&
+          String(modelRef.name || '') === prevNameForDep;
+        modelRef.variantDeprecated = variantTargetUnchanged
+          ? prevVariantDep
+          : false;
+      }
       if (!modelRef.clientId) {
         modelRef.clientId =
           modelRef.rimId != null
@@ -2320,6 +2338,7 @@ function openIngredientEditRow({
         seedLine.isMassNoun = modelRef.isMassNoun;
         seedLine.pluralOverride = modelRef.pluralOverride;
         seedLine.isDeprecated = modelRef.isDeprecated;
+        seedLine.variantDeprecated = modelRef.variantDeprecated;
         if (!seedLine.clientId) seedLine.clientId = modelRef.clientId;
       }
 

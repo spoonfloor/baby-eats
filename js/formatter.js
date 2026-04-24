@@ -98,6 +98,10 @@ function formatRecipe(db, recipeId) {
       return [];
     }
   })();
+  const variantHasDep = variantCols.includes('is_deprecated');
+  const variantDeprecatedSelectSql = variantHasDep
+    ? `(SELECT COALESCE((SELECT ivd.is_deprecated FROM ingredient_variants ivd WHERE ivd.ingredient_id = COALESCE(rim.ingredient_id, i.ID) AND lower(trim(COALESCE(ivd.variant, ''))) = lower(trim(COALESCE(CASE WHEN rim.variant IS NULL THEN COALESCE(i.variant, '') ELSE COALESCE(rim.variant, '') END, ''))) LIMIT 1), 0) AS variant_deprecated`
+    : '0 AS variant_deprecated';
   const ingredientHomeLocationSql = variantCols.includes('home_location')
     ? `(SELECT COALESCE(ivh.home_location, 'none')
         FROM ingredient_variants ivh
@@ -198,7 +202,8 @@ function formatRecipe(db, recipeId) {
                  : 'NULL'
              },
              ${linkedRecipeTitleSql},
-             ${rimHasRecipeText ? "COALESCE(rim.recipe_text, '')" : "''"}
+             ${rimHasRecipeText ? "COALESCE(rim.recipe_text, '')" : "''"},
+             ${variantDeprecatedSelectSql}
       FROM recipe_ingredient_map rim
       LEFT JOIN ingredients i ON rim.ingredient_id = i.ID
       ${linkedRecipeJoinIdSql ? `LEFT JOIN recipes lr ON lr.ID = ${linkedRecipeJoinIdSql}` : ''}
@@ -232,6 +237,7 @@ function formatRecipe(db, recipeId) {
         linkedRecipeId,
         linkedRecipeTitle,
         recipeText,
+        variantDeprecated,
       ]) => {
         // Fetch substitutes for this ingredient
         const subsQ = db.exec(
@@ -285,6 +291,7 @@ function formatRecipe(db, recipeId) {
           linkedRecipeId: normalizedLinkedRecipeId,
           linkedRecipeTitle: normalizedLinkedRecipeTitle,
           recipeText: normalizedRecipeText,
+          variantDeprecated: !!variantDeprecated,
           rimId,
           sortOrder: sortOrder == null ? null : Number(sortOrder),
         };

@@ -504,6 +504,19 @@ window.bridge = {
 
 function loadRecipeFromDB(db, recipeId) {
   ensureRecipeTagsSchema(db);
+  try {
+    if (tableExists(db, 'ingredient_variants')) {
+      const vc = getTableColumns(db, 'ingredient_variants');
+      if (
+        vc.length &&
+        !vc.map((c) => String(c).toLowerCase()).includes('is_deprecated')
+      ) {
+        db.run(
+          'ALTER TABLE ingredient_variants ADD COLUMN is_deprecated INTEGER NOT NULL DEFAULT 0;',
+        );
+      }
+    }
+  } catch (_) {}
   const recipeRows = db.exec(`
     SELECT ID, title, servings_default, servings_min, servings_max
     FROM recipes WHERE ID = ${recipeId};
@@ -667,6 +680,9 @@ function loadRecipeFromDB(db, recipeId) {
       : "'' AS recipe_text",
     ingredientDeprecatedSql,
     hasIsAlt ? 'COALESCE(rim.is_alt, 0) AS is_alt' : '0 AS is_alt',
+    variantHas('is_deprecated')
+      ? `(SELECT COALESCE((SELECT ivd.is_deprecated FROM ingredient_variants ivd WHERE ivd.ingredient_id = COALESCE(rim.ingredient_id, i.ID) AND lower(trim(COALESCE(ivd.variant, ''))) = lower(trim(COALESCE(CASE WHEN rim.variant IS NULL THEN COALESCE(i.variant, '') ELSE COALESCE(rim.variant, '') END, ''))) LIMIT 1), 0) AS variant_deprecated)`
+      : '0 AS variant_deprecated',
   ];
 
   const orderParts = [];
@@ -717,6 +733,7 @@ function loadRecipeFromDB(db, recipeId) {
           recipeText,
           ingredientDeprecated,
           isAlt,
+          variantDeprecated,
         ]) => ({
           rowType: 'ingredient',
           rimId,
@@ -765,6 +782,7 @@ function loadRecipeFromDB(db, recipeId) {
             linkedRecipeTitle == null ? '' : String(linkedRecipeTitle).trim(),
           recipeText: recipeText == null ? '' : String(recipeText).trim(),
           isDeprecated: !!ingredientDeprecated,
+          variantDeprecated: !!variantDeprecated,
           isAlt: !!isAlt,
         })
       )
@@ -1163,6 +1181,10 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
         if (variantHas('home_location')) {
           variantInsertCols.push('home_location');
           variantInsertVals.push('none');
+        }
+        if (variantHas('is_deprecated')) {
+          variantInsertCols.push('is_deprecated');
+          variantInsertVals.push(0);
         }
         const variantPlaceholders = variantInsertCols.map(() => '?').join(', ');
         try {
