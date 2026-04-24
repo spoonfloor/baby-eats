@@ -197,6 +197,7 @@ function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
   body.dataset.forceWebMode = forceWebMode ? 'on' : 'off';
   body.dataset.pageSet = forceWebMode ? 'web' : 'editor';
   body.classList.toggle('force-web-mode', forceWebMode);
+  applyDocumentThemePlatform(forceWebMode);
   return forceWebMode;
 }
 
@@ -236,6 +237,13 @@ function getTopLevelPageHref(pageId) {
   if (!key) return 'index.html';
   if (key === 'shopping-list') return 'shoppingList.html';
   return `${key}.html`;
+}
+
+/** Force web off → editor (red); force web on → planner (purple). */
+function applyDocumentThemePlatform(planner = isForceWebModeEnabled()) {
+  const root = document.documentElement;
+  if (!(root instanceof HTMLElement)) return;
+  root.dataset.platform = planner ? 'planner' : 'editor';
 }
 
 if (!redirectIfPublicWebPageIsDisallowed()) {

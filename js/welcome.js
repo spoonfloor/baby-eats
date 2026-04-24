@@ -65,6 +65,10 @@ async function handleElectronWelcomeLoad() {
 }
 
 function initWelcomePage() {
+  try {
+    document.documentElement.dataset.platform = 'editor';
+  } catch (_) {}
+
   const loadDbBtn = document.getElementById('loadDbBtn');
   if (!(loadDbBtn instanceof HTMLButtonElement)) return;
 
