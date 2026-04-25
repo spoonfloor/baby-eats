@@ -1,3 +1,16 @@
+function recipeEditorDbTableExists(db, tableName) {
+  if (!db || !tableName) return false;
+  try {
+    const esc = String(tableName).replace(/'/g, "''");
+    const q = db.exec(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='${esc}';`,
+    );
+    return !!(q && q.length && q[0].values && q[0].values.length);
+  } catch (_) {
+    return false;
+  }
+}
+
 // --- Inline edit state ---
 window.editingStepId = null; // step id currently being edited (string)
 window._activeStepInput = null; // live input element (if any)
@@ -492,7 +505,9 @@ async function saveRecipeToDB() {
     return out;
   };
 
-  // Transaction keeps steps + ingredients consistent.
+  const catalogOnly = !recipeEditorDbTableExists(db, 'recipe_steps');
+
+  // Transaction keeps steps + ingredients consistent (or catalog metadata only).
   db.run('BEGIN;');
   try {
     // --- 1) Persist recipe metadata (title + servings) ---
@@ -522,36 +537,42 @@ async function saveRecipeToDB() {
     persistRecipeTags(db, rid, recipe.tags);
     persistRecipeUnits(db, recipe);
 
-    // --- 2) Persist steps from the canonical recipe model ---
-    if (typeof window.recipeEditorReconcileRecipeStepsAndStepNodes === 'function') {
-      window.recipeEditorReconcileRecipeStepsAndStepNodes(recipe);
-    }
+    if (!catalogOnly) {
+      // --- 2) Persist steps from the canonical recipe model ---
+      if (typeof window.recipeEditorReconcileRecipeStepsAndStepNodes === 'function') {
+        window.recipeEditorReconcileRecipeStepsAndStepNodes(recipe);
+      }
 
-    const canonicalStepCount =
-      Array.isArray(recipe.sections)
-        ? recipe.sections.reduce((count, section) => {
-            const sectionSteps = Array.isArray(section?.steps) ? section.steps.length : 0;
-            return count + sectionSteps;
-          }, 0)
-        : Array.isArray(recipe.steps)
-        ? recipe.steps.length
-        : 0;
+      const canonicalStepCount =
+        Array.isArray(recipe.sections)
+          ? recipe.sections.reduce((count, section) => {
+              const sectionSteps = Array.isArray(section?.steps)
+                ? section.steps.length
+                : 0;
+              return count + sectionSteps;
+            }, 0)
+          : Array.isArray(recipe.steps)
+          ? recipe.steps.length
+          : 0;
 
-    if (
-      canonicalStepCount > 0 &&
-      (!Array.isArray(window.stepNodes) || window.stepNodes.length === 0)
-    ) {
-      throw new Error('saveRecipeToDB: refusing to save empty stepNodes for non-empty recipe model');
-    }
+      if (
+        canonicalStepCount > 0 &&
+        (!Array.isArray(window.stepNodes) || window.stepNodes.length === 0)
+      ) {
+        throw new Error(
+          'saveRecipeToDB: refusing to save empty stepNodes for non-empty recipe model',
+        );
+      }
 
-    bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);
+      bridge.saveRecipeStepsFromStepNodes(db, rid, window.stepNodes);
 
-    // --- 3) Persist ingredients from the live model ---
-    if (
-      window.bridge &&
-      typeof bridge.saveRecipeIngredientsFromModel === 'function'
-    ) {
-      bridge.saveRecipeIngredientsFromModel(db, rid, recipe);
+      // --- 3) Persist ingredients from the live model ---
+      if (
+        window.bridge &&
+        typeof bridge.saveRecipeIngredientsFromModel === 'function'
+      ) {
+        bridge.saveRecipeIngredientsFromModel(db, rid, recipe);
+      }
     }
 
     db.run('COMMIT;');

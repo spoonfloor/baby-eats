@@ -2305,6 +2305,7 @@ window.recipeEditorRerenderIngredientsFromModel =
 
 function ensureRecipeHasEditableStep(recipe) {
   if (!recipe || isRecipeWebModeActive()) return;
+  if (window.recipeEditorCatalogOnlyMode) return;
 
   const hasAnySectionSteps =
     Array.isArray(recipe.sections) &&
@@ -3185,7 +3186,11 @@ function renderRecipeTagsSection(recipe, container) {
   const before = normalizeRecipeTagsArray(recipeModel.tags || []);
   const afterSingle = normalizeToSingleRecipeTagList(before);
   recipeModel.tags = afterSingle;
-  if (before.length > 1 && typeof markDirty === 'function') {
+  if (
+    before.length > 1 &&
+    typeof markDirty === 'function' &&
+    !window.recipeEditorCatalogOnlyMode
+  ) {
     markDirty();
   }
 

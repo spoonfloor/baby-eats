@@ -256,6 +256,7 @@ function ensureRecipeIngredientMapIsAltSchema(activeDb) {
 
 // --- StepNode → DB save adapter (Option A: minimal) ---
 function saveRecipeStepsFromStepNodes(activeDb, recipeId, stepNodes) {
+  if (!tableExists(activeDb, 'recipe_steps')) return;
   // Remove existing rows for this recipe
   activeDb.exec(`DELETE FROM recipe_steps WHERE recipe_id = ${recipeId};`);
 
@@ -545,23 +546,33 @@ function loadRecipeFromDB(db, recipeId) {
   }
 
   // --- Load steps from new schema (no sections, type column present) ---
-  const stepsQ = db.exec(`
-    SELECT ID, step_number, instructions, type
-    FROM recipe_steps
-    WHERE recipe_id = ${id}
-    ORDER BY step_number;
-  `);
-
-  const steps = stepsQ.length
-    ? stepsQ[0].values.map(([ID, step_number, instructions, type]) => ({
-        ID,
-        step_number,
-        instructions,
-        type,
-      }))
-    : [];
+  let steps = [];
+  if (tableExists(db, 'recipe_steps')) {
+    try {
+      const stepsQ = db.exec(`
+        SELECT ID, step_number, instructions, type
+        FROM recipe_steps
+        WHERE recipe_id = ${id}
+        ORDER BY step_number;
+      `);
+      steps = stepsQ.length
+        ? stepsQ[0].values.map(([ID, step_number, instructions, type]) => ({
+            ID,
+            step_number,
+            instructions,
+            type,
+          }))
+        : [];
+    } catch (_) {
+      steps = [];
+    }
+  }
 
   // --- Load ingredients ---
+  let ingredients = [];
+  if (!tableExists(db, 'recipe_ingredient_map')) {
+    // Catalog-only DBs: no ingredient graph.
+  } else {
   const rimCols = getTableColumns(db, 'recipe_ingredient_map');
   const rimHas = (col) => rimCols.map((c) => c.toLowerCase()).includes(col);
   const hasSectionId = rimHas('section_id');
@@ -705,7 +716,7 @@ function loadRecipeFromDB(db, recipeId) {
     ORDER BY ${orderParts.join(', ')};
   `);
 
-  const ingredients = ingredientsQ.length
+  ingredients = ingredientsQ.length
     ? ingredientsQ[0].values.map(
         ([
           rimId,
@@ -787,6 +798,7 @@ function loadRecipeFromDB(db, recipeId) {
         })
       )
     : [];
+  }
 
   // --- Load ingredient subsection headings (optional table) ---
   const headings = [];
@@ -904,6 +916,9 @@ function saveRecipeToDB(db, recipe) {
   if (!activeDb) throw new Error('No active database found');
   const rid = recipe.id || window.recipeId;
   if (!rid) throw new Error('No recipe id');
+  if (!tableExists(activeDb, 'recipe_steps')) {
+    return;
+  }
 
   const normalizeStepInstructions = (raw) => {
     if (raw == null) return '';
@@ -1007,6 +1022,9 @@ function saveRecipeIngredientsFromModel(activeDb, recipeId, recipe) {
   const rid = Number(recipeId || recipe?.id);
   if (!Number.isFinite(rid)) {
     throw new Error('saveRecipeIngredientsFromModel: invalid recipe id');
+  }
+  if (!tableExists(activeDb, 'recipe_ingredient_map')) {
+    return;
   }
 
   // Ensure schema supports sort_order so we can persist order safely.

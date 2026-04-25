@@ -2,11 +2,9 @@
 
 // Electron main process — handles app lifecycle and real file I/O.
 
-const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { ensureGoogleDocsAccessToken } = require('./googleDocsAuth');
-const { exportShoppingListToGoogleDocs } = require('./googleDocsExport');
 
 // 🔧 Adjustable constants
 
@@ -14,7 +12,6 @@ let ACTIVE_DB_PATH = null;
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
 let APP_CONFIG = {
   lastDb: null,
-  googleDocsAuth: null,
 };
 
 const MAX_BACKUPS = 20;
@@ -215,17 +212,6 @@ function saveConfig() {
   }
 }
 
-function getGoogleDocsAuthConfig() {
-  return APP_CONFIG.googleDocsAuth && typeof APP_CONFIG.googleDocsAuth === 'object'
-    ? APP_CONFIG.googleDocsAuth
-    : null;
-}
-
-function setGoogleDocsAuthConfig(nextAuth) {
-  APP_CONFIG.googleDocsAuth = nextAuth && typeof nextAuth === 'object' ? nextAuth : null;
-  saveConfig();
-}
-
 // --- File I/O helpers ---
 
 ipcMain.handle('loadDB', async (event, pathArg = null) => {
@@ -360,45 +346,6 @@ ipcMain.handle('getEnv', async () => ({
   appPath: app.getAppPath(),
   userData: app.getPath('userData'),
 }));
-
-ipcMain.handle('googleDocsExportShoppingList', async (event, payload = null) => {
-  try {
-    const accessToken = await ensureGoogleDocsAccessToken({
-      appPath: app.getAppPath(),
-      userDataPath: app.getPath('userData'),
-      persistedAuth: getGoogleDocsAuthConfig(),
-      onAuthChanged: (nextAuth) => {
-        setGoogleDocsAuthConfig(nextAuth);
-      },
-      openExternal: (url) => shell.openExternal(url),
-    });
-
-    const exportResult = await exportShoppingListToGoogleDocs({
-      accessToken,
-      payload,
-    });
-
-    if (String(exportResult?.url || '').trim()) {
-      try {
-        await shell.openExternal(exportResult.url);
-      } catch (openErr) {
-        console.warn('⚠️ Could not open exported Google Doc automatically:', openErr);
-      }
-    }
-
-    return {
-      ok: true,
-      ...exportResult,
-    };
-  } catch (err) {
-    console.error('❌ Google Docs export failed:', err);
-    return {
-      ok: false,
-      code: String(err?.code || 'google_docs_export_failed'),
-      message: String(err?.userMessage || err?.message || 'Could not export shopping list.'),
-    };
-  }
-});
 
 // --- App startup ---
 

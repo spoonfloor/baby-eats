@@ -127,7 +127,7 @@ const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
 const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
 // Only enforced when isPublicWebExperienceLocked() (GitHub Pages / dist/web with injected
 // __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
-// is allowed on public web: dist/web ships recipeEditor.html (list → recipe detail).
+// Recipe catalog uses recipes.html; recipeEditor.html is title + tag editing only when `recipe_steps` is absent.
 const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
   shopping: 'recipes',
   'shopping-list': 'recipes',
@@ -1570,6 +1570,19 @@ if (typeof window !== 'undefined') {
   };
 }
 // --- End shopping browse labeling helpers ---
+
+function tableExistsInMain(db, tableName) {
+  if (!db || !tableName) return false;
+  try {
+    const esc = String(tableName).replace(/'/g, "''");
+    const q = db.exec(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='${esc}';`,
+    );
+    return !!(q && q.length && q[0].values && q[0].values.length);
+  } catch (_) {
+    return false;
+  }
+}
 
 function tableHasColumnInMain(db, tableName, colName) {
   if (!db || !tableName || !colName) return false;
@@ -4195,9 +4208,16 @@ async function loadRecipesPage() {
 
   // Expose DB on window so other helpers can optionally reuse it if needed
   window.dbInstance = db;
-  await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+  try {
+    window.recipeEditorCatalogOnlyMode = false;
+  } catch (_) {}
+  if (tableExistsInMain(db, 'ingredients')) {
+    await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+  }
   ensureRecipeTagsSchemaInMain(db);
-  ensureIngredientVariantTagsSchemaInMain(db);
+  if (tableExistsInMain(db, 'ingredient_variants')) {
+    ensureIngredientVariantTagsSchemaInMain(db);
+  }
 
   initAppBar({
     mode: 'list',
@@ -4948,22 +4968,27 @@ async function loadRecipesPage() {
 
   // Delete a recipe and all dependent rows in child tables.
   function deleteRecipeDeep(db, recipeId) {
-    // Remove instructions for this recipe
-    db.run('DELETE FROM recipe_steps WHERE recipe_id = ?;', [recipeId]);
-
-    // Remove any sections owned by this recipe
-    db.run('DELETE FROM recipe_sections WHERE recipe_id = ?;', [recipeId]);
-
-    // Remove ingredient mappings (substitutes are ON DELETE CASCADE from this)
-    db.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [
-      recipeId,
-    ]);
-    // Remove recipe tag mappings.
+    if (tableExistsInMain(db, 'recipe_steps')) {
+      try {
+        db.run('DELETE FROM recipe_steps WHERE recipe_id = ?;', [recipeId]);
+      } catch (_) {}
+    }
+    if (tableExistsInMain(db, 'recipe_sections')) {
+      try {
+        db.run('DELETE FROM recipe_sections WHERE recipe_id = ?;', [recipeId]);
+      } catch (_) {}
+    }
+    if (tableExistsInMain(db, 'recipe_ingredient_map')) {
+      try {
+        db.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [
+          recipeId,
+        ]);
+      } catch (_) {}
+    }
     try {
       db.run('DELETE FROM recipe_tag_map WHERE recipe_id = ?;', [recipeId]);
     } catch (_) {}
 
-    // Finally remove the recipe itself
     db.run('DELETE FROM recipes WHERE ID = ?;', [recipeId]);
   }
 
@@ -8664,7 +8689,7 @@ async function resolveUnknownUnitCodes({
   return { map, finalCodes };
 }
 
-// --- Recipe editor loader ---
+// --- Recipe editor loader (full editor when `recipe_steps` exists; else title + tags only) ---
 async function loadRecipeEditorPage() {
   const isElectron = !!window.electronAPI;
   let db;
@@ -8672,8 +8697,7 @@ async function loadRecipeEditorPage() {
     try {
       const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
       const bytes = await window.electronAPI.loadDB(pathHint);
-      const Uints = new Uint8Array(bytes);
-      db = new SQL.Database(Uints);
+      db = new SQL.Database(new Uint8Array(bytes));
     } catch (err) {
       console.error('❌ Failed to load DB from disk:', err);
       uiToast('No database loaded. Please go back to the welcome page.');
@@ -8687,8 +8711,6 @@ async function loadRecipeEditorPage() {
   }
 
   const recipeId = sessionStorage.getItem('selectedRecipeId');
-  const isNewRecipe = sessionStorage.getItem('selectedRecipeIsNew') === '1';
-
   if (!recipeId) {
     uiToast('No recipe selected.');
     window.location.href = 'recipes.html';
@@ -8696,35 +8718,39 @@ async function loadRecipeEditorPage() {
   }
 
   window.dbInstance = db;
-  await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+  window.recipeEditorCatalogOnlyMode = !tableExistsInMain(db, 'recipe_steps');
+
+  if (tableExistsInMain(db, 'ingredients')) {
+    await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
+  }
+
   window.recipeId = recipeId;
   const isRecipeWebMode = isForceWebModeEnabled();
   ensureRecipeTagsSchemaInMain(db);
-  ensureIngredientVariantTagsSchemaInMain(db);
-  ensureSizesSchemaInMain(db);
-  ensureUnitsSchemaInMain(db);
+  if (tableExistsInMain(db, 'ingredient_variants')) {
+    ensureIngredientVariantTagsSchemaInMain(db);
+  }
 
-  // Notes are recipe-level (stored on recipe_ingredient_map), not shopping-item-level.
-  // Ensure the DB has the right column and backfill once for legacy DBs.
-  try {
-    if (
-      window.bridge &&
-      typeof bridge.ensureRecipeIngredientMapParentheticalNoteSchema ===
-        'function'
-    ) {
-      bridge.ensureRecipeIngredientMapParentheticalNoteSchema(db);
-    }
-  } catch (_) {}
+  if (!window.recipeEditorCatalogOnlyMode) {
+    ensureSizesSchemaInMain(db);
+    ensureUnitsSchemaInMain(db);
+    try {
+      if (
+        window.bridge &&
+        typeof bridge.ensureRecipeIngredientMapParentheticalNoteSchema ===
+          'function'
+      ) {
+        bridge.ensureRecipeIngredientMapParentheticalNoteSchema(db);
+      }
+    } catch (_) {}
+  }
 
-  // Fetch via bridge (single source of truth)
   const recipe = bridge.loadRecipeFromDB(db, recipeId);
-
   if (!recipe) {
     uiToast('Recipe not found.');
     window.location.href = 'recipes.html';
     return;
   }
-  // Compatibility shim for existing UI
 
   if (
     !recipe.servingsDefault &&
@@ -8734,74 +8760,62 @@ async function loadRecipeEditorPage() {
     recipe.servingsDefault = recipe.servings.default;
   }
 
-  // Decide when to seed placeholder rows:
-  // - brand-new recipes (fresh from "Add")
-  // - OR recipes that currently have no steps and no ingredients at all
-  const hasAnySteps =
-    (Array.isArray(recipe.sections) &&
-      recipe.sections.some(
-        (section) => Array.isArray(section.steps) && section.steps.length > 0,
-      )) ||
-    (Array.isArray(recipe.steps) && recipe.steps.length > 0);
-
-  const hasAnyIngredients =
-    Array.isArray(recipe.sections) &&
-    recipe.sections.some(
-      (section) =>
-        Array.isArray(section.ingredients) && section.ingredients.length > 0,
-    );
-
-  // 🔍 Decide seeding separately for steps vs ingredients.
-  // - Steps placeholder any time there are zero steps so the editor can
-  //   recover from missing-instruction recipes without user action.
-  // - Ingredient placeholder any time there are zero ingredients, even if steps exist
-  //   (e.g., user edited title + saved but never added ingredients).
-  const shouldSeedStepPlaceholder =
-    !isRecipeWebMode && (isNewRecipe || !hasAnySteps);
-
-  const shouldSeedIngredientPlaceholder =
-    !isRecipeWebMode && !hasAnyIngredients;
-
-  if (shouldSeedStepPlaceholder || shouldSeedIngredientPlaceholder) {
-    if (isNewRecipe) {
-      // One-shot flag: once we've initialized a brand-new recipe,
-      // we don't treat it as "new" again on future opens.
+  const isNewRecipe = sessionStorage.getItem('selectedRecipeIsNew') === '1';
+  if (window.recipeEditorCatalogOnlyMode) {
+    try {
       sessionStorage.removeItem('selectedRecipeIsNew');
+    } catch (_) {}
+  } else {
+    const hasAnySteps =
+      (Array.isArray(recipe.sections) &&
+        recipe.sections.some(
+          (section) =>
+            Array.isArray(section.steps) && section.steps.length > 0,
+        )) ||
+      (Array.isArray(recipe.steps) && recipe.steps.length > 0);
+    const hasAnyIngredients =
+      Array.isArray(recipe.sections) &&
+      recipe.sections.some(
+        (section) =>
+          Array.isArray(section.ingredients) && section.ingredients.length > 0,
+      );
+    const shouldSeedStepPlaceholder =
+      !isRecipeWebMode && (isNewRecipe || !hasAnySteps);
+    const shouldSeedIngredientPlaceholder =
+      !isRecipeWebMode && !hasAnyIngredients;
+    if (shouldSeedStepPlaceholder || shouldSeedIngredientPlaceholder) {
+      if (isNewRecipe) {
+        sessionStorage.removeItem('selectedRecipeIsNew');
+      }
+      if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
+        recipe.sections = [
+          {
+            ID: null,
+            id: null,
+            name: '',
+            steps: [],
+            ingredients: [],
+          },
+        ];
+      }
+      const firstSection = recipe.sections[0];
+      if (
+        shouldSeedStepPlaceholder &&
+        (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0)
+      ) {
+        const tempId = `tmp-step-${Date.now()}`;
+        firstSection.steps = [
+          {
+            ID: null,
+            id: tempId,
+            section_id: firstSection.ID ?? firstSection.id ?? null,
+            step_number: 1,
+            instructions: '',
+            type: 'step',
+          },
+        ];
+      }
     }
-
-    if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
-      recipe.sections = [
-        {
-          ID: null,
-          id: null,
-          name: '',
-          steps: [],
-          ingredients: [],
-        },
-      ];
-    }
-
-    const firstSection = recipe.sections[0];
-
-    // Ensure at least one placeholder step when a recipe has no steps at all.
-    if (
-      shouldSeedStepPlaceholder &&
-      (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0)
-    ) {
-      const tempId = `tmp-step-${Date.now()}`;
-      firstSection.steps = [
-        {
-          ID: null,
-          id: tempId,
-          section_id: firstSection.ID ?? firstSection.id ?? null,
-          step_number: 1,
-          instructions: '',
-          type: 'step',
-        },
-      ];
-    }
-
-    // Allow empty ingredient arrays; UI provides an add CTA instead of data placeholders.
   }
 
   if (
@@ -8811,19 +8825,20 @@ async function loadRecipeEditorPage() {
     window.recipeWebModePrimeRecipe(recipe);
   }
 
-  // --- On load/return: keep ingredient order as loaded ---
-  try {
-    if (typeof window.recipeEditorSortIngredientsOnLoad === 'function') {
-      window.recipeEditorSortIngredientsOnLoad(recipe);
+  if (!window.recipeEditorCatalogOnlyMode) {
+    try {
+      if (typeof window.recipeEditorSortIngredientsOnLoad === 'function') {
+        window.recipeEditorSortIngredientsOnLoad(recipe);
+      }
+    } catch (err) {
+      console.warn('⚠️ Ingredient load-order normalization failed:', err);
     }
-  } catch (err) {
-    console.warn('⚠️ Ingredient load-order normalization failed:', err);
   }
 
-  const titleEl = document.getElementById('recipeTitle');
-  if (titleEl) titleEl.textContent = recipe.title;
+  // Do not await waitForAppBarReady() before initAppBar: the bar is injected by
+  // initAppBar/ensureAppBarInjected, so #appBarTitle does not exist yet and the
+  // waiter would spin until its 2s timeout (felt as multi-second lag).
 
-  // Shared app bar for recipe editor
   initAppBar({
     mode: 'editor',
     titleText: recipe.title || '',
@@ -8860,44 +8875,34 @@ async function loadRecipeEditorPage() {
       }
     },
     onSave: (window.recipeEditorSave = async () => {
-      // Recipe editor SoT: the live model (`window.recipeData.title`).
-      // The app-bar title is a view; it may lag if the user edited the in-page title.
       const modelTitle = (window.recipeData?.title || '').trim();
       const el = document.getElementById('appBarTitle');
       const next = (modelTitle || el?.textContent || '').trim();
-      if (!next) return;
-
-      // Keep in-memory model + visible title in sync
-      recipe.title = next;
+      if (!next) {
+        uiToast('Title is required.');
+        return;
+      }
       if (window.recipeData) window.recipeData.title = next;
       if (el) el.textContent = next;
       const titleEl = document.getElementById('recipeTitle');
       if (titleEl) titleEl.textContent = next;
 
-      // Real save path (DB + persist-to-disk/localStorage), reusing existing helpers
-      try {
+      if (!window.recipeEditorCatalogOnlyMode) {
         try {
-          const db = window.dbInstance;
+          const dbInst = window.dbInstance;
           const recipeModel = window.recipeData;
-          if (db && recipeModel && Array.isArray(recipeModel.sections)) {
-            ensureSizesSchemaInMain(db);
+          if (
+            dbInst &&
+            recipeModel &&
+            Array.isArray(recipeModel.sections)
+          ) {
+            ensureSizesSchemaInMain(dbInst);
             const { getVisibleCanonicalId, anyIngredientNamed } =
-              createIngredientLookupHelpers(db);
-            const { anySelectableUnitCoded } = createUnitLookupHelpers(db);
-            const { anyVisibleTagNamed } = createTagLookupHelpers(db);
-            const { anySelectableSizeNamed } = createSizeLookupHelpers(db);
-            const {
-              hasVariantTable: hasIngredientVariantTable,
-              getIngredientNameById,
-              anyVariantForIngredient,
-              ensureVariantForIngredient,
-            } = createVariantLookupHelpers(db);
+              createIngredientLookupHelpers(dbInst);
             const unknownUnique = [];
             const seenUnknown = new Set();
             recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients)
-                ? sec.ingredients
-                : [];
+              const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
               rows.forEach((row) => {
                 if (!row || row.isPlaceholder || row.rowType === 'heading')
                   return;
@@ -8920,10 +8925,9 @@ async function loadRecipeEditorPage() {
                 unknownUnique.push(rawName);
               });
             });
-
             if (unknownUnique.length) {
               const resolved = await resolveUnknownIngredientNames({
-                db,
+                db: dbInst,
                 names: unknownUnique,
                 title: `New ingredients (${unknownUnique.length})`,
                 message:
@@ -8937,9 +8941,7 @@ async function loadRecipeEditorPage() {
               }
               const replacementMap = resolved.map;
               recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients)
-                  ? sec.ingredients
-                  : [];
+                const rows = Array.isArray(sec?.ingredients) ? sec.ingredients : [];
                 rows.forEach((row) => {
                   if (!row || row.isPlaceholder || row.rowType === 'heading')
                     return;
@@ -8951,241 +8953,11 @@ async function loadRecipeEditorPage() {
                   if (nextName) row.name = nextName;
                 });
               });
-              if (
-                typeof window.recipeEditorRerenderIngredientsFromModel ===
-                'function'
-              ) {
-                window.recipeEditorRerenderIngredientsFromModel();
-              }
             }
-
-            if (hasIngredientVariantTable) {
-              const unknownVariantUnique = [];
-              const seenUnknownVariants = new Set();
-              recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients)
-                  ? sec.ingredients
-                  : [];
-                rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading')
-                    return;
-                  const linkedRecipeId = Number(row.linkedRecipeId);
-                  const currentRecipeId = Number(recipeModel.id);
-                  const isLinkedSubrecipe =
-                    !!row.isRecipe &&
-                    Number.isFinite(linkedRecipeId) &&
-                    linkedRecipeId > 0 &&
-                    (!Number.isFinite(currentRecipeId) ||
-                      linkedRecipeId !== currentRecipeId);
-                  if (isLinkedSubrecipe) return;
-                  const rawName = String(row.name || '').trim();
-                  const rawVariant = String(row.variant || '').trim();
-                  if (!rawName || !rawVariant) return;
-                  const ingredientId = Number(getVisibleCanonicalId(rawName));
-                  if (!Number.isFinite(ingredientId) || ingredientId <= 0)
-                    return;
-                  if (anyVariantForIngredient(ingredientId, rawVariant)) return;
-                  const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
-                  if (seenUnknownVariants.has(key)) return;
-                  seenUnknownVariants.add(key);
-                  unknownVariantUnique.push({
-                    ingredientId,
-                    ingredientName:
-                      getIngredientNameById(ingredientId) || rawName,
-                    variant: rawVariant,
-                  });
-                });
-              });
-              if (unknownVariantUnique.length) {
-                const resolvedVariants = await resolveUnknownIngredientVariants(
-                  {
-                    db,
-                    entries: unknownVariantUnique,
-                  },
-                );
-                if (!resolvedVariants) {
-                  uiToast('Save cancelled.');
-                  return;
-                }
-                const variantReplacementMap = resolvedVariants.map;
-                recipeModel.sections.forEach((sec) => {
-                  const rows = Array.isArray(sec?.ingredients)
-                    ? sec.ingredients
-                    : [];
-                  rows.forEach((row) => {
-                    if (!row || row.isPlaceholder || row.rowType === 'heading')
-                      return;
-                    const rawName = String(row.name || '').trim();
-                    const rawVariant = String(row.variant || '').trim();
-                    if (!rawName || !rawVariant) return;
-                    const ingredientId = Number(getVisibleCanonicalId(rawName));
-                    if (!Number.isFinite(ingredientId) || ingredientId <= 0)
-                      return;
-                    const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
-                    const nextVariant = String(
-                      variantReplacementMap.get(key) || '',
-                    ).trim();
-                    if (nextVariant) row.variant = nextVariant;
-                  });
-                });
-                if (
-                  typeof window.recipeEditorRerenderIngredientsFromModel ===
-                  'function'
-                ) {
-                  window.recipeEditorRerenderIngredientsFromModel();
-                }
-              }
-
-              const ensuredVariantKeys = new Set();
-              recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients)
-                  ? sec.ingredients
-                  : [];
-                rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading')
-                    return;
-                  const rawName = String(row.name || '').trim();
-                  const rawVariant = String(row.variant || '').trim();
-                  if (!rawName || !rawVariant) return;
-                  const ingredientId = Number(getVisibleCanonicalId(rawName));
-                  if (!Number.isFinite(ingredientId) || ingredientId <= 0)
-                    return;
-                  const key = `${ingredientId}::${rawVariant.toLowerCase()}`;
-                  if (ensuredVariantKeys.has(key)) return;
-                  ensuredVariantKeys.add(key);
-                  if (!anyVariantForIngredient(ingredientId, rawVariant)) {
-                    ensureVariantForIngredient(ingredientId, rawVariant);
-                  }
-                });
-              });
-            }
-
-            const unknownUnitUnique = [];
-            const seenUnknownUnits = new Set();
-            recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients)
-                ? sec.ingredients
-                : [];
-              rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading')
-                  return;
-                const rawUnit = String(row.unit || '').trim();
-                if (!rawUnit) return;
-                const key = rawUnit.toLowerCase();
-                if (seenUnknownUnits.has(key)) return;
-                seenUnknownUnits.add(key);
-                if (anySelectableUnitCoded(rawUnit)) return;
-                unknownUnitUnique.push(rawUnit);
-              });
-            });
-            if (unknownUnitUnique.length) {
-              const resolvedUnits = await resolveUnknownUnitCodes({
-                db,
-                units: unknownUnitUnique,
-                title: `New units (${unknownUnitUnique.length})`,
-                message:
-                  unknownUnitUnique.length === 1
-                    ? 'This unit is not in your database. Edit, match it to an existing unit, or save it as a new one.'
-                    : 'These units are not in your database. Edit, match them to existing units, or save them as new ones.',
-              });
-              if (!resolvedUnits) {
-                uiToast('Save cancelled.');
-                return;
-              }
-              const replacementMap = resolvedUnits.map;
-              recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients)
-                  ? sec.ingredients
-                  : [];
-                rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading')
-                    return;
-                  const key = String(row.unit || '')
-                    .trim()
-                    .toLowerCase();
-                  if (!key) return;
-                  const nextUnit = replacementMap.get(key);
-                  if (nextUnit) row.unit = nextUnit;
-                });
-              });
-              if (
-                typeof window.recipeEditorRerenderIngredientsFromModel ===
-                'function'
-              ) {
-                window.recipeEditorRerenderIngredientsFromModel();
-              }
-            }
-
-            const unknownSizeUnique = [];
-            const seenUnknownSizes = new Set();
-            recipeModel.sections.forEach((sec) => {
-              const rows = Array.isArray(sec?.ingredients)
-                ? sec.ingredients
-                : [];
-              rows.forEach((row) => {
-                if (!row || row.isPlaceholder || row.rowType === 'heading')
-                  return;
-                const rawSize = String(row.size || '').trim();
-                if (!rawSize) return;
-                const key = rawSize.toLowerCase();
-                if (seenUnknownSizes.has(key)) return;
-                seenUnknownSizes.add(key);
-                if (anySelectableSizeNamed(rawSize)) return;
-                unknownSizeUnique.push(rawSize);
-              });
-            });
-            if (unknownSizeUnique.length) {
-              const resolvedSizes = await resolveUnknownSizeNames({
-                db,
-                sizes: unknownSizeUnique,
-                title: `New sizes (${unknownSizeUnique.length})`,
-                message:
-                  unknownSizeUnique.length === 1
-                    ? 'This size is not in your database. Edit, match it to an existing size, or save it as a new one.'
-                    : 'These sizes are not in your database. Edit, match them to existing sizes, or save them as new ones.',
-              });
-              if (!resolvedSizes) {
-                uiToast('Save cancelled.');
-                return;
-              }
-              const replacementMap = resolvedSizes.map;
-              recipeModel.sections.forEach((sec) => {
-                const rows = Array.isArray(sec?.ingredients)
-                  ? sec.ingredients
-                  : [];
-                rows.forEach((row) => {
-                  if (!row || row.isPlaceholder || row.rowType === 'heading')
-                    return;
-                  const key = String(row.size || '')
-                    .trim()
-                    .toLowerCase();
-                  if (key) {
-                    const nextSize = replacementMap.get(key);
-                    if (nextSize) row.size = nextSize;
-                  }
-                  if (!Array.isArray(row.substitutes)) return;
-                  row.substitutes.forEach((sub) => {
-                    if (!sub) return;
-                    const subKey = String(sub.size || '')
-                      .trim()
-                      .toLowerCase();
-                    if (!subKey) return;
-                    const nextSubSize = replacementMap.get(subKey);
-                    if (nextSubSize) sub.size = nextSubSize;
-                  });
-                });
-              });
-              if (
-                typeof window.recipeEditorRerenderIngredientsFromModel ===
-                'function'
-              ) {
-                window.recipeEditorRerenderIngredientsFromModel();
-              }
-            }
-
             const normalizedDraftTags = normalizeRecipeTagDraftList(
               recipeModel.tags,
             );
+            const { anyVisibleTagNamed } = createTagLookupHelpers(dbInst);
             const unknownTagUnique = [];
             const seenUnknownTags = new Set();
             normalizedDraftTags.forEach((tag) => {
@@ -9199,7 +8971,7 @@ async function loadRecipeEditorPage() {
             });
             if (unknownTagUnique.length) {
               const resolvedTags = await resolveUnknownTagNames({
-                db,
+                db: dbInst,
                 tags: unknownTagUnique,
                 title: `New tags (${unknownTagUnique.length})`,
                 message:
@@ -9227,24 +8999,21 @@ async function loadRecipeEditorPage() {
         } catch (unknownErr) {
           console.warn('Unknown-item resolution skipped:', unknownErr);
         }
+      }
 
-        if (typeof saveRecipeToDB === 'function') {
-          await saveRecipeToDB();
+      try {
+        if (typeof saveRecipeToDB !== 'function') {
+          throw new Error('saveRecipeToDB is not available');
         }
-
-        // Persist SQL.js memory to disk (Electron) or localStorage (browser fallback)
+        await saveRecipeToDB();
         if (!window.dbInstance) throw new Error('No active database found');
-        const binaryArray = window.dbInstance.export();
-        const isElectron = !!window.electronAPI;
-
-        await persistBinaryArrayInMain(binaryArray, {
-          isElectron,
+        await persistBinaryArrayInMain(window.dbInstance.export(), {
+          isElectron: !!window.electronAPI,
           overwriteOnly: false,
           failureMessage: 'Save failed — check console for details.',
         });
-        if (isElectron) uiToast('Database saved successfully.');
+        if (window.electronAPI) uiToast('Saved.');
 
-        // Refresh Cancel baseline after a successful save
         if (window.bridge && typeof bridge.loadRecipeFromDB === 'function') {
           const refreshed = bridge.loadRecipeFromDB(
             window.dbInstance,
@@ -9252,17 +9021,13 @@ async function loadRecipeEditorPage() {
           );
           window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
           window.recipeData = JSON.parse(JSON.stringify(refreshed));
+          if (typeof renderRecipe === 'function') {
+            renderRecipe(refreshed);
+          }
         }
-
-        // Reset editor UI state after save
         if (typeof window.recipeEditorResetDirty === 'function') {
           window.recipeEditorResetDirty();
-        } else {
-          const appCancel = document.getElementById('appBarCancelBtn');
-          if (appCancel) appCancel.disabled = true;
-          if (typeof disableSave === 'function') disableSave();
         }
-        if (typeof clearSelectedStep === 'function') clearSelectedStep();
       } catch (err) {
         console.error('❌ Save failed:', err);
         uiToast('Save failed — check console for details.');
@@ -9326,14 +9091,14 @@ async function loadRecipeEditorPage() {
     }
   }
 
-  renderRecipe(recipe);
+  if (typeof renderRecipe === 'function') {
+    renderRecipe(recipe);
+  }
 
-  // ✅ One-time reset after first render
   if (!isRecipeWebMode && typeof revertChanges === 'function') {
     revertChanges();
   }
 
-  // --- Always scroll editor to top on load ---
   try {
     window.scrollTo({ top: 0, behavior: 'auto' });
   } catch (_) {

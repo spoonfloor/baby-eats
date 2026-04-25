@@ -1,25 +1,17 @@
 /*
- * Theme bundles: `editor` (red, force-web off / Electron-style) vs `planner` (purple, force-web on).
- * <html data-platform="editor"|"planner"> — main.js: force web off → editor, on → planner.
+ * Editor theme: red primary (default build uses force-web off; Electron-styled list chrome).
+ * Optional <html data-platform="editor">; tokens below drive chips/pills and accent neutrals.
  * Light surfaces: color-mix(in srgb, accent, white) for chip/pill wash.
  */
 :root,
 :root[data-platform='editor'],
 :root:not([data-platform]) {
-  /* Editor: primary #ec413f; error #ff18fc; planner keeps its own --palette-error. */
+  /* Editor: primary #ec413f; error #ff18fc */
   --palette-accent: oklch(0.594 0.202 26.3);
   --palette-accent-emphasis: oklch(0.528 0.196 26.3);
   /* Error / validation / deprecated — #ff18fc */
   --palette-error: oklch(0.73 0.3 327.5);
 }
-
-:root[data-platform='planner'] {
-  /* Planner: purple chrome; distinct --palette-error from editor. */
-  --palette-accent: oklch(0.573 0.23 285.75);
-  --palette-accent-emphasis: oklch(0.607 0.215 286);
-  --palette-error: oklch(0.718 0.344 328.5);
-}
-
 :root {
   /* --- Typography --- */
   --main-font: 'Red Hat Mono', monospace;
@@ -244,20 +236,14 @@
   --material-symbols-wght: 100;
   --material-symbols-grad: 0;
   --material-symbols-opsz: 24;
-}
-
-.material-symbols-outlined {
+}.material-symbols-outlined {
   font-variation-settings:
     'FILL' var(--material-symbols-fill),
     'wght' var(--material-symbols-wght),
     'GRAD' var(--material-symbols-grad),
     'opsz' var(--material-symbols-opsz);
 }
-
-/* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. */
-
-/* --- Body / Layout Defaults --- */
-.centered-container {
+/* NOTE: Overlay UI (dropdowns/toasts/dialogs/modals) moved to `css/overlays.css`. *//* --- Body / Layout Defaults --- */.centered-container {
   background: var(--theme-light-hex);
   /* background: var(--theme-light); */
   display: flex;
@@ -266,9 +252,7 @@
   height: 100vh;
   color: inherit;
   /* padding: 80px; so card doesn’t touch screen edges */
-}
-
-.welcome-card {
+}.welcome-card {
   background: white;
   /* background: var(--theme-primary-light); */
   color: var(--font-color-near-black);
@@ -282,24 +266,18 @@
   height: auto;
   padding: 64px; /* defines card size */
   box-shadow: 0 2px 20px var(--theme-primary-transparent);
-}
-
-.welcome-card__body {
+}.welcome-card__body {
   margin: 0;
   max-width: 28rem;
   text-align: center;
-}
-
-.welcome-card__actions {
+}.welcome-card__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
 }
-
-/* --- Buttons --- */
-.button {
+/* --- Buttons --- */.button {
   font-family: inherit;
   /* font-size: inherit; */
   font-weight: inherit;
@@ -312,69 +290,38 @@
   outline: none;
   height: 44px;
   cursor: pointer;
-}
-
-.button:not(:disabled):not(.button--secondary):not(.button--danger):not(
+}.button:not(:disabled):not(.button--secondary):not(.button--danger):not(
     .button--danger-outline
   ):hover {
   background: var(--button-primary-hover);
 }
-
-/* Disabled state overrides */
-.button:disabled {
+/* Disabled state overrides */.button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   /* Remove pointer-events so cursor still changes on hover */
   pointer-events: none;
-}
-
-#loadDbBtn {
+}#loadDbBtn {
   background: var(--theme-primary);
 }
-
-/* --- File Input --- */
-.file-input-hidden {
+/* --- File Input --- */.file-input-hidden {
   display: none;
-}
-
-.page-main {
+}.page-main {
   padding-top: calc(var(--app-bar-height) + var(--page-top-gap));
-}
-
-body.has-top-filter-chip-rail {
+}body.has-top-filter-chip-rail {
   --page-top-gap: var(--top-filter-chip-page-top-gap);
-}
-
-body.recipes-page .page-main,
-body.shopping-page .page-main,
-body.stores-page .page-main,
-body.tags-page .page-main,
-body.sizes-page .page-main,
-body.units-page .page-main,
-body.shopping-list-page .page-main {
+}body.recipes-page .page-main{
   padding-top: var(--app-bar-height);
-}
-
-body.has-top-filter-chip-rail.recipes-page .page-main,
-body.has-top-filter-chip-rail.shopping-page .page-main,
-body.has-top-filter-chip-rail.stores-page .page-main,
-body.has-top-filter-chip-rail.tags-page .page-main,
-body.has-top-filter-chip-rail.sizes-page .page-main,
-body.has-top-filter-chip-rail.units-page .page-main,
-body.has-top-filter-chip-rail.shopping-list-page .page-main {
+}body.has-top-filter-chip-rail.recipes-page .page-main {
   padding-top: calc(
     var(--app-bar-height) + var(--top-filter-chip-rail-stack-height)
   );
 }
-
 /* Prevent a white flash before the app-bar fragment injects on navigation.
    IMPORTANT: the real app bar is position:fixed, so the mount must NOT take up
    layout space (otherwise we double-count height with .page-main padding-top). */
 #appBarMount {
   height: 0;
-}
-
-#appBarMount:empty {
+}#appBarMount:empty {
   position: fixed;
   top: 0;
   left: 0;
@@ -382,41 +329,25 @@ body.has-top-filter-chip-rail.shopping-list-page .page-main {
   height: var(--app-bar-height);
   background: var(--theme-primary);
   z-index: var(--z-app-chrome);
-}
-
-.page-wrapper {
+}.page-wrapper {
   width: 100%;
   max-width: var(--page-content-width);
   margin: 0px auto;
   padding: 0 0px;
-}
-
-body.shopping-editor-page .page-wrapper {
-  max-width: calc(var(--page-content-width) + 120px);
-}
-
-.page-title {
+}.page-title {
   font-size: 22px;
-}
-
-.list-view {
+}.list-view {
   list-style: none;
   margin: 0;
   padding: 0;
   max-width: 600px;
-}
-
-.list-view li {
+}.list-view li {
   cursor: pointer;
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
-}
-
-.list-view li.list-item--removed {
+}.list-view li.list-item--removed {
   color: var(--ingredient-deprecated-fg);
-}
-
-.app-filter-chip {
+}.app-filter-chip {
   appearance: none;
   border: none;
   border-radius: 9999px;
@@ -429,53 +360,35 @@ body.shopping-editor-page .page-wrapper {
   font-weight: var(--app-filter-chip-font-weight);
   line-height: 1;
   cursor: pointer;
-}
-
-.app-filter-chip.is-disabled {
+}.app-filter-chip.is-disabled {
   opacity: 0.4;
   cursor: default;
   pointer-events: none;
-}
-
-.app-filter-chip.is-active {
+}.app-filter-chip.is-active {
   background: var(--app-filter-chip-active-bg);
   color: var(--app-filter-chip-active-fg);
-}
-
-.app-filter-chip:hover {
+}.app-filter-chip:hover {
   background: color-mix(
     in srgb,
     var(--app-filter-chip-bg) 90%,
     var(--app-filter-chip-active-bg) 10%
   );
-}
-
-.app-filter-chip.is-active:hover {
+}.app-filter-chip.is-active:hover {
   background: var(--app-filter-chip-active-bg);
-}
-
-.app-filter-chip:focus-visible {
+}.app-filter-chip:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.8);
   outline-offset: 1px;
-}
-
-.app-filter-chip-dropdown-wrap {
+}.app-filter-chip-dropdown-wrap {
   position: relative;
   display: inline-flex;
-}
-
-.app-filter-chip--dropdown {
+}.app-filter-chip--dropdown {
   display: inline-flex;
   align-items: center;
   gap: var(--app-filter-chip-dropdown-gap);
-}
-
-.app-filter-chip--dropdown-pill.app-filter-chip--dropdown {
+}.app-filter-chip--dropdown-pill.app-filter-chip--dropdown {
   gap: 4px;
   box-sizing: border-box;
-}
-
-.app-filter-chip-dropdown-open {
+}.app-filter-chip-dropdown-open {
   flex: 1 1 auto;
   min-width: 0;
   display: inline-flex;
@@ -490,15 +403,11 @@ body.shopping-editor-page .page-wrapper {
   cursor: pointer;
   text-align: left;
   line-height: 1;
-}
-
-.app-filter-chip-dropdown-open:focus-visible {
+}.app-filter-chip-dropdown-open:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.8);
   outline-offset: 1px;
   border-radius: 8px;
-}
-
-.app-filter-chip-dropdown-clear {
+}.app-filter-chip-dropdown-clear {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -510,24 +419,16 @@ body.shopping-editor-page .page-wrapper {
   background: transparent;
   color: inherit;
   cursor: pointer;
-}
-
-.app-filter-chip--dropdown-pill.is-active .app-filter-chip-dropdown-clear {
+}.app-filter-chip--dropdown-pill.is-active .app-filter-chip-dropdown-clear {
   color: var(--app-filter-chip-active-fg);
-}
-
-.app-filter-chip-dropdown-clear:focus-visible {
+}.app-filter-chip-dropdown-clear:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.85);
   outline-offset: 1px;
-}
-
-.app-filter-chip-dropdown-clear-icon.material-symbols-outlined {
+}.app-filter-chip-dropdown-clear-icon.material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
   --material-symbols-opsz: 20;
-}
-
-.app-filter-chip-dropdown-chevron.material-symbols-outlined {
+}.app-filter-chip-dropdown-chevron.material-symbols-outlined {
   font-size: var(--app-filter-chip-dropdown-chevron-size);
   line-height: 1;
   display: inline-flex;
@@ -537,17 +438,13 @@ body.shopping-editor-page .page-wrapper {
     var(--app-filter-chip-dropdown-chevron-offset-x),
     var(--app-filter-chip-dropdown-chevron-offset-y)
   );
-}
-
-.app-filter-chip-dropdown-wrap.is-open .app-filter-chip-dropdown-chevron {
+}.app-filter-chip-dropdown-wrap.is-open .app-filter-chip-dropdown-chevron {
   transform: translate(
       var(--app-filter-chip-dropdown-chevron-offset-x),
       var(--app-filter-chip-dropdown-chevron-offset-y-open)
     )
     rotate(180deg);
-}
-
-.app-filter-chip-dropdown-backdrop {
+}.app-filter-chip-dropdown-backdrop {
   position: fixed;
   inset: 0;
   z-index: var(--z-filter-chip-dropdown-backdrop);
@@ -556,9 +453,7 @@ body.shopping-editor-page .page-wrapper {
   border: none;
   background: transparent;
   pointer-events: auto;
-}
-
-.app-filter-chip-dropdown-panel {
+}.app-filter-chip-dropdown-panel {
   position: fixed;
   z-index: var(--z-dropdown);
   display: flex;
@@ -578,9 +473,7 @@ body.shopping-editor-page .page-wrapper {
   max-width: min(92vw, 320px);
   max-height: min(56vh, 460px);
   overflow-y: auto;
-}
-
-.app-filter-chip-dropdown-option {
+}.app-filter-chip-dropdown-option {
   appearance: none;
   border: none;
   background: transparent;
@@ -599,35 +492,25 @@ body.shopping-editor-page .page-wrapper {
   cursor: pointer;
   border-radius: 8px;
 }
-
-/* Unselected hover: same as `.list-view li:hover:not(.is-selected)` */
-.app-filter-chip-dropdown-option:hover:not(.is-selected):not(.is-disabled) {
+/* Unselected hover: same as `.list-view li:hover:not(.is-selected)` */.app-filter-chip-dropdown-option:hover:not(.is-selected):not(.is-disabled) {
   background-color: hsl(270, 0%, 96%);
 }
-
-/* Selected: default chip look (not active / pressed chip) */
-.app-filter-chip-dropdown-option.is-selected {
+/* Selected: default chip look (not active / pressed chip) */.app-filter-chip-dropdown-option.is-selected {
   background: var(--app-filter-chip-bg);
   color: var(--app-filter-chip-fg);
   font-weight: var(--app-filter-chip-font-weight);
 }
-
-/* Selected hover: same as `.app-filter-chip:hover` (unselected chip hover) */
-.app-filter-chip-dropdown-option.is-selected:hover:not(.is-disabled) {
+/* Selected hover: same as `.app-filter-chip:hover` (unselected chip hover) */.app-filter-chip-dropdown-option.is-selected:hover:not(.is-disabled) {
   background: color-mix(
     in srgb,
     var(--app-filter-chip-bg) 90%,
     var(--app-filter-chip-active-bg) 10%
   );
   color: var(--app-filter-chip-fg);
-}
-
-.app-filter-chip-dropdown-option.is-disabled {
+}.app-filter-chip-dropdown-option.is-disabled {
   opacity: 0.45;
   cursor: default;
-}
-
-.app-filter-chip-dropdown-option-check.material-symbols-outlined {
+}.app-filter-chip-dropdown-option-check.material-symbols-outlined {
   flex: 0 0 auto;
   width: var(--app-filter-chip-dropdown-check-size);
   min-width: var(--app-filter-chip-dropdown-check-size);
@@ -635,215 +518,17 @@ body.shopping-editor-page .page-wrapper {
   line-height: 1;
   text-align: center;
 }
-
-/* Shopping list rows: keep items single-line; truncate long "(variants...)" tails. */
-body.shopping-page #shoppingList li:not(.list-section-label) {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li:not(.list-section-label) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-body.shopping-page #shoppingList .shopping-list-row-label {
-  display: block;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.shopping-list-row-label--variant-deprecated {
+/* Shopping list rows: keep items single-line; truncate long "(variants...)" tails. */.shopping-list-row-label--variant-deprecated {
   color: var(--ingredient-deprecated-fg);
 }
-/*  */
-
-/* Match Shopping List doc row: same body type + line rhythm as inline ▾/▴ in label text. */
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-parent
-  .shopping-list-row-label,
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-label {
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  line-height: var(--shopping-inline-expand-line-height);
-}
-
-body.shopping-page #shoppingList .shopping-list-row-icon {
-  display: none;
-  flex: 0 0 auto;
-  margin-left: auto;
-  pointer-events: none;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-icon {
-  display: inline-block;
-  font-size: 32px;
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  color: rgba(0, 0, 0, 0.4);
-  --material-symbols-opsz: 32;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-body.shopping-page #shoppingList .shopping-list-row-stepper {
-  display: none;
-  flex: 0 0 auto;
-  margin-left: auto;
-  align-items: center;
-  gap: 2px;
-  height: 32px;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-stepper {
-  display: inline-flex;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: rgba(0, 0, 0, 0.4);
-  -webkit-tap-highlight-color: transparent;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-btn[disabled] {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-btn
-  .material-symbols-outlined {
-  font-size: 26px;
-  line-height: 1;
-  --material-symbols-opsz: 26;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-qty {
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  min-width: 2ch;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.4);
-  user-select: none;
-  line-height: 1;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-qty-input {
-  width: 3ch;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  line-height: 1;
-  text-align: center;
-  color: inherit;
-  outline: none;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-qty-input::-webkit-outer-spin-button,
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-stepper-qty-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-body.shopping-page #shoppingList .shopping-list-row-badge {
-  display: none;
-  flex: 0 0 auto;
-  flex-shrink: 0;
-  margin-left: auto;
-  align-items: center;
-  justify-content: flex-end;
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  color: rgba(0, 0, 0, 0.4);
-  user-select: none;
-  line-height: 1;
-  min-height: 32px;
-  /* icon (32) + flex gap (12) + stepper: −(32) + gap(2) + qty(2ch) + gap(2) + +(32) */
-  width: calc(32px + 12px + 32px + 2px + 2ch + 2px + 32px);
-  max-width: none;
-  padding: 0;
-  box-sizing: border-box;
-  overflow: visible;
-  margin-right: 0;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-body.shopping-page #shoppingList .shopping-list-row-badge-qty {
-  flex: 0 0 32px;
-  width: 32px;
-  max-width: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  min-height: 32px;
-  box-sizing: border-box;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  .shopping-list-row-badge {
-  display: none;
-}
-
+/*  *//* Match Shopping List doc row: same body type + line rhythm as inline ▾/▴ in label text. */
 body.recipes-page
   #recipeList
   li:not(.list-section-label):not(.recipe-list-servings-header) {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-body.recipes-page #recipeList .recipe-list-servings-header {
+}body.recipes-page #recipeList .recipe-list-servings-header {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -855,17 +540,13 @@ body.recipes-page #recipeList .recipe-list-servings-header {
   /* `.list-page li` + force-web row rules use overflow:hidden; allow SERVINGS/SVGS to extend */
   overflow: visible;
   text-overflow: clip;
-}
-
-body.recipes-page #recipeList .shopping-list-row-label {
+}body.recipes-page #recipeList .shopping-list-row-label {
   display: block;
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-body.recipes-page
+}body.recipes-page
   #recipeList
   li[data-recipe-row-stepper-key]
   .recipe-list-title-hit {
@@ -876,9 +557,7 @@ body.recipes-page
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-}
-
-body.recipes-page #recipeList .recipe-list-servings-slot {
+}body.recipes-page #recipeList .recipe-list-servings-slot {
   flex: 0 0 var(--recipe-list-servings-slot-width);
   width: var(--recipe-list-servings-slot-width);
   margin-left: auto;
@@ -886,18 +565,7 @@ body.recipes-page #recipeList .recipe-list-servings-slot {
   align-items: center;
   justify-content: flex-end;
 }
-
 /* Web mode: full column is tappable when stepper is collapsed (icon or badge). */
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li[data-recipe-row-stepper-key]
-  .recipe-list-servings-slot--collapsed-hit {
-  cursor: pointer;
-  min-height: 32px;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
 body.recipes-page #recipeList .recipe-list-servings-header-label {
   font-family: var(--main-font);
   font-size: 14px;
@@ -909,155 +577,28 @@ body.recipes-page #recipeList .recipe-list-servings-header-label {
   overflow: visible;
   flex-shrink: 0;
 }
-
 /* Below 620px: short label + tighter nudge (see `RECIPE_LIST_SERVINGS_HEADER_WIDE_MIN_PX` in main.js). */
 @media (max-width: 619px) {
-  body.recipes-page #recipeList .recipe-list-servings-header-label {
+body.recipes-page #recipeList .recipe-list-servings-header-label {
     transform: translateX(2px);
-  }
-}
-
+  }}
 /* Editor mode: servings stepper column is off; hide slot so titles use full width */
 body.recipes-page[data-force-web-mode='off']
   #recipeList
   .recipe-list-servings-slot {
   display: none !important;
-}
-
-body.recipes-page #recipeList .shopping-list-row-icon {
+}body.recipes-page #recipeList .shopping-list-row-icon {
   display: none;
   flex: 0 0 auto;
   pointer-events: none;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-icon {
-  display: inline-block;
-  font-size: 32px;
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  color: rgba(0, 0, 0, 0.4);
-  --material-symbols-opsz: 32;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-body.recipes-page #recipeList .shopping-list-row-stepper {
+}body.recipes-page #recipeList .shopping-list-row-stepper {
   display: none;
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
   height: 32px;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-stepper {
-  display: inline-flex;
-}
-
-body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(0, 0, 0, 0.4);
-  -webkit-tap-highlight-color: transparent;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-btn:not([disabled]) {
-  cursor: pointer;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-btn[disabled] {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-btn
-  .material-symbols-outlined {
-  font-size: 26px;
-  line-height: 1;
-  --material-symbols-opsz: 26;
-}
-
-body.recipes-page[data-force-web-mode='on'] #recipeList .shopping-stepper-qty {
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  min-width: 2.5ch;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.4);
-  user-select: none;
-  line-height: 1;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-qty-button {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  min-width: 2.5ch;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: text;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-qty-input {
-  width: 3ch;
-  min-width: 2ch;
-  border: 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  line-height: 1;
-  text-align: center;
-  color: inherit;
-  outline: none;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-qty-input::-webkit-outer-spin-button,
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-stepper-qty-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-body.recipes-page #recipeList .shopping-list-row-badge {
+}body.recipes-page #recipeList .shopping-list-row-badge {
   display: none;
   flex: 0 0 32px;
   flex-shrink: 0;
@@ -1079,9 +620,7 @@ body.recipes-page #recipeList .shopping-list-row-badge {
   overflow: visible;
   cursor: pointer;
   pointer-events: auto;
-}
-
-body.recipes-page #recipeList .shopping-list-row-badge-qty {
+}body.recipes-page #recipeList .shopping-list-row-badge-qty {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -1090,390 +629,22 @@ body.recipes-page #recipeList .shopping-list-row-badge-qty {
   text-align: center;
   line-height: 1;
 }
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .recipe-list-servings-disabled {
-  display: none;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  cursor: not-allowed;
-  font-size: 32px;
-  line-height: 1;
-  color: rgba(0, 0, 0, 0.16);
-  --material-symbols-opsz: 32;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  .shopping-list-row-badge {
-  display: none;
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
-  color: var(--theme-primary);
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-badge {
-  color: var(--theme-primary);
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-btn {
-  color: var(--theme-primary);
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-qty {
-  color: var(--theme-primary);
-}
-
-body.recipes-page[data-force-web-mode='on']
-  #recipeList
-  li.shopping-row-checked:not(.list-section-label) {
-  color: var(--theme-primary);
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.stores-row-reorderable:not(.list-section-label) {
-  cursor: grab;
-  touch-action: none;
-}
-
-body.stores-page #storesList .shopping-list-row-handle {
-  display: none;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  font-size: 24px;
-  line-height: 1;
-  color: rgba(0, 0, 0, 0.32);
-  pointer-events: none;
-  transition: none;
-  animation: none;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  .shopping-list-row-handle {
-  display: inline-block;
-  pointer-events: auto;
-  cursor: grab;
-  touch-action: none;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li:not(.stores-row-reorderable)
-  .shopping-list-row-handle {
-  display: none;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  .shopping-list-row-handle--dragging {
-  color: rgba(0, 0, 0, 0.56);
-  cursor: grabbing;
-  transition: none;
-  animation: none;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.store-row-dragging:not(.list-section-label) {
-  position: relative;
-  z-index: 1;
-  background-color: rgb(from var(--palette-accent) r g b / 0.16);
-  transition: none;
-  animation: none;
-  border-radius: 8px;
-  cursor: grabbing;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.store-row-dragging:not(.list-section-label):hover {
-  background-color: rgb(from var(--palette-accent) r g b / 0.16);
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li:not(.list-section-label) {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-body.stores-page #storesList .shopping-list-row-label {
-  display: block;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-body.stores-page #storesList .shopping-list-row-icon {
-  display: none;
-  flex: 0 0 auto;
-  margin-left: auto;
-  pointer-events: none;
-}
-
-body.stores-page[data-force-web-mode='on'] #storesList .shopping-list-row-icon {
-  display: inline-block;
-  font-size: 32px;
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  color: rgba(0, 0, 0, 0.4);
-  --material-symbols-opsz: 32;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
-  color: var(--theme-primary);
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.shopping-row-checked:not(.list-section-label) {
-  color: inherit;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-icon {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-list-row-badge {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-btn {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-checked:not(.list-section-label)
-  .shopping-stepper-qty {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-checked:not(.list-section-label) {
-  color: var(--theme-primary);
-}
-
-@keyframes shopping-nav-target-pulse {
-  0%,
+@keyframes shopping-nav-target-pulse {0%,
   100% {
     background-color: transparent;
-  }
-  15%,
+  }15%,
   55% {
     background-color: rgb(from var(--palette-accent) r g b / 0.16);
-  }
-  32%,
+  }32%,
   72% {
     background-color: transparent;
-  }
-}
-
-body.shopping-page
-  #shoppingList
-  li.shopping-nav-target:not(.list-section-label) {
-  animation: shopping-nav-target-pulse 1200ms ease-out 1;
-  border-radius: 8px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.shopping-page
-    #shoppingList
-    li.shopping-nav-target:not(.list-section-label) {
-    animation: none;
-    background-color: rgb(from var(--palette-accent) r g b / 0.16);
-  }
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-row-flagged:not(.list-section-label) {
-  outline: 2px solid var(--theme-primary);
-  outline-offset: -2px;
-  border-radius: 8px;
-}
-
-/* ── Variant expansion: child rows ── */
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-left: 2rem;
-  cursor: default;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-label {
-  font-size: calc(var(--body-font-size) - 1px);
-  color: rgba(0, 0, 0, 0.65);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-list-row-label {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-icon {
-  display: inline-block;
-  font-size: 32px;
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  box-sizing: border-box;
-  color: rgba(0, 0, 0, 0.4);
-  --material-symbols-opsz: 32;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-list-row-icon {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-list-row-stepper {
-  display: inline-flex;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: rgba(0, 0, 0, 0.4);
-  -webkit-tap-highlight-color: transparent;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-stepper-btn {
-  color: var(--theme-primary);
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-btn
-  .material-symbols-outlined {
-  font-size: 26px;
-  line-height: 1;
-  --material-symbols-opsz: 26;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child
-  .shopping-stepper-qty {
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  min-width: 2ch;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.4);
-  user-select: none;
-  line-height: 1;
-}
-
-body.shopping-page[data-force-web-mode='on']
-  #shoppingList
-  li.shopping-variant-child.shopping-row-checked
-  .shopping-stepper-qty {
-  color: var(--theme-primary);
-}
-
-.list-view li.is-selected {
+  }}
+@media (prefers-reduced-motion: reduce) {}
+/* ── Variant expansion: child rows ── */.list-view li.is-selected {
   background-color: hsl(270, 0%, 96%);
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.is-selected:not(.list-section-label) {
-  background-color: rgb(from var(--palette-accent) r g b / 0.16);
-  border-radius: 8px;
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li.is-selected:hover:not(.list-section-label) {
-  background-color: rgb(from var(--palette-accent) r g b / 0.16);
-}
-
-.list-view li:hover:not(.is-selected) {
+}.list-view li:hover:not(.is-selected) {
   background-color: hsl(270, 0%, 96%);
-}
-
-body.stores-page[data-force-web-mode='on']
-  #storesList
-  li:hover:not(.is-selected):not(.list-section-label):not(.store-row-dragging) {
-  background-color: hsl(270, 0%, 96%);
-}
-
-.list-view li.list-section-label {
+}.list-view li.list-section-label {
   cursor: default;
   user-select: none;
   font-size: 12px;
@@ -1482,502 +653,10 @@ body.stores-page[data-force-web-mode='on']
   color: var(--section-label-color);
   padding-top: 1rem;
   padding-bottom: 0.25rem;
-}
-
-.list-view li.list-section-label:hover {
+}.list-view li.list-section-label:hover {
   background-color: transparent;
 }
-
-body.shopping-list-page #shoppingListOutput .shopping-list-section--store,
-body.shopping-list-page #shoppingListOutput .shopping-list-section--unlisted,
-body.shopping-list-page #shoppingListOutput .shopping-list-section--recipes,
-body.tags-page #tagsList .shopping-list-section--recipes,
-body.tags-page #tagsList .tags-list-section--ingredients {
-  margin-top: 0.75rem;
-  color: var(--theme-primary);
-  font-size: 13px;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section--store:first-child,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section--unlisted:first-child,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section--recipes:first-child,
-body.tags-page #tagsList .shopping-list-section--recipes:first-child,
-body.tags-page #tagsList .tags-list-section--ingredients:first-child {
-  margin-top: 0;
-}
-
-body.shopping-list-page .shopping-list-controls {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.75rem;
-}
-
-body.shopping-list-page .shopping-list-controls__reset {
-  height: 38px;
-  padding: 0 1rem;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-section--aisle,
-body.shopping-list-page #shoppingListOutput .shopping-list-section--completed {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 13px;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle,
-body.tags-page #tagsList .shopping-list-section-toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  margin: 0;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2px;
-  cursor: pointer;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-section-toggle__icon,
-body.tags-page #tagsList .shopping-list-section-toggle__icon {
-  flex: 0 0 auto;
-  font-size: 20px;
-  line-height: 1;
-  color: inherit;
-  opacity: 0.72;
-  --material-symbols-opsz: 20;
-  transition: transform 120ms ease;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section-toggle[aria-expanded='true']
-  .shopping-list-section-toggle__icon,
-body.tags-page
-  #tagsList
-  .shopping-list-section-toggle[aria-expanded='true']
-  .shopping-list-section-toggle__icon {
-  transform: rotate(180deg);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-section-toggle__label,
-body.tags-page #tagsList .shopping-list-section-toggle__label {
-  line-height: 1.2;
-}
-
-body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  /* Override `.list-page li` single-line ellipsis so long names wrap. */
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--recipe-summary {
-  cursor: default;
-  gap: 0;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--recipe-summary:hover {
-  background-color: transparent;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-recipe-summary-text {
-  line-height: var(--ingredients-line-height);
-  color: inherit;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline--recipe-summary {
-  line-height: var(--ingredients-line-height);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--recipe-summary
-  .shopping-list-doc-recipe-summary-link {
-  font-size: var(--body-font-size);
-  line-height: var(--ingredients-line-height);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--recipe-summary
-  .shopping-list-doc-contribution-detail {
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-checkbox {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: rgba(0, 0, 0, 0.58);
-  padding: 0;
-  margin: 0;
-  width: 28px;
-  height: 28px;
-  line-height: 1;
-  flex: 0 0 auto;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-checkbox
-  .material-symbols-outlined {
-  font-size: 24px;
-  line-height: 1;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-text-wrap {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-text,
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-input {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  margin: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: var(--ingredients-line-height);
-  text-align: left;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-text {
-  cursor: text;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-input:focus {
-  outline: none;
-}
-
-body.shopping-list-page #shoppingListOutput li.shopping-list-doc-item--checked {
-  color: rgba(0, 0, 0, 0.48);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--checked
-  .shopping-list-doc-checkbox {
-  color: rgba(0, 0, 0, 0.48);
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-headline {
-  display: block;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline
-  .shopping-list-doc-text {
-  width: auto;
-  min-width: 0;
-  display: inline;
-  overflow-wrap: anywhere;
-  vertical-align: baseline;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline
-  .shopping-list-doc-link {
-  line-height: var(--shopping-inline-expand-line-height);
-  overflow-wrap: anywhere;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-tail {
-  display: inline;
-  white-space: nowrap;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-link,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link {
-  color: inherit;
-  text-decoration: none;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-link.shopping-list-doc-link--variant-deprecated,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-text.shopping-list-doc-text--variant-deprecated {
-  color: var(--ingredient-deprecated-fg);
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-link:hover,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link:hover {
-  text-decoration: underline;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-link:focus-visible,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link:focus-visible,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-expand:focus-visible {
-  outline: 2px solid rgb(from var(--palette-accent) r g b / 0.3);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  button.shopping-list-doc-text--amount,
-body.shopping-list-page
-  #shoppingListOutput
-  button.shopping-list-doc-text--amount-diverged {
-  cursor: pointer;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-text--amount {
-  display: inline;
-  width: auto;
-  color: rgba(0, 0, 0, 0.56);
-  font-size: 13px;
-  line-height: 1.45;
-  vertical-align: baseline;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-text--amount-diverged {
-  color: var(--ingredient-deprecated-fg);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--checked
-  .shopping-list-doc-text--amount-diverged {
-  color: color-mix(
-    in srgb,
-    var(--ingredient-deprecated-fg) 55%,
-    rgba(0, 0, 0, 0.5)
-  );
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-skin {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: baseline;
-  margin-left: 1px;
-  cursor: pointer;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-amount-paren {
-  color: rgba(0, 0, 0, 0.56);
-  font-size: 13px;
-  line-height: 1.45;
-  flex-shrink: 0;
-  transition:
-    opacity 0.12s ease,
-    width 0.12s ease,
-    margin 0.12s ease;
-  cursor: pointer;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-amount-skin:focus-within
-  .shopping-list-doc-amount-paren {
-  opacity: 0;
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-}
-
-/* Amount inline edit: light tray vs. list row hover (hsl(270,0%,96%)); tight width from `size` in JS */
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-input--amount {
-  width: auto;
-  max-width: min(100%, 32ch);
-  min-width: 2.25ch;
-  field-sizing: content;
-  height: var(--servings-field-height);
-  padding: 4px 8px;
-  border-radius: 8px;
-  /* Clear contrast vs .list-page li:hover (≈ #f5f5f5) and vs --field-bg */
-  background-color: #fff;
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  box-sizing: border-box;
-  outline: none;
-  line-height: 1.2;
-  font: inherit;
-  vertical-align: middle;
-  cursor: pointer;
-  box-shadow: none;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-input--amount:focus {
-  outline: none;
-  border: 1px solid rgb(from var(--palette-accent) r g b / 0.2);
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-  box-shadow: none;
-}
-
-body.shopping-list-page #shoppingListOutput .shopping-list-doc-expand {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  font-family: var(--main-font);
-  font-size: var(--body-font-size);
-  font-weight: var(--body-font-weight);
-  line-height: var(--shopping-inline-expand-line-height);
-  color: inherit;
-  cursor: pointer;
-  display: inline;
-  vertical-align: baseline;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-expand[aria-expanded='true'] {
-  color: inherit;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context,
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  cursor: default;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context:hover,
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution:hover {
-  background-color: transparent;
-}
-
-/* "RECIPES" label row: shared top padding + optional bottom; horizontal matches parent via `.list-view li`. */
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-context {
-  margin-top: var(--shopping-list-doc-contribution-line-gap);
-  padding-top: var(--shopping-list-doc-contribution-child-padding-top);
-  padding-bottom: var(--shopping-list-doc-contribution-context-padding-y);
-}
-
-/* Recipe contribution rows: same top padding as RECIPES; horizontal matches parent via `.list-view li`. */
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution {
-  margin-top: var(--shopping-list-doc-contribution-line-gap);
-  padding-top: var(--shopping-list-doc-contribution-child-padding-top);
-  padding-bottom: 0;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-checkbox--placeholder {
-  visibility: hidden;
-  pointer-events: none;
-  cursor: default;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline--contribution-context,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-headline--contribution {
-  flex-wrap: wrap;
-  align-items: baseline;
-  row-gap: 2px;
-  column-gap: 6px;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-context-label {
-  color: var(--theme-primary);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  li.shopping-list-doc-item--contribution-last {
-  margin-bottom: var(--shopping-list-doc-contribution-trailing-gap);
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-link,
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-label {
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-body.shopping-list-page
-  #shoppingListOutput
-  .shopping-list-doc-contribution-detail {
-  color: rgba(0, 0, 0, 0.56);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* Must beat `.list-view li.list-section-label` (section headers: 12px / uppercase). */
-.list-view li.list-section-label.top-level-empty-state {
+/* Amount inline edit: light tray vs. list row hover (hsl(270,0%,96%)); tight width from `size` in JS *//* "RECIPES" label row: shared top padding + optional bottom; horizontal matches parent via `.list-view li`. *//* Recipe contribution rows: same top padding as RECIPES; horizontal matches parent via `.list-view li`. *//* Must beat `.list-view li.list-section-label` (section headers: 12px / uppercase). */.list-view li.list-section-label.top-level-empty-state {
   color: var(--top-level-empty-color);
   text-transform: var(--top-level-empty-text-transform);
   font-size: var(--top-level-empty-font-size);
@@ -1993,21 +672,15 @@ body.shopping-list-page
   gap: var(--top-level-empty-paragraph-gap);
   width: 100%;
   padding: 0;
-}
-
-.list-page li.top-level-empty-state {
+}.list-page li.top-level-empty-state {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
   cursor: default;
-}
-
-.top-level-empty-diagnosis,
+}.top-level-empty-diagnosis,
 .top-level-empty-cta {
   margin: 0;
-}
-
-.list-view.list-page.is-top-level-empty {
+}.list-view.list-page.is-top-level-empty {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2016,653 +689,23 @@ body.shopping-list-page
     100dvh - var(--app-bar-height) - var(--bottom-nav-height) -
       (2 * var(--top-level-list-edge-gap))
   );
-}
-
-.list-view.top-level-kbd-nav li:hover:not(.is-selected) {
+}.list-view.top-level-kbd-nav li:hover:not(.is-selected) {
   /* For top-level pages, hover moves selection in JS.
      Don't also paint a separate hover highlight (it fights keyboard selection). */
   background-color: transparent;
-}
-
-.recipe-title {
+}.recipe-title {
   font-size: 22px; /* stronger heading style */
 }
-
-/* Shopping item / unit editor: single calm card */
-body.shopping-editor-page .shopping-item-editor-card,
-body.unit-editor-page .shopping-item-editor-card {
-  margin-top: 18px;
-  background: var(--field-bg);
-  border-radius: 14px;
-  padding: 18px 18px;
-
-  /* Optical alignment with the title: let the card bleed slightly wider */
-  margin-left: -12px;
-  margin-right: -12px;
-}
-
-body.shopping-editor-page .shopping-item-field,
-body.store-editor-page .shopping-item-field,
-body.unit-editor-page .shopping-item-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
-}
-
-body.shopping-editor-page .shopping-item-label,
-body.unit-editor-page .shopping-item-label {
-  font-size: 13px;
-  color: var(--theme-primary);
-  letter-spacing: 0.2px;
-}
-
-body.shopping-editor-page .shopping-item-input,
-body.unit-editor-page .shopping-item-input {
-  height: var(--servings-field-height);
-  padding: 4px 10px;
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  font-family: var(--main-font);
-  font-size: var(--ingredient-editor-control-font-size);
-  width: 100%;
-  box-sizing: border-box;
-}
-
-body.shopping-editor-page .shopping-item-input:focus,
-body.unit-editor-page .shopping-item-input:focus {
-  outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.shopping-editor-page .shopping-item-textarea,
-body.store-editor-page .shopping-item-textarea {
-  min-height: 56px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  font-family: var(--main-font);
-  font-size: var(--ingredient-editor-control-font-size);
-  width: 100%;
-  box-sizing: border-box;
-
-  /* default: newline-only list, no wrap */
-  white-space: pre;
-  overflow-x: auto;
-  /* Auto-grow JS clamps height (~8 lines); after that we need vertical scroll. */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  resize: none;
-}
-
-/* Store aisle editor: wrap long lines instead of horizontal scrolling. */
-body.store-editor-page .shopping-item-textarea {
-  min-height: 72px;
-  white-space: pre-wrap;
-  overflow-x: hidden;
-}
-
-body.shopping-editor-page .shopping-item-textarea:focus,
-body.store-editor-page .shopping-item-textarea:focus {
-  outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.shopping-editor-page .shopping-item-variant-editor {
-  --shopping-item-variant-cols: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-rows {
-  min-width: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid {
-  min-height: 56px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-sizing: border-box;
-  overflow-x: hidden;
-  overflow-y: visible;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid:focus-within {
-  background-color: #e5eefa;
-  border-color: #b5ceff;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid-row {
-  display: grid;
-  grid-template-columns: var(--shopping-item-variant-cols);
-  gap: 24px;
-  /* start: when tags wrap, Name/Home stay with the first tag line (not vertically centered in the full tags block). */
-  align-items: start;
-  min-height: var(--shopping-filter-chip-height);
-  min-width: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
-  .shopping-item-variant-name-input:not(:focus),
-body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
-  .shopping-item-variant-home-input:not(:focus),
-body.shopping-editor-page .shopping-item-variant-grid-row--variant-deprecated
-  .shopping-item-variant-tags-input:not(:focus) {
-  color: var(--ingredient-deprecated-fg);
-}
-
-body.shopping-editor-page .shopping-item-variant-grid-row--header {
-  min-height: 20px;
-  margin-bottom: 4px;
-}
-
-body.shopping-editor-page
-  .shopping-item-variant-grid-row
-  + .shopping-item-variant-grid-row {
-  margin-top: 2px;
-}
-
-body.shopping-editor-page .shopping-item-variant-header-cell {
-  min-width: 0;
-  font-size: 13px;
-  color: var(--theme-primary);
-  letter-spacing: 0.2px;
-}
-
-body.shopping-editor-page .shopping-item-variant-cell {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: var(--shopping-filter-chip-height);
-  cursor: text;
-}
-
-body.shopping-editor-page .shopping-item-variant-cell--base {
-  cursor: text;
-}
-
-body.shopping-editor-page .shopping-item-variant-base-label {
-  display: flex;
-  align-items: center;
-  gap: 0.35ch;
-  min-height: var(--shopping-filter-chip-height);
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: var(--ingredient-editor-control-font-size);
-}
-
-body.shopping-editor-page .shopping-item-variant-base-prefix {
-  color: var(--field-fg);
-}
-
-body.shopping-editor-page .shopping-item-variant-base-name {
-  color: var(--theme-primary);
-}
-
-body.shopping-editor-page .shopping-item-variant-name-input,
-body.shopping-editor-page .shopping-item-variant-home-input,
-body.shopping-editor-page .shopping-item-variant-tags-input {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--field-fg);
-  font: inherit;
-  font-size: var(--ingredient-editor-control-font-size);
-  padding: 0;
-  height: var(--shopping-filter-chip-height);
-  line-height: var(--shopping-filter-chip-height);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body.shopping-editor-page .shopping-item-variant-name-input:focus {
-  outline: none;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.shopping-editor-page .shopping-item-variant-home-input:focus {
-  outline: none;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.shopping-editor-page .shopping-item-variant-cell--tags {
-  align-items: flex-start;
-}
-
-body.shopping-editor-page .shopping-item-variant-tags-control {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-}
-
-body.shopping-editor-page .shopping-item-variant-tag-pill {
-  max-width: 100%;
-}
-
-body.shopping-editor-page .shopping-item-variant-tags-slot {
-  display: none;
-  position: relative;
-  flex: 0 0 auto;
-  min-width: 0;
-  max-width: 100%;
-  height: var(--shopping-filter-chip-height);
-}
-
-body.shopping-editor-page .shopping-item-variant-tags-input {
-  display: block;
-  min-width: 1ch;
-  width: auto;
-  max-width: 100%;
-}
-
-body.shopping-editor-page
-  .shopping-item-variant-tags-control.is-editing
-  .shopping-item-variant-tags-slot {
-  display: block;
-}
-
-body.shopping-editor-page
-  .shopping-item-variant-tags-control.is-editing
-  .shopping-item-variant-tags-slot.is-empty {
-  width: 0;
-  flex-basis: 0;
-  overflow: visible;
-}
-
-body.shopping-editor-page
-  .shopping-item-variant-tags-control.is-editing
-  .shopping-item-variant-tags-slot.is-empty
-  .shopping-item-variant-tags-input {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1px;
-  min-width: 1px;
-}
-
-body.shopping-editor-page .shopping-item-variant-tags-input:focus {
-  outline: none;
-  color: var(--edit-mode-color);
-  caret-color: var(--edit-mode-color);
-}
-
-body.store-editor-page .shopping-item-textarea::placeholder {
-  font-size: var(--ingredient-editor-control-font-size);
-  font-family: var(--main-font);
-}
-
-/* Store editor: aisle cards (mirror shopping item card + purple labels) */
-body.store-editor-page .shopping-item-editor-card {
-  margin-top: 14px;
-  background: var(--field-bg);
-  border-radius: 14px;
-  padding: 18px 18px;
-  margin-left: -12px;
-  margin-right: -12px;
-  position: relative;
-}
-
-body.store-editor-page .shopping-item-label,
-body.store-editor-page .store-aisle-name {
-  font-size: 13px;
-  color: var(--theme-primary);
-  letter-spacing: 0.2px;
-}
-
-body.store-editor-page .store-aisle-name {
-  cursor: text;
-  min-height: 1.25em;
-}
-
-/* Leave empty card width for Ctrl/⌘/right-click delete (match recipe row UX). */
-body.store-editor-page .store-aisle-name:not(.editing-title) {
-  max-width: 65%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body.store-editor-page .store-aisle-name.editing-title {
-  max-width: none;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  color: var(--edit-mode-color);
-  outline: none;
-}
-
-body.store-editor-page .store-add-aisle-cta {
-  margin-top: 10px;
-  padding: 10px 0 6px;
-  cursor: pointer;
-  user-select: none;
-}
-
-body.store-editor-page .store-aisle-slot {
-  position: relative;
-}
-
-body.store-editor-page .store-add-aisle-cta--per-slot {
-  display: none;
-}
-
-body.store-editor-page
-  .store-aisle-slot.store-aisle-slot--hint-active
-  > .store-add-aisle-cta--per-slot {
-  display: block;
-}
-
-body.store-editor-page .store-add-aisle-cta .placeholder-prompt {
-  font-size: var(--ingredient-editor-control-font-size);
-  font-family: var(--main-font);
-}
-
-/* Subtitle hint (“Add a description.”) matches add-aisle hint color/opacity only. */
-body.store-editor-page #storeLocationSubtitle.placeholder-prompt {
-  color: var(--placeholder-muted);
-}
-
-body.store-editor-page .store-add-location-cta {
-  display: block;
-  margin: 4px 0 0 0;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 15px;
-  color: var(--subtitle);
-  cursor: pointer;
-  text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-body.store-editor-page .store-add-location-cta:hover {
-  color: var(--theme-primary);
-}
-
-/* Aisle name + Items field stack (Items uses shared .shopping-item-field) */
-body.store-editor-page .store-aisle-items-field {
-  padding-top: 4px;
-  padding-right: 20px;
-}
-
-body.store-editor-page
-  .store-aisle-items-field--has-deprecated-variant
-  .shopping-item-textarea:not(:focus) {
-  color: var(--ingredient-deprecated-fg);
-}
-
-/* App bar search active: show match lines only (not the full scrollable list). */
-body.store-editor-page.store-editor-search-active
-  .store-aisle-items-field--search-active
-  .shopping-item-textarea {
-  display: none !important;
-}
-
-body.store-editor-page.store-editor-search-active
-  .store-aisle-items-field--search-active
-  .store-variant-picker {
-  display: none !important;
-}
-
-/* Filtered lines: same visual + typography as aisle item textarea */
-body.store-editor-page .store-aisle-search-results {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
-  color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-body.store-editor-page .store-aisle-search-line {
-  font-family: var(--main-font);
-  font-size: var(--ingredient-editor-control-font-size);
-  line-height: 1.45;
-  color: var(--field-fg);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-body.store-editor-page .store-variant-picker {
-  margin-top: 8px;
-}
-
-body.store-editor-page .store-variant-picker-hidden-input {
-  display: none;
-}
-
-body.store-editor-page .store-variant-picker--inline {
-  margin-top: 0;
-  min-height: 56px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background-color: #e5eefa;
-  border: 1px solid #b5ceff;
-  color: var(--edit-mode-color);
-  box-sizing: border-box;
-}
-
-body.store-editor-page .store-variant-picker-inline-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-body.store-editor-page .store-variant-picker-inline-name {
-  font-size: var(--ingredient-editor-control-font-size);
-  font-family: var(--main-font);
-  color: var(--edit-mode-color);
-}
-
-body.store-editor-page .store-variant-picker-inline-name-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  /* Match chip metrics so label baseline aligns with pills. */
-  padding: 4px 10px;
-  font-size: 13px;
-  border: 1px solid rgb(from var(--palette-accent) r g b / 0);
-  background: transparent;
-}
-
-body.store-editor-page .store-variant-picker-name {
-  font-size: var(--ingredient-editor-control-font-size);
-  color: var(--field-fg);
-  margin-bottom: 8px;
-}
-
-body.store-editor-page .store-variant-picker-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-body.store-editor-page .store-variant-picker-pills--inline {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-body.store-editor-page .store-variant-picker-pill {
-  border: 1px solid rgb(from var(--palette-accent) r g b / 0.24);
-  background: #fff;
-  color: var(--theme-primary);
-  transition:
-    opacity 120ms ease,
-    background-color 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease,
-    filter 120ms ease,
-    transform 120ms ease;
-}
-
-body.store-editor-page .store-variant-picker-pill.is-on {
-  opacity: 1;
-  background: var(--theme-primary);
-  color: #fff;
-  border-color: var(--theme-primary);
-}
-
-body.store-editor-page .store-variant-picker-pill.is-off {
-  opacity: 0.92;
-}
-
-body.store-editor-page .store-variant-picker-pill.is-on:hover {
-  filter: brightness(1.04);
-}
-
-body.store-editor-page .store-variant-picker-pill.is-off:hover {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgb(from var(--palette-accent) r g b / 0.42);
-  color: var(--theme-primary);
-}
-
-body.store-editor-page .store-variant-picker-pill--add-all {
-  background: rgb(from var(--palette-accent) r g b / 0.1);
-  color: var(--theme-primary);
-  border-color: rgb(from var(--palette-accent) r g b / 0.55);
-  font-weight: 600;
-}
-
-body.store-editor-page .store-variant-picker-pill--add-all:hover {
-  background: rgb(from var(--palette-accent) r g b / 0.16);
-  border-color: rgb(from var(--palette-accent) r g b / 0.72);
-}
-
-body.store-editor-page .store-variant-picker-pill--add-all.is-unavailable,
-body.store-editor-page .store-variant-picker-pill--add-all:disabled {
-  opacity: 0.62;
-  cursor: default;
-  background: rgb(from var(--palette-accent) r g b / 0.09);
-  border-color: rgb(from var(--palette-accent) r g b / 0.38);
-  color: rgb(from var(--palette-accent) r g b / 0.84);
-}
-
-body.store-editor-page .store-aisle-move-controls {
-  position: absolute;
-  top: 10px;
-  right: 9px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-body.store-editor-page .store-aisle-card:hover .store-aisle-move-controls,
-body.store-editor-page
-  .store-aisle-card:focus-within
-  .store-aisle-move-controls,
-body.store-editor-page .store-aisle-card:focus .store-aisle-move-controls {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-body.store-editor-page .store-aisle-move-btn {
-  border: 0;
-  background: transparent;
-  color: rgba(0, 0, 0, 0.55);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-}
-
-body.store-editor-page .store-aisle-move-icon {
-  font-size: 18px;
-  line-height: 1;
-  --material-symbols-opsz: 20;
-}
-
-body.store-editor-page .store-aisle-move-btn:disabled,
-body.store-editor-page .store-aisle-move-btn[aria-disabled='true'] {
-  opacity: 0.35;
-  cursor: default;
-}
-
-body.store-editor-page.store-master-link-mode
-  .store-aisle-slot.store-aisle-slot--hint-active
-  .shopping-item-textarea {
-  cursor: pointer;
-}
-
-body.shopping-editor-page .shopping-item-status,
-body.unit-editor-page .shopping-item-status,
-body.size-editor-page .shopping-item-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-body.shopping-editor-page .shopping-item-status-row,
-body.unit-editor-page .shopping-item-status-row,
-body.size-editor-page .shopping-item-status-row {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-
-body.shopping-editor-page .shopping-item-toggle,
-body.unit-editor-page .shopping-item-toggle,
-body.size-editor-page .shopping-item-toggle,
-.ui-dialog-panel .shopping-item-toggle {
+/* Shopping item / unit editor: single calm card *//* Store aisle editor: wrap long lines instead of horizontal scrolling. *//* Store editor: aisle cards (mirror shopping item card + purple labels) *//* Leave empty card width for Ctrl/⌘/right-click delete (match recipe row UX). *//* Subtitle hint (“Add a description.”) matches add-aisle hint color/opacity only. *//* Aisle name + Items field stack (Items uses shared .shopping-item-field) *//* App bar search active: show match lines only (not the full scrollable list). *//* Filtered lines: same visual + typography as aisle item textarea */.ui-dialog-panel .shopping-item-toggle{
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 6px 0;
-}
-
-body.shopping-editor-page .shopping-item-toggle span,
-body.unit-editor-page .shopping-item-toggle span,
-body.size-editor-page .shopping-item-toggle span,
-.ui-dialog-panel .shopping-item-toggle span {
+}.ui-dialog-panel .shopping-item-toggle span{
   font-size: 13px;
   color: rgba(0, 0, 0, 0.7);
-}
-
-body.shopping-editor-page .shopping-item-toggle input[type='checkbox'],
-body.shopping-editor-page .shopping-item-toggle input[type='radio'],
-body.unit-editor-page .shopping-item-toggle input[type='checkbox'],
-body.unit-editor-page .shopping-item-toggle input[type='radio'],
-body.size-editor-page .shopping-item-toggle input[type='checkbox'],
-body.size-editor-page .shopping-item-toggle input[type='radio'],
-.ui-dialog-panel .shopping-item-toggle input[type='checkbox'],
-.ui-dialog-panel .shopping-item-toggle input[type='radio'] {
+}.ui-dialog-panel .shopping-item-toggle input[type='checkbox'],
+.ui-dialog-panel .shopping-item-toggle input[type='radio']{
   appearance: none;
   -webkit-appearance: none;
   width: 18px;
@@ -2672,35 +715,11 @@ body.size-editor-page .shopping-item-toggle input[type='radio'],
   background: #fff;
   display: inline-grid;
   place-content: center;
-}
-
-body.shopping-editor-page .shopping-item-toggle input[type='checkbox']:checked,
-body.shopping-editor-page .shopping-item-toggle input[type='radio']:checked,
-body.unit-editor-page .shopping-item-toggle input[type='checkbox']:checked,
-body.unit-editor-page .shopping-item-toggle input[type='radio']:checked,
-body.size-editor-page .shopping-item-toggle input[type='checkbox']:checked,
-body.size-editor-page .shopping-item-toggle input[type='radio']:checked,
-.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked,
-.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked {
+}.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked,
+.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked{
   border-color: var(--theme-primary);
-}
-
-body.shopping-editor-page
-  .shopping-item-toggle
-  input[type='checkbox']:checked::after,
-body.shopping-editor-page
-  .shopping-item-toggle
-  input[type='radio']:checked::after,
-body.unit-editor-page
-  .shopping-item-toggle
-  input[type='checkbox']:checked::after,
-body.unit-editor-page .shopping-item-toggle input[type='radio']:checked::after,
-body.size-editor-page
-  .shopping-item-toggle
-  input[type='checkbox']:checked::after,
-body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after,
-.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked::after,
-.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked::after {
+}.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked::after,
+.ui-dialog-panel .shopping-item-toggle input[type='radio']:checked::after{
   content: '';
   width: 18px;
   height: 18px;
@@ -2716,35 +735,16 @@ body.size-editor-page .shopping-item-toggle input[type='radio']:checked::after,
   mask-size: 18px 18px;
   -webkit-mask-position: center;
   mask-position: center;
-}
-
-body.shopping-editor-page .shopping-item-help {
-  margin-top: 10px;
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.55);
-  line-height: 1.4;
-}
-
-.recipe-title[contenteditable='true'] {
+}.recipe-title[contenteditable='true'] {
   outline: none;
-}
-
-.recipe-title.editing-title {
+}.recipe-title.editing-title {
   color: var(--edit-mode-color);
 }
-
-/* --- Section headings / spacing --- */
-.section-heading {
+/* --- Section headings / spacing --- */.section-heading {
   margin-top: 2rem;
   margin-bottom: 0.5rem;
 }
-
-/* .section { */
-/* margin-bottom: 2rem; */
-/* } */
-
-/* --- Ingredient lines --- */
-.ingredient-line {
+/* .section { *//* margin-bottom: 2rem; *//* } *//* --- Ingredient lines --- */.ingredient-line {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -2752,9 +752,7 @@ body.shopping-editor-page .shopping-item-help {
   position: relative;
   z-index: 1;
   margin: 0; /* spacing is handled via downstream-only margin-top rules below */
-}
-
-body.recipe-editor-page .ingredient-row-move-btn {
+}body.recipe-editor-page .ingredient-row-move-btn {
   border: 0;
   background: transparent;
   color: rgba(0, 0, 0, 0.55);
@@ -2766,20 +764,15 @@ body.recipe-editor-page .ingredient-row-move-btn {
   line-height: 1;
   padding: 0;
   cursor: pointer;
-}
-
-body.recipe-editor-page .ingredient-row-move-icon {
+}body.recipe-editor-page .ingredient-row-move-icon {
   font-size: 18px;
   line-height: 1;
   --material-symbols-opsz: 20;
-}
-
-body.recipe-editor-page .ingredient-row-move-btn:disabled,
+}body.recipe-editor-page .ingredient-row-move-btn:disabled,
 body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
   opacity: 0.35;
   cursor: default;
 }
-
 /* Read-only recipe list: deprecated master ingredient (not used in edit tray) */
 #ingredientsSection
   .ingredient-line.ingredient-line--deprecated
@@ -2791,9 +784,7 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
   .ingredient-line.ingredient-line--deprecated
   .sub-recipe-link:visited {
   color: var(--ingredient-deprecated-fg);
-}
-
-#ingredientsSection
+}#ingredientsSection
   .ingredient-line.ingredient-line--variant-deprecated
   .ingredient-text,
 #ingredientsSection
@@ -2804,67 +795,47 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
   .sub-recipe-link:visited {
   color: var(--ingredient-deprecated-fg);
 }
-
 /* overrides.css sets `line-height` on `*`, so we must set it on the actual text nodes too.
    Scope to the Ingredients section only (YWN stays on default rhythm). */
 #ingredientsSection .ingredient-line,
 #ingredientsSection .ingredient-line * {
   line-height: var(--ingredients-line-height);
 }
-
 /* Ingredients: item → item spacing */
 #ingredientsSection .ingredient-line + .ingredient-line {
   margin-top: var(--space-ingredient-item);
 }
-
-/* YWN list: tighter line-height and spacing for scanning */
-.you-will-need-card .ingredient-line,
+/* YWN list: tighter line-height and spacing for scanning */.you-will-need-card .ingredient-line,
 .you-will-need-card .ingredient-line * {
   line-height: var(--text-line-height);
-}
-.you-will-need-card .ingredient-line {
+}.you-will-need-card .ingredient-line {
   margin: 0;
   cursor: default;
-}
-
-.ingredient-alt-prefix {
+}.ingredient-alt-prefix {
   color: var(--theme-primary);
-}
-
-.ingredient-subsection-heading-line {
+}.ingredient-subsection-heading-line {
   display: flex;
   align-items: baseline;
   cursor: pointer;
   position: relative;
   z-index: 1;
-}
-
-.ingredient-subsection-heading-text {
+}.ingredient-subsection-heading-text {
   flex: 1;
-}
-
-.ingredient-subsection-heading-text,
+}.ingredient-subsection-heading-text,
 .instruction-line[data-step-type='heading'] .step-text {
   /* Unified subsection heading style (Ingredients + Instructions) */
   line-height: var(--text-line-height);
   color: var(--theme-primary);
 }
-
 /* Ingredient subsection headings: consistent line-height */
 #ingredientsSection .ingredient-subsection-heading-text {
   line-height: var(--text-line-height);
 }
-
-/* CTA uses ingredient-line for layout; only behavior remains here */
-.ingredient-add-cta {
+/* CTA uses ingredient-line for layout; only behavior remains here */.ingredient-add-cta {
   cursor: default;
-}
-
-.ingredient-add-cta-copy {
+}.ingredient-add-cta-copy {
   display: inline;
-}
-
-.ingredient-add-cta-action {
+}.ingredient-add-cta-action {
   padding: 0;
   margin: 0;
   border: none;
@@ -2873,149 +844,100 @@ body.recipe-editor-page .ingredient-row-move-btn[aria-disabled='true'] {
   color: var(--placeholder-muted);
   text-decoration: none;
   cursor: pointer;
-}
-
-body.ingredient-insert-blank-active
+}body.ingredient-insert-blank-active
   .ingredient-add-cta-action[data-cta-action='add-ingredient'] {
   cursor: default;
   color: var(--placeholder-muted);
-}
-
-body.ingredient-insert-blank-active
+}body.ingredient-insert-blank-active
   .ingredient-add-cta-action[data-cta-action='add-ingredient']:hover,
 body.ingredient-insert-blank-active
   .ingredient-add-cta-action[data-cta-action='add-ingredient']:focus-visible {
   color: var(--placeholder-muted);
   outline: none;
-}
-
-.ingredient-add-cta-action.ingredient-add-cta-action--inert,
+}.ingredient-add-cta-action.ingredient-add-cta-action--inert,
 .ingredient-add-cta-action.ingredient-add-cta-action--inert:hover,
 .ingredient-add-cta-action.ingredient-add-cta-action--inert:focus-visible {
   color: var(--placeholder-muted);
   cursor: default;
   outline: none;
-}
-
-.ingredient-add-cta-action:hover,
+}.ingredient-add-cta-action:hover,
 .ingredient-add-cta-action:focus-visible {
   color: var(--theme-primary);
-}
-
-.ingredient-add-cta-action:focus-visible {
+}.ingredient-add-cta-action:focus-visible {
   outline: 2px solid var(--theme-primary);
   outline-offset: 2px;
 }
-
-/* --- Ingredient slots (wrapper for line + per-line CTA) --- */
-.ingredient-slot {
+/* --- Ingredient slots (wrapper for line + per-line CTA) --- */.ingredient-slot {
   position: relative;
 }
-
-/* Per-line CTA: hidden by default, revealed by JS hint controller */
-.ingredient-slot > .ingredient-add-cta {
+/* Per-line CTA: hidden by default, revealed by JS hint controller */.ingredient-slot > .ingredient-add-cta {
   display: none;
   position: relative;
   z-index: 1;
-}
-
-.ingredient-slot.ingredient-slot--hint-active > .ingredient-add-cta {
+}.ingredient-slot.ingredient-slot--hint-active > .ingredient-add-cta {
   display: flex;
 }
-
 /* INGREDIENTS header hint CTA:
    - persistent in empty state
-   - hover-activated in non-empty state */
-.ingredient-header-cta {
+   - hover-activated in non-empty state */.ingredient-header-cta {
   display: none;
   position: relative;
   z-index: 1;
-}
-
-.ingredient-header-cta.ingredient-header-cta--persistent,
+}.ingredient-header-cta.ingredient-header-cta--persistent,
 .ingredient-header-cta.ingredient-header-cta--active {
   display: flex;
 }
-
-/* Slot spacing (applied via JS classes to avoid fragile sibling selectors) */
-.ingredient-slot--spacing-first {
+/* Slot spacing (applied via JS classes to avoid fragile sibling selectors) */.ingredient-slot--spacing-first {
   margin-top: var(--space-section-header-to-content);
-}
-
-.ingredient-slot--spacing-item-item {
+}.ingredient-slot--spacing-item-item {
   margin-top: var(--space-ingredient-item);
-}
-
-.ingredient-slot--spacing-heading-item {
+}.ingredient-slot--spacing-heading-item {
   margin-top: var(--space-subhead-to-content);
-}
-
-.ingredient-slot--spacing-item-heading {
+}.ingredient-slot--spacing-item-heading {
   margin-top: var(--space-content-to-subhead);
 }
-
-/* Fallback sibling rule for first slot after header + insert-zone */
-.section-header + .ingredient-insert-zone + .ingredient-slot {
+/* Fallback sibling rule for first slot after header + insert-zone */.section-header + .ingredient-insert-zone + .ingredient-slot {
   margin-top: var(--space-section-header-to-content);
 }
-
 /* When the empty-state CTA is present, suppress between-row insertion icons and interactions */
 #ingredientsSection:has(.ingredient-header-cta--persistent)
   .ingredient-insert-zone::before {
   opacity: 0 !important;
-}
-
-#ingredientsSection:has(.ingredient-header-cta--persistent)
+}#ingredientsSection:has(.ingredient-header-cta--persistent)
   .ingredient-insert-zone {
   pointer-events: none;
   cursor: default;
 }
-
-/* --- Inter-Element Spacing Rules --- */
-/* All spacing uses margin-top on the downstream element.
-   Pattern: .upstream-selector + .downstream-selector { margin-top: var(--space-x); } */
-
-/* Reset all instruction-line margins first (overrides universal reset) */
-.instruction-line {
+/* --- Inter-Element Spacing Rules --- *//* All spacing uses margin-top on the downstream element.
+   Pattern: .upstream-selector + .downstream-selector { margin-top: var(--space-x); } *//* Reset all instruction-line margins first (overrides universal reset) */.instruction-line {
   margin: 0;
 }
-
-/* Reset any incidental margins on headings/subheads */
-.instruction-line[data-step-type='heading'],
+/* Reset any incidental margins on headings/subheads */.instruction-line[data-step-type='heading'],
 .ingredient-subsection-heading-line {
   margin: 0;
   padding: 0;
 }
-
-/* Section headers → first content */
-.section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
+/* Section headers → first content */.section-header + .ingredient-insert-zone + .ingredient-subsection-heading-line,
 .section-header + .ingredient-insert-zone + .ingredient-line,
 #ingredientsSection > .section-header + .ingredient-subsection-heading-line,
 #ingredientsSection > .section-header + .ingredient-line,
 #stepsSection .section-header + .instruction-line.numbered {
   margin-top: var(--space-section-header-to-content);
 }
-
-/* Instructions: step → step (main flow) */
-.instruction-line.numbered:not([data-step-type='heading'])
+/* Instructions: step → step (main flow) */.instruction-line.numbered:not([data-step-type='heading'])
   + .instruction-line.numbered:not([data-step-type='heading']) {
   margin-top: var(--space-step-to-step);
 }
-
-/* Instructions: content → subhead (section break signal) */
-.instruction-line.numbered:not([data-step-type='heading'])
+/* Instructions: content → subhead (section break signal) */.instruction-line.numbered:not([data-step-type='heading'])
   + .instruction-line.numbered[data-step-type='heading'],
 .instruction-line.numbered[data-step-type='heading']
   + .instruction-line.numbered[data-step-type='heading'] {
   margin-top: var(--space-content-to-subhead);
 }
-
-/* Instructions: subhead → next item (grouped under heading) */
-.instruction-line.numbered[data-step-type='heading']
+/* Instructions: subhead → next item (grouped under heading) */.instruction-line.numbered[data-step-type='heading']
   + .instruction-line.numbered {
   margin-top: var(--space-subhead-to-content);
 }
-
 /* Ingredients: item → subhead (section break) */
 #ingredientsSection .ingredient-line + .ingredient-subsection-heading-line,
 #ingredientsSection
@@ -3023,48 +945,33 @@ body.ingredient-insert-blank-active
   + .ingredient-subsection-heading-line {
   margin-top: var(--space-content-to-subhead);
 }
-
 /* Ingredients: subhead → item (grouped under heading) */
 #ingredientsSection .ingredient-subsection-heading-line + .ingredient-line {
   margin-top: var(--space-subhead-to-content);
 }
-
-/* YWN: header → first label */
-.you-will-need-card .section-header + .subsection-header {
+/* YWN: header → first label */.you-will-need-card .section-header + .subsection-header {
   margin-top: var(--space-section-header-to-content);
 }
-
-/* YWN: item → label (tighter breaks in card) */
-.you-will-need-card .ingredient-line + .subsection-header,
+/* YWN: item → label (tighter breaks in card) */.you-will-need-card .ingredient-line + .subsection-header,
 .you-will-need-card .subsection-header + .subsection-header {
   margin-top: var(--space-ywn-item-to-subhead);
 }
-
-/* YWN: label → item (grouped in card) */
-.you-will-need-card .subsection-header + .ingredient-line {
+/* YWN: label → item (grouped in card) */.you-will-need-card .subsection-header + .ingredient-line {
   margin-top: var(--space-ywn-subhead-to-item);
 }
-
-/* YWN: item → item (tight scanning list) */
-.you-will-need-card .ingredient-line + .ingredient-line {
+/* YWN: item → item (tight scanning list) */.you-will-need-card .ingredient-line + .ingredient-line {
   margin-top: var(--space-ywn-item);
-}
-
-.ingredient-subsection-heading-text[contenteditable='true'] {
+}.ingredient-subsection-heading-text[contenteditable='true'] {
   outline: none;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
-}
-
-.ingredient-subsection-heading-text.placeholder-prompt::before {
+}.ingredient-subsection-heading-text.placeholder-prompt::before {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
 }
-
 /* Hover target between ingredient rows. The zone itself stays visually empty;
-   JS can treat it like "space below the preceding entity." */
-.ingredient-insert-zone {
+   JS can treat it like "space below the preceding entity." */.ingredient-insert-zone {
   position: relative;
   height: 0;
   margin: 0; /* rails must never affect layout */
@@ -3080,9 +987,7 @@ body.ingredient-insert-blank-active
   margin-top: calc(-1 * var(--insert-hit-overhang-v));
   margin-bottom: calc(-1 * var(--insert-hit-overhang-v));
 }
-
-/* Hit target overlay (no layout impact) */
-.ingredient-insert-zone::after {
+/* Hit target overlay (no layout impact) */.ingredient-insert-zone::after {
   content: '';
   position: absolute;
   left: calc(-1 * var(--insert-hit-overhang-left));
@@ -3090,20 +995,15 @@ body.ingredient-insert-blank-active
   top: calc(-1 * var(--insert-hit-overhang-v));
   height: calc(2 * var(--insert-hit-overhang-v));
 }
-
-/* No visual affordance here; the current text hint is shown by JS instead. */
-.ingredient-insert-zone::before {
+/* No visual affordance here; the current text hint is shown by JS instead. */.ingredient-insert-zone::before {
   content: none;
 }
-
 /* Disable insert interactions while editing (read-mode-only affordance) */
 body.ingredient-editing #ingredientsSection .ingredient-insert-zone,
 body.step-editing #ingredientsSection .ingredient-insert-zone {
   pointer-events: none;
   cursor: default;
-}
-
-.step-insert-zone {
+}.step-insert-zone {
   position: relative;
   height: 0;
   margin: 0; /* rails must never affect layout */
@@ -3117,9 +1017,7 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   padding-bottom: var(--insert-hit-overhang-v);
   margin-top: calc(-1 * var(--insert-hit-overhang-v));
   margin-bottom: calc(-1 * var(--insert-hit-overhang-v));
-}
-
-.step-insert-zone::after {
+}.step-insert-zone::after {
   content: '';
   position: absolute;
   left: calc(-1 * var(--insert-hit-overhang-left));
@@ -3127,9 +1025,7 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   top: calc(-1 * var(--insert-hit-overhang-v));
   height: calc(2 * var(--insert-hit-overhang-v));
 }
-
-/* Instructions: icon-only affordance (subhead/heading insert), hover-only + Option */
-.step-insert-zone::before {
+/* Instructions: icon-only affordance (subhead/heading insert), hover-only + Option */.step-insert-zone::before {
   content: '';
   position: absolute;
   width: var(--ing-insert-icon-size);
@@ -3151,141 +1047,63 @@ body.step-editing #ingredientsSection .ingredient-insert-zone {
   -webkit-mask-position: center;
   mask-position: center;
 }
-
 /* Show only when Option is held (subhead-insert-mode) */
 body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
   #stepsSection
   .step-insert-zone:hover::before {
   opacity: 0.4;
 }
-
 /* Disabled zones (adjacent to headings) show no icon */
 body.subhead-insert-mode
   #stepsSection
   .step-insert-zone.step-insert-zone--disabled:hover::before {
   opacity: 0;
 }
-
 /* Cursor hint only when insertion is possible */
 body.subhead-insert-mode:not(.ingredient-editing):not(.step-editing)
   #stepsSection
   .step-insert-zone:hover {
   cursor: pointer;
 }
-
 /* Disable insert interactions while editing steps (read-mode-only affordance) */
 body.step-editing #stepsSection .step-insert-zone,
 body.ingredient-editing #stepsSection .step-insert-zone {
   pointer-events: none;
   cursor: default;
 }
-
-/* --- Recipe list item hover --- */
-
-/* .recipe-list-wrapper > ul {
+/* --- Recipe list item hover --- *//* .recipe-list-wrapper > ul {
   width: 100%;
   max-width: calc(600px - 22px); 
   margin: 22px auto; 
   padding: 0;
-} */
-
-/* Unified list styling for Recipes, Shopping, Units, Stores */
-.list-view.list-page {
+} *//* Unified list styling for Recipes, Shopping, Units, Stores */.list-view.list-page {
   /* Inset the list so hover pills keep rounded corners visible on narrow windows */
   padding-left: var(--list-page-gutter-left);
   padding-right: var(--list-page-gutter-right);
   box-sizing: border-box;
-}
-
-body.recipes-page .list-view.list-page,
-body.shopping-page .list-view.list-page,
-body.stores-page .list-view.list-page,
-body.tags-page .list-view.list-page,
-body.sizes-page .list-view.list-page,
-body.units-page .list-view.list-page,
-body.shopping-list-page .list-view.list-page {
+}body.recipes-page .list-view.list-page{
   /* One shared breathing-space token for first and last list rows. */
   padding-top: var(--top-level-list-edge-gap);
   padding-bottom: var(--top-level-list-edge-gap);
-}
-
-.list-page li {
+}.list-page li {
   cursor: pointer;
   border-radius: 8px;
   /* Polished truncation */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-body:not(.shopping-list-page) .list-page li:not(.list-section-label) {
+}body:not(.shopping-list-page) .list-page li:not(.list-section-label) {
   padding: var(--top-level-list-row-padding-y)
     var(--top-level-list-row-padding-x);
   height: var(--top-level-list-row-height-electron);
   box-sizing: border-box;
 }
-
-/* Freeze web-mode rows separately so Electron and web can be tuned visually. */
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label) {
-  height: var(--top-level-list-row-height-web);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-stepper {
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-stepper-btn {
-  width: 20px;
-  height: 20px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-stepper-btn
-  .material-symbols-outlined {
-  font-size: 16px;
-}
-
-body:not(.shopping-list-page)[data-force-web-mode='on']
-  .list-page
-  li:not(.list-section-label)
-  .shopping-list-row-badge {
-  line-height: 20px;
-  min-height: 20px;
-  width: 20px;
-}
-
-.list-page li:hover:not(.is-selected) {
+/* Freeze web-mode rows separately so Electron and web can be tuned visually. */.list-page li:hover:not(.is-selected) {
   background-color: hsl(270, 0%, 96%);
-}
-
-.list-page.top-level-kbd-nav li:hover:not(.is-selected) {
+}.list-page.top-level-kbd-nav li:hover:not(.is-selected) {
   background-color: transparent;
 }
-
-/* --- App Bar Wrapper --- */
-
-.app-bar-icon-button {
+/* --- App Bar Wrapper --- */.app-bar-icon-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3293,9 +1111,7 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   height: 44px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-.app-bar-wrapper .app-bar-icon-font.material-symbols-outlined {
+}.app-bar-wrapper .app-bar-icon-font.material-symbols-outlined {
   font-size: var(--app-bar-chrome-icon-size);
   line-height: 1;
   color: #fff;
@@ -3303,13 +1119,9 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   pointer-events: none;
   --material-symbols-opsz: 28;
 }
-
-/* Keep menu/back hit targets stable; title ellipsis absorbs narrow widths. */
-.app-bar-wrapper .title-and-back .app-bar-icon-button {
+/* Keep menu/back hit targets stable; title ellipsis absorbs narrow widths. */.app-bar-wrapper .title-and-back .app-bar-icon-button {
   flex-shrink: 0;
-}
-
-.app-bar-wrapper {
+}.app-bar-wrapper {
   --app-bar-chrome-icon-size: 28px;
   position: fixed;
   background: var(--theme-primary);
@@ -3326,26 +1138,20 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   align-items: center;
   font-size: var(--headline-font-size);
 }
-
-/* --- Left/Right Elements Layer --- */
-.app-bar-elements-layer {
+/* --- Left/Right Elements Layer --- */.app-bar-elements-layer {
   display: flex;
   align-items: center;
   width: 100%;
   gap: var(--app-bar-gap);
 }
-
-/* The shared app-bar shell uses `.app-bar-wrapper` (not legacy `.app-bar`). */
-.app-bar-wrapper .actions {
+/* The shared app-bar shell uses `.app-bar-wrapper` (not legacy `.app-bar`). */.app-bar-wrapper .actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
   white-space: nowrap; /* prevent Cancel/Save wrapping to a second line */
   margin-left: auto; /* keep actions pinned right on all pages */
-}
-
-.app-bar-wrapper .actions .button.app-bar-action-icon-only {
+}.app-bar-wrapper .actions .button.app-bar-action-icon-only {
   width: 44px;
   min-width: 44px;
   padding: 0;
@@ -3357,72 +1163,48 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.app-bar-wrapper .actions .button.app-bar-action-icon-only:hover,
+}.app-bar-wrapper .actions .button.app-bar-action-icon-only:hover,
 .app-bar-wrapper .actions .button.app-bar-action-icon-only:focus,
 .app-bar-wrapper .actions .button.app-bar-action-icon-only:active {
   background: transparent;
 }
-
-/* Must beat `.button.app-bar-action-icon-only { display: inline-flex }` (4 classes). */
-.app-bar-wrapper
+/* Must beat `.button.app-bar-action-icon-only { display: inline-flex }` (4 classes). */.app-bar-wrapper
   .actions
   .button.app-bar-search-toggle.app-bar-action-icon-only {
   display: none;
 }
-
-/* Add / Cancel / Save: text by default; icon strip added for snug breakpoint in media query */
-.app-bar-wrapper .actions .app-bar-text-action {
+/* Add / Cancel / Save: text by default; icon strip added for snug breakpoint in media query */.app-bar-wrapper .actions .app-bar-text-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0;
-}
-
-.app-bar-wrapper .actions .app-bar-action-icon--snug-only {
+}.app-bar-wrapper .actions .app-bar-action-icon--snug-only {
   display: none;
-}
-
-.app-bar-wrapper .title-and-back {
+}.app-bar-wrapper .title-and-back {
   flex: 0 1 auto;
   min-width: 0; /* allow title to shrink + ellipsis instead of forcing wrap */
-}
-
-.app-bar-wrapper .title {
+}.app-bar-wrapper .title {
   font-size: var(--app-bar-title-size);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* Title */
-.title {
+/* Title */.title {
   color: white;
-}
-
-.title-recipes {
+}.title-recipes {
   cursor: pointer;
 }
-
-/* (Legacy `.app-bar` styles removed — shared shell is `.app-bar-wrapper`) */
-
-/* --- Center search column (in layout flow) --- */
-.app-bar-search-layer {
+/* (Legacy `.app-bar` styles removed — shared shell is `.app-bar-wrapper`) *//* --- Center search column (in layout flow) --- */.app-bar-search-layer {
   display: flex;
   justify-content: center;
   flex: 1 1 auto;
   min-width: 0; /* allow shrink on narrow windows */
-}
-
-.app-bar-search-layer .search-bar {
+}.app-bar-search-layer .search-bar {
   width: 100%;
   max-width: 600px; /* match recipe list */
   position: relative;
-}
-
-.app-bar-search-layer .search-bar input {
+}.app-bar-search-layer .search-bar input {
   width: 100%;
   height: 44px;
   padding: 0 1.5rem;
@@ -3435,35 +1217,23 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   color: #fff;
   text-align: left;
 }
-
-/* White placeholder text */
-.app-bar-search-layer .search-bar input::placeholder {
+/* White placeholder text */.app-bar-search-layer .search-bar input::placeholder {
   color: #fff;
   opacity: 1;
-}
-
-.title-and-back {
+}.title-and-back {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.back-arrow {
+}.back-arrow {
   cursor: pointer;
   color: white;
-}
-
-.search-bar {
+}.search-bar {
   position: relative;
   display: block;
   width: 100%;
-}
-
-.search-bar input {
+}.search-bar input {
   padding-right: 20px; /* make space for the × */
-}
-
-.clear-search {
+}.clear-search {
   position: absolute;
   right: 16px;
   top: 50%;
@@ -3477,14 +1247,10 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   padding: 0;
   border: 0;
   background: transparent;
-}
-
-.clear-search:hover {
+}.clear-search:hover {
   color: white;
 }
-
-/* Top-level list page filter chips (shared rail) */
-.list-filter-chip-dock {
+/* Top-level list page filter chips (shared rail) */.list-filter-chip-dock {
   position: fixed;
   z-index: var(--z-filter-chip-rail);
   left: 0;
@@ -3496,13 +1262,9 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   pointer-events: auto;
   overscroll-behavior-x: contain;
   box-sizing: border-box;
-}
-
-.list-filter-chip-dock::-webkit-scrollbar {
+}.list-filter-chip-dock::-webkit-scrollbar {
   display: none;
-}
-
-.list-filter-chip-track {
+}.list-filter-chip-track {
   display: inline-flex;
   align-items: center;
   gap: var(--list-filter-chip-gap);
@@ -3514,7 +1276,6 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   padding-left: var(--list-filter-chip-leading-inset);
   box-sizing: border-box;
 }
-
 /* .recipe-list-wrapper {
   position: absolute;
   top: var(--app-bar-height);
@@ -3527,10 +1288,7 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   width: 100vw;
   bottom: var(--bottom-nav-height);
   overflow-y: auto;
-} */
-
-/* New universal page-content container */
-.page-content {
+} *//* New universal page-content container */.page-content {
   width: 100%;
   max-width: 680px;
   /* IMPORTANT: avoid double top-spacing.
@@ -3538,15 +1296,12 @@ body:not(.shopping-list-page)[data-force-web-mode='on']
   margin: 0 auto;
   padding: 0 24px 80px 24px; /* Add bottom padding for scrolling last line into view */
 }
-
 /* While editing tags at the bottom of long recipes, provide temporary
    runway so the editor card and typeahead can open below naturally. */
 body.recipe-editor-page.recipe-tags-editing .page-content {
   padding-bottom: 320px;
 }
-
-/* Proper hanging indent for steps */
-.instruction-line {
+/* Proper hanging indent for steps */.instruction-line {
   display: flex;
   align-items: baseline;
   /* margin: 0; — REMOVED: conflicts with downstream spacing knobs below */
@@ -3554,143 +1309,91 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   position: relative;
   z-index: 1;
 }
-
-/* Whole step rows are clickable when not editing. */
-.instruction-line:not(.editing),
+/* Whole step rows are clickable when not editing. */.instruction-line:not(.editing),
 .instruction-line:not(.editing) .step-num,
 .instruction-line:not(.editing) .step-text {
   cursor: pointer;
-}
-
-.instruction-line .step-num {
+}.instruction-line .step-num {
   flex: 0 0 2em; /* reserve fixed width for numbers */
 }
-
-/* Empty-state placeholder row: reserve number gutter but hide the number pre-focus. */
-.instruction-line.instruction-line--placeholder:not(.editing) .step-num {
+/* Empty-state placeholder row: reserve number gutter but hide the number pre-focus. */.instruction-line.instruction-line--placeholder:not(.editing) .step-num {
   opacity: 0;
 }
-
 /* For the placeholder row only, pull the prompt into the reserved number gutter.
-   This keeps the empty-step hint (e.g. "Add a step." / web "Use the Force.") left-aligned, while editing snaps to "1. |". */
-.instruction-line.instruction-line--placeholder:not(.editing) .step-text {
+   This keeps the empty-step hint (e.g. "Add a step." / web "Use the Force.") left-aligned, while editing snaps to "1. |". */.instruction-line.instruction-line--placeholder:not(.editing) .step-text {
   margin-left: -2em;
-}
-
-.instruction-line .step-text {
+}.instruction-line .step-text {
   flex: 1;
   line-height: var(--step-line-height);
-}
-
-.placeholder-prompt {
+}.placeholder-prompt {
   color: var(--placeholder-muted);
-}
-
-.step-text.placeholder-prompt::before {
+}.step-text.placeholder-prompt::before {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
 }
-
-/* While editing, hide the placeholder prompt so the caret is the only cue. */
-.instruction-line.editing .step-text.placeholder-prompt::before {
+/* While editing, hide the placeholder prompt so the caret is the only cue. */.instruction-line.editing .step-text.placeholder-prompt::before {
   content: '';
-}
-
-.ingredient-text.placeholder-prompt::before {
+}.ingredient-text.placeholder-prompt::before {
   content: attr(data-placeholder);
   color: var(--placeholder-muted);
   pointer-events: none;
 }
-
-/* Heading placeholder should look like "edit blue" (semi-transparent), not purple. */
-.step-text.placeholder-prompt--editblue::before {
+/* Heading placeholder should look like "edit blue" (semi-transparent), not purple. */.step-text.placeholder-prompt--editblue::before {
   color: rgba(33, 132, 255, 0.55);
 }
-
-/* Also avoid making placeholder heading text purple via the heading rule. */
-.instruction-line[data-step-type='heading']
+/* Also avoid making placeholder heading text purple via the heading rule. */.instruction-line[data-step-type='heading']
   .step-text.placeholder-prompt--editblue {
   color: transparent;
 }
-
-/* Same edit-blue placeholder style for ingredient subsection headings. */
-.ingredient-subsection-heading-text.placeholder-prompt--editblue::before {
+/* Same edit-blue placeholder style for ingredient subsection headings. */.ingredient-subsection-heading-text.placeholder-prompt--editblue::before {
   content: attr(data-placeholder);
   color: var(--edit-mode-color);
   pointer-events: none;
-}
-
-.ingredient-subsection-heading-text.placeholder-prompt--editblue {
+}.ingredient-subsection-heading-text.placeholder-prompt--editblue {
   color: transparent;
-}
-
-.instruction-line[data-step-type='heading'] .step-text {
+}.instruction-line[data-step-type='heading'] .step-text {
   margin-left: calc(-2em);
-}
-
-.instruction-line.editing .step-num {
+}.instruction-line.editing .step-num {
   color: var(--edit-mode-color);
 }
-
-/* Quill v1.1 — full-width inline step editor */
-.step-input {
+/* Quill v1.1 — full-width inline step editor */.step-input {
   width: 100%;
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-}
-
-.section-header {
+}.section-header {
   color: black;
   font-size: var(--header-font-size);
   margin-top: var(--space-title-to-section);
   margin-bottom: 0;
   text-transform: uppercase;
-}
-
-.subsection-header {
+}.subsection-header {
   color: var(--theme-primary);
   margin: 0;
-}
-
-.instruction-line[data-step-type='heading'] .step-text {
+}.instruction-line[data-step-type='heading'] .step-text {
   /* Default: headings are purple when no inline edit is active */
   color: var(--theme-primary);
 }
-
-/* While any line is being edited, suppress purple on other headings */
-.recipe-wrapper:has(.instruction-line.editing)
+/* While any line is being edited, suppress purple on other headings */.recipe-wrapper:has(.instruction-line.editing)
   .instruction-line[data-step-type='heading']:not(.editing)
   .step-text {
   color: var(--font-color-near-black);
-}
-
-.nav-text {
+}.nav-text {
   font-size: var(--headline-font-size);
-}
-
-h1.nav-text {
+}h1.nav-text {
   color: black;
-}
-
-.servings-line {
+}.servings-line {
   margin: 0 0 0 0;
   font-weight: 500;
   color: var(--subtitle);
-}
-
-.servings-line.servings-line--web .row-field {
+}.servings-line.servings-line--web .row-field {
   display: inline-flex;
   align-items: center;
   gap: 24px;
-}
-
-.servings-line--web .servings-web-subtitle {
+}.servings-line--web .servings-web-subtitle {
   color: var(--subtitle);
-}
-
-.servings-line--web .servings-web-value {
+}.servings-line--web .servings-web-value {
   border: 0;
   background: transparent;
   padding: 0;
@@ -3699,9 +1402,7 @@ h1.nav-text {
   font: inherit;
   line-height: inherit;
   cursor: text;
-}
-
-.servings-line--web .servings-web-value-input {
+}.servings-line--web .servings-web-value-input {
   width: 4ch;
   min-width: 3ch;
   border: 0;
@@ -3712,22 +1413,16 @@ h1.nav-text {
   line-height: inherit;
   text-align: left;
   padding: 0;
-}
-
-.servings-line--web .servings-web-value-input:focus {
+}.servings-line--web .servings-web-value-input:focus {
   outline: none;
   border-bottom-color: rgba(0, 0, 0, 0.45);
-}
-
-.servings-line--web .shopping-list-row-stepper {
+}.servings-line--web .shopping-list-row-stepper {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   height: auto;
-}
-
-.servings-line--web .shopping-stepper-btn {
+}.servings-line--web .shopping-stepper-btn {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -3748,33 +1443,21 @@ h1.nav-text {
     background-color 120ms ease,
     color 120ms ease;
   -webkit-tap-highlight-color: transparent;
-}
-
-.servings-line--web .shopping-stepper-btn:hover:not([disabled]) {
+}.servings-line--web .shopping-stepper-btn:hover:not([disabled]) {
   background-color: hsl(270, 0%, 92%);
-}
-
-.servings-line--web .shopping-stepper-btn[disabled] {
+}.servings-line--web .shopping-stepper-btn[disabled] {
   opacity: 0.42;
   cursor: default;
-}
-
-.servings-line--web .shopping-stepper-btn .material-symbols-outlined {
+}.servings-line--web .shopping-stepper-btn .material-symbols-outlined {
   font-size: 18px;
   line-height: 1;
   --material-symbols-opsz: 20;
-}
-
-.servings-line--web .shopping-stepper-qty {
+}.servings-line--web .shopping-stepper-qty {
   display: none;
-}
-
-.recipe-tags-section {
+}.recipe-tags-section {
   margin-top: 18px;
   position: relative;
-}
-
-.recipe-tags-manage-btn {
+}.recipe-tags-manage-btn {
   position: absolute;
   top: 2px;
   right: 0;
@@ -3785,13 +1468,9 @@ h1.nav-text {
   font-family: var(--main-font);
   cursor: pointer;
   padding: 4px 0;
-}
-
-#ingredientsSection.ingredients-section-has-manage {
+}#ingredientsSection.ingredients-section-has-manage {
   position: relative;
-}
-
-.ingredients-manage-btn {
+}.ingredients-manage-btn {
   position: absolute;
   top: 2px;
   right: 0;
@@ -3805,33 +1484,21 @@ h1.nav-text {
   text-decoration: none;
   z-index: 3;
   pointer-events: auto;
-}
-
-.recipe-tags-manage-btn.manage-btn--hidden,
+}.recipe-tags-manage-btn.manage-btn--hidden,
 .ingredients-manage-btn.manage-btn--hidden {
   display: none;
-}
-
-.recipe-tags-content {
+}.recipe-tags-content {
   margin-top: var(--space-section-header-to-content);
-}
-
-.recipe-tags-content--view {
+}.recipe-tags-content--view {
   cursor: pointer;
-}
-
-.recipe-tags-content--edit {
+}.recipe-tags-content--edit {
   margin-left: -12px;
   margin-right: -12px;
-}
-
-.recipe-tags-wrap {
+}.recipe-tags-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.recipe-tag-pill {
+}.recipe-tag-pill {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -3843,13 +1510,9 @@ h1.nav-text {
   font-size: var(--shopping-filter-chip-font-size);
   font-weight: var(--shopping-filter-chip-font-weight);
   line-height: 1;
-}
-
-.recipe-tags-empty {
+}.recipe-tags-empty {
   font-size: var(--body-font-size);
-}
-
-body.recipe-editor-page .recipe-tags-select {
+}body.recipe-editor-page .recipe-tags-select {
   --recipe-tags-chevron-inset: 42px; /* 10px + 32px: chevron sits 32px left of the prior edge */
   width: 100%;
   max-width: 100%;
@@ -3871,14 +1534,10 @@ body.recipe-editor-page .recipe-tags-select {
   background-repeat: no-repeat;
   /* Prior edge was ~10px; shift chevron 32px left: */
   background-position: right 42px center;
-}
-
-body.recipe-editor-page .recipe-tags-select:focus {
+}body.recipe-editor-page .recipe-tags-select:focus {
   outline: none;
   color: var(--field-fg);
-}
-
-.recipe-tags-editor {
+}.recipe-tags-editor {
   width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
@@ -3894,108 +1553,76 @@ body.recipe-editor-page .recipe-tags-select:focus {
   overflow-y: auto;
   overscroll-behavior: contain;
   resize: none;
-}
-
-.recipe-tags-editor:focus {
+}.recipe-tags-editor:focus {
   outline: none;
   background-color: #e5eefa;
   border-color: #b5ceff;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
-}
-
-.servings-line.editing {
+}.servings-line.editing {
   position: relative;
   left: var(--servings-pill-offset);
 }
-
-/* Shared subtitle line (Unit editor abbreviation, Store editor location). One size for both. */
-.unit-abbreviation-line {
+/* Shared subtitle line (Unit editor abbreviation, Store editor location). One size for both. */.unit-abbreviation-line {
   margin: 0 0 0 0;
   font-size: var(--body-font-size);
   font-family: var(--main-font);
   font-weight: 500;
   color: var(--subtitle);
-}
-.unit-abbreviation-line[contenteditable='true'] {
+}.unit-abbreviation-line[contenteditable='true'] {
   outline: none;
-}
-.unit-abbreviation-line.editing-title {
+}.unit-abbreviation-line.editing-title {
   color: var(--edit-mode-color);
 }
-
-/* Generic chip+field row shell (servings, ingredients, etc.) */
-.row-shell {
+/* Generic chip+field row shell (servings, ingredients, etc.) */.row-shell {
   display: flex;
   flex-direction: column;
   justify-content: center;
   height: var(--servings-line-h);
   overflow: hidden; /* you said you're fine with clipping */
-}
-
-.row-labels {
+}.row-labels {
   height: 0;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
-}
-
-.row-shell.editing .row-labels {
+}.row-shell.editing .row-labels {
   height: auto;
   opacity: 1;
   pointer-events: auto;
-}
-
-.row-field {
+}.row-field {
   display: inline-flex;
   align-items: center;
   gap: 0;
-}
-
-.servings-line .row-field {
+}.servings-line .row-field {
   display: block;
 }
-
-/* Inline flex wrapper for legacy uses, can be reused inside .row-field */
-.servings-edit-row {
+/* Inline flex wrapper for legacy uses, can be reused inside .row-field */.servings-edit-row {
   display: flex;
   align-items: center;
   gap: var(--servings-set-gap);
   margin: 0;
   flex-wrap: wrap;
   justify-content: flex-start;
-}
-
-.servings-set {
+}.servings-set {
   display: inline-flex;
   align-items: center;
   gap: var(--servings-pill-gap);
 
   white-space: nowrap;
-}
-
-.servings-set--default {
+}.servings-set--default {
   flex: 0 0 var(--servings-col-default);
-}
-
-.servings-set--min {
+}.servings-set--min {
   flex: 0 0 var(--servings-col-min);
-}
-
-.servings-set--max {
+}.servings-set--max {
   flex: 0 0 var(--servings-col-max);
 }
-
-/* Ingredient inline edit row — mirrors servings row layout */
-.ingredient-edit-row {
+/* Ingredient inline edit row — mirrors servings row layout */.ingredient-edit-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--servings-set-gap);
   min-height: var(--servings-line-h);
-}
-
-.ingredient-edit-row.editing {
+}.ingredient-edit-row.editing {
   /* Containment tray for the one active ingredient row in edit mode */
   position: relative;
   background: var(--field-bg);
@@ -4006,13 +1633,9 @@ body.recipe-editor-page .recipe-tags-select:focus {
   margin-left: calc(-1 * var(--ingredient-edit-tray-bleed));
   margin-right: calc(-1 * var(--ingredient-edit-tray-bleed));
   gap: var(--ingredient-edit-field-gap);
-}
-
-.ingredient-edit-row.editing.ingredient-edit-row--reorderable {
+}.ingredient-edit-row.editing.ingredient-edit-row--reorderable {
   padding-right: 42px;
-}
-
-.ingredient-edit-row.editing .ingredient-row-move-controls {
+}.ingredient-edit-row.editing .ingredient-row-move-controls {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -4020,32 +1643,24 @@ body.recipe-editor-page .recipe-tags-select:focus {
   flex-direction: column;
   gap: 0;
   z-index: 2;
-}
-
-.inline-edit-blur-target {
+}.inline-edit-blur-target {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
-}
-
-.ingredient-edit-cell {
+}.ingredient-edit-cell {
   display: inline-flex;
   align-items: center;
   gap: var(--ingredient-edit-cell-gap);
   white-space: nowrap;
 }
-
-/* Paste-content insert tray: same card treatment, single full-width field. */
-.ingredient-paste-row .ingredient-edit-cell--paste {
+/* Paste-content insert tray: same card treatment, single full-width field. */.ingredient-paste-row .ingredient-edit-cell--paste {
   display: flex;
   flex: 1 1 100%;
   width: 100%;
-}
-
-.ingredient-paste-input {
+}.ingredient-paste-input {
   width: 100%;
   max-width: none;
   min-height: calc(var(--servings-field-height) * 2);
@@ -4053,9 +1668,7 @@ body.recipe-editor-page .recipe-tags-select:focus {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
-/* Treat each pill+field pair like a "word" in a text editor: intrinsic width, no reserved columns. */
-.ingredient-edit-cell--qty,
+/* Treat each pill+field pair like a "word" in a text editor: intrinsic width, no reserved columns. */.ingredient-edit-cell--qty,
 .ingredient-edit-cell--qtymin,
 .ingredient-edit-cell--qtymax,
 .ingredient-edit-cell--unit,
@@ -4071,9 +1684,7 @@ body.recipe-editor-page .recipe-tags-select:focus {
 .ingredient-edit-cell--isopt,
 .ingredient-edit-cell--loc {
   flex: 0 0 auto;
-}
-
-.ingredient-edit-input {
+}.ingredient-edit-input {
   width: auto;
   height: var(--servings-field-height);
   padding: 4px 8px;
@@ -4086,9 +1697,7 @@ body.recipe-editor-page .recipe-tags-select:focus {
   box-sizing: border-box;
   white-space: nowrap;
 }
-
-/* Checkbox variant (used for opt toggle) */
-.ingredient-edit-input[type='checkbox'] {
+/* Checkbox variant (used for opt toggle) */.ingredient-edit-input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   width: var(--servings-field-height);
@@ -4100,14 +1709,10 @@ body.recipe-editor-page .recipe-tags-select:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.ingredient-edit-input[type='checkbox']:checked {
+}.ingredient-edit-input[type='checkbox']:checked {
   border-color: var(--theme-primary);
   background-color: var(--theme-primary);
-}
-
-.ingredient-edit-input[type='checkbox']:checked::after {
+}.ingredient-edit-input[type='checkbox']:checked::after {
   content: '';
   /* Crisp, scalable checkmark (no SVG) */
   width: 12px;
@@ -4117,118 +1722,80 @@ body.recipe-editor-page .recipe-tags-select:focus {
   transform: rotate(-45deg);
   margin-top: -1px; /* optical centering */
 }
-
-/* Opt toggle wrapper: match pill<->field spacing + vertical centering with other cells */
-.ingredient-edit-toggle {
+/* Opt toggle wrapper: match pill<->field spacing + vertical centering with other cells */.ingredient-edit-toggle {
   display: inline-flex;
   align-items: center;
   gap: var(--ingredient-edit-cell-gap);
   line-height: 1; /* avoid baseline quirks that lift the checkbox */
-}
-
-.ingredient-edit-toggle .ingredient-edit-input[type='checkbox'] {
+}.ingredient-edit-toggle .ingredient-edit-input[type='checkbox'] {
   vertical-align: middle;
 }
-
 /* Checkbox focus: show the blue "focused field" styling only for keyboard focus.
-   Mouse-clicking the checkbox should not look like a text-field focus. */
-.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus {
+   Mouse-clicking the checkbox should not look like a text-field focus. */.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus {
   outline: none;
   /* Override the global `.ingredient-edit-input:focus { border-color: transparent; }` */
   background-color: hsl(0, 0%, 98%);
   border-color: rgba(0, 0, 0, 0.06);
 }
-
-/* If the checkbox is checked, never visually “lose” the checked state just because it has focus. */
-.ingredient-edit-row.editing
+/* If the checkbox is checked, never visually “lose” the checked state just because it has focus. */.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:checked:focus {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
-}
-
-.ingredient-edit-row.editing
+}.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:focus-visible {
   background-color: #e5eefa;
   border-color: #b5ceff;
-}
-
-.ingredient-edit-row.editing
+}.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:checked:focus-visible {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
 }
-
-/* Edit mode input styling: blue only for the focused text-like field (not the opt checkbox) */
-.ingredient-edit-row.editing
+/* Edit mode input styling: blue only for the focused text-like field (not the opt checkbox) */.ingredient-edit-row.editing
   .ingredient-edit-input:not([type='checkbox']):focus {
   background-color: #e5eefa;
   border-color: #b5ceff;
 }
-
-/* Unified sizing for all ingredient edit inputs */
-.ingredient-edit-input {
+/* Unified sizing for all ingredient edit inputs */.ingredient-edit-input {
   width: var(--ingredient-field-empty-width);
   max-width: var(--ingredient-field-max-width);
-}
-
-.ingredient-paste-row {
+}.ingredient-paste-row {
   align-items: stretch;
-}
-
-.ingredient-paste-row .ingredient-paste-input {
+}.ingredient-paste-row .ingredient-paste-input {
   flex: 1 1 100%;
   width: 100%;
   max-width: none;
-}
-
-.ingredient-edit-input--name {
+}.ingredient-edit-input--name {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.ingredient-edit-cell--disabled {
+}.ingredient-edit-cell--disabled {
   opacity: 0.55;
-}
-
-#ingredientsSection .sub-recipe-link,
+}#ingredientsSection .sub-recipe-link,
 #ingredientsSection .sub-recipe-link:visited,
 #stepsSection .sub-recipe-link,
 #stepsSection .sub-recipe-link:visited {
   color: var(--edit-mode-color);
   text-decoration: none;
-}
-
-#ingredientsSection .sub-recipe-link:hover,
+}#ingredientsSection .sub-recipe-link:hover,
 #ingredientsSection .sub-recipe-link:focus-visible,
 #stepsSection .sub-recipe-link:hover,
 #stepsSection .sub-recipe-link:focus-visible {
   text-decoration: underline;
 }
-
-/* Deprecated master ingredient: name stays red in the tray until that field is focused (blue). */
-.ingredient-edit-row--deprecated.editing
+/* Deprecated master ingredient: name stays red in the tray until that field is focused (blue). */.ingredient-edit-row--deprecated.editing
   .ingredient-edit-input--name:not(:focus) {
   color: var(--ingredient-deprecated-fg);
-}
-
-.ingredient-edit-row--variant-deprecated.editing
+}.ingredient-edit-row--variant-deprecated.editing
   .ingredient-edit-input--name:not(:focus) {
   color: var(--ingredient-deprecated-fg);
-}
-
-.ingredient-edit-input:not([type='checkbox']):focus {
+}.ingredient-edit-input:not([type='checkbox']):focus {
   outline: none;
   border-color: transparent;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
-}
-
-.ingredient-edit-input--deprecated-variant-blur:not(:focus) {
+}.ingredient-edit-input--deprecated-variant-blur:not(:focus) {
   color: var(--ingredient-deprecated-fg);
 }
-
-/* Label pill — uses theme-derived pill vars */
-.field-pill {
+/* Label pill — uses theme-derived pill vars */.field-pill {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
@@ -4242,9 +1809,7 @@ body.recipe-editor-page .recipe-tags-select:focus {
   font-size: var(--pill-font-size);
   line-height: var(--pill-line-height);
 }
-
-/* Editable servings input — uses dedicated field vars */
-.servings-input {
+/* Editable servings input — uses dedicated field vars */.servings-input {
   width: 4ch;
   height: var(--servings-field-height);
   padding: 4px 8px;
@@ -4254,17 +1819,13 @@ body.recipe-editor-page .recipe-tags-select:focus {
   border: 1px solid transparent;
   box-sizing: border-box;
   outline: none;
-}
-
-.servings-input:focus {
+}.servings-input:focus {
   outline: none;
   border-color: transparent;
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
 }
-
-/* Highlight selected step for keyboard reordering */
-.instruction-line.selected {
+/* Highlight selected step for keyboard reordering */.instruction-line.selected {
   background-color: var(--theme-light);
   border-radius: 8px;
   position: relative;
@@ -4272,32 +1833,22 @@ body.recipe-editor-page .recipe-tags-select:focus {
   padding-left: 10px;
   width: calc(100% + 20px);
 }
-
-/* ✨ NEW: Freeze layout of an instruction row while editing */
-.instruction-line.editing {
+/* ✨ NEW: Freeze layout of an instruction row while editing */.instruction-line.editing {
   position: relative;
   overflow: visible; /* allow textarea to grow downward */
-}
-
-.app-bar-elements-layer .title-recipes {
+}.app-bar-elements-layer .title-recipes {
   position: relative;
   font-size: 18px;
-}
-
-.app-bar-elements-layer .title-editor {
+}.app-bar-elements-layer .title-editor {
   position: relative;
   top: 0px;
   color: white;
-}
-
-.back-arrow {
+}.back-arrow {
   width: 24px;
   height: 24px;
   /* filter: brightness(0) invert(1); */
   user-select: none;
-}
-
-.you-will-need-card {
+}.you-will-need-card {
   padding-top: 20px;
   padding-bottom: 20px;
   padding-left: var(--section-card-offset);
@@ -4310,42 +1861,29 @@ body.recipe-editor-page .recipe-tags-select:focus {
   left: calc(-1 * var(--section-card-offset));
   width: calc(100% + (2 * var(--section-card-offset)));
 }
-
-/* Reset section header margins inside card for balanced padding */
-.you-will-need-card .section-header {
+/* Reset section header margins inside card for balanced padding */.you-will-need-card .section-header {
   margin-top: 0;
   margin-bottom: 0;
-}
-
-#tagRecipesList {
+}#tagRecipesList {
   margin-top: 24px;
-}
-
-.ingredient-line a {
+}.ingredient-line a {
   color: var(--theme-primary);
   text-decoration: none;
   cursor: pointer;
-}
-
-.ingredient-line a:hover {
+}.ingredient-line a:hover {
   text-decoration: underline;
   color: var(--theme-secondary);
-}
-
-#ingredientsSection .ingredient-shopping-link,
+}#ingredientsSection .ingredient-shopping-link,
 #ingredientsSection .ingredient-shopping-link:visited,
 .you-will-need-card .ingredient-shopping-link,
 .you-will-need-card .ingredient-shopping-link:visited {
   color: var(--font-color-near-black);
   text-decoration: none;
-}
-
-#ingredientsSection .ingredient-shopping-link:hover,
+}#ingredientsSection .ingredient-shopping-link:hover,
 #ingredientsSection .ingredient-shopping-link:focus-visible {
   color: var(--theme-secondary);
   text-decoration: underline;
 }
-
 /* Master links are reveal-only in modifier mode; suppress generic anchor hover affordance. */
 #ingredientsSection .ingredient-master-link:hover,
 #ingredientsSection .ingredient-master-link:focus-visible,
@@ -4353,23 +1891,17 @@ body.recipe-editor-page .recipe-tags-select:focus {
 .you-will-need-card .ingredient-master-link:focus-visible {
   text-decoration: none;
   color: inherit;
-}
-
-#ingredientsSection .ingredient-master-link,
+}#ingredientsSection .ingredient-master-link,
 #ingredientsSection .ingredient-master-link:visited {
   color: inherit;
   text-decoration: none;
   cursor: text;
-}
-
-.you-will-need-card .ingredient-master-link,
+}.you-will-need-card .ingredient-master-link,
 .you-will-need-card .ingredient-master-link:visited {
   color: inherit;
   text-decoration: none;
   cursor: text;
-}
-
-body.ingredient-master-link-mode
+}body.ingredient-master-link-mode
   #ingredientsSection
   .ingredient-slot.ingredient-slot--hint-active
   .ingredient-master-link,
@@ -4379,9 +1911,7 @@ body.ingredient-master-link-mode
   .ingredient-master-link:visited {
   color: var(--theme-primary);
   cursor: pointer;
-}
-
-body.ingredient-master-link-mode
+}body.ingredient-master-link-mode
   .you-will-need-card
   .ingredient-line.ywn-line--hint-active
   .ingredient-master-link,
@@ -4391,9 +1921,7 @@ body.ingredient-master-link-mode
   .ingredient-master-link:visited {
   color: var(--theme-primary);
   cursor: pointer;
-}
-
-body.ingredient-master-link-mode
+}body.ingredient-master-link-mode
   #ingredientsSection
   .ingredient-slot.ingredient-slot--hint-active
   .ingredient-master-link:hover,
@@ -4403,9 +1931,7 @@ body.ingredient-master-link-mode
   .ingredient-master-link:focus-visible {
   color: var(--theme-secondary);
   text-decoration: underline;
-}
-
-body.ingredient-master-link-mode
+}body.ingredient-master-link-mode
   .you-will-need-card
   .ingredient-line.ywn-line--hint-active
   .ingredient-master-link:hover,
@@ -4416,216 +1942,24 @@ body.ingredient-master-link-mode
   color: var(--theme-secondary);
   text-decoration: underline;
 }
-
-/* Highlight active editing line text */
-.instruction-line.editing .step-text,
+/* Highlight active editing line text */.instruction-line.editing .step-text,
 .instruction-line.editing .step-textarea {
   color: var(--edit-mode-color);
   cursor: text;
 }
-
-/* Selection highlight inside step textarea */
-.step-textarea::selection {
+/* Selection highlight inside step textarea */.step-textarea::selection {
   background: var(--theme-light); /* derived from --palette-accent */
   color: inherit; /* keep text color unchanged */
-}
-
-.step-textarea::-moz-selection {
+}.step-textarea::-moz-selection {
   background: var(--theme-light);
   color: inherit;
-}
-
-.instruction-line .step-text[contenteditable='true'] {
+}.instruction-line .step-text[contenteditable='true'] {
   outline: none;
 }
-
-/* --- Bottom Navigation --- */
-
-.bottom-nav {
-  position: fixed;
-  top: calc(var(--app-bar-height) + 8px); /* hangs just below app bar */
-  left: 8px; /* gap from left edge */
-  right: auto;
-  bottom: auto;
-  height: auto;
-  min-width: 184px;
-  box-sizing: border-box;
-  background-color: var(--theme-primary);
-  padding: 12px;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--theme-primary-transparent);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 10px;
-  z-index: var(--z-app-chrome);
-}
-
-.bottom-nav--hidden {
-  display: none;
-}
-
-.bottom-nav-editor-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.bottom-nav-editor-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 6px 6px 22px;
-  box-sizing: border-box;
-  width: 100%;
-  cursor: pointer;
-}
-
-/* Same typography as `.bottom-nav-pill` (font: inherit from body / app chrome) */
-.bottom-nav-editor-toggle > span:first-child {
-  font: inherit;
-  line-height: inherit;
-  color: white;
-  opacity: 0.9;
-}
-
-.bottom-nav-editor-switch-track {
-  position: relative;
-  display: inline-block;
-  flex-shrink: 0;
-  width: 48px;
-  height: 26px;
-  border-radius: 9999px;
-  /* Pill background — off (unchecked) */
-  background: rgba(255, 255, 255, 0.2);
-  transition: background 100ms ease;
-}
-
-.bottom-nav-editor-switch-track:has(.bottom-nav-editor-switch-input:checked) {
-  /* Pill background — on (checked) */
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.bottom-nav-editor-switch-input {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.bottom-nav-editor-switch-input:focus {
-  outline: none;
-}
-
-.bottom-nav-editor-switch-knob {
-  position: absolute;
-  top: 50%;
-  left: 2px;
-  width: 22px;
-  height: 22px;
-  margin-top: -11px;
-  border-radius: 50%;
-  /* knob off */
-  background: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.22);
-  z-index: 1;
-  pointer-events: none;
-  transition:
-    transform 75ms ease,
-    background-color 75ms ease,
-    box-shadow 75ms ease;
-}
-
-.bottom-nav-editor-switch-input:checked + .bottom-nav-editor-switch-knob {
-  transform: translateX(22px);
-  /* knob on */
-  background: var(--theme-secondary);
-  box-shadow: 0 1px 3px rgb(from var(--palette-accent-emphasis) r g b / 0.35);
-}
-
-.bottom-nav-editor-separator {
-  height: 0;
-  margin: 0;
-  border: none;
-  border-top: 1px solid rgb(255 255 255 / 0.35);
-}
-
-.bottom-nav-pill-row {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 8px;
-}
-
-.bottom-nav-pill {
-  /* Match Add button height + type */
-  height: 44px;
-  border-radius: 9999px;
-  padding-left: 22px;
-  width: 100%;
-  box-sizing: border-box;
-  min-width: 0;
-  font: inherit;
-  line-height: inherit;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: none;
-  color: white;
-  opacity: 0.9; /* visually echo disabled Cancel/Save */
-  border: none;
-  cursor: pointer;
-}
-
-.bottom-nav-pill.bottom-nav-pill--force-web-mode {
-  width: max-content;
-  min-width: 120px;
-  max-width: none;
-  padding-right: 22px;
-  overflow: visible;
-  text-overflow: clip;
-  border: 1px solid transparent;
-}
-
-.bottom-nav-pill.bottom-nav-pill--force-web-mode[data-force-web-mode='on'] {
-  background-color: var(--theme-secondary);
-  opacity: 1;
-  border-color: rgb(255 255 255 / 0.45);
-}
-
-.bottom-nav-pill.bottom-nav-pill--force-web-mode[hidden] {
-  display: none;
-}
-
-.bottom-nav-pill.bottom-nav-pill--active {
-  /* Visually match search bar styling */
-  background-color: var(--theme-secondary);
-  opacity: 1;
-}
-
-/* Hover / rollover for non-active top-level nav pills */
-.bottom-nav-pill:not(.bottom-nav-pill--active):hover {
-  opacity: 0.9;
-  background: var(--theme-secondary);
-}
-
-/* =====================================================================
+/* --- Bottom Navigation --- *//* Same typography as `.bottom-nav-pill` (font: inherit from body / app chrome) *//* Hover / rollover for non-active top-level nav pills *//* =====================================================================
    Responsive breakpoints – progressive tightening as viewport narrows
-   ===================================================================== */
-
-/* --- Tier 2: Snug (≤ 500px) ---------------------------------------- */
-@media (max-width: 500px) {
-  :root {
+   ===================================================================== *//* --- Tier 2: Snug (≤ 500px) ---------------------------------------- */
+@media (max-width: 500px) {:root {
     --list-page-gutter-left: 12px;
     --list-page-gutter-right: 8px;
     --list-filter-chip-leading-inset: 15px;
@@ -4635,49 +1969,31 @@ body.ingredient-master-link-mode
     --shopping-filter-chip-gap: 6px;
     --top-level-list-row-padding-x: 0.5rem;
     --top-level-empty-font-size: 14px;
-  }
-
-  .app-bar-wrapper {
+  }.app-bar-wrapper {
     padding-left: 10px;
     padding-right: 14px;
-  }
-
-  .app-bar-wrapper .actions {
+  }.app-bar-wrapper .actions {
     gap: 2px;
-  }
-
-  .app-bar-wrapper
+  }.app-bar-wrapper
     .actions
     .button.app-bar-search-toggle.app-bar-action-icon-only {
     display: inline-flex;
-  }
-
-  .app-bar-wrapper .app-bar-search-layer {
+  }.app-bar-wrapper .app-bar-search-layer {
     display: none;
     flex: 0 1 auto;
-  }
-
-  .app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer {
+  }.app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer {
     display: flex;
     flex: 1 1 auto;
-  }
-
-  .app-bar-wrapper.app-bar-search-expanded
+  }.app-bar-wrapper.app-bar-search-expanded
     .actions
     .button.app-bar-search-toggle.app-bar-action-icon-only {
     display: none;
-  }
-
-  .app-bar-wrapper.app-bar-search-expanded #appBarTitle {
+  }.app-bar-wrapper.app-bar-search-expanded #appBarTitle {
     display: none;
-  }
-
-  .app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer .search-bar {
+  }.app-bar-wrapper.app-bar-search-expanded .app-bar-search-layer .search-bar {
     max-width: none;
   }
-
-  /* App bar text actions → icon-only chrome (matches search toggle) */
-  .app-bar-wrapper .actions .app-bar-text-action .app-bar-action-label {
+/* App bar text actions → icon-only chrome (matches search toggle) */.app-bar-wrapper .actions .app-bar-text-action .app-bar-action-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -4688,31 +2004,21 @@ body.ingredient-master-link-mode
     clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
-  }
-
-  .app-bar-wrapper .actions .app-bar-action-icon--snug-only {
+  }.app-bar-wrapper .actions .app-bar-action-icon--snug-only {
     display: inline-flex;
-  }
-
-  .app-bar-wrapper .actions #appBarCancelBtn .app-bar-cancel-icon--reset {
+  }.app-bar-wrapper .actions #appBarCancelBtn .app-bar-cancel-icon--reset {
     display: none;
-  }
-
-  .app-bar-wrapper
+  }.app-bar-wrapper
     .actions
     #appBarCancelBtn.app-bar-cancel--reset-servings
     .app-bar-cancel-icon--dismiss {
     display: none;
-  }
-
-  .app-bar-wrapper
+  }.app-bar-wrapper
     .actions
     #appBarCancelBtn.app-bar-cancel--reset-servings
     .app-bar-cancel-icon--reset {
     display: inline-flex;
-  }
-
-  .app-bar-wrapper .actions .app-bar-text-action {
+  }.app-bar-wrapper .actions .app-bar-text-action {
     position: relative;
     width: 44px;
     min-width: 44px;
@@ -4722,58 +2028,33 @@ body.ingredient-master-link-mode
     background: transparent;
     box-shadow: none;
     color: #fff;
-  }
-
-  .app-bar-wrapper .actions .app-bar-text-action:hover,
+  }.app-bar-wrapper .actions .app-bar-text-action:hover,
   .app-bar-wrapper .actions .app-bar-text-action:focus,
   .app-bar-wrapper .actions .app-bar-text-action:active {
     background: transparent;
-  }
-
-  .you-will-need-card {
+  }.you-will-need-card {
     border-radius: 0;
     background: var(--theme-light);
-  }
-}
-
+  }}
 /* --- Tier 3: Tight (≤ 380px) ---------------------------------------- */
-@media (max-width: 380px) {
-  :root {
+@media (max-width: 380px) {:root {
     --shopping-filter-chip-padding-x: 8px;
     --app-bar-gap: 8px;
     --top-level-list-row-padding-x: 0.4rem;
-  }
-
-  body:not(.shopping-list-page) .list-page li {
+  }body:not(.shopping-list-page) .list-page li {
     border-radius: 4px;
-  }
-
-  .app-bar-wrapper {
+  }.app-bar-wrapper {
     padding-left: 8px;
     padding-right: 10px;
-  }
-}
-
+  }}
 /* --- Tier 4: Minimum viable (≤ 320px) ------------------------------- */
-@media (max-width: 320px) {
-  :root {
+@media (max-width: 320px) {:root {
     --shopping-filter-chip-gap: 4px;
     --shopping-filter-chip-padding-x: 6px;
     --top-level-list-row-padding-x: 0.35rem;
-  }
-
-  body:not(.shopping-list-page) .list-page li {
+  }body:not(.shopping-list-page) .list-page li {
     border-radius: 0;
-  }
-
-  .app-bar-wrapper {
+  }.app-bar-wrapper {
     padding-left: 6px;
     padding-right: 8px;
-  }
-
-  body.shopping-page[data-force-web-mode='on']
-    #shoppingList
-    li:not(.list-section-label) {
-    gap: 8px;
-  }
-}
+  }}
