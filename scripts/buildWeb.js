@@ -11,6 +11,7 @@ const COPY_PATHS = [
   'assets',
   'css',
   'fragments',
+  'index.html',
   'js',
   'recipes.html',
   'recipeEditor.html',
@@ -24,24 +25,6 @@ async function copyPath(relativePath) {
   const from = path.join(projectRoot, relativePath);
   const to = path.join(outDir, relativePath);
   await fs.cp(from, to, { recursive: true });
-}
-
-async function writeIndexHtml() {
-  const html = [
-    '<!DOCTYPE html>',
-    '<html lang="en">',
-    '  <head>',
-    '    <meta charset="UTF-8" />',
-    '    <meta http-equiv="refresh" content="0; url=recipes.html" />',
-    '    <title>Baby Eats</title>',
-    '  </head>',
-    '  <body>',
-    '    <a href="recipes.html">Open Baby Eats</a>',
-    '  </body>',
-    '</html>',
-    '',
-  ].join('\n');
-  await fs.writeFile(path.join(outDir, 'index.html'), html, 'utf8');
 }
 
 async function writeWebBuildConfig() {
@@ -70,7 +53,6 @@ async function main() {
   for (const relativePath of COPY_PATHS) {
     await copyPath(relativePath);
   }
-  await writeIndexHtml();
   await writeWebBuildConfig();
   console.log(`Web build ready: ${path.relative(projectRoot, outDir)}`);
 }

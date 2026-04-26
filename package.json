@@ -31,8 +31,5 @@
     "win": {
       "icon": "assets/app-icon.ico"
     }
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.104.1"
   }
 }
