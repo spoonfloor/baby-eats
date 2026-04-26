@@ -53,14 +53,6 @@ function welcomeToast({
 }
 
 async function handleElectronWelcomeLoad() {
-  const lastPath = localStorage.getItem('favoriteEatsDbPath');
-  const dbPath = await window.electronAPI.pickDB(lastPath);
-  if (!dbPath) {
-    return;
-  }
-
-  localStorage.setItem('favoriteEatsDbPath', dbPath);
-  await window.electronAPI.loadDB(dbPath);
   window.location.href = 'recipes.html';
 }
 
@@ -81,7 +73,10 @@ function initWelcomePage() {
   });
 
   loadDbBtn.addEventListener('click', async () => {
-    if (!window.electronAPI || typeof window.electronAPI.pickDB !== 'function') {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.supabaseListRecipes !== 'function'
+    ) {
       welcomeToast({
         message:
           'This app must run in the desktop app. From the project folder, run: npm start',

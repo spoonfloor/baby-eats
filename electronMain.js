@@ -1,154 +1,26 @@
-// electronMain.js
-
-// Electron main process — handles app lifecycle and real file I/O.
-
-const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
-const fs = require('fs');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
-// 🔧 Adjustable constants
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || 'https://ieancejhyihxpazturiz.supabase.co';
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ||
+  'sb_publishable_OEspL1dwwLl7aOAH6Q8bCg_1jKnbkzu';
 
-let ACTIVE_DB_PATH = null;
-const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
-let APP_CONFIG = {
-  lastDb: null,
-};
-
-const MAX_BACKUPS = 20;
-
-// --- Backup helpers ---
-
-function tsStamp(d = new Date()) {
-  // local time: "YYYYMMDD-HHMMSS"
-  const pad = (n) => String(n).padStart(2, '0');
-  const YYYY = d.getFullYear();
-  const MM = pad(d.getMonth() + 1);
-  const DD = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  const ss = pad(d.getSeconds());
-  return `${YYYY}${MM}${DD}-${hh}${mm}${ss}`;
-}
-
-function reserveBackupPath(historyDir, base, ext) {
-  const stamp = tsStamp();
-  for (let n = 0; n < 100; n++) {
-    const suffix = n === 0 ? '' : `-${String(n).padStart(2, '0')}`;
-    const candidate = path.join(historyDir, `${base}_${stamp}${suffix}${ext}`);
-    try {
-      const fd = fs.openSync(candidate, 'wx'); // atomic reserve
-      fs.closeSync(fd);
-      return candidate;
-    } catch (e) {
-      if (e.code === 'EEXIST') continue;
-      throw e;
-    }
-  }
-  throw new Error('Too many backups in the same second.');
-}
-function shouldMirrorDbToRepoAssets() {
-  if (app.isPackaged) {
-    return false;
-  }
-  return process.env.FAVORITE_EATS_MIRROR_ASSETS !== '0';
-}
-
-function getRepoAssetDbPath() {
-  return path.join(__dirname, 'assets', 'favorite_eats.db');
-}
-
-/**
- * After a successful save to the user's DB, copy the file into `assets/favorite_eats.db`
- * for the web bundle when running unpackaged (e.g. npm start). Packaged dist builds never
- * mirror — app.asar is read-only. Set FAVORITE_EATS_MIRROR_ASSETS=0 to disable in dev.
- * If the repo asset already exists and is not the same file as the active DB, it is moved
- * to `assets/archive/` first.
- */
-function mirrorDbToRepoAssets(sourcePath) {
-  if (!shouldMirrorDbToRepoAssets()) {
-    return { enabled: false, skipped: true, reason: 'disabled' };
-  }
-  if (!sourcePath || typeof sourcePath !== 'string') {
-    throw new Error('Mirror source path is missing.');
-  }
-
-  const dest = getRepoAssetDbPath();
-  const resolvedSource = path.resolve(sourcePath);
-  const resolvedDest = path.resolve(dest);
-  if (resolvedSource === resolvedDest) {
-    return {
-      enabled: true,
-      skipped: true,
-      reason: 'same-path',
-      source: resolvedSource,
-      dest: resolvedDest,
-    };
-  }
-
-  const sourceStat = fs.statSync(resolvedSource);
-  if (!sourceStat.isFile()) {
-    throw new Error(`Mirror source is not a file: ${resolvedSource}`);
-  }
-
-  let archivePath = null;
-  if (fs.existsSync(dest)) {
-    const archiveDir = path.join(__dirname, 'assets', 'archive');
-    fs.mkdirSync(archiveDir, { recursive: true });
-    const ext = path.extname(dest) || '.db';
-    archivePath = reserveBackupPath(archiveDir, 'favorite_eats', ext);
-    fs.renameSync(dest, archivePath);
-  }
-
-  fs.copyFileSync(resolvedSource, resolvedDest);
-
-  const destStat = fs.statSync(resolvedDest);
-  if (!destStat.isFile()) {
-    throw new Error(`Mirror destination is not a file: ${resolvedDest}`);
-  }
-  if (destStat.size !== sourceStat.size) {
+function assertSupabaseEnv() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error(
-      `Mirror size mismatch: source=${sourceStat.size} dest=${destStat.size}`
+      'Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables.'
     );
   }
-
-  return {
-    enabled: true,
-    skipped: false,
-    source: resolvedSource,
-    dest: resolvedDest,
-    archivePath,
-    bytes: sourceStat.size,
-  };
 }
 
-function pruneBackups(historyDir, keepCount = MAX_BACKUPS) {
-  try {
-    if (!fs.existsSync(historyDir)) return;
-    const files = fs
-      .readdirSync(historyDir)
-      .map((name) => ({ name, full: path.join(historyDir, name) }))
-      .filter((f) => {
-        try {
-          return fs.statSync(f.full).isFile();
-        } catch {
-          return false;
-        }
-      })
-      .sort((a, b) => {
-        try {
-          return fs.statSync(b.full).mtimeMs - fs.statSync(a.full).mtimeMs;
-        } catch {
-          return 0;
-        }
-      });
-    files.slice(keepCount).forEach((f) => {
-      try {
-        fs.unlinkSync(f.full);
-      } catch {}
-    });
-  } catch (e) {
-    console.warn('⚠️ pruneBackups failed:', e);
-  }
+function getSupabase() {
+  assertSupabaseEnv();
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  });
 }
 
 function createWindow() {
@@ -163,7 +35,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, // isolate renderer from Node
       nodeIntegration: false, // no require() / process in renderer
-      sandbox: false, // keep one execution world (sql.js friendly)
+      sandbox: false,
       enableRemoteModule: false, // belt & suspenders
     },
   });
@@ -183,163 +55,279 @@ function createWindow() {
   });
 }
 
-// --- Config helpers (remember last DB path) ---
-function loadConfig() {
-  try {
-    const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
-    const json = JSON.parse(raw);
-    if (json && typeof json === 'object') {
-      APP_CONFIG = {
-        ...APP_CONFIG,
-        ...json,
-      };
-    }
-    if (typeof APP_CONFIG.lastDb === 'string' && fs.existsSync(APP_CONFIG.lastDb)) {
-      ACTIVE_DB_PATH = APP_CONFIG.lastDb;
-    }
-  } catch (_) {
-    // no config yet or unreadable; ignore
-  }
+function normalizeTagNames(raw) {
+  const source = Array.isArray(raw) ? raw : [];
+  const seen = new Set();
+  const out = [];
+  source.forEach((v) => {
+    const tag = String(v || '').trim().replace(/\s+/g, ' ');
+    if (!tag) return;
+    const clipped = tag.length > 48 ? tag.slice(0, 48).trim() : tag;
+    if (!clipped) return;
+    const key = clipped.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(clipped);
+  });
+  return out;
 }
 
-function saveConfig() {
-  try {
-    APP_CONFIG.lastDb = ACTIVE_DB_PATH || null;
-    fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(APP_CONFIG, null, 2));
-  } catch (err) {
-    console.warn('⚠️ Could not persist config:', err.message);
-  }
-}
-
-// --- File I/O helpers ---
-
-ipcMain.handle('loadDB', async (event, pathArg = null) => {
-  if (pathArg) {
-    ACTIVE_DB_PATH = pathArg;
-    saveConfig();
-  }
-
-  return fs.promises.readFile(ACTIVE_DB_PATH);
+ipcMain.handle('supabaseListVisibleTags', async () => {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('tags')
+    .select('id,name,is_hidden,intended_use,sort_order')
+    .eq('is_hidden', 0)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  const seen = new Set();
+  return (Array.isArray(data) ? data : [])
+    .filter(
+      (row) =>
+        String(row?.name || '').trim() &&
+        String(row?.intended_use || 'recipes').trim().toLowerCase() === 'recipes'
+    )
+    .map((row) => String(row.name || '').trim())
+    .filter((name) => {
+      const k = name.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
 });
 
-ipcMain.handle(
-  'saveDB',
-  async (event, bytes, options = { overwriteOnly: false }) => {
-    let targetPath = ACTIVE_DB_PATH;
-    let targetSaved = false;
-    try {
-      const buffer = Buffer.from(bytes);
-      if (!targetPath || typeof targetPath !== 'string') {
-        throw new Error('No active database selected.');
-      }
-      targetPath = path.resolve(targetPath);
-      console.info(
-        `💾 Saving DB to ${targetPath} (overwriteOnly=${options?.overwriteOnly === true}, mirror=${shouldMirrorDbToRepoAssets() ? 'on' : 'off'})`
-      );
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+ipcMain.handle('loadDB', async () => {
+  throw new Error('Local SQLite loading is disabled. Supabase is now the source of truth.');
+});
 
-      // Guard: prevent edits to backups (no recursive Backup folders)
-      const isInBackupFolder = /(^|[\\/])Backup([\\/]|$)/i.test(
-        path.normalize(targetPath)
-      );
-      if (isInBackupFolder) {
-        dialog.showErrorBox(
-          'Read-only Backup',
-          'This file is a read-only backup. Move it out of the Backup folder to edit.'
-        );
-        return false;
-      }
+ipcMain.handle('saveDB', async () => false);
 
-      // Optional backup step
-      if (!options.overwriteOnly) {
-        const BACKUP_DIR = path.join(path.dirname(targetPath), 'Backup');
-        fs.mkdirSync(BACKUP_DIR, { recursive: true });
-        // Back up existing on-disk DB BEFORE overwrite
-        if (fs.existsSync(targetPath)) {
-          const base = path.basename(targetPath, path.extname(targetPath));
-          const ext = path.extname(targetPath) || '.db';
-          const backupPath = reserveBackupPath(BACKUP_DIR, base, ext);
-          fs.copyFileSync(targetPath, backupPath);
-        }
-        pruneBackups(BACKUP_DIR);
-      }
+ipcMain.handle('pickDB', async () => null);
 
-      // Safer write: temp + rename
-      const tmp = `${targetPath}.tmp`;
-      fs.writeFileSync(tmp, buffer);
-      fs.renameSync(tmp, targetPath);
-      targetSaved = true;
-      const mirrorResult = mirrorDbToRepoAssets(targetPath);
-      if (mirrorResult.enabled) {
-        if (mirrorResult.skipped) {
-          console.info(
-            `🪞 Mirror skipped (${mirrorResult.reason}) for ${mirrorResult.dest}`
-          );
-        } else {
-          console.info(
-            `🪞 Mirrored DB to ${mirrorResult.dest} from ${mirrorResult.source} (${mirrorResult.bytes} bytes)`
-          );
-          if (mirrorResult.archivePath) {
-            console.info(`🗃️ Archived previous bundled DB at ${mirrorResult.archivePath}`);
-          }
-        }
-      }
-      return true;
-    } catch (err) {
-      console.error('❌ Save failed:', {
-        targetPath,
-        mirrorPath: getRepoAssetDbPath(),
-        error: err,
-      });
-      const message =
-        targetSaved && shouldMirrorDbToRepoAssets()
-          ? `Saved your database, but failed to update ${getRepoAssetDbPath()}.\n\n${err.message}`
-          : err.message;
-      dialog.showErrorBox('Save Error', message);
-      return false;
-    }
-  }
-);
-ipcMain.handle('pickDB', async (event, lastPath = null) => {
-  const options = {
-    title: 'Select a SQLite database',
-    filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }],
-    properties: ['openFile'],
+ipcMain.handle('supabaseListRecipes', async () => {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('recipes')
+    .select(
+      `
+      id,
+      title,
+      servings_default,
+      servings_min,
+      servings_max,
+      recipe_tag_map (
+        sort_order,
+        tags (
+          name,
+          is_hidden
+        )
+      )
+    `
+    )
+    .order('title', { ascending: true });
+  if (error) throw error;
+
+  return (Array.isArray(data) ? data : []).map((row) => {
+    const tagRows = Array.isArray(row?.recipe_tag_map) ? row.recipe_tag_map : [];
+    const tags = tagRows
+      .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
+      .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
+      .map((m) => String(m?.tags?.name || '').trim())
+      .filter(Boolean);
+    return {
+      id: row.id,
+      title: String(row?.title || ''),
+      servings_default: row?.servings_default,
+      servings_min: row?.servings_min,
+      servings_max: row?.servings_max,
+      tags,
+    };
+  });
+});
+
+ipcMain.handle('supabaseGetRecipeById', async (_event, recipeId) => {
+  const rid = Number(recipeId);
+  if (!Number.isFinite(rid) || rid <= 0) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('recipes')
+    .select(
+      `
+      id,
+      title,
+      servings_default,
+      servings_min,
+      servings_max,
+      recipe_tag_map (
+        sort_order,
+        tags (
+          name,
+          is_hidden
+        )
+      )
+    `
+    )
+    .eq('id', rid)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const tags = (Array.isArray(data.recipe_tag_map) ? data.recipe_tag_map : [])
+    .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
+    .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
+    .map((m) => String(m?.tags?.name || '').trim())
+    .filter(Boolean);
+
+  return {
+    id: data.id,
+    title: String(data?.title || ''),
+    servings: {
+      default: data?.servings_default,
+      min: data?.servings_min,
+      max: data?.servings_max,
+    },
+    tags,
+    sections: [],
   };
+});
 
-  // If we know the last used path, start there
-  if (lastPath) {
-    const lastDir = path.dirname(lastPath);
-    if (fs.existsSync(lastDir)) {
-      options.defaultPath = lastDir;
+ipcMain.handle('supabaseCreateRecipe', async (_event, payload = {}) => {
+  const supabase = getSupabase();
+  const title = String(payload?.title || '').trim();
+  const servingsMin = payload?.servings_min ?? 0.5;
+  const servingsMax = payload?.servings_max ?? 99;
+
+  const { data, error } = await supabase
+    .from('recipes')
+    .insert({
+      title,
+      servings_min: servingsMin,
+      servings_max: servingsMax,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data?.id ?? null;
+});
+
+ipcMain.handle('supabaseDeleteRecipe', async (_event, recipeId) => {
+  const rid = Number(recipeId);
+  if (!Number.isFinite(rid) || rid <= 0) return false;
+  const supabase = getSupabase();
+  const { error } = await supabase.from('recipes').delete().eq('id', rid);
+  if (error) throw error;
+  return true;
+});
+
+ipcMain.handle('supabaseSaveRecipeMeta', async (_event, payload = {}) => {
+  const rid = Number(payload?.id);
+  if (!Number.isFinite(rid) || rid <= 0) {
+    throw new Error('Invalid recipe id.');
+  }
+  const supabase = getSupabase();
+  const title = String(payload?.title || '').trim();
+  const servings = payload?.servings || {};
+  const tagNames = normalizeTagNames(payload?.tags);
+
+  const { error: recipeError } = await supabase
+    .from('recipes')
+    .update({
+      title,
+      servings_default: servings?.default ?? null,
+      servings_min: servings?.min ?? null,
+      servings_max: servings?.max ?? null,
+    })
+    .eq('id', rid);
+  if (recipeError) throw recipeError;
+
+  const { error: clearMapError } = await supabase
+    .from('recipe_tag_map')
+    .delete()
+    .eq('recipe_id', rid);
+  if (clearMapError) throw clearMapError;
+
+  if (tagNames.length) {
+    const tagIds = [];
+    for (const [index, tagName] of tagNames.entries()) {
+      const { data: foundTag, error: findError } = await supabase
+        .from('tags')
+        .select('id')
+        .ilike('name', tagName)
+        .limit(1)
+        .maybeSingle();
+      if (findError) throw findError;
+      let tagId = foundTag?.id ?? null;
+      if (tagId == null) {
+        const { data: createdTag, error: createTagError } = await supabase
+          .from('tags')
+          .insert({
+            name: tagName,
+            sort_order: 100000 + index,
+            intended_use: 'recipes',
+            is_hidden: 0,
+          })
+          .select('id')
+          .single();
+        if (createTagError) throw createTagError;
+        tagId = createdTag?.id ?? null;
+      }
+      if (tagId != null) tagIds.push({ tagId, sort_order: index + 1 });
+    }
+
+    if (tagIds.length) {
+      const rows = tagIds.map((entry) => ({
+        recipe_id: rid,
+        tag_id: entry.tagId,
+        sort_order: entry.sort_order,
+      }));
+      const { error: mapInsertError } = await supabase
+        .from('recipe_tag_map')
+        .insert(rows);
+      if (mapInsertError) throw mapInsertError;
     }
   }
 
-  const result = await dialog.showOpenDialog(options);
-  if (result.canceled) return null;
-  const chosen = result.filePaths[0];
-  if (!chosen) return null;
-
-  // persist selected DB for next launch
-  ACTIVE_DB_PATH = chosen;
-  saveConfig();
-
-  const isInBackupFolder = /(^|[\\/])Backup([\\/]|$)/i.test(
-    path.normalize(chosen)
-  );
-  if (isInBackupFolder) {
-    await dialog.showMessageBox({
-      type: 'warning',
-      buttons: ['OK'],
-      title: 'Read-only Backup',
-      message:
-        'This file is a read-only backup. Move it out of the Backup folder to edit.',
-      detail:
-        'You can view it now, but saving changes will be blocked until it is moved.',
-    });
-  }
-  return chosen;
+  const { data: refreshed, error: refreshedError } = await supabase
+    .from('recipes')
+    .select(
+      `
+      id,
+      title,
+      servings_default,
+      servings_min,
+      servings_max,
+      recipe_tag_map (
+        sort_order,
+        tags (
+          name,
+          is_hidden
+        )
+      )
+    `
+    )
+    .eq('id', rid)
+    .single();
+  if (refreshedError) throw refreshedError;
+  const refreshedTags = (Array.isArray(refreshed.recipe_tag_map)
+    ? refreshed.recipe_tag_map
+    : []
+  )
+    .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
+    .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
+    .map((m) => String(m?.tags?.name || '').trim())
+    .filter(Boolean);
+  return {
+    id: refreshed.id,
+    title: String(refreshed?.title || ''),
+    servings: {
+      default: refreshed?.servings_default,
+      min: refreshed?.servings_min,
+      max: refreshed?.servings_max,
+    },
+    tags: refreshedTags,
+    sections: [],
+  };
 });
 
 ipcMain.handle('getEnv', async () => ({
@@ -351,10 +339,6 @@ ipcMain.handle('getEnv', async () => ({
 
 app.whenReady().then(() => {
   app.setName('Baby Eats');
-
-  loadConfig();
-
-  // macOS: set dock icon in dev and prod
 
   createWindow();
 

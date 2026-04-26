@@ -281,8 +281,8 @@ async function saveRecipeToDB() {
   const db = window.dbInstance;
   const recipe = window.recipeData;
 
-  if (!db || !recipe) {
-    throw new Error('saveRecipeToDB: missing db or recipeData');
+  if (!recipe) {
+    throw new Error('saveRecipeToDB: missing recipeData');
   }
 
   const rid = Number(window.recipeId || recipe.id);
@@ -504,6 +504,41 @@ async function saveRecipeToDB() {
       });
     return out;
   };
+
+  if (!db) {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.supabaseSaveRecipeMeta !== 'function'
+    ) {
+      throw new Error('saveRecipeToDB: no data backend available');
+    }
+    const title = String(recipe.title || '').trim();
+    recipe.tags = normalizeRecipeTagsForModel(recipe.tags);
+    const refreshed = await window.electronAPI.supabaseSaveRecipeMeta({
+      id: rid,
+      title,
+      servings: {
+        default:
+          recipe.servingsDefault ??
+          (recipe.servings && recipe.servings.default != null
+            ? recipe.servings.default
+            : null),
+        min:
+          recipe.servings && recipe.servings.min != null
+            ? recipe.servings.min
+            : null,
+        max:
+          recipe.servings && recipe.servings.max != null
+            ? recipe.servings.max
+            : null,
+      },
+      tags: recipe.tags,
+    });
+    try {
+      window.dispatchEvent(new CustomEvent('favoriteEats:db-updated'));
+    } catch (_) {}
+    return refreshed || null;
+  }
 
   const catalogOnly = !recipeEditorDbTableExists(db, 'recipe_steps');
 

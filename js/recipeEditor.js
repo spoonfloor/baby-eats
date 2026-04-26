@@ -3094,6 +3094,18 @@ window.__recipeTagsKeyboardHelpers = {
 // --- End recipe tags keyboard helpers ---
 
 function getVisibleRecipeTagNamePool() {
+  if (Array.isArray(window.recipeEditorTagOptions)) {
+    const seen = new Set();
+    return window.recipeEditorTagOptions
+      .map((name) => String(name || '').trim().replace(/\s+/g, ' '))
+      .filter((name) => {
+        if (!name) return false;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
   const db = window.dbInstance;
   if (!db) return [];
   try {

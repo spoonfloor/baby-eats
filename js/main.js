@@ -4161,21 +4161,14 @@ function bootFavoriteEatsAfterSqlReady() {
     const pageLoaders = {
       recipes: loadRecipesPage,
       'recipe-editor': loadRecipeEditorPage,
-      shopping: loadShoppingPage,
-      'shopping-list': loadShoppingListPage,
-      'shopping-editor': loadShoppingItemEditorPage,
-      units: loadUnitsPage,
-      'unit-editor': loadUnitEditorPage,
-      sizes: loadSizesPage,
-      'size-editor': loadSizeEditorPage,
-      tags: loadTagsPage,
-      'tag-editor': loadTagEditorPage,
-      stores: loadStoresPage,
-      'store-editor': loadStoreEditorPage,
     };
 
     if (pageId && pageLoaders[pageId]) {
       pageLoaders[pageId]();
+      return;
+    }
+    if (pageId && pageId !== 'welcome') {
+      window.location.href = 'recipes.html';
     }
   });
 }
@@ -4187,37 +4180,34 @@ if (!shouldDeferSqlBootForCurrentPage()) {
 // Welcome screen is handled by `js/welcome.js` (index.html). Browser-only database
 // loading and `dist/web` have been removed; use `npm start` (Electron) only.
 
+function assertMinimalRecipeSchemaOrThrow(db) {
+  if (!db) throw new Error('Missing database instance.');
+  const required = new Set(['recipes', 'tags', 'recipe_tag_map']);
+  const q = db.exec(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
+  );
+  const rows = q.length ? q[0].values : [];
+  const seen = new Set(
+    rows.map((row) => String((Array.isArray(row) ? row[0] : '') || '').trim()),
+  );
+  required.forEach((name) => {
+    if (!seen.has(name)) {
+      throw new Error(`Database missing required table: ${name}`);
+    }
+  });
+}
+
 // Recipes page logic
 async function loadRecipesPage() {
-  if (!window.electronAPI) {
+  if (
+    !window.electronAPI ||
+    typeof window.electronAPI.supabaseListRecipes !== 'function'
+  ) {
     uiToast('This app must run in the desktop (Electron) build. Use npm start.');
     return;
   }
-  const isElectron = true;
-  let db;
-  try {
-    const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
-    const bytes = await window.electronAPI.loadDB(pathHint);
-    const Uints = new Uint8Array(bytes);
-    db = new SQL.Database(Uints);
-  } catch (err) {
-    console.error('❌ Failed to load DB from disk:', err);
-    uiToast('No database loaded. Please go back to the welcome page.');
-    return;
-  }
-
-  // Expose DB on window so other helpers can optionally reuse it if needed
-  window.dbInstance = db;
-  try {
-    window.recipeEditorCatalogOnlyMode = false;
-  } catch (_) {}
-  if (tableExistsInMain(db, 'ingredients')) {
-    await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
-  }
-  ensureRecipeTagsSchemaInMain(db);
-  if (tableExistsInMain(db, 'ingredient_variants')) {
-    ensureIngredientVariantTagsSchemaInMain(db);
-  }
+  window.dbInstance = null;
+  window.recipeEditorCatalogOnlyMode = true;
 
   initAppBar({
     mode: 'list',
@@ -4236,11 +4226,7 @@ async function loadRecipesPage() {
   const list = document.getElementById('recipeList');
   if (!list) return;
   ensureRecipeListServingsHeaderLabelMediaListener();
-  ensureRecipeTagsSchemaInMain(db);
-  ensureIngredientVariantTagsSchemaInMain(db);
   list.innerHTML = '';
-
-  window.dbInstance = db;
 
   // Keyboard selection + Enter activation for list rows.
   const listNav = enableTopLevelListKeyboardNav(list);
@@ -4489,56 +4475,7 @@ async function loadRecipesPage() {
   };
 
   const loadRecipeRows = () => {
-    const recipesQ = db.exec(
-      `
-        SELECT ID, title, servings_default, servings_min, servings_max
-        FROM recipes
-        ORDER BY title COLLATE NOCASE;
-      `,
-    );
-    const rows = recipesQ.length ? recipesQ[0].values : [];
-    const out = rows.map(
-      ([id, title, servingsDefault, servingsMin, servingsMax]) => {
-        const normalizedDefault = toPositiveServingsOrNull(servingsDefault);
-        return {
-          id: Number(id),
-          title: String(title || ''),
-          tags: [],
-          servingsDefault: normalizedDefault,
-          servings: {
-            default: normalizedDefault,
-            min: toPositiveServingsOrNull(servingsMin),
-            max: toPositiveServingsOrNull(servingsMax),
-          },
-        };
-      },
-    );
-    const byRecipe = new Map();
-    out.forEach((r) => byRecipe.set(r.id, r));
-
-    try {
-      const tagsQ = db.exec(`
-        SELECT m.recipe_id, t.name
-        FROM recipe_tag_map m
-        JOIN tags t ON t.id = m.tag_id
-        WHERE COALESCE(t.is_hidden, 0) = 0
-        ORDER BY m.recipe_id, COALESCE(m.sort_order, 999999), m.id, t.name COLLATE NOCASE;
-      `);
-      if (tagsQ.length) {
-        tagsQ[0].values.forEach(([recipeIdRaw, tagNameRaw]) => {
-          const recipeId = Number(recipeIdRaw);
-          const row = byRecipe.get(recipeId);
-          if (!row) return;
-          const nextTag = String(tagNameRaw || '').trim();
-          if (!nextTag) return;
-          if (row.tags.some((t) => t.toLowerCase() === nextTag.toLowerCase()))
-            return;
-          row.tags.push(nextTag);
-        });
-      }
-    } catch (_) {}
-
-    return out;
+    return [];
   };
 
   const renderTagFilterChips = (rows) => {
@@ -4840,7 +4777,7 @@ async function loadRecipesPage() {
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           event.stopPropagation();
-          void deleteRecipeWithConfirm(db, id, title);
+          void deleteRecipeWithConfirm(id, title);
           return;
         }
 
@@ -4852,7 +4789,7 @@ async function loadRecipesPage() {
       // Right-click / two-finger click → delete dialog as well
       li.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        void deleteRecipeWithConfirm(db, id, title);
+        void deleteRecipeWithConfirm(id, title);
       });
 
       list.appendChild(li);
@@ -4899,15 +4836,35 @@ async function loadRecipesPage() {
     rerenderFilteredRecipes();
   });
 
-  recipeRows = loadRecipeRows();
+  try {
+    const remoteRows = await window.electronAPI.supabaseListRecipes();
+    recipeRows = (Array.isArray(remoteRows) ? remoteRows : []).map((row) => {
+      const normalizedDefault = toPositiveServingsOrNull(row?.servings_default);
+      return {
+        id: Number(row?.id),
+        title: String(row?.title || ''),
+        tags: Array.isArray(row?.tags) ? row.tags : [],
+        servingsDefault: normalizedDefault,
+        servings: {
+          default: normalizedDefault,
+          min: toPositiveServingsOrNull(row?.servings_min),
+          max: toPositiveServingsOrNull(row?.servings_max),
+        },
+      };
+    });
+  } catch (err) {
+    console.error('❌ Failed to load recipes from Supabase:', err);
+    uiToast('Failed to load recipes.');
+    recipeRows = loadRecipeRows();
+  }
   hydrateRecipeSelectionsFromPlan();
   syncRecipesActionButtonState();
   rerenderFilteredRecipes();
 
   // --- Recipes action button stub ---
 
-  async function openCreateRecipeDialog(db) {
-    if (!db || !window.ui) return;
+  async function openCreateRecipeDialog() {
+    if (!window.ui) return;
     const vals = await window.ui.form({
       title: 'New Recipe',
       fields: [
@@ -4931,31 +4888,14 @@ async function loadRecipesPage() {
     const title = vals.title;
     let newId = null;
     try {
-      db.run(
-        'INSERT INTO recipes (title, servings_min, servings_max) VALUES (?, ?, ?);',
-        [title, 0.5, 99],
-      );
-      const idQ = db.exec('SELECT last_insert_rowid();');
-      if (idQ.length && idQ[0].values.length) {
-        newId = idQ[0].values[0][0];
-      }
+      newId = await window.electronAPI.supabaseCreateRecipe({
+        title,
+        servings_min: 0.5,
+        servings_max: 99,
+      });
     } catch (err) {
       console.error('❌ Failed to create recipe:', err);
       window.ui.toast({ message: 'Failed to create recipe. See console.' });
-      return;
-    }
-
-    // Persist DB so editor + list can see the new recipe
-    try {
-      await persistDbForCurrentRuntime(db, {
-        isElectron: !!window.electronAPI,
-        failureMessage: 'Failed to save database after creating recipe.',
-      });
-    } catch (err) {
-      console.error('❌ Failed to persist DB after creating recipe:', err);
-      window.ui.toast({
-        message: 'Failed to save database after creating recipe.',
-      });
       return;
     }
 
@@ -4966,34 +4906,8 @@ async function loadRecipesPage() {
     }
   }
 
-  // Delete a recipe and all dependent rows in child tables.
-  function deleteRecipeDeep(db, recipeId) {
-    if (tableExistsInMain(db, 'recipe_steps')) {
-      try {
-        db.run('DELETE FROM recipe_steps WHERE recipe_id = ?;', [recipeId]);
-      } catch (_) {}
-    }
-    if (tableExistsInMain(db, 'recipe_sections')) {
-      try {
-        db.run('DELETE FROM recipe_sections WHERE recipe_id = ?;', [recipeId]);
-      } catch (_) {}
-    }
-    if (tableExistsInMain(db, 'recipe_ingredient_map')) {
-      try {
-        db.run('DELETE FROM recipe_ingredient_map WHERE recipe_id = ?;', [
-          recipeId,
-        ]);
-      } catch (_) {}
-    }
-    try {
-      db.run('DELETE FROM recipe_tag_map WHERE recipe_id = ?;', [recipeId]);
-    } catch (_) {}
-
-    db.run('DELETE FROM recipes WHERE ID = ?;', [recipeId]);
-  }
-
-  async function deleteRecipeWithConfirm(db, recipeId, title) {
-    if (!db || recipeId == null || !window.ui) return;
+  async function deleteRecipeWithConfirm(recipeId, title) {
+    if (recipeId == null || !window.ui) return;
     const ok = await window.ui.confirm({
       title: 'Delete Recipe',
       message: `Delete "${title}"?`,
@@ -5004,23 +4918,10 @@ async function loadRecipesPage() {
     if (!ok) return;
 
     try {
-      deleteRecipeDeep(db, recipeId);
+      await window.electronAPI.supabaseDeleteRecipe(recipeId);
     } catch (err) {
       console.error('❌ Failed to delete recipe:', err);
       window.ui.toast({ message: 'Failed to delete recipe. See console.' });
-      return;
-    }
-
-    try {
-      await persistDbForCurrentRuntime(db, {
-        isElectron: !!window.electronAPI,
-        failureMessage: 'Failed to save database after deleting recipe.',
-      });
-    } catch (err) {
-      console.error('❌ Failed to persist DB after deleting recipe:', err);
-      window.ui.toast({
-        message: 'Failed to save database after deleting recipe.',
-      });
       return;
     }
 
@@ -5057,7 +4958,7 @@ async function loadRecipesPage() {
       rerenderFilteredRecipes();
       uiToastUndo('Recipe selections cleared.', restoreClearedRecipes);
     } else {
-      void openCreateRecipeDialog(db);
+      void openCreateRecipeDialog();
     }
   };
   const syncRecipesAppBarActionChrome = () => {
@@ -8692,19 +8593,10 @@ async function resolveUnknownUnitCodes({
 // --- Recipe editor loader (full editor when `recipe_steps` exists; else title + tags only) ---
 async function loadRecipeEditorPage() {
   const isElectron = !!window.electronAPI;
-  let db;
-  if (isElectron) {
-    try {
-      const pathHint = localStorage.getItem('favoriteEatsDbPath') || null;
-      const bytes = await window.electronAPI.loadDB(pathHint);
-      db = new SQL.Database(new Uint8Array(bytes));
-    } catch (err) {
-      console.error('❌ Failed to load DB from disk:', err);
-      uiToast('No database loaded. Please go back to the welcome page.');
-      window.location.href = 'index.html';
-      return;
-    }
-  } else {
+  if (
+    !isElectron ||
+    typeof window.electronAPI.supabaseGetRecipeById !== 'function'
+  ) {
     uiToast('This app must run in the desktop (Electron) build. Use npm start.');
     window.location.href = 'index.html';
     return;
@@ -8717,35 +8609,20 @@ async function loadRecipeEditorPage() {
     return;
   }
 
-  window.dbInstance = db;
-  window.recipeEditorCatalogOnlyMode = !tableExistsInMain(db, 'recipe_steps');
-
-  if (tableExistsInMain(db, 'ingredients')) {
-    await ensureIngredientLemmaMaintenanceInMain(db, isElectron);
-  }
+  window.dbInstance = null;
+  window.recipeEditorCatalogOnlyMode = true;
 
   window.recipeId = recipeId;
   const isRecipeWebMode = isForceWebModeEnabled();
-  ensureRecipeTagsSchemaInMain(db);
-  if (tableExistsInMain(db, 'ingredient_variants')) {
-    ensureIngredientVariantTagsSchemaInMain(db);
+  let recipe = null;
+  try {
+    recipe = await window.electronAPI.supabaseGetRecipeById(Number(recipeId));
+    window.recipeEditorTagOptions =
+      (await window.electronAPI.supabaseListVisibleTags()) || [];
+  } catch (err) {
+    console.error('❌ Failed to load recipe from Supabase:', err);
+    window.recipeEditorTagOptions = [];
   }
-
-  if (!window.recipeEditorCatalogOnlyMode) {
-    ensureSizesSchemaInMain(db);
-    ensureUnitsSchemaInMain(db);
-    try {
-      if (
-        window.bridge &&
-        typeof bridge.ensureRecipeIngredientMapParentheticalNoteSchema ===
-          'function'
-      ) {
-        bridge.ensureRecipeIngredientMapParentheticalNoteSchema(db);
-      }
-    } catch (_) {}
-  }
-
-  const recipe = bridge.loadRecipeFromDB(db, recipeId);
   if (!recipe) {
     uiToast('Recipe not found.');
     window.location.href = 'recipes.html';
@@ -9005,20 +8882,10 @@ async function loadRecipeEditorPage() {
         if (typeof saveRecipeToDB !== 'function') {
           throw new Error('saveRecipeToDB is not available');
         }
-        await saveRecipeToDB();
-        if (!window.dbInstance) throw new Error('No active database found');
-        await persistBinaryArrayInMain(window.dbInstance.export(), {
-          isElectron: !!window.electronAPI,
-          overwriteOnly: false,
-          failureMessage: 'Save failed — check console for details.',
-        });
+        const refreshed = await saveRecipeToDB();
         if (window.electronAPI) uiToast('Saved.');
 
-        if (window.bridge && typeof bridge.loadRecipeFromDB === 'function') {
-          const refreshed = bridge.loadRecipeFromDB(
-            window.dbInstance,
-            window.recipeId,
-          );
+        if (refreshed) {
           window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));
           window.recipeData = JSON.parse(JSON.stringify(refreshed));
           if (typeof renderRecipe === 'function') {
