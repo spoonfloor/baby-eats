@@ -1,4 +1,4 @@
-import { compare } from 'npm:bcryptjs@2.4.3';
+import { compare } from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts';
 
 const corsHeaders = {
   'access-control-allow-origin': '*',
