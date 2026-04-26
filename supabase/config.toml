@@ -1,0 +1,4 @@
+project_id = "ieancejhyihxpazturiz"
+
+[functions.verify-splash-password]
+verify_jwt = false

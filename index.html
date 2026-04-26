@@ -21,8 +21,31 @@
     <div class="centered-container">
       <div class="welcome-card">
         <h1 class="nav-text">Favorite Eats!</h1>
-        <a class="button nav-text" href="recipes.html">Continue</a>
+        <form id="splashGateForm" class="welcome-card__actions" autocomplete="off">
+          <input
+            id="splashPasswordInput"
+            class="splash-gate-input nav-text"
+            type="password"
+            name="password"
+            placeholder="Password"
+            aria-label="Password"
+            required
+          />
+          <button id="splashContinueBtn" class="button nav-text" type="submit">
+            Continue
+          </button>
+        </form>
+        <p
+          id="splashGateError"
+          class="ui-dialog-error nav-text"
+          role="alert"
+          aria-live="polite"
+          hidden
+        ></p>
       </div>
     </div>
+    <script src="js/buildConfig.js"></script>
+    <script src="js/pageGate.js"></script>
+    <script src="js/splashGate.js"></script>
   </body>
 </html>

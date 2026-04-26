@@ -31,5 +31,9 @@
     "win": {
       "icon": "assets/app-icon.ico"
     }
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "supabase": "^2.95.3"
   }
 }

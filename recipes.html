@@ -27,6 +27,12 @@
   </head>
 
   <body class="recipes-page" data-page="recipes">
+    <script src="js/pageGate.js"></script>
+    <script>
+      if (window.favoriteEatsGate && !window.favoriteEatsGate.ensureAccess()) {
+        throw new Error('Redirecting to splash.');
+      }
+    </script>
     <div id="appBarMount"></div>
 
     <main class="page-main">
