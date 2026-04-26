@@ -276,10 +276,17 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-}.splash-gate-input {
+}
+#splashGateForm {
+  --splash-gate-control-width: 170px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+.splash-gate-input {
   appearance: none;
   -webkit-appearance: none;
-  min-width: 220px;
+  width: var(--splash-gate-control-width);
   height: 44px;
   padding: 0 16px;
   border-radius: 9999px;
@@ -299,6 +306,10 @@
   border-color: color-mix(in srgb, var(--theme-primary) 55%, transparent);
   box-shadow: 0 0 0 3px rgb(from var(--palette-accent) r g b / 0.16);
   background: #fff;
+}
+#splashGateForm .button {
+  width: var(--splash-gate-control-width);
+  justify-content: center;
 }
 /* --- Buttons --- */.button {
   font-family: inherit;

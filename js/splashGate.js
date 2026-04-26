@@ -2,6 +2,7 @@
   if (!global || !global.document) return;
 
   const DEFAULT_SUPABASE_URL = 'https://ieancejhyihxpazturiz.supabase.co';
+  const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_OEspL1dwwLl7aOAH6Q8bCg_1jKnbkzu';
   const VERIFY_PATH = '/functions/v1/verify-splash-password';
 
   function getSupabaseUrl() {
@@ -21,16 +22,31 @@
     el.textContent = text;
   }
 
+  function getSupabaseAnonKey() {
+    const configured = String(global.__SUPABASE_ANON_KEY__ || '').trim();
+    return configured || DEFAULT_SUPABASE_ANON_KEY;
+  }
+
   async function verifyPassword(password) {
     const url = `${getSupabaseUrl()}${VERIFY_PATH}`;
+    const anonKey = getSupabaseAnonKey();
+    const headers = { 'content-type': 'application/json' };
+    if (anonKey) {
+      headers.apikey = anonKey;
+      headers.authorization = `Bearer ${anonKey}`;
+    }
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({ password }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload || payload.ok !== true) {
-      throw new Error('Invalid password.');
+    if (!response.ok) {
+      const message = String(payload?.error || '').trim();
+      throw new Error(message || `Request failed (${response.status}).`);
+    }
+    if (!payload || payload.ok !== true) {
+      throw new Error('Invalid response from password service.');
     }
     return true;
   }
@@ -60,8 +76,15 @@
         global.favoriteEatsGate.grantAccess();
       }
       global.location.href = 'recipes.html';
-    } catch (_) {
-      setError(errorEl, 'Incorrect password.');
+    } catch (err) {
+      const message = String(err && err.message ? err.message : '').trim();
+      if (message.toLowerCase() === 'invalid password.') {
+        setError(errorEl, 'Incorrect password.');
+      } else if (message) {
+        setError(errorEl, message);
+      } else {
+        setError(errorEl, 'Unable to verify password right now.');
+      }
     } finally {
       setButtonBusy(button, false);
     }
