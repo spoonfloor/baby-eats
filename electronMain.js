@@ -23,6 +23,20 @@ function getSupabase() {
   });
 }
 
+function toErrorMessage(err, fallback = 'Supabase request failed.') {
+  if (!err) return fallback;
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (typeof err?.message === 'string' && err.message.trim()) {
+    return err.message.trim();
+  }
+  try {
+    return JSON.stringify(err);
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function createWindow() {
   const { width, height, x, y } = screen.getPrimaryDisplay().workArea;
   const win = new BrowserWindow({
@@ -40,8 +54,8 @@ function createWindow() {
     },
   });
 
-  // load your existing web app entry
-  win.loadFile('index.html');
+  // Launch directly into the recipes home page (no splash screen).
+  win.loadFile('recipes.html');
 
   // Enforce a consistent no-zoom baseline on every page load.
   // This prevents page-to-page zoom drift and guarantees zoom won't "stick"
@@ -73,44 +87,41 @@ function normalizeTagNames(raw) {
 }
 
 ipcMain.handle('supabaseListVisibleTags', async () => {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('tags')
-    .select('id,name,is_hidden,intended_use,sort_order')
-    .eq('is_hidden', 0)
-    .order('sort_order', { ascending: true, nullsFirst: false })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  const seen = new Set();
-  return (Array.isArray(data) ? data : [])
-    .filter(
-      (row) =>
-        String(row?.name || '').trim() &&
-        String(row?.intended_use || 'recipes').trim().toLowerCase() === 'recipes'
-    )
-    .map((row) => String(row.name || '').trim())
-    .filter((name) => {
-      const k = name.toLowerCase();
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('tags')
+      .select('id,name,is_hidden,intended_use,sort_order')
+      .eq('is_hidden', 0)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('name', { ascending: true });
+    if (error) throw error;
+    const seen = new Set();
+    return (Array.isArray(data) ? data : [])
+      .filter(
+        (row) =>
+          String(row?.name || '').trim() &&
+          String(row?.intended_use || 'recipes').trim().toLowerCase() === 'recipes'
+      )
+      .map((row) => String(row.name || '').trim())
+      .filter((name) => {
+        const k = name.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to list visible tags.'));
+  }
 });
-
-ipcMain.handle('loadDB', async () => {
-  throw new Error('Local SQLite loading is disabled. Supabase is now the source of truth.');
-});
-
-ipcMain.handle('saveDB', async () => false);
-
-ipcMain.handle('pickDB', async () => null);
 
 ipcMain.handle('supabaseListRecipes', async () => {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('recipes')
-    .select(
-      `
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('recipes')
+      .select(
+        `
       id,
       title,
       servings_default,
@@ -124,36 +135,42 @@ ipcMain.handle('supabaseListRecipes', async () => {
         )
       )
     `
-    )
-    .order('title', { ascending: true });
-  if (error) throw error;
+      )
+      .order('title', { ascending: true });
+    if (error) throw error;
 
-  return (Array.isArray(data) ? data : []).map((row) => {
-    const tagRows = Array.isArray(row?.recipe_tag_map) ? row.recipe_tag_map : [];
-    const tags = tagRows
-      .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
-      .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
-      .map((m) => String(m?.tags?.name || '').trim())
-      .filter(Boolean);
-    return {
-      id: row.id,
-      title: String(row?.title || ''),
-      servings_default: row?.servings_default,
-      servings_min: row?.servings_min,
-      servings_max: row?.servings_max,
-      tags,
-    };
-  });
+    return (Array.isArray(data) ? data : []).map((row) => {
+      const tagRows = Array.isArray(row?.recipe_tag_map) ? row.recipe_tag_map : [];
+      const tags = tagRows
+        .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
+        .sort(
+          (a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999)
+        )
+        .map((m) => String(m?.tags?.name || '').trim())
+        .filter(Boolean);
+      return {
+        id: row.id,
+        title: String(row?.title || ''),
+        servings_default: row?.servings_default,
+        servings_min: row?.servings_min,
+        servings_max: row?.servings_max,
+        tags,
+      };
+    });
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to list recipes.'));
+  }
 });
 
 ipcMain.handle('supabaseGetRecipeById', async (_event, recipeId) => {
-  const rid = Number(recipeId);
-  if (!Number.isFinite(rid) || rid <= 0) return null;
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('recipes')
-    .select(
-      `
+  try {
+    const rid = Number(recipeId);
+    if (!Number.isFinite(rid) || rid <= 0) return null;
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('recipes')
+      .select(
+        `
       id,
       title,
       servings_default,
@@ -167,79 +184,110 @@ ipcMain.handle('supabaseGetRecipeById', async (_event, recipeId) => {
         )
       )
     `
-    )
-    .eq('id', rid)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
+      )
+      .eq('id', rid)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
 
-  const tags = (Array.isArray(data.recipe_tag_map) ? data.recipe_tag_map : [])
-    .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
-    .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
-    .map((m) => String(m?.tags?.name || '').trim())
-    .filter(Boolean);
+    const tags = (Array.isArray(data.recipe_tag_map) ? data.recipe_tag_map : [])
+      .filter((m) => Number(m?.tags?.is_hidden || 0) === 0)
+      .sort(
+        (a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999)
+      )
+      .map((m) => String(m?.tags?.name || '').trim())
+      .filter(Boolean);
 
-  return {
-    id: data.id,
-    title: String(data?.title || ''),
-    servings: {
-      default: data?.servings_default,
-      min: data?.servings_min,
-      max: data?.servings_max,
-    },
-    tags,
-    sections: [],
-  };
+    return {
+      id: data.id,
+      title: String(data?.title || ''),
+      servings: {
+        default: data?.servings_default,
+        min: data?.servings_min,
+        max: data?.servings_max,
+      },
+      tags,
+      sections: [],
+    };
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to load recipe.'));
+  }
 });
 
 ipcMain.handle('supabaseCreateRecipe', async (_event, payload = {}) => {
-  const supabase = getSupabase();
-  const title = String(payload?.title || '').trim();
-  const servingsMin = payload?.servings_min ?? 0.5;
-  const servingsMax = payload?.servings_max ?? 99;
+  try {
+    const supabase = getSupabase();
+    const title = String(payload?.title || '').trim();
+    const servingsMin = payload?.servings_min ?? 0.5;
+    const servingsMax = payload?.servings_max ?? 99;
 
-  const { data, error } = await supabase
-    .from('recipes')
-    .insert({
-      title,
-      servings_min: servingsMin,
-      servings_max: servingsMax,
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data?.id ?? null;
+    const attemptWithServings = await supabase
+      .from('recipes')
+      .insert({
+        title,
+        servings_min: servingsMin,
+        servings_max: servingsMax,
+      })
+      .select('id')
+      .single();
+    if (!attemptWithServings.error) {
+      return attemptWithServings.data?.id ?? null;
+    }
+
+    // Schema-safe fallback when servings columns are absent/locked.
+    const attemptTitleOnly = await supabase
+      .from('recipes')
+      .insert({ title })
+      .select('id')
+      .single();
+    if (!attemptTitleOnly.error) {
+      return attemptTitleOnly.data?.id ?? null;
+    }
+
+    throw new Error(
+      `${toErrorMessage(attemptWithServings.error)} | fallback: ${toErrorMessage(
+        attemptTitleOnly.error
+      )}`
+    );
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to create recipe.'));
+  }
 });
 
 ipcMain.handle('supabaseDeleteRecipe', async (_event, recipeId) => {
-  const rid = Number(recipeId);
-  if (!Number.isFinite(rid) || rid <= 0) return false;
-  const supabase = getSupabase();
-  const { error } = await supabase.from('recipes').delete().eq('id', rid);
-  if (error) throw error;
-  return true;
+  try {
+    const rid = Number(recipeId);
+    if (!Number.isFinite(rid) || rid <= 0) return false;
+    const supabase = getSupabase();
+    const { error } = await supabase.from('recipes').delete().eq('id', rid);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to delete recipe.'));
+  }
 });
 
 ipcMain.handle('supabaseSaveRecipeMeta', async (_event, payload = {}) => {
-  const rid = Number(payload?.id);
-  if (!Number.isFinite(rid) || rid <= 0) {
-    throw new Error('Invalid recipe id.');
-  }
-  const supabase = getSupabase();
-  const title = String(payload?.title || '').trim();
-  const servings = payload?.servings || {};
-  const tagNames = normalizeTagNames(payload?.tags);
+  try {
+    const rid = Number(payload?.id);
+    if (!Number.isFinite(rid) || rid <= 0) {
+      throw new Error('Invalid recipe id.');
+    }
+    const supabase = getSupabase();
+    const title = String(payload?.title || '').trim();
+    const servings = payload?.servings || {};
+    const tagNames = normalizeTagNames(payload?.tags);
 
-  const { error: recipeError } = await supabase
-    .from('recipes')
-    .update({
-      title,
-      servings_default: servings?.default ?? null,
-      servings_min: servings?.min ?? null,
-      servings_max: servings?.max ?? null,
-    })
-    .eq('id', rid);
-  if (recipeError) throw recipeError;
+    const { error: recipeError } = await supabase
+      .from('recipes')
+      .update({
+        title,
+        servings_default: servings?.default ?? null,
+        servings_min: servings?.min ?? null,
+        servings_max: servings?.max ?? null,
+      })
+      .eq('id', rid);
+    if (recipeError) throw recipeError;
 
   const { error: clearMapError } = await supabase
     .from('recipe_tag_map')
@@ -317,7 +365,7 @@ ipcMain.handle('supabaseSaveRecipeMeta', async (_event, payload = {}) => {
     .sort((a, b) => Number(a?.sort_order || 999999) - Number(b?.sort_order || 999999))
     .map((m) => String(m?.tags?.name || '').trim())
     .filter(Boolean);
-  return {
+    return {
     id: refreshed.id,
     title: String(refreshed?.title || ''),
     servings: {
@@ -326,8 +374,11 @@ ipcMain.handle('supabaseSaveRecipeMeta', async (_event, payload = {}) => {
       max: refreshed?.servings_max,
     },
     tags: refreshedTags,
-    sections: [],
-  };
+      sections: [],
+    };
+  } catch (err) {
+    throw new Error(toErrorMessage(err, 'Failed to save recipe metadata.'));
+  }
 });
 
 ipcMain.handle('getEnv', async () => ({

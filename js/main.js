@@ -1842,6 +1842,9 @@ async function persistBinaryArrayInMain(
   } = {},
 ) {
   if (isElectron) {
+    if (!window.electronAPI || typeof window.electronAPI.saveDB !== 'function') {
+      return;
+    }
     const ok = await window.electronAPI.saveDB(binaryArray, { overwriteOnly });
     if (ok === false) throw new Error(failureMessage);
   } else {
@@ -4248,6 +4251,7 @@ async function loadRecipesPage() {
       : null;
 
   const activeTagFilters = new Set();
+  let allVisibleTagNames = [];
   let searchQuery = '';
   let recipeRows = [];
   const listRowStepper = window.listRowStepper;
@@ -4474,23 +4478,18 @@ async function loadRecipesPage() {
     });
   };
 
-  const loadRecipeRows = () => {
-    return [];
-  };
-
   const renderTagFilterChips = (rows) => {
     const chipMountEl = recipeFilterChipRail?.trackEl;
     if (!chipMountEl) return;
-    const names = [];
-    const seen = new Set();
+    const names = Array.isArray(allVisibleTagNames) ? [...allVisibleTagNames] : [];
+    const countsByTagKey = new Map();
     (rows || []).forEach((r) => {
       (Array.isArray(r.tags) ? r.tags : []).forEach((name) => {
         const key = String(name || '')
           .trim()
           .toLowerCase();
-        if (!key || seen.has(key)) return;
-        seen.add(key);
-        names.push(String(name || '').trim());
+        if (!key) return;
+        countsByTagKey.set(key, Number(countsByTagKey.get(key) || 0) + 1);
       });
     });
     names.sort((a, b) =>
@@ -4505,7 +4504,7 @@ async function loadRecipesPage() {
       chips: names.map((name) => ({
         id: String(name || '').toLowerCase(),
         label: String(name || ''),
-        disabled: false,
+        disabled: Number(countsByTagKey.get(String(name || '').toLowerCase()) || 0) <= 0,
       })),
       activeChipIds: activeTagFilters,
       onToggle: (chipId) => {
@@ -4838,6 +4837,12 @@ async function loadRecipesPage() {
 
   try {
     const remoteRows = await window.electronAPI.supabaseListRecipes();
+    const remoteTagPool = await window.electronAPI.supabaseListVisibleTags();
+    allVisibleTagNames = Array.isArray(remoteTagPool)
+      ? remoteTagPool
+          .map((name) => String(name || '').trim())
+          .filter(Boolean)
+      : [];
     recipeRows = (Array.isArray(remoteRows) ? remoteRows : []).map((row) => {
       const normalizedDefault = toPositiveServingsOrNull(row?.servings_default);
       return {
@@ -4855,7 +4860,8 @@ async function loadRecipesPage() {
   } catch (err) {
     console.error('❌ Failed to load recipes from Supabase:', err);
     uiToast('Failed to load recipes.');
-    recipeRows = loadRecipeRows();
+    allVisibleTagNames = [];
+    recipeRows = [];
   }
   hydrateRecipeSelectionsFromPlan();
   syncRecipesActionButtonState();

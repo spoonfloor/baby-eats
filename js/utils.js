@@ -2319,16 +2319,24 @@ if (typeof window !== 'undefined') {
 
       host.appendChild(el);
 
-      const t = window.setTimeout(() => {
+      const removeToast = () => {
         try {
           if (el && el.parentNode) el.parentNode.removeChild(el);
         } catch (_) {}
-      }, Math.max(1000, Number(timeoutMs) || 5000));
+      };
+      const lifetimeMs = Math.max(1000, Number(timeoutMs) || 5000);
+      let t = window.setTimeout(removeToast, lifetimeMs);
 
       el.addEventListener('mouseenter', () => {
         try {
           window.clearTimeout(t);
         } catch (_) {}
+      });
+      el.addEventListener('mouseleave', () => {
+        try {
+          window.clearTimeout(t);
+        } catch (_) {}
+        t = window.setTimeout(removeToast, lifetimeMs);
       });
 
       return el;
