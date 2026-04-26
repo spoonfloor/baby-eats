@@ -3958,8 +3958,6 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
 function bootFavoriteEatsAfterSqlReady() {
   // --- page load routing ---
 
-  if (redirectIfPublicWebPageIsDisallowed()) return;
-
   const pageId = detectPageIdFromBody();
 
   // --- Cmd/Ctrl+S: invoke visible editor Save action ---
