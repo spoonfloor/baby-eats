@@ -1,4 +1,4 @@
-import { compare } from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts';
+import bcrypt from 'npm:bcryptjs@2.4.3';
 
 const corsHeaders = {
   'access-control-allow-origin': '*',
@@ -43,7 +43,13 @@ Deno.serve(async (req) => {
     return jsonResponse(400, { ok: false, error: 'Password is required.' });
   }
 
-  const isValid = await compare(password, configuredHash).catch(() => false);
+  let isValid = false;
+  try {
+    isValid = await bcrypt.compare(password, configuredHash);
+  } catch (err) {
+    console.error('Password hash compare failed:', err);
+    return jsonResponse(500, { ok: false, error: 'Password verification failed.' });
+  }
   if (!isValid) {
     return jsonResponse(401, { ok: false, error: 'Invalid password.' });
   }

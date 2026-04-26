@@ -28,11 +28,7 @@
 
   <body class="recipe-editor-page" data-page="recipe-editor">
     <script src="js/pageGate.js"></script>
-    <script>
-      if (window.favoriteEatsGate && !window.favoriteEatsGate.ensureAccess()) {
-        throw new Error('Redirecting to splash.');
-      }
-    </script>
+    <script src="js/protectedPageGate.js"></script>
     <!-- App Bar (injected) -->
     <div id="appBarMount"></div>
 
