@@ -251,7 +251,7 @@ function getTopLevelPageHref(pageId) {
   const key = String(pageId || '')
     .trim()
     .toLowerCase();
-  if (!key) return 'index.html';
+  if (!key) return 'recipes.html';
   if (key === 'recipes' || key === 'recipe-editor') {
     return key === 'recipe-editor' ? 'recipeEditor.html' : 'recipes.html';
   }
@@ -4180,8 +4180,8 @@ if (!shouldDeferSqlBootForCurrentPage()) {
   bootFavoriteEatsAfterSqlReady();
 }
 
-// Welcome screen is handled by `js/welcome.js` (index.html). Browser-only database
-// loading and `dist/web` have been removed; use `npm start` (Electron) only.
+// Browser-only database loading and `dist/web` have been removed;
+// use `npm start` (Electron) only.
 
 function assertMinimalRecipeSchemaOrThrow(db) {
   if (!db) throw new Error('Missing database instance.');
@@ -8604,7 +8604,7 @@ async function loadRecipeEditorPage() {
     typeof window.electronAPI.supabaseGetRecipeById !== 'function'
   ) {
     uiToast('This app must run in the desktop (Electron) build. Use npm start.');
-    window.location.href = 'index.html';
+    window.location.href = 'recipes.html';
     return;
   }
 

@@ -300,8 +300,6 @@
   cursor: not-allowed;
   /* Remove pointer-events so cursor still changes on hover */
   pointer-events: none;
-}#loadDbBtn {
-  background: var(--theme-primary);
 }
 /* --- File Input --- */.file-input-hidden {
   display: none;
