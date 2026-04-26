@@ -1,1 +1,0 @@
-# LAN SQLite HTTP service

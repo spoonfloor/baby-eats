@@ -122,7 +122,7 @@ const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
 const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
 /** Dispatched on `window` when planner (force-web) mode flips. `detail.enabled` is a boolean. */
 const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
-// Only enforced when isPublicWebExperienceLocked() (GitHub Pages / dist/web with injected
+// Only enforced when isPublicWebExperienceLocked() (public web build with injected
 // __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
 // Recipe catalog uses recipes.html; recipeEditor.html is title + tag editing only when `recipe_steps` is absent.
 const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
@@ -2020,17 +2020,7 @@ function ensureIngredientBaseVariantsInMain(db) {
 
 async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
   if (!db) return 0;
-  let lemmaChangedCount = 0;
   let baseVariantChangedCount = 0;
-  try {
-    if (typeof window.bridge?.regenerateAllIngredientLemmas === 'function') {
-      lemmaChangedCount =
-        Number(window.bridge.regenerateAllIngredientLemmas(db)) || 0;
-    }
-  } catch (err) {
-    console.warn('⚠️ Failed to regenerate ingredient lemmas:', err);
-    lemmaChangedCount = 0;
-  }
   try {
     baseVariantChangedCount =
       Number(ensureIngredientBaseVariantsInMain(db)) || 0;
@@ -2038,17 +2028,12 @@ async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
     console.warn('⚠️ Failed to repair ingredient base variants:', err);
     baseVariantChangedCount = 0;
   }
-  const changedCount =
-    (Number.isFinite(lemmaChangedCount) ? lemmaChangedCount : 0) +
-    (Number.isFinite(baseVariantChangedCount) ? baseVariantChangedCount : 0);
+  const changedCount = Number.isFinite(baseVariantChangedCount)
+    ? baseVariantChangedCount
+    : 0;
   if (changedCount <= 0) return 0;
   try {
     await persistLoadedDbInMain(db, isElectron);
-    if (lemmaChangedCount > 0) {
-      console.info(
-        `ℹ️ Regenerated ${lemmaChangedCount} ingredient lemma value(s).`,
-      );
-    }
     if (baseVariantChangedCount > 0) {
       console.info(
         `ℹ️ Repaired ${baseVariantChangedCount} ingredient base variant row(s).`,
@@ -2061,9 +2046,6 @@ async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
 }
 
 function deriveIngredientLemmaInMain(rawTitle) {
-  if (typeof window.bridge?.deriveIngredientLemma === 'function') {
-    return String(window.bridge.deriveIngredientLemma(rawTitle) || '').trim();
-  }
   return String(rawTitle || '').trim();
 }
 
@@ -2446,19 +2428,9 @@ function getRecipeIngredientShoppingCount(line) {
 const SHOPPING_PLAN_LINKED_RECIPE_MAX_DEPTH = 2;
 
 function loadShoppingPlanRecipeFromDB(db, recipeId) {
-  if (
-    !db ||
-    typeof db.exec !== 'function' ||
-    !window.bridge ||
-    typeof window.bridge.loadRecipeFromDB !== 'function'
-  ) {
-    return null;
-  }
-  try {
-    return window.bridge.loadRecipeFromDB(db, recipeId);
-  } catch (_) {
-    return null;
-  }
+  void db;
+  void recipeId;
+  return null;
 }
 
 function getRecipeServingsMultiplierForShoppingPlan(recipeId, recipe) {
@@ -3351,12 +3323,7 @@ function getShoppingPlanSelectionRows(options = {}) {
 
   Object.values(getShoppingPlanItemSelections()).forEach(addSelectedItemBucket);
 
-  if (
-    db &&
-    typeof db.exec === 'function' &&
-    window.bridge &&
-    typeof window.bridge.loadRecipeFromDB === 'function'
-  ) {
+  if (db && typeof db.exec === 'function') {
     Object.values(getShoppingPlanRecipeSelections()).forEach((selection) => {
       const recipeId = Number(selection?.recipeId);
       const recipeCount = Number(selection?.quantity || 0);
@@ -4171,7 +4138,7 @@ if (!shouldDeferSqlBootForCurrentPage()) {
   bootFavoriteEatsAfterSqlReady();
 }
 
-// Browser-only database loading and `dist/web` have been removed;
+// Browser-only database loading and static web builds have been removed;
 // use `npm start` (Electron) only.
 
 // Recipes page logic

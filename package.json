@@ -12,8 +12,7 @@
     "test:ingredient-parser": "node tests/runIngredientPasteParserTests.js",
     "test:recipe-tags-keyboard": "node tests/runRecipeTagsKeyboardTests.js",
     "test:typeahead-keyboard": "node tests/runTypeaheadKeyboardTests.js",
-    "test:unit-size-state": "node tests/runUnitSizeStateTests.js",
-    "test:web-build": "node tests/runWebBuildTests.js"
+    "test:unit-size-state": "node tests/runUnitSizeStateTests.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -23,7 +22,6 @@
     "appId": "com.spoonfloor.favoriteeats",
     "files": [
       "**/*",
-      "!recipe-lan-server/**",
       "!**/.venv/**"
     ],
     "mac": {
