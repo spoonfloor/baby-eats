@@ -91,12 +91,9 @@
   }
 
   function init() {
-    if (global.favoriteEatsGate && typeof global.favoriteEatsGate.hasAccess === 'function') {
-      if (global.favoriteEatsGate.hasAccess()) {
-        global.location.replace('recipes.html');
-        return;
-      }
-    }
+    try {
+      global.sessionStorage.removeItem('favoriteEatsSplashAccess');
+    } catch (_) {}
     const form = global.document.getElementById('splashGateForm');
     if (form instanceof HTMLFormElement) {
       form.addEventListener('submit', onSubmit);
