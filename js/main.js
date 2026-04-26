@@ -1,6 +1,3 @@
-// Shared SQL.js init (offline / local version)
-let SQL;
-
 // Set by loadStoresPage: if Cmd+↑/↓ should reorder a selected row instead of changing tabs.
 /** @type {null | ((e: KeyboardEvent) => boolean)} */
 let consumeCmdVerticalArrowBeforeTopLevelNav = null;
@@ -4056,124 +4053,118 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
 }
 
 function bootFavoriteEatsAfterSqlReady() {
-  initSqlJs({
-    locateFile: (file) => `js/${file}`, // load local sql-wasm.wasm
-  }).then((sql) => {
-    SQL = sql;
+  // --- page load routing ---
 
-    // --- page load routing ---
+  if (redirectIfPublicWebPageIsDisallowed()) return;
 
-    if (redirectIfPublicWebPageIsDisallowed()) return;
+  const pageId = detectPageIdFromBody();
 
-    const pageId = detectPageIdFromBody();
+  // --- Cmd/Ctrl+S: invoke visible editor Save action ---
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.isComposing) return;
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (String(e.key || '').toLowerCase() !== 's') return;
 
-    // --- Cmd/Ctrl+S: invoke visible editor Save action ---
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        if (e.isComposing) return;
-        if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-        if (String(e.key || '').toLowerCase() !== 's') return;
+      const saveBtn = document.getElementById('appBarSaveBtn');
+      if (!(saveBtn instanceof HTMLButtonElement)) return;
+      if (saveBtn.disabled) return;
 
-        const saveBtn = document.getElementById('appBarSaveBtn');
-        if (!(saveBtn instanceof HTMLButtonElement)) return;
-        if (saveBtn.disabled) return;
+      const styles = window.getComputedStyle(saveBtn);
+      if (styles.display === 'none' || styles.visibility === 'hidden') return;
 
-        const styles = window.getComputedStyle(saveBtn);
-        if (styles.display === 'none' || styles.visibility === 'hidden') return;
+      e.preventDefault();
+      e.stopPropagation();
+      saveBtn.click();
+    },
+    { capture: true },
+  );
 
-        e.preventDefault();
-        e.stopPropagation();
-        saveBtn.click();
-      },
-      { capture: true },
-    );
+  // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages ---
+  const TOP_LEVEL_PAGES = getTopLevelPageOrder();
 
-    // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages ---
-    const TOP_LEVEL_PAGES = getTopLevelPageOrder();
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.isComposing) return;
 
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
-        if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-        if (e.isComposing) return;
+      if (
+        !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
+      )
+        return;
+      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
+        return;
+      if (TOP_LEVEL_PAGES.length <= 1) return;
+      const idx = TOP_LEVEL_PAGES.indexOf(pageId);
+      if (idx === -1) return; // only act on top-level list pages
 
-        if (
-          !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
-        )
-          return;
-        if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
-          return;
-        if (TOP_LEVEL_PAGES.length <= 1) return;
-        const idx = TOP_LEVEL_PAGES.indexOf(pageId);
-        if (idx === -1) return; // only act on top-level list pages
+      // Stores: Cmd+↑/↓ reorders when a row has keyboard selection (red), not tab switching.
+      if (
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+        typeof consumeCmdVerticalArrowBeforeTopLevelNav === 'function'
+      ) {
+        try {
+          if (consumeCmdVerticalArrowBeforeTopLevelNav(e)) return;
+        } catch (_) {}
+      }
 
-        // Stores: Cmd+↑/↓ reorders when a row has keyboard selection (red), not tab switching.
-        if (
-          (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-          typeof consumeCmdVerticalArrowBeforeTopLevelNav === 'function'
-        ) {
-          try {
-            if (consumeCmdVerticalArrowBeforeTopLevelNav(e)) return;
-          } catch (_) {}
-        }
+      // Treat Up like Left, and Down like Right.
+      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+      const nextIdx =
+        (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
 
-        // Treat Up like Left, and Down like Right.
-        const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-        const nextIdx =
-          (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
+      e.preventDefault();
+      window.location.href = getTopLevelPageHref(TOP_LEVEL_PAGES[nextIdx]);
+    },
+    { capture: true },
+  );
 
-        e.preventDefault();
-        window.location.href = getTopLevelPageHref(TOP_LEVEL_PAGES[nextIdx]);
-      },
-      { capture: true },
-    );
+  // --- Cmd+↑: go to parent/back page on editor pages ---
+  const CHILD_EDITOR_PAGES = new Set([
+    'recipe-editor',
+    'shopping-editor',
+    'unit-editor',
+    'size-editor',
+    'tag-editor',
+    'store-editor',
+  ]);
 
-    // --- Cmd+↑: go to parent/back page on editor pages ---
-    const CHILD_EDITOR_PAGES = new Set([
-      'recipe-editor',
-      'shopping-editor',
-      'unit-editor',
-      'size-editor',
-      'tag-editor',
-      'store-editor',
-    ]);
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.isComposing) return;
 
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
-        if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-        if (e.isComposing) return;
+      if (e.key !== 'ArrowUp') return;
+      if (!CHILD_EDITOR_PAGES.has(pageId)) return;
+      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
+        return;
 
-        if (e.key !== 'ArrowUp') return;
-        if (!CHILD_EDITOR_PAGES.has(pageId)) return;
-        if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
-          return;
+      const backBtn = document.getElementById('appBarBackBtn');
+      if (!backBtn) return;
 
-        const backBtn = document.getElementById('appBarBackBtn');
-        if (!backBtn) return;
+      e.preventDefault();
+      backBtn.click();
+    },
+    { capture: true },
+  );
 
-        e.preventDefault();
-        backBtn.click();
-      },
-      { capture: true },
-    );
+  const pageLoaders = {
+    recipes: loadRecipesPage,
+    'recipe-editor': loadRecipeEditorPage,
+  };
 
-    const pageLoaders = {
-      recipes: loadRecipesPage,
-      'recipe-editor': loadRecipeEditorPage,
-    };
-
-    if (pageId && pageLoaders[pageId]) {
-      pageLoaders[pageId]();
-      return;
-    }
-    if (pageId && pageId !== 'welcome') {
-      window.location.href = 'recipes.html';
-    }
-  });
+  if (pageId && pageLoaders[pageId]) {
+    pageLoaders[pageId]();
+    return;
+  }
+  if (pageId && pageId !== 'welcome') {
+    window.location.href = 'recipes.html';
+  }
 }
 
 if (!shouldDeferSqlBootForCurrentPage()) {
@@ -4182,23 +4173,6 @@ if (!shouldDeferSqlBootForCurrentPage()) {
 
 // Browser-only database loading and `dist/web` have been removed;
 // use `npm start` (Electron) only.
-
-function assertMinimalRecipeSchemaOrThrow(db) {
-  if (!db) throw new Error('Missing database instance.');
-  const required = new Set(['recipes', 'tags', 'recipe_tag_map']);
-  const q = db.exec(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
-  );
-  const rows = q.length ? q[0].values : [];
-  const seen = new Set(
-    rows.map((row) => String((Array.isArray(row) ? row[0] : '') || '').trim()),
-  );
-  required.forEach((name) => {
-    if (!seen.has(name)) {
-      throw new Error(`Database missing required table: ${name}`);
-    }
-  });
-}
 
 // Recipes page logic
 async function loadRecipesPage() {
