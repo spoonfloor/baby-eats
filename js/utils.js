@@ -413,9 +413,7 @@ function isCompactWebAppBarModeActive() {
         ).matches
       : Number(window.innerWidth || 0) <= COMPACT_WEB_APP_BAR_MAX_WIDTH_PX;
   if (!isSnugWidth) return false;
-  if (body.dataset?.forceWebMode === 'on') return true;
-  // Editor/Electron: same CSS snug layout as web but without force-web presentation.
-  return !!window.electronAPI;
+  return true;
 }
 
 function getCompactWebAppBarSearchElements() {

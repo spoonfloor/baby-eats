@@ -88,9 +88,7 @@ function uiToastUndo(message, onUndo, { timeoutMs = 8000 } = {}) {
 }
 
 const FAVORITE_EATS_BUILD_DEFAULTS = Object.freeze({
-  target: 'desktop',
-  forceWebExperience: false,
-  allowHiddenForceWebModeToggle: true,
+  target: 'web',
 });
 
 function readFavoriteEatsBuildConfig() {
@@ -99,16 +97,11 @@ function readFavoriteEatsBuildConfig() {
     if (!raw || typeof raw !== 'object') {
       return { ...FAVORITE_EATS_BUILD_DEFAULTS };
     }
-    const target = String(raw.target || FAVORITE_EATS_BUILD_DEFAULTS.target)
-      .trim()
-      .toLowerCase();
+    const target = String(raw.target || FAVORITE_EATS_BUILD_DEFAULTS.target).trim().toLowerCase();
     return {
       ...FAVORITE_EATS_BUILD_DEFAULTS,
       ...raw,
-      target: target === 'web' ? 'web' : FAVORITE_EATS_BUILD_DEFAULTS.target,
-      forceWebExperience: raw.forceWebExperience === true,
-      allowHiddenForceWebModeToggle:
-        raw.allowHiddenForceWebModeToggle !== false,
+      target: target === 'web' ? 'web' : 'web',
     };
   } catch (_) {
     return { ...FAVORITE_EATS_BUILD_DEFAULTS };
@@ -116,64 +109,10 @@ function readFavoriteEatsBuildConfig() {
 }
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
-/* '1' = planner (force-web) layout on; absent or '0' = off (editing / native
-   shell). Replaces legacy favoriteEatsForceWebMode. Default is editing until the
-   user turns force-web on via the nav switch or shortcut. */
-const PLANNER_LAYOUT_STORAGE_KEY = 'favoriteEatsPlannerOn';
-/** Dispatched on `window` when planner (force-web) mode flips. `detail.enabled` is a boolean. */
 const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
-// Only enforced when isPublicWebExperienceLocked() (public web build with injected
-// __FAVORITE_EATS_BUILD__). Electron always has target desktop — not affected. Recipe editor
-// Recipe catalog uses recipes.html; recipeEditor.html is title + tag editing only when `recipe_steps` is absent.
-const PUBLIC_WEB_PAGE_REDIRECTS = Object.freeze({
-  shopping: 'recipes',
-  'shopping-list': 'recipes',
-  'shopping-editor': 'recipes',
-  stores: 'recipes',
-  'store-editor': 'recipes',
-  tags: 'recipes',
-  'tag-editor': 'recipes',
-  units: 'recipes',
-  'unit-editor': 'recipes',
-  sizes: 'recipes',
-  'size-editor': 'recipes',
-});
-
-function isPublicWebExperienceLocked() {
-  return (
-    FAVORITE_EATS_BUILD.target === 'web' &&
-    FAVORITE_EATS_BUILD.forceWebExperience
-  );
-}
-
-function isHiddenForceWebModeToggleAllowed() {
-  return (
-    !isPublicWebExperienceLocked() &&
-    FAVORITE_EATS_BUILD.allowHiddenForceWebModeToggle !== false
-  );
-}
-
-function getPublicWebRedirectPageId(
-  pageId = document.body?.dataset?.page || '',
-) {
-  if (!isPublicWebExperienceLocked()) return '';
-  const key = String(pageId || '')
-    .trim()
-    .toLowerCase();
-  if (!key) return '';
-  return PUBLIC_WEB_PAGE_REDIRECTS[key] || '';
-}
-
-function redirectIfPublicWebPageIsDisallowed() {
-  const redirectPageId = getPublicWebRedirectPageId();
-  if (!redirectPageId) return false;
-  window.location.replace(getTopLevelPageHref(redirectPageId));
-  return true;
-}
 
 function isForceWebModeEnabled() {
-  if (isPublicWebExperienceLocked()) return true;
-  // Desktop/Electron: planner (purple) mode removed — always use editor (red) chrome.
+  // Single-mode app: force-web/planner split removed.
   return false;
 }
 
@@ -230,15 +169,6 @@ function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
   return forceWebMode;
 }
 
-function setForceWebModeEnabled(enabled) {
-  if (isPublicWebExperienceLocked()) {
-    return applyForceWebModePresentation(true);
-  }
-  // Non–public-web builds: no-op; presentation stays editor (see isForceWebModeEnabled).
-  void enabled;
-  return applyForceWebModePresentation(false);
-}
-
 function getTopLevelPageOrder() {
   // Recipes-only shell: no other top-level tabs.
   return ['recipes'];
@@ -262,14 +192,20 @@ function applyDocumentThemePlatform(planner = isForceWebModeEnabled()) {
   root.dataset.platform = planner ? 'planner' : 'editor';
 }
 
-if (!redirectIfPublicWebPageIsDisallowed()) {
-  applyForceWebModePresentation();
-}
+applyForceWebModePresentation();
 window.forceWebMode = Object.freeze({
   isEnabled: isForceWebModeEnabled,
-  setEnabled: setForceWebModeEnabled,
+  setEnabled: () => applyForceWebModePresentation(false),
   apply: applyForceWebModePresentation,
 });
+
+function getFavoriteEatsDataApi() {
+  const api = window.favoriteEatsDataApi;
+  if (!api || typeof api !== 'object') {
+    throw new Error('Supabase web data API is not available.');
+  }
+  return api;
+}
 
 function isTypingContext(target) {
   const el = target instanceof Element ? target : null;
@@ -4143,13 +4079,7 @@ if (!shouldDeferSqlBootForCurrentPage()) {
 
 // Recipes page logic
 async function loadRecipesPage() {
-  if (
-    !window.electronAPI ||
-    typeof window.electronAPI.supabaseListRecipes !== 'function'
-  ) {
-    uiToast('This app must run in the desktop (Electron) build. Use npm start.');
-    return;
-  }
+  const dataApi = getFavoriteEatsDataApi();
   window.dbInstance = null;
   window.recipeEditorCatalogOnlyMode = true;
 
@@ -4777,8 +4707,8 @@ async function loadRecipesPage() {
   });
 
   try {
-    const remoteRows = await window.electronAPI.supabaseListRecipes();
-    const remoteTagPool = await window.electronAPI.supabaseListVisibleTags();
+    const remoteRows = await dataApi.listRecipes();
+    const remoteTagPool = await dataApi.listVisibleTags();
     allVisibleTagNames = Array.isArray(remoteTagPool)
       ? remoteTagPool
           .map((name) => String(name || '').trim())
@@ -4835,7 +4765,7 @@ async function loadRecipesPage() {
     const title = vals.title;
     let newId = null;
     try {
-      newId = await window.electronAPI.supabaseCreateRecipe({
+      newId = await dataApi.createRecipe({
         title,
         servings_min: 0.5,
         servings_max: 99,
@@ -4865,7 +4795,7 @@ async function loadRecipesPage() {
     if (!ok) return;
 
     try {
-      await window.electronAPI.supabaseDeleteRecipe(recipeId);
+      await dataApi.deleteRecipe(recipeId);
     } catch (err) {
       console.error('❌ Failed to delete recipe:', err);
       window.ui.toast({ message: 'Failed to delete recipe. See console.' });
@@ -7594,11 +7524,7 @@ function initBottomNav() {
     syncBottomNavPills(pillRow);
   }
 
-  if (
-    isHiddenForceWebModeToggleAllowed() &&
-    pillRow instanceof HTMLElement &&
-    !nav.querySelector('.bottom-nav-editor-section')
-  ) {
+  if (false && pillRow instanceof HTMLElement && !nav.querySelector('.bottom-nav-editor-section')) {
     const editorSection = document.createElement('div');
     editorSection.className = 'bottom-nav-editor-section';
     const editorLabel = document.createElement('label');
@@ -8539,15 +8465,7 @@ async function resolveUnknownUnitCodes({
 
 // --- Recipe editor loader (full editor when `recipe_steps` exists; else title + tags only) ---
 async function loadRecipeEditorPage() {
-  const isElectron = !!window.electronAPI;
-  if (
-    !isElectron ||
-    typeof window.electronAPI.supabaseGetRecipeById !== 'function'
-  ) {
-    uiToast('This app must run in the desktop (Electron) build. Use npm start.');
-    window.location.href = 'recipes.html';
-    return;
-  }
+  const dataApi = getFavoriteEatsDataApi();
 
   const recipeId = sessionStorage.getItem('selectedRecipeId');
   if (!recipeId) {
@@ -8563,9 +8481,8 @@ async function loadRecipeEditorPage() {
   const isRecipeWebMode = isForceWebModeEnabled();
   let recipe = null;
   try {
-    recipe = await window.electronAPI.supabaseGetRecipeById(Number(recipeId));
-    window.recipeEditorTagOptions =
-      (await window.electronAPI.supabaseListVisibleTags()) || [];
+    recipe = await dataApi.getRecipeById(Number(recipeId));
+    window.recipeEditorTagOptions = (await dataApi.listVisibleTags()) || [];
   } catch (err) {
     console.error('❌ Failed to load recipe from Supabase:', err);
     window.recipeEditorTagOptions = [];
@@ -8716,7 +8633,7 @@ async function loadRecipeEditorPage() {
           throw new Error('saveRecipeToDB is not available');
         }
         const refreshed = await saveRecipeToDB();
-        if (window.electronAPI) uiToast('Saved.');
+        uiToast('Saved.');
 
         if (refreshed) {
           window.originalRecipeSnapshot = JSON.parse(JSON.stringify(refreshed));

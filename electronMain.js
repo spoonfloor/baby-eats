@@ -7,6 +7,8 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY ||
   'sb_publishable_OEspL1dwwLl7aOAH6Q8bCg_1jKnbkzu';
+const DEFAULT_WEB_APP_URL =
+  process.env.APP_WEB_URL || 'https://erichenry.github.io/baby-eats/';
 
 function assertSupabaseEnv() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -54,8 +56,10 @@ function createWindow() {
     },
   });
 
-  // Launch directly into the recipes home page (no splash screen).
-  win.loadFile('recipes.html');
+  // Desktop shell now wraps the hosted web app.
+  win.loadURL(DEFAULT_WEB_APP_URL).catch((err) => {
+    console.error('Failed to load hosted web app URL:', err);
+  });
 
   // Enforce a consistent no-zoom baseline on every page load.
   // This prevents page-to-page zoom drift and guarantees zoom won't "stick"

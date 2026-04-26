@@ -704,19 +704,7 @@ function navigateToShoppingItemEditor(selection) {
 }
 
 function isIngredientRecipeWebModeActive() {
-  try {
-    if (
-      window.forceWebMode &&
-      typeof window.forceWebMode.isEnabled === 'function'
-    ) {
-      return !!window.forceWebMode.isEnabled();
-    }
-  } catch (_) {}
-  try {
-    return document.body?.dataset?.forceWebMode === 'on';
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 function navigateToShoppingListTarget(rawName) {

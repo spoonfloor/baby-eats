@@ -9,19 +9,7 @@ window._hasPendingEdit = false; // enables Cancel as soon as typing starts
 window.originalRecipeSnapshot = null;
 
 function recipeEditorIsWebMode() {
-  try {
-    if (
-      window.forceWebMode &&
-      typeof window.forceWebMode.isEnabled === 'function'
-    ) {
-      return !!window.forceWebMode.isEnabled();
-    }
-  } catch (_) {}
-  try {
-    return document.body?.dataset?.forceWebMode === 'on';
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 // --- Display / selection helpers shared across editor ---
@@ -295,14 +283,14 @@ async function saveRecipeToDB() {
   };
 
   if (
-    !window.electronAPI ||
-    typeof window.electronAPI.supabaseSaveRecipeMeta !== 'function'
+    !window.favoriteEatsDataApi ||
+    typeof window.favoriteEatsDataApi.saveRecipeMeta !== 'function'
   ) {
     throw new Error('saveRecipeToDB: no data backend available');
   }
   const title = String(recipe.title || '').trim();
   recipe.tags = normalizeRecipeTagsForModel(recipe.tags);
-  const refreshed = await window.electronAPI.supabaseSaveRecipeMeta({
+  const refreshed = await window.favoriteEatsDataApi.saveRecipeMeta({
     id: rid,
     title,
     servings: {

@@ -158,19 +158,7 @@ function findYwnCanonicalNameByLemma(rawLemma) {
 }
 
 function isRecipeWebModeActive() {
-  try {
-    if (
-      window.forceWebMode &&
-      typeof window.forceWebMode.isEnabled === 'function'
-    ) {
-      return !!window.forceWebMode.isEnabled();
-    }
-  } catch (_) {}
-  try {
-    return document.body?.dataset?.forceWebMode === 'on';
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 // Step row placeholder: default (native editor) vs web when the recipe has no real steps.
