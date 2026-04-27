@@ -1735,46 +1735,6 @@ function tableHasColumnInMain(db, tableName, colName) {
   }
 }
 
-function dropLegacyVariantAisleUniqueIndexesInMain(db) {
-  if (!db) return false;
-  let changed = false;
-  try {
-    const listQ = db.exec(
-      `PRAGMA index_list('ingredient_variant_store_location');`,
-    );
-    const rows =
-      Array.isArray(listQ) && listQ.length > 0 && Array.isArray(listQ[0].values)
-        ? listQ[0].values
-        : [];
-    rows.forEach((row) => {
-      const indexName = String((Array.isArray(row) ? row[1] : '') || '').trim();
-      const isUnique = Number(Array.isArray(row) ? row[2] : 0) === 1;
-      if (!indexName || !isUnique) return;
-      try {
-        const infoQ = db.exec(
-          `PRAGMA index_info(${JSON.stringify(indexName)});`,
-        );
-        const infoRows =
-          Array.isArray(infoQ) &&
-          infoQ.length > 0 &&
-          Array.isArray(infoQ[0].values)
-            ? infoQ[0].values
-            : [];
-        const cols = infoRows
-          .map((infoRow) =>
-            String((Array.isArray(infoRow) ? infoRow[2] : '') || '').trim(),
-          )
-          .filter(Boolean);
-        if (cols.length === 1 && cols[0] === 'ingredient_variant_id') {
-          db.run(`DROP INDEX IF EXISTS "${indexName.replace(/"/g, '""')}";`);
-          changed = true;
-        }
-      } catch (_) {}
-    });
-  } catch (_) {}
-  return changed;
-}
-
 function ensureRecipeTagsSchemaInMain(db) {
   if (!db) return false;
   try {
@@ -1985,12 +1945,6 @@ async function persistBinaryArrayInMain(
   }
 }
 
-async function persistDbForCurrentRuntime(db, options = {}) {
-  if (!db) return;
-  const binaryArray = db.export();
-  await persistBinaryArrayInMain(binaryArray, options);
-}
-
 function ensureIngredientBaseVariantsInMain(db) {
   if (
     !db ||
@@ -2181,13 +2135,7 @@ async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
   return changedCount;
 }
 
-function deriveIngredientLemmaInMain(rawTitle) {
-  return String(rawTitle || '').trim();
-}
-
 const LAST_PAGE_SESSION_KEY = 'favoriteEats:last-page-id';
-const SHOPPING_FILTER_CHIPS_SESSION_KEY_LEGACY =
-  'favoriteEats:shopping-filter-chips';
 const SHOPPING_FILTER_CHIPS_SESSION_KEY_PREFIX =
   'favoriteEats:shopping-filter-chips';
 /** Prefix for Items-page tag filter chip ids (avoids collisions with home location ids). */
@@ -8120,39 +8068,6 @@ function applyBottomNavActiveState(pillRow, activeTab) {
   });
 }
 
-function getListPageBottomNavActiveTab() {
-  const body = document.body;
-  if (!body) return null;
-  if (body.classList.contains('recipes-page')) return 'recipes';
-  return null;
-}
-
-function reconcileAfterForceWebModeToggle() {
-  const pillRow = document.querySelector('.bottom-nav-pill-row');
-  const activeTab = getListPageBottomNavActiveTab();
-  if (pillRow instanceof HTMLElement) {
-    syncBottomNavPills(pillRow);
-    if (activeTab) applyBottomNavActiveState(pillRow, activeTab);
-  }
-  const nextPages = getTopLevelPageOrder();
-  const currentPage = String(activeTab || detectPageIdFromBody() || '')
-    .trim()
-    .toLowerCase();
-  if (!nextPages.includes(currentPage)) {
-    const targetPage = nextPages.includes('recipes')
-      ? 'recipes'
-      : nextPages[0] || 'recipes';
-    window.location.href = getTopLevelPageHref(targetPage);
-  }
-}
-
-function syncBottomNavEditorToggleCheckedState() {
-  const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
-  if (bottomNavEditorToggle instanceof HTMLInputElement) {
-    bottomNavEditorToggle.checked = false;
-  }
-}
-
 // --- Bottom navigation wiring (list pages only) ---
 function initBottomNav() {
   const nav = document.querySelector('.bottom-nav');
@@ -9497,6 +9412,3 @@ window.openStoreAisle = function openStoreAisle(
   proceed();
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  // (intentionally empty) legacy DOMContentLoaded wiring removed
-});
