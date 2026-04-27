@@ -4275,7 +4275,7 @@ async function loadRecipesPage() {
   const addBtnRecipes = document.getElementById('appBarAddBtn');
   const recipesActionBtn = addBtnRecipes;
   const recipesMenuBtn = document.getElementById('appBarMenuPlanBtn');
-  if (recipesMenuBtn) recipesMenuBtn.hidden = false;
+  if (recipesMenuBtn) recipesMenuBtn.hidden = true;
 
   const list = document.getElementById('recipeList');
   if (!list) return;
@@ -5059,11 +5059,6 @@ async function loadRecipesPage() {
         rerenderFilteredRecipes();
       },
     );
-  }
-  if (recipesMenuBtn) {
-    recipesMenuBtn.addEventListener('click', () => {
-      void openMenuPlanDialog();
-    });
   }
 }
 
@@ -8684,7 +8679,7 @@ async function loadRecipeEditorPage() {
   window.recipeEditorCatalogOnlyMode = true;
 
   window.recipeId = recipeId;
-  const isRecipeWebMode = true;
+  const isRecipeWebMode = false;
   let recipe = null;
   try {
     recipe = await dataApi.getRecipeById(Number(recipeId));
@@ -8858,6 +8853,11 @@ async function loadRecipeEditorPage() {
       }
     }),
   });
+  const recipeEditorMenuPlanBtn = document.getElementById('appBarMenuPlanBtn');
+  if (recipeEditorMenuPlanBtn) {
+    recipeEditorMenuPlanBtn.hidden = true;
+    recipeEditorMenuPlanBtn.style.display = 'none';
+  }
 
   window.recipeWebModeSyncAppBar = () => {
     const cancelBtn = document.getElementById('appBarCancelBtn');
