@@ -33,8 +33,8 @@ main {
 html,
 body {
   height: 100%;
-  color: #191919;
-  background: #fff;
+  color: var(--font-color-near-black);
+  background: var(--surface-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-family: var(--main-font);

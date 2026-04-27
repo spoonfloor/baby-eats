@@ -1,16 +1,16 @@
 /*
- * Editor theme: red primary (default build uses force-web off; Electron-styled list chrome).
+ * Editor theme: purple primary (default build uses force-web off; Electron-styled list chrome).
  * Optional <html data-platform="editor">; tokens below drive chips/pills and accent neutrals.
  * Light surfaces: color-mix(in srgb, accent, white) for chip/pill wash.
  */
 :root,
 :root[data-platform='editor'],
 :root:not([data-platform]) {
-  /* Editor: primary #ec413f; error #ff18fc */
-  --palette-accent: oklch(0.594 0.202 26.3);
-  --palette-accent-emphasis: oklch(0.528 0.196 26.3);
+  /* Purple theme reference tokens */
+  --palette-accent: oklch(0.573 0.23 285.75);
+  --palette-accent-emphasis: oklch(0.607 0.215 286);
   /* Error / validation / deprecated — #ff18fc */
-  --palette-error: oklch(0.73 0.3 327.5);
+  --palette-error: oklch(0.718 0.344 328.5);
 }
 :root {
   /* --- Typography --- */
@@ -27,6 +27,29 @@
   --subtitle: #333333;
   --field-bg: #f5f5f5;
   --edit-mode-color: #2184ff;
+  --text-inverse: #fff;
+  --surface-bg: #fff;
+  --surface-hover-subtle: hsl(270, 0%, 96%);
+  --surface-hover-subtle-strong: hsl(270, 0%, 92%);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.25);
+  --border-soft: rgba(0, 0, 0, 0.2);
+  --border-soft-strong: rgba(0, 0, 0, 0.45);
+  --text-muted-40: rgba(0, 0, 0, 0.4);
+  --text-muted-42: rgba(0, 0, 0, 0.42);
+  --text-muted-55: rgba(0, 0, 0, 0.55);
+  --text-muted-70: rgba(0, 0, 0, 0.7);
+  --text-disabled: rgba(0, 0, 0, 0.45);
+  --input-bg: hsl(0, 0%, 98%);
+  --edit-focus-bg: #e5eefa;
+  --edit-focus-border: #b5ceff;
+  --edit-active-muted: rgba(33, 132, 255, 0.55);
+  --overlay-backdrop: rgba(0, 0, 0, 0.42);
+  --overlay-backdrop-soft: rgba(0, 0, 0, 0.4);
+  --toast-bg: rgba(25, 25, 25, 0.92);
+  --toast-hover-bg: rgba(255, 255, 255, 0.12);
+  --focus-ring-on-dark: rgba(255, 255, 255, 0.8);
+  --focus-ring-on-dark-strong: rgba(255, 255, 255, 0.85);
 
   --color-accent: var(--palette-accent);
   --color-accent-emphasis: var(--palette-accent-emphasis);
@@ -72,7 +95,7 @@
   --top-level-list-row-height-electron: 40px;
   --top-level-list-row-height-web: 40px;
 
-  --section-label-color: rgba(0, 0, 0, 0.55);
+  --section-label-color: var(--text-muted-55);
   /* Top-level empty-state tuning knobs */
   --top-level-empty-font-size: 16px;
   --top-level-empty-color: var(--section-label-color);
@@ -191,7 +214,7 @@
   --app-filter-chip-bg: var(--pill-bg);
   --app-filter-chip-fg: var(--theme-primary);
   --app-filter-chip-active-bg: var(--theme-primary);
-  --app-filter-chip-active-fg: #fff;
+  --app-filter-chip-active-fg: var(--text-inverse);
   --shopping-filter-chip-font-size: var(--ingredient-editor-control-font-size);
   --shopping-filter-chip-font-weight: var(--body-font-weight);
   --shopping-filter-chip-height: 30px;
@@ -201,9 +224,9 @@
   --shopping-filter-chip-bg: var(--pill-bg);
   --shopping-filter-chip-fg: var(--theme-primary);
   --shopping-filter-chip-active-bg: var(--theme-primary);
-  --shopping-filter-chip-active-fg: #fff;
+  --shopping-filter-chip-active-fg: var(--text-inverse);
   --app-filter-chip-dropdown-gap: 7px;
-  --app-filter-chip-dropdown-panel-bg: #fff;
+  --app-filter-chip-dropdown-panel-bg: var(--surface-bg);
   --app-filter-chip-dropdown-panel-shadow: 0 14px 30px rgb(0 0 0 / 0.16);
   /* Location dropdown panel spacing (edit these) */
   --app-filter-chip-dropdown-row-gap: 6px; /* gap between option rows */
@@ -253,7 +276,7 @@
   color: inherit;
   /* padding: 80px; so card doesn’t touch screen edges */
 }.welcome-card {
-  background: white;
+  background: var(--surface-bg);
   /* background: var(--theme-primary-light); */
   color: var(--font-color-near-black);
   border-radius: 8px;
@@ -305,7 +328,7 @@
   outline: none;
   border-color: color-mix(in srgb, var(--theme-primary) 55%, transparent);
   box-shadow: 0 0 0 3px rgb(from var(--palette-accent) r g b / 0.16);
-  background: #fff;
+  background: var(--surface-bg);
 }
 #splashGateForm .button {
   width: var(--splash-gate-control-width);
@@ -318,7 +341,7 @@
   line-height: inherit;
   padding: 0 1.5rem;
   background: var(--theme-secondary);
-  color: white;
+  color: var(--text-inverse);
   border: none;
   border-radius: 9999px;
   outline: none;
@@ -408,7 +431,7 @@
 }.app-filter-chip.is-active:hover {
   background: var(--app-filter-chip-active-bg);
 }.app-filter-chip:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline: 2px solid var(--focus-ring-on-dark);
   outline-offset: 1px;
 }.app-filter-chip-dropdown-wrap {
   position: relative;
@@ -436,7 +459,7 @@
   text-align: left;
   line-height: 1;
 }.app-filter-chip-dropdown-open:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline: 2px solid var(--focus-ring-on-dark);
   outline-offset: 1px;
   border-radius: 8px;
 }.app-filter-chip-dropdown-clear {
@@ -454,7 +477,7 @@
 }.app-filter-chip--dropdown-pill.is-active .app-filter-chip-dropdown-clear {
   color: var(--app-filter-chip-active-fg);
 }.app-filter-chip-dropdown-clear:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline: 2px solid var(--focus-ring-on-dark-strong);
   outline-offset: 1px;
 }.app-filter-chip-dropdown-clear-icon.material-symbols-outlined {
   font-size: 18px;
@@ -525,7 +548,7 @@
   border-radius: 8px;
 }
 /* Unselected hover: same as `.list-view li:hover:not(.is-selected)` */.app-filter-chip-dropdown-option:hover:not(.is-selected):not(.is-disabled) {
-  background-color: hsl(270, 0%, 96%);
+  background-color: var(--surface-hover-subtle);
 }
 /* Selected: default chip look (not active / pressed chip) */.app-filter-chip-dropdown-option.is-selected {
   background: var(--app-filter-chip-bg);
@@ -566,7 +589,7 @@ body.recipes-page
   gap: 12px;
   min-height: 24px;
   margin-bottom: 4px; /* gap between header and items */
-  color: rgba(0, 0, 0, 0.42);
+  color: var(--text-muted-42);
   cursor: default;
   pointer-events: none;
   /* `.list-page li` + force-web row rules use overflow:hidden; allow SERVINGS/SVGS to extend */
@@ -640,7 +663,7 @@ body.recipes-page[data-force-web-mode='off']
   font-family: var(--main-font);
   font-size: var(--body-font-size);
   font-weight: var(--body-font-weight);
-  color: rgba(0, 0, 0, 0.4);
+  color: var(--text-muted-40);
   user-select: none;
   line-height: 32px;
   min-height: 32px;
@@ -673,9 +696,9 @@ body.recipes-page[data-force-web-mode='off']
   }}
 @media (prefers-reduced-motion: reduce) {}
 /* ── Variant expansion: child rows ── */.list-view li.is-selected {
-  background-color: hsl(270, 0%, 96%);
+  background-color: var(--surface-hover-subtle);
 }.list-view li:hover:not(.is-selected) {
-  background-color: hsl(270, 0%, 96%);
+  background-color: var(--surface-hover-subtle);
 }.list-view li.list-section-label {
   cursor: default;
   user-select: none;
@@ -735,7 +758,7 @@ body.recipes-page[data-force-web-mode='off']
   padding: 6px 0;
 }.ui-dialog-panel .shopping-item-toggle span{
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.7);
+  color: var(--text-muted-70);
 }.ui-dialog-panel .shopping-item-toggle input[type='checkbox'],
 .ui-dialog-panel .shopping-item-toggle input[type='radio']{
   appearance: none;
@@ -743,8 +766,8 @@ body.recipes-page[data-force-web-mode='off']
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  background: #fff;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-bg);
   display: inline-grid;
   place-content: center;
 }.ui-dialog-panel .shopping-item-toggle input[type='checkbox']:checked,
@@ -787,7 +810,7 @@ body.recipes-page[data-force-web-mode='off']
 }body.recipe-editor-page .ingredient-row-move-btn {
   border: 0;
   background: transparent;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--text-muted-55);
   width: 22px;
   height: 22px;
   display: inline-flex;
@@ -1131,7 +1154,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   box-sizing: border-box;
 }
 /* Freeze web-mode rows separately so Electron and web can be tuned visually. */.list-page li:hover:not(.is-selected) {
-  background-color: hsl(270, 0%, 96%);
+  background-color: var(--surface-hover-subtle);
 }.list-page.top-level-kbd-nav li:hover:not(.is-selected) {
   background-color: transparent;
 }
@@ -1146,7 +1169,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
 }.app-bar-wrapper .app-bar-icon-font.material-symbols-outlined {
   font-size: var(--app-bar-chrome-icon-size);
   line-height: 1;
-  color: #fff;
+  color: var(--text-inverse);
   user-select: none;
   pointer-events: none;
   --material-symbols-opsz: 28;
@@ -1191,7 +1214,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   border: 0;
   background: transparent;
   box-shadow: none;
-  color: white;
+  color: var(--text-inverse);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1223,7 +1246,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   text-overflow: ellipsis;
 }
 /* Title */.title {
-  color: white;
+  color: var(--text-inverse);
 }.title-recipes {
   cursor: pointer;
 }
@@ -1246,11 +1269,11 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   border-radius: 9999px;
   box-sizing: border-box;
   background-color: var(--theme-secondary);
-  color: #fff;
+  color: var(--text-inverse);
   text-align: left;
 }
 /* White placeholder text */.app-bar-search-layer .search-bar input::placeholder {
-  color: #fff;
+  color: var(--text-inverse);
   opacity: 1;
 }.title-and-back {
   display: flex;
@@ -1258,7 +1281,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   gap: 8px;
 }.back-arrow {
   cursor: pointer;
-  color: white;
+  color: var(--text-inverse);
 }.search-bar {
   position: relative;
   display: block;
@@ -1280,7 +1303,7 @@ body.ingredient-editing #stepsSection .step-insert-zone {
   border: 0;
   background: transparent;
 }.clear-search:hover {
-  color: white;
+  color: var(--text-inverse);
 }
 /* Top-level list page filter chips (shared rail) */.list-filter-chip-dock {
   position: fixed;
@@ -1372,7 +1395,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   pointer-events: none;
 }
 /* Heading placeholder should look like "edit blue" (semi-transparent), not purple. */.step-text.placeholder-prompt--editblue::before {
-  color: rgba(33, 132, 255, 0.55);
+  color: var(--edit-active-muted);
 }
 /* Also avoid making placeholder heading text purple via the heading rule. */.instruction-line[data-step-type='heading']
   .step-text.placeholder-prompt--editblue {
@@ -1395,7 +1418,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   margin: 0;
   padding: 0;
 }.section-header {
-  color: black;
+  color: var(--font-color-near-black);
   font-size: var(--header-font-size);
   margin-top: var(--space-title-to-section);
   margin-bottom: 0;
@@ -1414,7 +1437,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
 }.nav-text {
   font-size: var(--headline-font-size);
 }h1.nav-text {
-  color: black;
+  color: var(--font-color-near-black);
 }.servings-line {
   margin: 0 0 0 0;
   font-weight: 500;
@@ -1438,7 +1461,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   width: 4ch;
   min-width: 3ch;
   border: 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--border-soft);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -1447,7 +1470,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   padding: 0;
 }.servings-line--web .servings-web-value-input:focus {
   outline: none;
-  border-bottom-color: rgba(0, 0, 0, 0.45);
+  border-bottom-color: var(--border-soft-strong);
 }.servings-line--web .shopping-list-row-stepper {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1458,7 +1481,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  background-color: hsl(270, 0%, 96%);
+  background-color: var(--surface-hover-subtle);
   padding: 0;
   margin: 0;
   min-width: 24px;
@@ -1476,7 +1499,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
     color 120ms ease;
   -webkit-tap-highlight-color: transparent;
 }.servings-line--web .shopping-stepper-btn:hover:not([disabled]) {
-  background-color: hsl(270, 0%, 92%);
+  background-color: var(--surface-hover-subtle-strong);
 }.servings-line--web .shopping-stepper-btn[disabled] {
   opacity: 0.42;
   cursor: default;
@@ -1573,9 +1596,9 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
-  background-color: hsl(0, 0%, 98%);
+  background-color: var(--input-bg);
   color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-subtle);
   font-family: var(--main-font);
   font-size: var(--ingredient-editor-control-font-size);
   box-sizing: border-box;
@@ -1587,8 +1610,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   resize: none;
 }.recipe-tags-editor:focus {
   outline: none;
-  background-color: #e5eefa;
-  border-color: #b5ceff;
+  background-color: var(--edit-focus-bg);
+  border-color: var(--edit-focus-border);
   color: var(--edit-mode-color);
   caret-color: var(--edit-mode-color);
 }.servings-line.editing {
@@ -1721,9 +1744,9 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   height: var(--servings-field-height);
   padding: 4px 8px;
   border-radius: 8px;
-  background-color: hsl(0, 0%, 98%);
+  background-color: var(--input-bg);
   color: var(--field-fg);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-subtle);
   font-family: var(--main-font);
   font-size: var(--ingredient-editor-control-font-size);
   box-sizing: border-box;
@@ -1736,8 +1759,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   height: var(--servings-field-height);
   padding: 0;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  background-color: hsl(0, 0%, 98%);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--input-bg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1749,8 +1772,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   /* Crisp, scalable checkmark (no SVG) */
   width: 12px;
   height: 6px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
+  border-left: 2px solid var(--text-inverse);
+  border-bottom: 2px solid var(--text-inverse);
   transform: rotate(-45deg);
   margin-top: -1px; /* optical centering */
 }
@@ -1766,8 +1789,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
    Mouse-clicking the checkbox should not look like a text-field focus. */.ingredient-edit-row.editing .ingredient-edit-input[type='checkbox']:focus {
   outline: none;
   /* Override the global `.ingredient-edit-input:focus { border-color: transparent; }` */
-  background-color: hsl(0, 0%, 98%);
-  border-color: rgba(0, 0, 0, 0.06);
+  background-color: var(--input-bg);
+  border-color: var(--border-subtle);
 }
 /* If the checkbox is checked, never visually “lose” the checked state just because it has focus. */.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:checked:focus {
@@ -1775,8 +1798,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
   border-color: var(--theme-primary);
 }.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:focus-visible {
-  background-color: #e5eefa;
-  border-color: #b5ceff;
+  background-color: var(--edit-focus-bg);
+  border-color: var(--edit-focus-border);
 }.ingredient-edit-row.editing
   .ingredient-edit-input[type='checkbox']:checked:focus-visible {
   background-color: var(--theme-primary);
@@ -1784,8 +1807,8 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
 }
 /* Edit mode input styling: blue only for the focused text-like field (not the opt checkbox) */.ingredient-edit-row.editing
   .ingredient-edit-input:not([type='checkbox']):focus {
-  background-color: #e5eefa;
-  border-color: #b5ceff;
+  background-color: var(--edit-focus-bg);
+  border-color: var(--edit-focus-border);
 }
 /* Unified sizing for all ingredient edit inputs */.ingredient-edit-input {
   width: var(--ingredient-field-empty-width);
@@ -1874,7 +1897,7 @@ body.recipe-editor-page.recipe-tags-editing .page-content {
 }.app-bar-elements-layer .title-editor {
   position: relative;
   top: 0px;
-  color: white;
+  color: var(--text-inverse);
 }.back-arrow {
   width: 24px;
   height: 24px;
@@ -2059,7 +2082,7 @@ body.ingredient-master-link-mode
     border: 0;
     background: transparent;
     box-shadow: none;
-    color: #fff;
+    color: var(--text-inverse);
   }.app-bar-wrapper .actions .app-bar-text-action:hover,
   .app-bar-wrapper .actions .app-bar-text-action:focus,
   .app-bar-wrapper .actions .app-bar-text-action:active {

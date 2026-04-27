@@ -4777,9 +4777,14 @@ async function loadRecipesPage() {
       },
     });
   }
+  const recipeCatalogPollIntervalMs = 3000;
+  const recipeCatalogPollHandle = window.setInterval(() => {
+    void refreshRecipesFromRemote({ showErrorToast: false });
+  }, recipeCatalogPollIntervalMs);
   window.addEventListener(
     'pagehide',
     () => {
+      window.clearInterval(recipeCatalogPollHandle);
       if (typeof unsubscribeRecipeCatalogRealtime === 'function') {
         unsubscribeRecipeCatalogRealtime();
       }
@@ -8813,10 +8818,15 @@ async function loadRecipeEditorPage() {
       },
     });
   }
+  const recipeEditorPollIntervalMs = 3000;
+  const recipeEditorPollHandle = window.setInterval(() => {
+    void refreshEditorRecipeFromRemote();
+  }, recipeEditorPollIntervalMs);
   window.addEventListener(
     'pagehide',
     () => {
       editorRealtimeReady = false;
+      window.clearInterval(recipeEditorPollHandle);
       if (typeof unsubscribeRecipeRealtime === 'function') {
         unsubscribeRecipeRealtime();
       }
