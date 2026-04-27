@@ -646,8 +646,16 @@ body.recipes-page[data-force-web-mode='off']
   display: none !important;
 }body.recipes-page #recipeList .shopping-list-row-icon {
   display: none;
+  width: 32px;
+  height: 32px;
+  line-height: 1;
+  font-size: 32px;
+  color: var(--text-muted-40);
+  cursor: pointer;
+  user-select: none;
+  --material-symbols-opsz: 32;
   flex: 0 0 auto;
-  pointer-events: none;
+  pointer-events: auto;
 }body.recipes-page #recipeList .shopping-list-row-stepper {
   display: none;
   flex: 0 0 auto;
@@ -685,6 +693,87 @@ body.recipes-page[data-force-web-mode='off']
   justify-content: center;
   text-align: center;
   line-height: 1;
+}
+body.recipes-page #recipeList .shopping-stepper-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted-40);
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+body.recipes-page #recipeList .shopping-stepper-btn[disabled] {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+body.recipes-page #recipeList .shopping-stepper-btn .material-symbols-outlined {
+  font-size: 26px;
+  line-height: 1;
+  --material-symbols-opsz: 26;
+}
+body.recipes-page #recipeList .shopping-stepper-qty {
+  font-family: var(--main-font);
+  font-size: var(--body-font-size);
+  font-weight: var(--body-font-weight);
+  min-width: 2.5ch;
+  text-align: center;
+  color: var(--text-muted-40);
+  user-select: none;
+  line-height: 1;
+}
+body.recipes-page #recipeList .shopping-stepper-qty-button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  min-width: 2.5ch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: text;
+}
+body.recipes-page #recipeList .shopping-stepper-qty-input {
+  width: 3ch;
+  min-width: 2ch;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-family: var(--main-font);
+  font-size: var(--body-font-size);
+  font-weight: var(--body-font-weight);
+  line-height: 1;
+  text-align: center;
+  color: inherit;
+  outline: none;
+}
+body.recipes-page #recipeList .shopping-stepper-qty-input::-webkit-outer-spin-button,
+body.recipes-page #recipeList .shopping-stepper-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+body.recipes-page #recipeList li.shopping-row-checked:not(.list-section-label) {
+  color: var(--theme-primary);
+}
+body.recipes-page #recipeList li.shopping-row-checked:not(.list-section-label) .shopping-stepper-btn,
+body.recipes-page #recipeList li.shopping-row-checked:not(.list-section-label) .shopping-stepper-qty,
+body.recipes-page #recipeList li.shopping-row-checked:not(.list-section-label) .shopping-list-row-icon,
+body.recipes-page #recipeList li.shopping-row-checked:not(.list-section-label) .shopping-list-row-badge {
+  color: var(--theme-primary);
 }
 @keyframes shopping-nav-target-pulse {0%,
   100% {

@@ -4321,6 +4321,31 @@ async function loadRecipesPage() {
   const getRecipeQtyKey = (recipeId) => String(recipeId || '').trim();
   const isRecipeSelected = (recipeId) =>
     recipeSelectionKeys.has(getRecipeQtyKey(recipeId));
+  const getRecipeSelectionQty = (recipeId) => {
+    const entry = getShoppingPlanRecipeSelections()[getRecipeQtyKey(recipeId)];
+    const quantity = Math.max(0, Math.min(99, Number(entry?.quantity || 0)));
+    return Number.isFinite(quantity) ? quantity : 0;
+  };
+  const setRecipeSelectionQty = (recipeRow, nextQty) => {
+    if (!recipeRow) return;
+    const recipeId = recipeRow.id;
+    const quantity = Math.max(0, Math.min(99, Number(nextQty || 0)));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      recipeSelectionKeys.delete(getRecipeQtyKey(recipeId));
+      setShoppingPlanRecipeSelection({
+        recipeId,
+        title: recipeRow?.title || '',
+        quantity: 0,
+      });
+      return;
+    }
+    recipeSelectionKeys.add(getRecipeQtyKey(recipeId));
+    setShoppingPlanRecipeSelection({
+      recipeId,
+      title: recipeRow?.title || '',
+      quantity,
+    });
+  };
   const getRecipeRowById = (recipeId) =>
     recipeRows.find((row) => Number(row?.id) === Number(recipeId)) || null;
   const primeRecipeRowServings = (recipeRow) => {
@@ -4335,12 +4360,8 @@ async function loadRecipesPage() {
     return null;
   };
   const getRecipeRowDisplayServings = (recipeRow) => {
-    if (typeof recipeWebServingsUi.getDisplayValue === 'function') {
-      return recipeWebServingsUi.getDisplayValue(recipeRow);
-    }
-    const bounds = getRecipeRowBounds(recipeRow);
-    if (!bounds) return null;
-    return bounds.baseDefault;
+    const quantity = getRecipeSelectionQty(recipeRow?.id);
+    return quantity > 0 ? quantity : null;
   };
   const formatRecipeRowServings = (rawValue) => {
     if (typeof recipeWebServingsUi.formatDisplay === 'function') {
@@ -4423,8 +4444,6 @@ async function loadRecipesPage() {
     if (!(rowEl instanceof HTMLElement) || !recipeRow) return;
     const recipeId = recipeRow.id;
     const enabled = isRecipeWebSelectMode();
-    const bounds = getRecipeRowBounds(recipeRow);
-    const hasServings = !!bounds;
     const selected = isRecipeSelected(recipeId);
     const isActive =
       selected &&
@@ -4438,30 +4457,25 @@ async function loadRecipesPage() {
     const qtyEl = stepper?.querySelector('.shopping-stepper-qty');
     const minusBtn = stepper?.querySelector('.shopping-stepper-btn');
     const minusIcon = minusBtn?.querySelector('.material-symbols-outlined');
-    const displayServings = getRecipeRowDisplayServings(recipeRow);
+    const displayServings = selected ? getRecipeSelectionQty(recipeId) : null;
     const formattedServings =
-      displayServings == null ? '' : formatRecipeRowServings(displayServings);
-    const shouldDeleteOnDecrease = !!(
-      hasServings &&
-      selected &&
-      bounds?.canAdjust &&
-      displayServings != null &&
-      Math.abs(displayServings - bounds.min) < 1e-9
-    );
+      displayServings == null || displayServings <= 0
+        ? ''
+        : formatRecipeRowServings(displayServings);
+    const shouldDeleteOnDecrease = selected && displayServings <= 1;
 
-    rowEl.dataset.recipeServingsAvailable = hasServings ? 'true' : 'false';
-    rowEl.dataset.recipeSelected =
-      enabled && selected && hasServings ? 'true' : 'false';
+    rowEl.dataset.recipeServingsAvailable = 'true';
+    rowEl.dataset.recipeSelected = enabled && selected ? 'true' : 'false';
     rowEl.classList.toggle(
       'shopping-row-checked',
-      enabled && selected && hasServings,
+      enabled && selected,
     );
 
     const servingsSlot = rowEl.querySelector('.recipe-list-servings-slot');
     if (servingsSlot) {
       servingsSlot.classList.toggle(
         'recipe-list-servings-slot--collapsed-hit',
-        !!(enabled && hasServings && !isActive),
+        !!(enabled && !isActive),
       );
     }
 
@@ -4488,14 +4502,6 @@ async function loadRecipesPage() {
       return;
     }
 
-    if (!hasServings) {
-      if (icon) icon.style.display = 'none';
-      if (stepper) stepper.style.display = 'none';
-      if (badge) badge.style.display = 'none';
-      if (disabledIndicator) disabledIndicator.style.display = 'inline-flex';
-      return;
-    }
-
     if (disabledIndicator) disabledIndicator.style.display = 'none';
     if (isActive) {
       if (icon) icon.style.display = 'none';
@@ -4511,25 +4517,20 @@ async function loadRecipesPage() {
       return;
     }
 
-    if (icon) icon.style.display = '';
+    if (icon) icon.style.display = 'inline-block';
     if (stepper) stepper.style.display = 'none';
     if (badge) badge.style.display = 'none';
   };
   const setRecipeSelected = (
     recipeId,
     isSelected,
-    { activate = false } = {},
+    { activate = false, quantity = 1 } = {},
   ) => {
     const recipeKey = getRecipeQtyKey(recipeId);
     const recipeRow = getRecipeRowById(recipeId);
     if (!recipeKey || !recipeRow) return;
-    if (isSelected) recipeSelectionKeys.add(recipeKey);
-    else recipeSelectionKeys.delete(recipeKey);
-    setShoppingPlanRecipeSelection({
-      recipeId,
-      title: recipeRow?.title || '',
-      quantity: isSelected ? 1 : 0,
-    });
+    const existingQty = getRecipeSelectionQty(recipeId);
+    setRecipeSelectionQty(recipeRow, isSelected ? existingQty || quantity : 0);
     if (isSelected && activate) {
       recipeRowStepperController?.activate(recipeKey);
     } else if (!isSelected && recipeRowStepperController?.isActive(recipeKey)) {
@@ -4552,13 +4553,6 @@ async function loadRecipesPage() {
       if (!Number.isFinite(recipeId) || recipeId <= 0) return;
       if (!Number.isFinite(quantity) || quantity <= 0) return;
       recipeSelectionKeys.add(getRecipeQtyKey(recipeId));
-      if (quantity !== 1) {
-        setShoppingPlanRecipeSelection({
-          recipeId,
-          title: String(entry?.title || '').trim(),
-          quantity: 1,
-        });
-      }
     });
   };
 
@@ -4697,9 +4691,9 @@ async function loadRecipesPage() {
         input.className = 'shopping-stepper-qty shopping-stepper-qty-input';
         input.inputMode = 'decimal';
         input.setAttribute('aria-label', 'Servings value');
-        const fallbackValue = getRecipeRowDisplayServings(row);
+        const fallbackValue = getRecipeSelectionQty(id);
         input.value =
-          fallbackValue == null
+          fallbackValue == null || fallbackValue <= 0
             ? ''
             : Number.isInteger(fallbackValue)
               ? String(fallbackValue)
@@ -4714,12 +4708,12 @@ async function loadRecipesPage() {
             recipeRowEditingKey = '';
           }
           if (
-            shouldCommit &&
-            typeof recipeWebServingsUi.commitInputValue === 'function'
+            shouldCommit
           ) {
-            recipeWebServingsUi.commitInputValue(row, input.value, {
-              fallbackValue,
-            });
+            const raw = String(input.value || '').trim();
+            const numeric = raw ? Number(raw) : 0;
+            const nextQty = Number.isFinite(numeric) ? numeric : fallbackValue;
+            setRecipeSelectionQty(row, nextQty);
           }
           rerenderFilteredRecipes();
         };
@@ -4746,7 +4740,6 @@ async function loadRecipesPage() {
 
       slot.addEventListener('click', (event) => {
         if (!isRecipeWebSelectMode()) return;
-        if (!getRecipeRowBounds(row)) return;
         if (disabledIndicator.contains(event.target)) return;
 
         const isStepperVisible = stepper.style.display === 'inline-flex';
@@ -4762,7 +4755,6 @@ async function loadRecipesPage() {
         consumeRowStepperEvent(event);
 
         if (!selectedNow) {
-          initializeRecipeRowServings(row);
           setRecipeSelected(id, true, { activate: true });
         } else {
           recipeRowStepperController?.activate(recipeKey);
@@ -4771,7 +4763,6 @@ async function loadRecipesPage() {
       });
       slot.addEventListener('pointerdown', (event) => {
         if (!isRecipeWebSelectMode()) return;
-        if (!getRecipeRowBounds(row)) return;
         if (disabledIndicator.contains(event.target)) return;
         if (
           stepper.style.display === 'inline-flex' &&
@@ -4804,52 +4795,27 @@ async function loadRecipesPage() {
           }
           return;
         }
-        const bounds = getRecipeRowBounds(row);
-        const displayServings = getRecipeRowDisplayServings(row);
-        if (!bounds || displayServings == null) return;
-        if (bounds.canAdjust && Math.abs(displayServings - bounds.min) < 1e-9) {
+        const displayServings = getRecipeSelectionQty(id);
+        if (displayServings <= 1) {
           setRecipeSelected(id, false);
           return;
         }
-        const nextValue =
-          typeof recipeWebServingsUi.getNextValue === 'function'
-            ? recipeWebServingsUi.getNextValue(row, -1)
-            : null;
-        if (
-          nextValue == null ||
-          typeof recipeWebServingsUi.applyToModel !== 'function'
-        )
-          return;
-        recipeWebServingsUi.applyToModel(row, nextValue);
+        setRecipeSelectionQty(row, displayServings - 1);
         rerenderFilteredRecipes();
       });
 
       plusBtn.addEventListener('click', (event) => {
         consumeRowStepperEvent(event);
-        if (!isRecipeWebSelectMode() || !isRecipeSelected(id)) return;
-        const nextValue =
-          typeof recipeWebServingsUi.getNextValue === 'function'
-            ? recipeWebServingsUi.getNextValue(row, 1)
-            : null;
-        if (
-          nextValue == null ||
-          typeof recipeWebServingsUi.applyToModel !== 'function'
-        )
-          return;
-        recipeWebServingsUi.applyToModel(row, nextValue);
+        if (!isRecipeWebSelectMode()) return;
+        const displayServings = getRecipeSelectionQty(id);
+        setRecipeSelectionQty(row, Math.min(99, Math.max(0, displayServings) + 1));
+        recipeRowStepperController?.activate(recipeKey);
         rerenderFilteredRecipes();
       });
 
-      const bounds = getRecipeRowBounds(row);
-      const displayServings = getRecipeRowDisplayServings(row);
-      const atOrAboveMax =
-        bounds &&
-        displayServings != null &&
-        displayServings >= bounds.max - 1e-9;
-      minusBtn.disabled =
-        !bounds || displayServings == null || !bounds.canAdjust;
-      plusBtn.disabled =
-        !bounds || displayServings == null || !bounds.canAdjust || atOrAboveMax;
+      const displayServings = getRecipeSelectionQty(id);
+      minusBtn.disabled = !isRecipeSelected(id);
+      plusBtn.disabled = displayServings >= 99;
 
       // Row-level hit target: open recipe from padding, label, gaps — not the servings column.
       li.addEventListener('click', (event) => {
