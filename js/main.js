@@ -207,6 +207,194 @@ function getFavoriteEatsDataApi() {
   return api;
 }
 
+const PRESENCE_CLIENT_ID_STORAGE_KEY = 'favoriteEatsPresenceClientId';
+const PRESENCE_NICKNAME_STORAGE_KEY = 'favoriteEatsPresenceNickname';
+const PRESENCE_TOAST_COOLDOWN_MS = 2 * 60 * 1000;
+
+const PRESENCE_ADJECTIVES = Object.freeze([
+  'Funky',
+  'Kinetic',
+  'Cosmic',
+  'Sunny',
+  'Bouncy',
+  'Mellow',
+  'Zippy',
+  'Sparkly',
+  'Cheery',
+  'Wiggly',
+  'Dizzy',
+  'Nifty',
+  'Snappy',
+  'Peppy',
+  'Chill',
+  'Jazzy',
+  'Silly',
+  'Speedy',
+  'Dreamy',
+  'Lucky',
+]);
+
+const PRESENCE_FOODS = Object.freeze([
+  'Lasagna',
+  'Cheesecake',
+  'Dumpling',
+  'Pretzel',
+  'Pancake',
+  'Taco',
+  'Gnocchi',
+  'Risotto',
+  'Brownie',
+  'Cupcake',
+  'Muffin',
+  'Noodle',
+  'Bagel',
+  'Burrito',
+  'Sushi',
+  'Waffle',
+  'Ravioli',
+  'Quesadilla',
+  'Meatball',
+  'Croissant',
+  'Pierogi',
+  'Falafel',
+  'Tempura',
+  'Sorbet',
+  'Casserole',
+]);
+
+function randomFrom(source) {
+  if (!Array.isArray(source) || source.length === 0) return '';
+  const idx = Math.floor(Math.random() * source.length);
+  return String(source[idx] || '').trim();
+}
+
+function ensurePresenceClientId() {
+  try {
+    const existing = String(localStorage.getItem(PRESENCE_CLIENT_ID_STORAGE_KEY) || '').trim();
+    if (existing) return existing;
+    const generated = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(PRESENCE_CLIENT_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch (_) {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function ensurePresenceNickname() {
+  try {
+    const existing = String(localStorage.getItem(PRESENCE_NICKNAME_STORAGE_KEY) || '').trim();
+    if (existing) return existing;
+    const adjective = randomFrom(PRESENCE_ADJECTIVES) || 'Friendly';
+    const food = randomFrom(PRESENCE_FOODS) || 'Snack';
+    const generated = `${adjective} ${food}`.trim();
+    localStorage.setItem(PRESENCE_NICKNAME_STORAGE_KEY, generated);
+    return generated;
+  } catch (_) {
+    const adjective = randomFrom(PRESENCE_ADJECTIVES) || 'Friendly';
+    const food = randomFrom(PRESENCE_FOODS) || 'Snack';
+    return `${adjective} ${food}`.trim();
+  }
+}
+
+function setPresenceIndicatorText(text) {
+  const label = document.getElementById('appBarPresenceIndicator');
+  if (!(label instanceof HTMLElement)) return;
+  const next = String(text || '').trim();
+  label.textContent = next;
+  label.hidden = !next;
+}
+
+function ensurePresenceIndicatorMount() {
+  const title = document.getElementById('appBarTitle');
+  if (!(title instanceof HTMLElement)) return;
+  const existing = document.getElementById('appBarPresenceIndicator');
+  if (existing instanceof HTMLElement) return existing;
+  const indicator = document.createElement('span');
+  indicator.id = 'appBarPresenceIndicator';
+  indicator.className = 'app-bar-presence-indicator nav-text';
+  indicator.hidden = true;
+  indicator.setAttribute('aria-live', 'polite');
+  title.insertAdjacentElement('afterend', indicator);
+  return indicator;
+}
+
+async function bootSharedPresence({ pageId } = {}) {
+  if (!['recipes', 'recipe-editor'].includes(String(pageId || ''))) return;
+  let dataApi;
+  try {
+    dataApi = getFavoriteEatsDataApi();
+  } catch (_) {
+    return;
+  }
+  if (typeof dataApi.subscribeSharedPresence !== 'function') return;
+  const localClientId = ensurePresenceClientId();
+  const localNickname = ensurePresenceNickname();
+  let lastToastAt = 0;
+  let lastSignature = '';
+  const mountProbe = window.setInterval(() => {
+    const mounted = ensurePresenceIndicatorMount();
+    if (mounted) {
+      try {
+        clearInterval(mountProbe);
+      } catch (_) {}
+    }
+  }, 1000);
+
+  const cleanup = dataApi.subscribeSharedPresence({
+    clientId: localClientId,
+    nickname: localNickname,
+    onPresence: (presenceState) => {
+      const state = presenceState && typeof presenceState === 'object' ? presenceState : {};
+      const others = [];
+      Object.entries(state).forEach(([key, metas]) => {
+        if (String(key || '').trim() === localClientId) return;
+        const list = Array.isArray(metas) ? metas : [];
+        list.forEach((meta) => {
+          const name = String(meta?.nickname || '').trim();
+          if (name) others.push(name);
+        });
+      });
+      const uniqueOthers = Array.from(new Set(others)).sort((a, b) => a.localeCompare(b));
+      const signature = uniqueOthers.join('|');
+      const indicator = ensurePresenceIndicatorMount();
+      if (indicator) {
+        if (uniqueOthers.length === 0) {
+          setPresenceIndicatorText('');
+        } else if (uniqueOthers.length === 1) {
+          setPresenceIndicatorText(`${uniqueOthers[0]} active now`);
+        } else {
+          setPresenceIndicatorText(`${uniqueOthers.length} active now`);
+        }
+      }
+      const now = Date.now();
+      const changed = signature !== lastSignature;
+      if (
+        uniqueOthers.length > 0 &&
+        changed &&
+        now - lastToastAt > PRESENCE_TOAST_COOLDOWN_MS
+      ) {
+        const headline =
+          uniqueOthers.length === 1
+            ? `${uniqueOthers[0]} is active right now`
+            : `${uniqueOthers.length} others are active right now`;
+        uiToast(headline, { timeoutMs: 5000 });
+        lastToastAt = now;
+      }
+      lastSignature = signature;
+    },
+  });
+
+  const onPageHide = () => {
+    try {
+      clearInterval(mountProbe);
+    } catch (_) {}
+    try {
+      cleanup?.();
+    } catch (_) {}
+  };
+  window.addEventListener('pagehide', onPageHide, { once: true });
+}
+
 function isTypingContext(target) {
   const el = target instanceof Element ? target : null;
   const active =
@@ -3959,6 +4147,7 @@ function bootFavoriteEatsAfterSqlReady() {
   // --- page load routing ---
 
   const pageId = detectPageIdFromBody();
+  void bootSharedPresence({ pageId });
 
   // --- Cmd/Ctrl+S: invoke visible editor Save action ---
   document.addEventListener(

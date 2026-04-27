@@ -360,6 +360,74 @@
     };
   }
 
+  function buildPresenceChannelName() {
+    return 'favorite-eats-shared-presence-v1';
+  }
+
+  function subscribeSharedPresence({ clientId, nickname, onPresence } = {}) {
+    const client = getSupabase();
+    if (!client || typeof client.channel !== 'function') {
+      return () => {};
+    }
+    const presenceKey = String(clientId || '').trim() || Math.random().toString(36).slice(2);
+    const displayName = String(nickname || '').trim() || 'Anonymous Snack';
+    const handler = typeof onPresence === 'function' ? onPresence : () => {};
+    const channel = client.channel(buildPresenceChannelName(), {
+      config: { presence: { key: presenceKey } },
+    });
+    let heartbeatHandle = null;
+    let isSubscribed = false;
+
+    const emitPresence = () => {
+      try {
+        const state =
+          typeof channel.presenceState === 'function' ? channel.presenceState() : {};
+        handler(state || {});
+      } catch (_) {}
+    };
+
+    const trackPresence = () => {
+      if (!isSubscribed) return;
+      channel.track({
+        nickname: displayName,
+        updated_at: new Date().toISOString(),
+      });
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, emitPresence)
+      .on('presence', { event: 'join' }, emitPresence)
+      .on('presence', { event: 'leave' }, emitPresence);
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        isSubscribed = true;
+        trackPresence();
+        heartbeatHandle = setInterval(trackPresence, 25000);
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+      try {
+        if (heartbeatHandle) {
+          clearInterval(heartbeatHandle);
+        }
+      } catch (_) {}
+      heartbeatHandle = null;
+      try {
+        channel.untrack();
+      } catch (_) {}
+      try {
+        if (typeof client.removeChannel === 'function') {
+          client.removeChannel(channel);
+        } else if (typeof channel.unsubscribe === 'function') {
+          channel.unsubscribe();
+        }
+      } catch (_) {}
+    };
+  }
+
   global.favoriteEatsDataApi = Object.freeze({
     listVisibleTags: () =>
       listVisibleTags().catch((err) => {
@@ -387,5 +455,6 @@
       }),
     subscribeRecipeCatalogChanges: (options) => subscribeRecipeCatalogChanges(options),
     subscribeRecipeById: (recipeId, options) => subscribeRecipeById(recipeId, options),
+    subscribeSharedPresence: (options) => subscribeSharedPresence(options),
   });
 })(typeof window !== 'undefined' ? window : globalThis);
