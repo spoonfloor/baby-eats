@@ -109,11 +109,10 @@ function readFavoriteEatsBuildConfig() {
 }
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
-const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
-
-function isForceWebModeEnabled() {
-  return true;
-}
+const SINGLE_UI_STATE = Object.freeze({
+  pageSet: 'web',
+  platform: 'planner',
+});
 
 /** Wide recipe-list servings header from this width; keep in sync with `css/styles.css`. */
 const RECIPE_LIST_SERVINGS_HEADER_WIDE_MIN_PX = 620;
@@ -156,16 +155,14 @@ function ensureRecipeListServingsHeaderLabelMediaListener() {
   }
 }
 
-function applyForceWebModePresentation(enabled = isForceWebModeEnabled()) {
+function applySingleUiPresentation() {
   const body = document.body;
-  if (!(body instanceof HTMLElement)) return !!enabled;
+  if (!(body instanceof HTMLElement)) return SINGLE_UI_STATE.pageSet;
 
-  const forceWebMode = !!enabled;
-  body.dataset.forceWebMode = forceWebMode ? 'on' : 'off';
-  body.dataset.pageSet = forceWebMode ? 'web' : 'editor';
-  body.classList.toggle('force-web-mode', forceWebMode);
-  applyDocumentThemePlatform(forceWebMode);
-  return forceWebMode;
+  body.dataset.pageSet = SINGLE_UI_STATE.pageSet;
+  body.classList.add('force-web-mode');
+  applyDocumentThemePlatform();
+  return SINGLE_UI_STATE.pageSet;
 }
 
 function getTopLevelPageOrder() {
@@ -184,19 +181,14 @@ function getTopLevelPageHref(pageId) {
   return 'recipes.html';
 }
 
-/** Force web off → editor (red); force web on → planner (purple). */
-function applyDocumentThemePlatform(planner = isForceWebModeEnabled()) {
+/** Single-UI build platform theme selector. */
+function applyDocumentThemePlatform() {
   const root = document.documentElement;
   if (!(root instanceof HTMLElement)) return;
-  root.dataset.platform = planner ? 'planner' : 'editor';
+  root.dataset.platform = SINGLE_UI_STATE.platform;
 }
 
-applyForceWebModePresentation();
-window.forceWebMode = Object.freeze({
-  isEnabled: isForceWebModeEnabled,
-  setEnabled: () => applyForceWebModePresentation(false),
-  apply: applyForceWebModePresentation,
-});
+applySingleUiPresentation();
 
 function getFavoriteEatsDataApi() {
   const api = window.favoriteEatsDataApi;
@@ -4321,7 +4313,7 @@ async function loadRecipesPage() {
     window.favoriteEatsRecipeWebServings?.changeEventName ||
     window.favoriteEatsEventNames?.recipeWebServingsChanged ||
     '';
-  const isRecipeWebSelectMode = () => isForceWebModeEnabled();
+  const isRecipeWebSelectMode = () => true;
   const toPositiveServingsOrNull = (rawValue) => {
     const numeric = Number(rawValue);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
@@ -4639,24 +4631,22 @@ async function loadRecipesPage() {
     }
     setTopLevelEmptyStateLayoutMode(list, false);
 
-    if (isForceWebModeEnabled()) {
-      const headerLi = document.createElement('li');
-      headerLi.className = 'recipe-list-servings-header';
-      headerLi.setAttribute('aria-hidden', 'true');
-      const headerSpacer = document.createElement('span');
-      headerSpacer.className =
-        'recipe-list-title shopping-list-row-label recipe-list-servings-header-spacer';
-      headerSpacer.textContent = '';
-      const headerSlot = document.createElement('span');
-      headerSlot.className = 'recipe-list-servings-slot';
-      const headerLabel = document.createElement('span');
-      headerLabel.className = 'recipe-list-servings-header-label';
-      syncRecipeListServingsHeaderLabelText(headerLabel);
-      headerSlot.appendChild(headerLabel);
-      headerLi.appendChild(headerSpacer);
-      headerLi.appendChild(headerSlot);
-      list.appendChild(headerLi);
-    }
+    const headerLi = document.createElement('li');
+    headerLi.className = 'recipe-list-servings-header';
+    headerLi.setAttribute('aria-hidden', 'true');
+    const headerSpacer = document.createElement('span');
+    headerSpacer.className =
+      'recipe-list-title shopping-list-row-label recipe-list-servings-header-spacer';
+    headerSpacer.textContent = '';
+    const headerSlot = document.createElement('span');
+    headerSlot.className = 'recipe-list-servings-slot';
+    const headerLabel = document.createElement('span');
+    headerLabel.className = 'recipe-list-servings-header-label';
+    syncRecipeListServingsHeaderLabelText(headerLabel);
+    headerSlot.appendChild(headerLabel);
+    headerLi.appendChild(headerSpacer);
+    headerLi.appendChild(headerSlot);
+    list.appendChild(headerLi);
 
     items.forEach((row) => {
       const id = row.id;
@@ -7757,7 +7747,7 @@ function reconcileAfterForceWebModeToggle() {
 function syncBottomNavEditorToggleCheckedState() {
   const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
   if (bottomNavEditorToggle instanceof HTMLInputElement) {
-    bottomNavEditorToggle.checked = !isForceWebModeEnabled();
+    bottomNavEditorToggle.checked = false;
   }
 }
 
@@ -7826,12 +7816,12 @@ function initBottomNav() {
 
   const bottomNavEditorToggle = document.getElementById('bottomNavEditorToggle');
   if (bottomNavEditorToggle && pillRow instanceof HTMLElement) {
-    bottomNavEditorToggle.checked = !isForceWebModeEnabled();
+    bottomNavEditorToggle.checked = false;
     bottomNavEditorToggle.addEventListener('change', () => {
       // Planner/force-web is disabled; control retained for a future real toggle.
       console.log('[Editing nav toggle]', {
         checked: bottomNavEditorToggle.checked,
-        forceWebModeEnabled: isForceWebModeEnabled(),
+        singleUiState: SINGLE_UI_STATE,
       });
     });
   }
@@ -8728,7 +8718,7 @@ async function loadRecipeEditorPage() {
   window.recipeEditorCatalogOnlyMode = true;
 
   window.recipeId = recipeId;
-  const isRecipeWebMode = isForceWebModeEnabled();
+  const isRecipeWebMode = true;
   let recipe = null;
   try {
     recipe = await dataApi.getRecipeById(Number(recipeId));
