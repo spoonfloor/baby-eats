@@ -1188,6 +1188,9 @@ if (typeof window !== 'undefined') {
     validate = null, // (values) => string|''|null
     onConfirm = null, // (values) => void|Promise
     onTertiary = null, // (values) => void|Promise
+    onReady = null, // ({ setConfirmDisabled, setTertiaryDisabled }) => void
+    confirmDisabled = false,
+    tertiaryDisabled = false,
     tertiaryClose = false,
     closeOnBackdrop = true,
   } = {}) => {
@@ -1385,6 +1388,9 @@ if (typeof window !== 'undefined') {
       confirmBtn.type = 'button';
       confirmBtn.className = `button ${danger ? 'button--danger' : ''}`.trim();
       confirmBtn.textContent = confirmText || 'OK';
+      let confirmForceDisabled = !!confirmDisabled;
+      let tertiaryForceDisabled = !!tertiaryDisabled;
+      tertiaryBtn.disabled = tertiaryForceDisabled;
 
       if (tertiaryText) actions.appendChild(tertiaryBtn);
       if (showCancel) actions.appendChild(cancelBtn);
@@ -1464,7 +1470,8 @@ if (typeof window !== 'undefined') {
         } catch (_) {}
 
         setError(err);
-        confirmBtn.disabled = !!err || hasMissingRequired || hasFieldErrors;
+        confirmBtn.disabled =
+          confirmForceDisabled || !!err || hasMissingRequired || hasFieldErrors;
       };
 
       const doCancel = () => {
@@ -1481,7 +1488,7 @@ if (typeof window !== 'undefined') {
           }
         } catch (err) {
           setError(err?.message || 'Something went wrong.');
-          confirmBtn.disabled = false;
+          syncValidity();
           return;
         }
         cleanup();
@@ -1515,6 +1522,20 @@ if (typeof window !== 'undefined') {
       confirmBtn.addEventListener('click', () => {
         void doConfirm();
       });
+      try {
+        if (typeof onReady === 'function') {
+          onReady({
+            setConfirmDisabled: (isDisabled) => {
+              confirmForceDisabled = !!isDisabled;
+              syncValidity();
+            },
+            setTertiaryDisabled: (isDisabled) => {
+              tertiaryForceDisabled = !!isDisabled;
+              tertiaryBtn.disabled = tertiaryForceDisabled;
+            },
+          });
+        }
+      } catch (_) {}
 
       backdrop.addEventListener('mousedown', (e) => {
         if (!closeOnBackdrop) return;
