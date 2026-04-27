@@ -3256,21 +3256,25 @@ function renderRecipeTagsSection(recipe, container) {
     selectEl.value = currentTag && !tagIsInPool ? currentTag : '';
   }
 
-  selectEl.addEventListener('change', () => {
+  const commitTagSelectionFromPicker = () => {
     const v = String(selectEl.value || '');
     const prevKey = JSON.stringify(
       (normalizeToSingleRecipeTagList(recipeModel.tags || [])[0] || '')
         .toLowerCase()
     );
     const next = v ? [v] : [];
-    const nextKey = JSON.stringify(
-      (next[0] || '').toLowerCase()
-    );
+    const nextKey = JSON.stringify((next[0] || '').toLowerCase());
     recipeModel.tags = next;
     if (prevKey !== nextKey && typeof markDirty === 'function') {
       markDirty();
     }
-  });
+  };
+
+  // Some environments can defer/drop select "change" during picker interactions.
+  // Listen to input + blur too so the chosen tag always commits.
+  selectEl.addEventListener('change', commitTagSelectionFromPicker);
+  selectEl.addEventListener('input', commitTagSelectionFromPicker);
+  selectEl.addEventListener('blur', commitTagSelectionFromPicker);
 
   content.appendChild(selectEl);
 }
