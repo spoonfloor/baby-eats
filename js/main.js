@@ -1705,225 +1705,46 @@ if (typeof window !== 'undefined') {
 // --- End shopping browse labeling helpers ---
 
 function tableExistsInMain(db, tableName) {
-  if (!db || !tableName) return false;
-  try {
-    const esc = String(tableName).replace(/'/g, "''");
-    const q = db.exec(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='${esc}';`,
-    );
-    return !!(q && q.length && q[0].values && q[0].values.length);
-  } catch (_) {
-    return false;
-  }
+  void db;
+  void tableName;
+  return false;
 }
 
 function tableHasColumnInMain(db, tableName, colName) {
-  if (!db || !tableName || !colName) return false;
-  try {
-    const q = db.exec(`PRAGMA table_info(${tableName});`);
-    const cols =
-      Array.isArray(q) && q.length > 0 && Array.isArray(q[0].values)
-        ? q[0].values
-            .map((r) =>
-              String((Array.isArray(r) ? r[1] : '') || '').toLowerCase(),
-            )
-            .filter(Boolean)
-        : [];
-    return cols.includes(String(colName || '').toLowerCase());
-  } catch (_) {
-    return false;
-  }
+  void db;
+  void tableName;
+  void colName;
+  return false;
 }
 
 function ensureRecipeTagsSchemaInMain(db) {
-  if (!db) return false;
-  try {
-    db.run('PRAGMA foreign_keys = ON;');
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS tags (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL COLLATE NOCASE,
-        is_hidden INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER,
-        intended_use TEXT NOT NULL DEFAULT 'recipes'
-      );
-    `);
-  } catch (_) {}
-  try {
-    if (!tableHasColumnInMain(db, 'tags', 'intended_use')) {
-      db.run(
-        "ALTER TABLE tags ADD COLUMN intended_use TEXT NOT NULL DEFAULT 'recipes';",
-      );
-    }
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name_nocase
-      ON tags(name COLLATE NOCASE);
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS recipe_tag_map (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        recipe_id INTEGER NOT NULL REFERENCES recipes(ID) ON DELETE CASCADE,
-        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-        sort_order INTEGER,
-        UNIQUE(recipe_id, tag_id)
-      );
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_recipe_tag_map_recipe
-      ON recipe_tag_map(recipe_id, sort_order, id);
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_recipe_tag_map_tag
-      ON recipe_tag_map(tag_id, recipe_id);
-    `);
-  } catch (_) {}
-  return true;
+  void db;
+  return false;
 }
 
 function ensureIngredientVariantTagsSchemaInMain(db) {
-  if (!db) return false;
-  ensureRecipeTagsSchemaInMain(db);
-  try {
-    db.run('PRAGMA foreign_keys = ON;');
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS ingredient_variant_tag_map (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ingredient_variant_id INTEGER NOT NULL REFERENCES ingredient_variants(id) ON DELETE CASCADE,
-        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-        sort_order INTEGER,
-        UNIQUE(ingredient_variant_id, tag_id)
-      );
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_variant
-      ON ingredient_variant_tag_map(ingredient_variant_id, sort_order, id);
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_ingredient_variant_tag_map_tag
-      ON ingredient_variant_tag_map(tag_id, ingredient_variant_id);
-    `);
-  } catch (_) {}
-  ensureIngredientVariantIsDeprecatedColumnInMain(db);
-  return true;
+  void db;
+  return false;
 }
 
 function ensureIngredientVariantIsDeprecatedColumnInMain(db) {
-  if (!db) return false;
-  try {
-    if (!tableHasColumnInMain(db, 'ingredient_variants', 'ingredient_id')) {
-      return false;
-    }
-    if (tableHasColumnInMain(db, 'ingredient_variants', 'is_deprecated')) {
-      return false;
-    }
-    db.run(
-      'ALTER TABLE ingredient_variants ADD COLUMN is_deprecated INTEGER NOT NULL DEFAULT 0;',
-    );
-    return true;
-  } catch (_) {
-    return false;
-  }
+  void db;
+  return false;
 }
 
 function ensureSizesSchemaInMain(db) {
-  if (!db) return false;
-  try {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS sizes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL COLLATE NOCASE,
-        is_hidden INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER,
-        is_removed INTEGER NOT NULL DEFAULT 0
-      );
-    `);
-  } catch (_) {}
-  try {
-    if (!tableHasColumnInMain(db, 'sizes', 'is_hidden')) {
-      db.run(
-        'ALTER TABLE sizes ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;',
-      );
-    }
-  } catch (_) {}
-  try {
-    if (!tableHasColumnInMain(db, 'sizes', 'is_removed')) {
-      db.run(
-        'ALTER TABLE sizes ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;',
-      );
-    }
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_sizes_name_nocase
-      ON sizes(name COLLATE NOCASE);
-    `);
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_sizes_sort
-      ON sizes(sort_order, name COLLATE NOCASE);
-    `);
-  } catch (_) {}
-  return true;
+  void db;
+  return false;
 }
 
 function ensureUnitsSchemaInMain(db) {
-  if (!db) return false;
-  try {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS units (
-        code TEXT PRIMARY KEY,
-        name_singular TEXT NOT NULL,
-        name_plural TEXT NOT NULL,
-        category TEXT NOT NULL,
-        sort_order INTEGER,
-        is_hidden INTEGER NOT NULL DEFAULT 0,
-        is_removed INTEGER NOT NULL DEFAULT 0
-      );
-    `);
-  } catch (_) {}
-  try {
-    if (!tableHasColumnInMain(db, 'units', 'is_hidden')) {
-      db.run(
-        'ALTER TABLE units ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;',
-      );
-    }
-  } catch (_) {}
-  try {
-    if (!tableHasColumnInMain(db, 'units', 'is_removed')) {
-      db.run(
-        'ALTER TABLE units ADD COLUMN is_removed INTEGER NOT NULL DEFAULT 0;',
-      );
-    }
-  } catch (_) {}
-  try {
-    db.run(`
-      CREATE INDEX IF NOT EXISTS idx_units_sort
-      ON units(sort_order, code COLLATE NOCASE);
-    `);
-  } catch (_) {}
-  return true;
+  void db;
+  return false;
 }
 
 async function persistLoadedDbInMain(db, isElectron) {
-  if (!db) return;
-  await persistBinaryArrayInMain(db.export(), { isElectron });
+  void db;
+  void isElectron;
 }
 
 async function persistBinaryArrayInMain(
@@ -1934,205 +1755,21 @@ async function persistBinaryArrayInMain(
     failureMessage = 'Failed to save database.',
   } = {},
 ) {
-  if (isElectron) {
-    if (!window.electronAPI || typeof window.electronAPI.saveDB !== 'function') {
-      return;
-    }
-    const ok = await window.electronAPI.saveDB(binaryArray, { overwriteOnly });
-    if (ok === false) throw new Error(failureMessage);
-  } else {
-    throw new Error('Saving requires the Electron app.');
-  }
+  void binaryArray;
+  void isElectron;
+  void overwriteOnly;
+  void failureMessage;
 }
 
 function ensureIngredientBaseVariantsInMain(db) {
-  if (
-    !db ||
-    !tableHasColumnInMain(db, 'ingredient_variants', 'ingredient_id') ||
-    !tableHasColumnInMain(db, 'ingredient_variants', 'variant')
-  ) {
-    return 0;
-  }
-  const hasHomeLocation = tableHasColumnInMain(
-    db,
-    'ingredient_variants',
-    'home_location',
-  );
-  const hasSortOrder = tableHasColumnInMain(
-    db,
-    'ingredient_variants',
-    'sort_order',
-  );
-  const hasLegacyHomeLocation = tableHasColumnInMain(
-    db,
-    'ingredients',
-    'location_at_home',
-  );
-  let changedCount = 0;
-  let txStarted = false;
-
-  try {
-    const ingredientQ = db.exec(
-      `SELECT ID, ${
-        hasLegacyHomeLocation ? "COALESCE(location_at_home, 'none')" : "'none'"
-      } AS legacy_home
-       FROM ingredients
-       ORDER BY ID ASC;`,
-    );
-    const ingredientRows =
-      Array.isArray(ingredientQ) &&
-      ingredientQ.length &&
-      Array.isArray(ingredientQ[0].values)
-        ? ingredientQ[0].values
-        : [];
-    if (!ingredientRows.length) return 0;
-
-    try {
-      db.run('BEGIN IMMEDIATE;');
-      txStarted = true;
-    } catch (_) {
-      db.run('BEGIN;');
-      txStarted = true;
-    }
-
-    ingredientRows.forEach(([ingredientIdRaw, legacyHomeRaw]) => {
-      const ingredientId = Number(ingredientIdRaw);
-      if (!Number.isFinite(ingredientId) || ingredientId <= 0) return;
-      const clearLegacyHomeIfNeeded = () => {
-        if (!hasLegacyHomeLocation || legacyHome === 'none') return false;
-        db.run(
-          `UPDATE ingredients
-              SET location_at_home = 'none'
-            WHERE ID = ?
-              AND COALESCE(location_at_home, 'none') != 'none';`,
-          [ingredientId],
-        );
-        return true;
-      };
-
-      const baseQ = db.exec(
-        `SELECT id,
-                COALESCE(variant, '') AS variant_name,
-                ${hasHomeLocation ? "COALESCE(home_location, 'none')" : "'none'"} AS home_location,
-                ${hasSortOrder ? 'COALESCE(sort_order, 999999)' : '0'} AS sort_order
-           FROM ingredient_variants
-          WHERE ingredient_id = ?
-            AND ${getIngredientBaseVariantWhereSql('variant')}
-          ORDER BY
-            CASE
-              WHEN lower(trim(COALESCE(variant, ''))) = '${INGREDIENT_BASE_VARIANT_NAME}'
-                THEN 0
-              ELSE 1
-            END,
-            ${hasSortOrder ? 'COALESCE(sort_order, 999999), ' : ''}id ASC
-          LIMIT 1;`,
-        [ingredientId],
-      );
-      const baseRow =
-        Array.isArray(baseQ) &&
-        baseQ.length &&
-        Array.isArray(baseQ[0].values) &&
-        baseQ[0].values.length
-          ? baseQ[0].values[0]
-          : null;
-      const legacyHome = normalizeShoppingHomeLocationId(legacyHomeRaw);
-
-      if (!baseRow) {
-        const insertCols = ['ingredient_id', 'variant'];
-        const insertVals = [ingredientId, INGREDIENT_BASE_VARIANT_NAME];
-        if (hasSortOrder) {
-          insertCols.push('sort_order');
-          insertVals.push(0);
-        }
-        if (hasHomeLocation) {
-          insertCols.push('home_location');
-          insertVals.push(legacyHome);
-        }
-        const placeholders = insertCols.map(() => '?').join(', ');
-        db.run(
-          `INSERT INTO ingredient_variants (${insertCols.join(', ')}) VALUES (${placeholders});`,
-          insertVals,
-        );
-        changedCount += clearLegacyHomeIfNeeded() ? 2 : 1;
-        return;
-      }
-
-      const [baseIdRaw, baseVariantRaw, baseHomeRaw, baseSortOrderRaw] =
-        baseRow;
-      const baseId = Number(baseIdRaw);
-      if (!Number.isFinite(baseId) || baseId <= 0) return;
-      const currentHome = normalizeShoppingHomeLocationId(baseHomeRaw);
-      const nextHome = currentHome !== 'none' ? currentHome : legacyHome;
-      const sets = [];
-      const vals = [];
-
-      if (
-        String(baseVariantRaw || '')
-          .trim()
-          .toLowerCase() !== INGREDIENT_BASE_VARIANT_NAME
-      ) {
-        sets.push('variant = ?');
-        vals.push(INGREDIENT_BASE_VARIANT_NAME);
-      }
-      if (hasSortOrder && Number(baseSortOrderRaw) !== 0) {
-        sets.push('sort_order = 0');
-      }
-      if (hasHomeLocation && nextHome !== currentHome) {
-        sets.push('home_location = ?');
-        vals.push(nextHome);
-      }
-      const legacyCleared = clearLegacyHomeIfNeeded();
-      if (!sets.length && !legacyCleared) return;
-
-      if (sets.length) {
-        db.run(
-          `UPDATE ingredient_variants SET ${sets.join(', ')} WHERE id = ?;`,
-          [...vals, baseId],
-        );
-      }
-      changedCount += legacyCleared ? 2 : 1;
-    });
-
-    if (txStarted) {
-      db.run('COMMIT;');
-      txStarted = false;
-    }
-    return changedCount;
-  } catch (err) {
-    if (txStarted) {
-      try {
-        db.run('ROLLBACK;');
-      } catch (_) {}
-    }
-    throw err;
-  }
+  void db;
+  return 0;
 }
 
 async function ensureIngredientLemmaMaintenanceInMain(db, isElectron) {
-  if (!db) return 0;
-  let baseVariantChangedCount = 0;
-  try {
-    baseVariantChangedCount =
-      Number(ensureIngredientBaseVariantsInMain(db)) || 0;
-  } catch (err) {
-    console.warn('⚠️ Failed to repair ingredient base variants:', err);
-    baseVariantChangedCount = 0;
-  }
-  const changedCount = Number.isFinite(baseVariantChangedCount)
-    ? baseVariantChangedCount
-    : 0;
-  if (changedCount <= 0) return 0;
-  try {
-    await persistLoadedDbInMain(db, isElectron);
-    if (baseVariantChangedCount > 0) {
-      console.info(
-        `ℹ️ Repaired ${baseVariantChangedCount} ingredient base variant row(s).`,
-      );
-    }
-  } catch (err) {
-    console.warn('⚠️ Failed to persist ingredient maintenance updates:', err);
-  }
-  return changedCount;
+  void db;
+  void isElectron;
+  return 0;
 }
 
 const LAST_PAGE_SESSION_KEY = 'favoriteEats:last-page-id';
@@ -3143,100 +2780,10 @@ if (typeof window !== 'undefined') {
  * (direct name or synonym) and that row is soft-deprecated.
  */
 function ingredientScopedVariantIsDeprecated(db, ingredientName, variantText) {
-  const n = String(ingredientName || '').trim();
-  const v = String(variantText || '').trim();
-  if (!db || typeof db.exec !== 'function' || !n || !v) return false;
-  if (v.toLowerCase() === 'default') return false;
-
-  let hasVariantTable = false;
-  try {
-    const t = db.exec(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_variants';`,
-    );
-    hasVariantTable = !!(t?.length && t[0]?.values?.length);
-  } catch (_) {
-    return false;
-  }
-  if (!hasVariantTable) return false;
-
-  const pragmaHasColumn = (table, col) => {
-    try {
-      const pc = db.exec(`PRAGMA table_info(${table});`);
-      const vals = pc?.[0]?.values || [];
-      const needle = String(col || '').toLowerCase();
-      return vals.some(
-        (row) =>
-          Array.isArray(row) && String(row[1] || '').toLowerCase() === needle,
-      );
-    } catch (_) {
-      return false;
-    }
-  };
-
-  if (!pragmaHasColumn('ingredient_variants', 'is_deprecated')) return false;
-
-  const ingHasDeprecated = pragmaHasColumn('ingredients', 'is_deprecated');
-  const ingHasHide = pragmaHasColumn('ingredients', 'hide_from_shopping_list');
-  const ingVisibilityClause = ingHasDeprecated
-    ? `AND COALESCE(i.is_deprecated, 0) = 0`
-    : ingHasHide
-      ? `AND COALESCE(i.hide_from_shopping_list, 0) = 0`
-      : ``;
-
-  const canonicalIds = [];
-  const seen = new Set();
-  const pushIds = (result) => {
-    const rows = result?.[0]?.values || [];
-    rows.forEach((row) => {
-      const id = Number(Array.isArray(row) ? row[0] : NaN);
-      if (!Number.isFinite(id) || id <= 0 || seen.has(id)) return;
-      seen.add(id);
-      canonicalIds.push(id);
-    });
-  };
-
-  try {
-    pushIds(
-      db.exec(
-        `SELECT i.ID
-           FROM ingredients i
-          WHERE lower(trim(i.name)) = lower(trim(?))
-            ${ingVisibilityClause}
-          ORDER BY i.ID ASC;`,
-        [n],
-      ),
-    );
-    pushIds(
-      db.exec(
-        `SELECT i.ID
-           FROM ingredient_synonyms s
-           JOIN ingredients i ON i.ID = s.ingredient_id
-          WHERE lower(trim(s.synonym)) = lower(trim(?))
-            ${ingVisibilityClause}
-          ORDER BY i.ID ASC;`,
-        [n],
-      ),
-    );
-  } catch (_) {
-    return false;
-  }
-
-  if (!canonicalIds.length) return false;
-  const ph = canonicalIds.map(() => '?').join(',');
-  try {
-    const r = db.exec(
-      `SELECT 1
-         FROM ingredient_variants
-        WHERE ingredient_id IN (${ph})
-          AND lower(trim(variant)) = lower(trim(?))
-          AND COALESCE(is_deprecated, 0) = 1
-        LIMIT 1;`,
-      [...canonicalIds, v],
-    );
-    return !!(r?.length && r[0]?.values?.length);
-  } catch (_) {
-    return false;
-  }
+  void db;
+  void ingredientName;
+  void variantText;
+  return false;
 }
 
 if (typeof window !== 'undefined') {
@@ -3573,325 +3120,12 @@ function getShoppingPlanSelectionRows(options = {}) {
     })
     .filter((entry) => String(entry.text || '').trim());
 
-  const tableExists = (name) => {
-    if (!db || typeof db.exec !== 'function') return false;
-    try {
-      const q = db.exec(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
-        [name],
-      );
-      return !!(Array.isArray(q) && q.length && q[0]?.values?.length);
-    } catch (_) {
-      return false;
-    }
-  };
-
-  const orderedSelectedStoreIds = orderShoppingListSelectedStoreIds(
-    getShoppingPlanStoreOrder(),
-    getShoppingPlanSelectedStoreIds(),
-  );
-
   /** @type {{ id: number, label: string }[]} */
-  let selectedStores = [];
+  const selectedStores = [];
   const baseAssignmentMap = new Map();
   const variantAssignmentMap = new Map();
   const variantAnyAssignmentMap = new Map();
   const variantOrderMap = new Map();
-
-  if (
-    db &&
-    typeof db.exec === 'function' &&
-    rows.length > 0 &&
-    orderedSelectedStoreIds.length > 0 &&
-    tableExists('stores') &&
-    tableExists('store_locations')
-  ) {
-    const storePh = orderedSelectedStoreIds.map(() => '?').join(',');
-    try {
-      const storeQ = db.exec(
-        `
-          SELECT ID, chain_name, location_name
-          FROM stores
-          WHERE ID IN (${storePh});
-        `,
-        orderedSelectedStoreIds,
-      );
-      const storeMeta = new Map();
-      if (
-        Array.isArray(storeQ) &&
-        storeQ.length &&
-        Array.isArray(storeQ[0].values)
-      ) {
-        storeQ[0].values.forEach(([id, chain, location]) => {
-          const storeId = Math.trunc(Number(id));
-          if (!Number.isFinite(storeId) || storeId <= 0) return;
-          const chainName = String(chain || '').trim();
-          const locationName = String(location || '').trim();
-          const label = locationName
-            ? `${chainName} (${locationName})`
-            : chainName || `Store ${storeId}`;
-          storeMeta.set(storeId, { id: storeId, label });
-        });
-      }
-      selectedStores = orderedSelectedStoreIds
-        .map((storeId) => storeMeta.get(storeId))
-        .filter(Boolean);
-    } catch (_) {
-      selectedStores = [];
-    }
-
-    const effectiveStoreIds = selectedStores.map((store) => store.id);
-    const uniqueNameKeys = [
-      ...new Set(
-        rows
-          .map((row) =>
-            String(row?.name || '')
-              .trim()
-              .toLowerCase(),
-          )
-          .filter(Boolean),
-      ),
-    ];
-    if (effectiveStoreIds.length && uniqueNameKeys.length) {
-      const effectiveStorePh = effectiveStoreIds.map(() => '?').join(',');
-      const namePh = uniqueNameKeys.map(() => '?').join(',');
-      if (tableExists('ingredient_store_location')) {
-        try {
-          const baseQ = db.exec(
-            `
-              SELECT DISTINCT
-                lower(trim(i.name)) AS name_key,
-                sl.store_id,
-                sl.ID AS aisle_id,
-                COALESCE(sl.name, '') AS aisle_name,
-                COALESCE(sl.sort_order, 999999) AS aisle_sort_order
-              FROM ingredient_store_location isl
-              JOIN ingredients i ON i.ID = isl.ingredient_id
-              JOIN store_locations sl ON sl.ID = isl.store_location_id
-              WHERE sl.store_id IN (${effectiveStorePh})
-                AND lower(trim(i.name)) IN (${namePh});
-            `,
-            [...effectiveStoreIds, ...uniqueNameKeys],
-          );
-          if (
-            Array.isArray(baseQ) &&
-            baseQ.length &&
-            Array.isArray(baseQ[0].values)
-          ) {
-            baseQ[0].values.forEach(
-              ([
-                nameKey,
-                storeIdRaw,
-                aisleIdRaw,
-                aisleName,
-                aisleSortOrder,
-              ]) => {
-                const nameKeyNormalized = String(nameKey || '')
-                  .trim()
-                  .toLowerCase();
-                const storeId = Math.trunc(Number(storeIdRaw));
-                const aisleId = Math.trunc(Number(aisleIdRaw));
-                if (
-                  !nameKeyNormalized ||
-                  !Number.isFinite(storeId) ||
-                  !Number.isFinite(aisleId)
-                ) {
-                  return;
-                }
-                if (!baseAssignmentMap.has(nameKeyNormalized)) {
-                  baseAssignmentMap.set(nameKeyNormalized, []);
-                }
-                baseAssignmentMap.get(nameKeyNormalized).push({
-                  storeId,
-                  aisleId,
-                  aisleLabel:
-                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
-                  aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
-                    ? Number(aisleSortOrder)
-                    : 999999,
-                });
-              },
-            );
-          }
-        } catch (_) {}
-      }
-
-      if (
-        tableExists('ingredient_variants') &&
-        tableExists('ingredient_variant_store_location')
-      ) {
-        try {
-          const variantOrderQ = db.exec(
-            `
-              SELECT
-                lower(trim(i.name)) AS name_key,
-                lower(trim(v.variant)) AS variant_key
-              FROM ingredient_variants v
-              JOIN ingredients i ON i.ID = v.ingredient_id
-              WHERE lower(trim(i.name)) IN (${namePh})
-                AND NOT (${getIngredientBaseVariantWhereSql('v.variant')})
-              ORDER BY
-                lower(trim(i.name)) ASC,
-                COALESCE(v.sort_order, 999999) ASC,
-                COALESCE(v.id, 999999) ASC;
-            `,
-            uniqueNameKeys,
-          );
-          if (
-            Array.isArray(variantOrderQ) &&
-            variantOrderQ.length &&
-            Array.isArray(variantOrderQ[0].values)
-          ) {
-            variantOrderQ[0].values.forEach(([nameKey, variantKey]) => {
-              const nameKeyNormalized = String(nameKey || '')
-                .trim()
-                .toLowerCase();
-              const variantKeyNormalized = String(variantKey || '')
-                .trim()
-                .toLowerCase();
-              if (!nameKeyNormalized || !variantKeyNormalized) return;
-              if (!variantOrderMap.has(nameKeyNormalized)) {
-                variantOrderMap.set(nameKeyNormalized, []);
-              }
-              variantOrderMap.get(nameKeyNormalized).push(variantKeyNormalized);
-            });
-          }
-        } catch (_) {}
-
-        try {
-          const variantAnyQ = db.exec(
-            `
-              SELECT DISTINCT
-                lower(trim(i.name)) AS name_key,
-                sl.store_id,
-                sl.ID AS aisle_id,
-                COALESCE(sl.name, '') AS aisle_name,
-                COALESCE(sl.sort_order, 999999) AS aisle_sort_order
-              FROM ingredient_variant_store_location ivsl
-              JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
-              JOIN ingredients i ON i.ID = v.ingredient_id
-              JOIN store_locations sl ON sl.ID = ivsl.store_location_id
-              WHERE sl.store_id IN (${effectiveStorePh})
-                AND lower(trim(i.name)) IN (${namePh})
-                AND NOT (${getIngredientBaseVariantWhereSql('v.variant')});
-            `,
-            [...effectiveStoreIds, ...uniqueNameKeys],
-          );
-          if (
-            Array.isArray(variantAnyQ) &&
-            variantAnyQ.length &&
-            Array.isArray(variantAnyQ[0].values)
-          ) {
-            variantAnyQ[0].values.forEach(
-              ([
-                nameKey,
-                storeIdRaw,
-                aisleIdRaw,
-                aisleName,
-                aisleSortOrder,
-              ]) => {
-                const nameKeyNormalized = String(nameKey || '')
-                  .trim()
-                  .toLowerCase();
-                const storeId = Math.trunc(Number(storeIdRaw));
-                const aisleId = Math.trunc(Number(aisleIdRaw));
-                if (
-                  !nameKeyNormalized ||
-                  !Number.isFinite(storeId) ||
-                  !Number.isFinite(aisleId)
-                ) {
-                  return;
-                }
-                if (!variantAnyAssignmentMap.has(nameKeyNormalized)) {
-                  variantAnyAssignmentMap.set(nameKeyNormalized, []);
-                }
-                variantAnyAssignmentMap.get(nameKeyNormalized).push({
-                  storeId,
-                  aisleId,
-                  aisleLabel:
-                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
-                  aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
-                    ? Number(aisleSortOrder)
-                    : 999999,
-                });
-              },
-            );
-          }
-        } catch (_) {}
-        try {
-          const variantQ = db.exec(
-            `
-              SELECT DISTINCT
-                lower(trim(i.name)) AS name_key,
-                lower(trim(v.variant)) AS variant_key,
-                sl.store_id,
-                sl.ID AS aisle_id,
-                COALESCE(sl.name, '') AS aisle_name,
-                COALESCE(sl.sort_order, 999999) AS aisle_sort_order
-              FROM ingredient_variant_store_location ivsl
-              JOIN ingredient_variants v ON v.id = ivsl.ingredient_variant_id
-              JOIN ingredients i ON i.ID = v.ingredient_id
-              JOIN store_locations sl ON sl.ID = ivsl.store_location_id
-              WHERE sl.store_id IN (${effectiveStorePh})
-                AND lower(trim(i.name)) IN (${namePh})
-                AND NOT (${getIngredientBaseVariantWhereSql('v.variant')});
-            `,
-            [...effectiveStoreIds, ...uniqueNameKeys],
-          );
-          if (
-            Array.isArray(variantQ) &&
-            variantQ.length &&
-            Array.isArray(variantQ[0].values)
-          ) {
-            variantQ[0].values.forEach(
-              ([
-                nameKey,
-                variantKey,
-                storeIdRaw,
-                aisleIdRaw,
-                aisleName,
-                aisleSortOrder,
-              ]) => {
-                const nameKeyNormalized = String(nameKey || '')
-                  .trim()
-                  .toLowerCase();
-                const variantKeyNormalized = String(variantKey || '')
-                  .trim()
-                  .toLowerCase();
-                const storeId = Math.trunc(Number(storeIdRaw));
-                const aisleId = Math.trunc(Number(aisleIdRaw));
-                if (
-                  !nameKeyNormalized ||
-                  !variantKeyNormalized ||
-                  !Number.isFinite(storeId) ||
-                  !Number.isFinite(aisleId)
-                ) {
-                  return;
-                }
-                const assignmentKey = getShoppingListVariantAssignmentKey(
-                  nameKeyNormalized,
-                  variantKeyNormalized,
-                );
-                if (!assignmentKey) return;
-                if (!variantAssignmentMap.has(assignmentKey)) {
-                  variantAssignmentMap.set(assignmentKey, []);
-                }
-                variantAssignmentMap.get(assignmentKey).push({
-                  storeId,
-                  aisleId,
-                  aisleLabel:
-                    String(aisleName || '').trim() || `Aisle ${aisleId}`,
-                  aisleSortOrder: Number.isFinite(Number(aisleSortOrder))
-                    ? Number(aisleSortOrder)
-                    : 999999,
-                });
-              },
-            );
-          }
-        } catch (_) {}
-      }
-    }
-  }
 
   const groupedInputRows = rows.map((row) => {
     return {
@@ -7877,127 +7111,24 @@ function initBottomNav() {
 }
 
 function getIngredientTableColumnSet(db) {
-  try {
-    const q = db.exec('PRAGMA table_info(ingredients);');
-    const rows = Array.isArray(q) && q.length > 0 ? q[0].values : [];
-    return new Set(
-      rows.map((r) =>
-        String((Array.isArray(r) ? r[1] : '') || '').toLowerCase(),
-      ),
-    );
-  } catch (_) {
-    return new Set();
-  }
+  void db;
+  return new Set();
 }
 
 function createIngredientVisibilitySql(colsSet) {
-  const hasDeprecated = colsSet.has('is_deprecated');
-  const hasHideLegacy = colsSet.has('hide_from_shopping_list');
-  const hasHidden = colsSet.has('is_hidden');
-  const clauses = [];
-  if (hasDeprecated) clauses.push('COALESCE(is_deprecated, 0) = 0');
-  if (hasHideLegacy) clauses.push('COALESCE(hide_from_shopping_list, 0) = 0');
-  if (hasHidden) clauses.push('COALESCE(is_hidden, 0) = 0');
-  return clauses.length ? clauses.join(' AND ') : '1 = 1';
+  void colsSet;
+  return '1 = 1';
 }
 
 function getVisibleIngredientNamePool(db) {
-  const colsSet = getIngredientTableColumnSet(db);
-  const visibilitySql = createIngredientVisibilitySql(colsSet);
-  try {
-    const q = db.exec(
-      `
-      SELECT DISTINCT name
-      FROM ingredients
-      WHERE name IS NOT NULL
-        AND trim(name) != ''
-        AND ${visibilitySql}
-      ORDER BY name COLLATE NOCASE;
-      `,
-    );
-    if (!Array.isArray(q) || !q.length || !Array.isArray(q[0].values))
-      return [];
-    return q[0].values
-      .map((row) => (Array.isArray(row) ? row[0] : null))
-      .map((v) => String(v || '').trim())
-      .filter((v) => v.length > 0);
-  } catch (_) {
-    return [];
-  }
+  void db;
+  return [];
 }
 
 function createIngredientLookupHelpers(db) {
-  const colsSet = getIngredientTableColumnSet(db);
-  const visibilitySql = createIngredientVisibilitySql(colsSet);
-  const getVisibleCanonicalId = (name) => {
-    const stmt = db.prepare(
-      `
-      SELECT ID
-      FROM ingredients
-      WHERE lower(trim(name)) = lower(trim(?))
-        AND ${visibilitySql}
-      ORDER BY
-        CASE WHEN TRIM(COALESCE(variant, '')) = '' THEN 0 ELSE 1 END,
-        CASE WHEN TRIM(COALESCE(size, '')) = '' THEN 0 ELSE 1 END,
-        ID ASC
-      LIMIT 1;
-      `,
-    );
-    stmt.bind([name]);
-    let id = null;
-    if (stmt.step()) id = Number(stmt.get()[0]);
-    stmt.free();
-    if (Number.isFinite(id)) return id;
-
-    // Fall back to synonym lookup.
-    try {
-      const synStmt = db.prepare(
-        `
-        SELECT i.ID
-        FROM ingredient_synonyms s
-        JOIN ingredients i ON i.ID = s.ingredient_id
-        WHERE lower(trim(s.synonym)) = lower(trim(?))
-          AND ${visibilitySql}
-        ORDER BY
-          CASE WHEN TRIM(COALESCE(i.variant, '')) = '' THEN 0 ELSE 1 END,
-          CASE WHEN TRIM(COALESCE(i.size, '')) = '' THEN 0 ELSE 1 END,
-          i.ID ASC
-        LIMIT 1;
-        `,
-      );
-      synStmt.bind([name]);
-      let synId = null;
-      if (synStmt.step()) synId = Number(synStmt.get()[0]);
-      synStmt.free();
-      if (Number.isFinite(synId)) return synId;
-    } catch (_) {}
-
-    return null;
-  };
-
-  const anyIngredientNamed = (name) => {
-    const stmt = db.prepare(
-      `SELECT 1 FROM ingredients WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1;`,
-    );
-    stmt.bind([name]);
-    const ok = stmt.step();
-    stmt.free();
-    if (ok) return true;
-
-    // Fall back to synonym lookup.
-    try {
-      const synStmt = db.prepare(
-        `SELECT 1 FROM ingredient_synonyms WHERE lower(trim(synonym)) = lower(trim(?)) LIMIT 1;`,
-      );
-      synStmt.bind([name]);
-      const synOk = synStmt.step();
-      synStmt.free();
-      if (synOk) return true;
-    } catch (_) {}
-
-    return false;
-  };
-
+  void db;
+  const getVisibleCanonicalId = () => null;
+  const anyIngredientNamed = () => false;
   return { getVisibleCanonicalId, anyIngredientNamed };
 }
 
