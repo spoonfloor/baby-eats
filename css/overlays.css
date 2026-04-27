@@ -130,10 +130,55 @@
   font-weight: var(--main-font-weight);
 }
 
+.ui-dialog-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px 0;
+}
+
+.ui-dialog-title-row .ui-dialog-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
 .ui-dialog-title {
   margin: 0 0 10px 0;
   font-size: var(--header-font-size);
   font-weight: 600;
+}
+
+.ui-dialog-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -8px -10px -8px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--font-color-near-black);
+  cursor: pointer;
+}
+
+.ui-dialog-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.ui-dialog-close:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+.ui-dialog-close-icon.material-symbols-outlined {
+  --material-symbols-opsz: 22;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .ui-dialog-body {

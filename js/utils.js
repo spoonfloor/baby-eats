@@ -1193,6 +1193,10 @@ if (typeof window !== 'undefined') {
     tertiaryDisabled = false,
     tertiaryClose = false,
     closeOnBackdrop = true,
+    showClose = false,
+    // Optional: async (surface) => boolean — return false to keep open. Use surface.detach/attach
+    // to swap with another dialog so only one modal is visible (e.g. confirm, then re-attach).
+    beforeDismiss = null,
   } = {}) => {
     return new Promise((resolve) => {
       const host = ensureDialogHost();
@@ -1220,11 +1224,29 @@ if (typeof window !== 'undefined') {
       })();
       panel.setAttribute('aria-label', ariaLabel);
 
+      let dialogCloseBtn = null;
       if (title) {
         const titleEl = document.createElement('h2');
         titleEl.className = 'ui-dialog-title';
         titleEl.textContent = String(title);
-        panel.appendChild(titleEl);
+        if (showClose) {
+          const titleRow = document.createElement('div');
+          titleRow.className = 'ui-dialog-title-row';
+          dialogCloseBtn = document.createElement('button');
+          dialogCloseBtn.type = 'button';
+          dialogCloseBtn.className = 'ui-dialog-close';
+          dialogCloseBtn.setAttribute('aria-label', 'Close');
+          const closeIcon = document.createElement('span');
+          closeIcon.className = 'material-symbols-outlined ui-dialog-close-icon';
+          closeIcon.textContent = 'close';
+          closeIcon.setAttribute('aria-hidden', 'true');
+          dialogCloseBtn.appendChild(closeIcon);
+          titleRow.appendChild(titleEl);
+          titleRow.appendChild(dialogCloseBtn);
+          panel.appendChild(titleRow);
+        } else {
+          panel.appendChild(titleEl);
+        }
       }
 
       let bodyEl = null;
@@ -1401,6 +1423,34 @@ if (typeof window !== 'undefined') {
       host.appendChild(backdrop);
       host.dataset.open = '1';
 
+      const dismissSurface = {
+        detach: () => {
+          try {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+          } catch (_) {}
+          try {
+            delete host.dataset.open;
+          } catch (_) {}
+        },
+        attach: () => {
+          try {
+            host.appendChild(backdrop);
+            host.dataset.open = '1';
+          } catch (_) {}
+        },
+        focusPrimary: () => {
+          window.setTimeout(() => {
+            try {
+              (firstInput || confirmBtn).focus();
+              if (firstInput && firstInput.select) firstInput.select();
+            } catch (_) {}
+          }, 0);
+        },
+        backdrop,
+        panel,
+        host,
+      };
+
       const cleanup = () => {
         try {
           delete host.dataset.open;
@@ -1479,6 +1529,18 @@ if (typeof window !== 'undefined') {
         resolve(null);
       };
 
+      const attemptDismiss = async () => {
+        if (typeof beforeDismiss === 'function') {
+          try {
+            const proceed = await beforeDismiss(dismissSurface);
+            if (proceed === false) return;
+          } catch (_) {
+            return;
+          }
+        }
+        doCancel();
+      };
+
       const doConfirm = async () => {
         syncValidity();
         if (confirmBtn.disabled) return;
@@ -1513,7 +1575,9 @@ if (typeof window !== 'undefined') {
         resolve({ ...values, __dialogAction: 'tertiary' });
       };
 
-      cancelBtn.addEventListener('click', doCancel);
+      cancelBtn.addEventListener('click', () => {
+        void attemptDismiss();
+      });
       if (tertiaryText) {
         tertiaryBtn.addEventListener('click', () => {
           void doTertiary();
@@ -1537,20 +1601,29 @@ if (typeof window !== 'undefined') {
         }
       } catch (_) {}
 
+      if (dialogCloseBtn) {
+        dialogCloseBtn.addEventListener('click', () => {
+          void attemptDismiss();
+        });
+      }
+
       backdrop.addEventListener('mousedown', (e) => {
         if (!closeOnBackdrop) return;
-        if (e.target === backdrop) doCancel();
+        if (e.target === backdrop) void attemptDismiss();
+      });
+
+      // Escape on bubble phase so nested inputs (e.g. inline editors) can handle/stop it first.
+      panel.addEventListener('keydown', (e) => {
+        if (!e || e.key !== 'Escape') return;
+        e.preventDefault();
+        void attemptDismiss();
       });
 
       panel.addEventListener(
         'keydown',
         (e) => {
           if (!e) return;
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            doCancel();
-            return;
-          }
+          if (e.key === 'Escape') return;
           trapTabKey(e, panel);
           if (e.key === 'Enter') {
             // Enter on inputs should submit; on buttons is handled by click anyway.

@@ -364,6 +364,149 @@
     return 'favorite-eats-shared-presence-v1';
   }
 
+  function buildMenuPlanRealtimeChannelName() {
+    const nonce = Math.random().toString(36).slice(2);
+    return `favorite-eats-menu-plan-${Date.now()}-${nonce}`;
+  }
+
+  function clampPlanQty(value) {
+    const qty = Number(value);
+    if (!Number.isFinite(qty)) return 0;
+    return Math.max(0, Math.min(99, qty));
+  }
+
+  function clampOverrideQty(value) {
+    const qty = Number(value);
+    if (!Number.isFinite(qty)) return null;
+    const rounded = Math.round(qty * 10000) / 10000;
+    if (rounded <= 0 || rounded > 99) return null;
+    return rounded;
+  }
+
+  async function fetchMenuPlanState() {
+    const client = getSupabase();
+    const [planRes, ovRes] = await Promise.all([
+      client.from('menu_plan_recipe').select('recipe_id, qty'),
+      client.from('menu_modal_override').select('recipe_id, override_qty'),
+    ]);
+    if (planRes.error) throw planRes.error;
+    if (ovRes.error) throw ovRes.error;
+
+    const recipeSelections = {};
+    (Array.isArray(planRes.data) ? planRes.data : []).forEach((row) => {
+      const recipeId = Math.trunc(Number(row.recipe_id));
+      const quantity = Number(row.qty);
+      if (!(recipeId > 0) || !(quantity > 0) || !Number.isFinite(quantity)) return;
+      const key = String(recipeId);
+      recipeSelections[key] = {
+        key,
+        recipeId,
+        title: '',
+        quantity,
+      };
+    });
+
+    const recipeMenuOverrides = {};
+    (Array.isArray(ovRes.data) ? ovRes.data : []).forEach((row) => {
+      const recipeId = Math.trunc(Number(row.recipe_id));
+      const quantity = Number(row.override_qty);
+      if (!(recipeId > 0) || !(quantity > 0) || !Number.isFinite(quantity)) return;
+      const key = String(recipeId);
+      recipeMenuOverrides[key] = {
+        key,
+        recipeId,
+        quantity,
+      };
+    });
+
+    return { recipeSelections, recipeMenuOverrides };
+  }
+
+  async function upsertMenuPlanRecipe({ recipeId, quantity }) {
+    const rid = Math.trunc(Number(recipeId));
+    if (!(rid > 0)) return;
+    const qty = clampPlanQty(quantity);
+    const client = getSupabase();
+    if (!(qty > 0)) {
+      const { error } = await client.from('menu_plan_recipe').delete().eq('recipe_id', rid);
+      if (error) throw error;
+      return;
+    }
+    const { error } = await client.from('menu_plan_recipe').upsert(
+      {
+        recipe_id: rid,
+        qty,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'recipe_id' }
+    );
+    if (error) throw error;
+  }
+
+  async function replaceMenuModalOverridesFromMap(overridesByKey) {
+    const client = getSupabase();
+    const { error: delError } = await client.from('menu_modal_override').delete().gte('recipe_id', 0);
+    if (delError) throw delError;
+
+    const src =
+      overridesByKey && typeof overridesByKey === 'object' && !Array.isArray(overridesByKey)
+        ? overridesByKey
+        : {};
+    const rows = [];
+    Object.keys(src).forEach((k) => {
+      const entry = src[k];
+      const recipeId = Math.trunc(Number(entry?.recipeId != null ? entry.recipeId : k));
+      const oq = clampOverrideQty(entry?.quantity);
+      if (!(recipeId > 0) || oq == null) return;
+      rows.push({
+        recipe_id: recipeId,
+        override_qty: oq,
+        updated_at: new Date().toISOString(),
+      });
+    });
+    if (!rows.length) return;
+    const { error: insError } = await client.from('menu_modal_override').insert(rows);
+    if (insError) throw insError;
+  }
+
+  async function clearMenuPlanAndModalOverrides() {
+    const client = getSupabase();
+    const { error: e1 } = await client.from('menu_modal_override').delete().gte('recipe_id', 0);
+    if (e1) throw e1;
+    const { error: e2 } = await client.from('menu_plan_recipe').delete().gte('recipe_id', 0);
+    if (e2) throw e2;
+  }
+
+  function subscribeMenuPlanChanges({ onChange } = {}) {
+    const client = getSupabase();
+    if (!client || typeof client.channel !== 'function') {
+      return () => {};
+    }
+    const handler = typeof onChange === 'function' ? onChange : () => {};
+    const channel = client
+      .channel(buildMenuPlanRealtimeChannelName())
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_plan_recipe' },
+        handler
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_modal_override' },
+        handler
+      );
+    channel.subscribe();
+    return () => {
+      try {
+        if (typeof client.removeChannel === 'function') {
+          client.removeChannel(channel);
+        } else if (typeof channel.unsubscribe === 'function') {
+          channel.unsubscribe();
+        }
+      } catch (_) {}
+    };
+  }
+
   function subscribeSharedPresence({ clientId, nickname, onPresence } = {}) {
     const client = getSupabase();
     if (!client || typeof client.channel !== 'function') {
@@ -456,5 +599,22 @@
     subscribeRecipeCatalogChanges: (options) => subscribeRecipeCatalogChanges(options),
     subscribeRecipeById: (recipeId, options) => subscribeRecipeById(recipeId, options),
     subscribeSharedPresence: (options) => subscribeSharedPresence(options),
+    fetchMenuPlanState: () =>
+      fetchMenuPlanState().catch((err) => {
+        throw new Error(toErrorMessage(err, 'Failed to load menu plan.'));
+      }),
+    upsertMenuPlanRecipe: (payload) =>
+      upsertMenuPlanRecipe(payload).catch((err) => {
+        throw new Error(toErrorMessage(err, 'Failed to save menu plan recipe.'));
+      }),
+    replaceMenuModalOverridesFromMap: (map) =>
+      replaceMenuModalOverridesFromMap(map).catch((err) => {
+        throw new Error(toErrorMessage(err, 'Failed to save menu overrides.'));
+      }),
+    clearMenuPlanAndModalOverrides: () =>
+      clearMenuPlanAndModalOverrides().catch((err) => {
+        throw new Error(toErrorMessage(err, 'Failed to clear menu plan.'));
+      }),
+    subscribeMenuPlanChanges: (options) => subscribeMenuPlanChanges(options),
   });
 })(typeof window !== 'undefined' ? window : globalThis);

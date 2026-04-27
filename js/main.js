@@ -1781,6 +1781,8 @@ const SHOPPING_SCROLL_RESTORE_SESSION_KEY =
 const SHOPPING_PLAN_STORAGE_KEY = 'favoriteEats:shopping-plan:v1';
 const SHOPPING_PLAN_KEY_SEP = '\x00';
 let shoppingPlanCache = null;
+/** When true, recipe plan / modal override writes skip Supabase (e.g. during remote hydrate). */
+let menuPlanSupabasePushSuspended = false;
 
 function loadRecipeWebServingsMap() {
   const api = window.favoriteEatsRecipeWebServings || {};
@@ -1989,7 +1991,12 @@ function loadShoppingPlanFromStorage() {
       shoppingPlanCache = createEmptyShoppingPlan();
       return shoppingPlanCache;
     }
-    shoppingPlanCache = normalizeShoppingPlan(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      parsed.recipeSelections = {};
+      parsed.recipeMenuOverrides = {};
+    }
+    shoppingPlanCache = normalizeShoppingPlan(parsed);
     return shoppingPlanCache;
   } catch (_) {
     shoppingPlanCache = createEmptyShoppingPlan();
@@ -2001,7 +2008,13 @@ function persistShoppingPlan(plan) {
   const normalized = normalizeShoppingPlan(plan);
   shoppingPlanCache = normalized;
   try {
-    localStorage.setItem(SHOPPING_PLAN_STORAGE_KEY, JSON.stringify(normalized));
+    // Recipe plan + modal overrides are sourced from Supabase only; persist legacy chrome fields locally.
+    const chromeOnly = normalizeShoppingPlan({
+      ...normalized,
+      recipeSelections: {},
+      recipeMenuOverrides: {},
+    });
+    localStorage.setItem(SHOPPING_PLAN_STORAGE_KEY, JSON.stringify(chromeOnly));
   } catch (_) {}
   return normalized;
 }
@@ -2114,7 +2127,8 @@ function setShoppingPlanRecipeSelection({
     return getShoppingPlan();
   }
   const normalizedKey = String(Math.trunc(normalizedRecipeId));
-  return updateShoppingPlan((plan) => {
+  const nextQty = Math.max(0, Math.min(99, Number(quantity || 0)));
+  const plan = updateShoppingPlan((plan) => {
     if (!plan.recipeSelections || typeof plan.recipeSelections !== 'object') {
       plan.recipeSelections = {};
     }
@@ -2124,7 +2138,6 @@ function setShoppingPlanRecipeSelection({
     ) {
       plan.recipeMenuOverrides = {};
     }
-    const nextQty = Math.max(0, Math.min(99, Number(quantity || 0)));
     if (!Number.isFinite(nextQty) || nextQty <= 0) {
       delete plan.recipeSelections[normalizedKey];
       delete plan.recipeMenuOverrides[normalizedKey];
@@ -2137,6 +2150,19 @@ function setShoppingPlanRecipeSelection({
       quantity: nextQty,
     };
   });
+  if (
+    !menuPlanSupabasePushSuspended &&
+    window.favoriteEatsDataApi &&
+    typeof window.favoriteEatsDataApi.upsertMenuPlanRecipe === 'function'
+  ) {
+    void window.favoriteEatsDataApi
+      .upsertMenuPlanRecipe({
+        recipeId: Math.trunc(normalizedRecipeId),
+        quantity: Number.isFinite(nextQty) && nextQty > 0 ? nextQty : 0,
+      })
+      .catch((err) => console.error('❌ Menu plan sync failed:', err));
+  }
+  return plan;
 }
 
 function getShoppingPlanRecipeSelections() {
@@ -2176,13 +2202,107 @@ function clearShoppingPlanSelections({
   clearItems = false,
   clearRecipes = false,
 } = {}) {
-  return updateShoppingPlan((plan) => {
+  const out = updateShoppingPlan((plan) => {
     if (clearItems) plan.itemSelections = {};
     if (clearRecipes) {
       plan.recipeSelections = {};
       plan.recipeMenuOverrides = {};
     }
   });
+  if (
+    clearRecipes &&
+    !menuPlanSupabasePushSuspended &&
+    window.favoriteEatsDataApi &&
+    typeof window.favoriteEatsDataApi.clearMenuPlanAndModalOverrides === 'function'
+  ) {
+    void window.favoriteEatsDataApi
+      .clearMenuPlanAndModalOverrides()
+      .catch((err) => console.error('❌ Clear menu plan failed:', err));
+  }
+  return out;
+}
+
+function applyRemoteMenuPlanStateToCache(remote, recipeRowsForTitles) {
+  const rows = Array.isArray(recipeRowsForTitles) ? recipeRowsForTitles : [];
+  const titleById = new Map(
+    rows.map((r) => [Number(r.id), String(r.title || '').trim()]),
+  );
+  const current = getShoppingPlan();
+  const recipeSelections = {};
+  const recipeMenuOverrides = {};
+  const remoteSel =
+    remote?.recipeSelections && typeof remote.recipeSelections === 'object'
+      ? remote.recipeSelections
+      : {};
+  Object.keys(remoteSel).forEach((k) => {
+    const v = remoteSel[k];
+    if (!v || typeof v !== 'object') return;
+    const recipeId = Math.trunc(Number(v.recipeId != null ? v.recipeId : k));
+    const quantity = Number(v.quantity);
+    if (!(recipeId > 0) || !(quantity > 0) || !Number.isFinite(quantity)) return;
+    const key = String(recipeId);
+    recipeSelections[key] = {
+      key,
+      recipeId,
+      title: titleById.get(recipeId) || String(v.title || ''),
+      quantity,
+    };
+  });
+  const remoteOv =
+    remote?.recipeMenuOverrides && typeof remote.recipeMenuOverrides === 'object'
+      ? remote.recipeMenuOverrides
+      : {};
+  Object.keys(remoteOv).forEach((k) => {
+    const v = remoteOv[k];
+    if (!v || typeof v !== 'object') return;
+    const recipeId = Math.trunc(Number(v.recipeId != null ? v.recipeId : k));
+    const quantity = Number(v.quantity);
+    if (!(recipeId > 0) || !(quantity > 0) || !Number.isFinite(quantity)) return;
+    const selKey = String(recipeId);
+    if (!recipeSelections[selKey]) return;
+    recipeMenuOverrides[selKey] = {
+      key: selKey,
+      recipeId,
+      quantity,
+    };
+  });
+  const merged = normalizeShoppingPlan({
+    version: 1,
+    itemSelections:
+      current.itemSelections && typeof current.itemSelections === 'object'
+        ? current.itemSelections
+        : {},
+    storeOrder: Array.isArray(current.storeOrder) ? current.storeOrder : [],
+    selectedStoreIds: Array.isArray(current.selectedStoreIds)
+      ? current.selectedStoreIds
+      : [],
+    recipeSelections,
+    recipeMenuOverrides,
+  });
+  shoppingPlanCache = merged;
+  try {
+    const chromeOnly = normalizeShoppingPlan({
+      ...merged,
+      recipeSelections: {},
+      recipeMenuOverrides: {},
+    });
+    localStorage.setItem(SHOPPING_PLAN_STORAGE_KEY, JSON.stringify(chromeOnly));
+  } catch (_) {}
+}
+
+async function hydrateShoppingPlanFromSupabase(recipeRowsForTitles) {
+  const api = window.favoriteEatsDataApi;
+  if (!api || typeof api.fetchMenuPlanState !== 'function') return;
+  menuPlanSupabasePushSuspended = true;
+  try {
+    const remote = await api.fetchMenuPlanState();
+    applyRemoteMenuPlanStateToCache(remote, recipeRowsForTitles);
+  } catch (err) {
+    console.error('❌ Failed to load menu plan from Supabase:', err);
+    uiToast('Failed to load menu plan.');
+  } finally {
+    menuPlanSupabasePushSuspended = false;
+  }
 }
 
 function getShoppingPlanSelectionLabel(entry) {
@@ -3703,12 +3823,10 @@ async function loadRecipesPage() {
       const recipeId = Number(entry?.recipeId);
       const title = String(entry?.title || '').trim();
       if (!Number.isFinite(recipeId) || recipeId <= 0 || !title) return;
+      // initialQuantity = effective value at dialog open (for unsaved dirty only). Plan/stepper
+      // baseline stays on the entry as `baselineQuantity` for Revert.
       const quantity = normalizeQuantity(entry?.quantity);
-      const baselineRaw = Number(entry?.baselineQuantity);
-      const initialQuantity =
-        Number.isFinite(baselineRaw) && baselineRaw > 0
-          ? normalizeQuantity(baselineRaw)
-          : quantity;
+      const initialQuantity = quantity;
       const draft = {
         recipeId,
         title,
@@ -3720,9 +3838,6 @@ async function loadRecipesPage() {
       rowDrafts.push(draft);
 
       const itemEl = document.createElement('li');
-      if (!quantitiesAreEqual(quantity, initialQuantity)) {
-        itemEl.classList.add('is-edited');
-      }
       const titleEl = document.createElement('span');
       titleEl.className = 'menu-plan-dialog-row-title';
       titleEl.textContent = `${title} (`;
@@ -3786,6 +3901,7 @@ async function loadRecipesPage() {
         }
         if (event.key === 'Escape') {
           event.preventDefault();
+          event.stopPropagation();
           showButtonOnly();
         }
       });
@@ -3879,6 +3995,16 @@ async function loadRecipesPage() {
         };
       });
     });
+    if (
+      !menuPlanSupabasePushSuspended &&
+      window.favoriteEatsDataApi &&
+      typeof window.favoriteEatsDataApi.replaceMenuModalOverridesFromMap ===
+        'function'
+    ) {
+      void window.favoriteEatsDataApi
+        .replaceMenuModalOverridesFromMap(getShoppingPlanRecipeMenuOverrides())
+        .catch((err) => console.error('❌ Menu overrides sync failed:', err));
+    }
   };
   const openMenuPlanDialog = async () => {
     if (!window.ui || typeof window.ui.dialog !== 'function') return;
@@ -3893,6 +4019,27 @@ async function loadRecipesPage() {
       confirmText: 'Save',
       confirmDisabled: !listState.isDirty(),
       tertiaryDisabled: !listState.isDirty(),
+      showClose: true,
+      beforeDismiss: async (surface) => {
+        if (!listState.isDirty()) return true;
+        surface.detach();
+        const discardChoice = await window.ui.dialog({
+          title: 'Discard changes',
+          message:
+            'You have unsaved changes. Are you sure you want to discard them?',
+          cancelText: 'Go back',
+          confirmText: 'Discard',
+          danger: true,
+          showCancel: true,
+          closeOnBackdrop: true,
+        });
+        if (discardChoice == null) {
+          surface.attach();
+          surface.focusPrimary();
+          return false;
+        }
+        return true;
+      },
       onReady: ({ setConfirmDisabled, setTertiaryDisabled }) => {
         listState.setOnChange(({ isDirty }) => {
           const disableActions = !isDirty;
@@ -4537,6 +4684,7 @@ async function loadRecipesPage() {
   };
 
   await refreshRecipesFromRemote();
+  await hydrateShoppingPlanFromSupabase(recipeRows);
   hydrateRecipeSelectionsFromPlan();
   syncRecipesActionButtonState();
   rerenderFilteredRecipes();
@@ -4546,6 +4694,23 @@ async function loadRecipesPage() {
     unsubscribeRecipeCatalogRealtime = dataApi.subscribeRecipeCatalogChanges({
       onChange: () => {
         void refreshRecipesFromRemote({ showErrorToast: false });
+      },
+    });
+  }
+  let unsubscribeMenuPlanRealtime = null;
+  if (typeof dataApi.subscribeMenuPlanChanges === 'function') {
+    unsubscribeMenuPlanRealtime = dataApi.subscribeMenuPlanChanges({
+      onChange: () => {
+        void (async () => {
+          try {
+            const remote = await dataApi.fetchMenuPlanState();
+            applyRemoteMenuPlanStateToCache(remote, recipeRows);
+            hydrateRecipeSelectionsFromPlan();
+            rerenderFilteredRecipes();
+          } catch (err) {
+            console.error('❌ Menu plan refresh failed:', err);
+          }
+        })();
       },
     });
   }
@@ -4561,6 +4726,10 @@ async function loadRecipesPage() {
         unsubscribeRecipeCatalogRealtime();
       }
       unsubscribeRecipeCatalogRealtime = null;
+      if (typeof unsubscribeMenuPlanRealtime === 'function') {
+        unsubscribeMenuPlanRealtime();
+      }
+      unsubscribeMenuPlanRealtime = null;
     },
     { once: true }
   );
@@ -4660,1550 +4829,6 @@ async function loadRecipesPage() {
     });
   }
 }
-
-// --- Shopping list checklist helpers (tests extract this block) ---
-const SHOPPING_LIST_DOC_STORAGE_KEY = 'favoriteEats:shopping-list-doc:v2';
-const SHOPPING_LIST_VIEW_MODE_SESSION_KEY =
-  'favoriteEats:shopping-list-view-mode';
-const SHOPPING_LIST_DOC_VERSION = 3;
-
-function readShoppingListViewModeFromSession() {
-  try {
-    const raw = String(
-      sessionStorage.getItem(SHOPPING_LIST_VIEW_MODE_SESSION_KEY) || '',
-    )
-      .trim()
-      .toLowerCase();
-    if (raw === 'home' || raw === 'stores') return raw;
-  } catch (_) {}
-  return 'stores';
-}
-
-function persistShoppingListViewMode(mode) {
-  const next = mode === 'home' ? 'home' : 'stores';
-  try {
-    sessionStorage.setItem(SHOPPING_LIST_VIEW_MODE_SESSION_KEY, next);
-  } catch (_) {}
-}
-
-function createShoppingListChecklistRowId() {
-  const stamp = Date.now().toString(36);
-  const random = Math.random().toString(36).slice(2, 8);
-  return `shopping-list-row-${stamp}-${random}`;
-}
-
-function createEmptyShoppingListDoc() {
-  return {
-    version: SHOPPING_LIST_DOC_VERSION,
-    rows: [],
-  };
-}
-
-function normalizeShoppingListDocRow(rawRow, fallbackOrder = 0) {
-  const source =
-    rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow)
-      ? rawRow
-      : {};
-  const text = String(source.text || '').trim();
-  if (!text) return null;
-  const rawOrder = Number(source.order);
-  const rawStoreId = Math.trunc(Number(source.storeId));
-  const rawAisleId = Math.trunc(Number(source.aisleId));
-  const rawAisleSortOrder = Number(source.aisleSortOrder);
-  const hasExplicitAisleSortOrder =
-    source.aisleSortOrder != null &&
-    String(source.aisleSortOrder).trim() !== '';
-  const sourceKey = String(source.sourceKey || '').trim();
-  const sourceText = String(source.sourceText || '').trim();
-  const sourceStoreLabel = String(source.sourceStoreLabel || '').trim();
-  const sourceBucketLabel = String(source.sourceBucketLabel || '').trim();
-  const hasExplicitUserEdited = typeof source.userEdited === 'boolean';
-  const inferredUserEdited = !!(
-    sourceKey &&
-    sourceText &&
-    text &&
-    text !== sourceText
-  );
-  return {
-    id: String(source.id || '').trim() || createShoppingListChecklistRowId(),
-    text,
-    checked: !!source.checked,
-    storeLabel: String(source.storeLabel || '').trim(),
-    storeId: Number.isFinite(rawStoreId) && rawStoreId > 0 ? rawStoreId : null,
-    bucketLabel: String(source.bucketLabel || '').trim(),
-    aisleId: Number.isFinite(rawAisleId) && rawAisleId > 0 ? rawAisleId : null,
-    aisleSortOrder:
-      hasExplicitAisleSortOrder && Number.isFinite(rawAisleSortOrder)
-        ? rawAisleSortOrder
-        : null,
-    sourceKey,
-    sourceText: sourceKey ? sourceText || text : '',
-    sourceStoreLabel: sourceKey
-      ? sourceStoreLabel || String(source.storeLabel || '').trim()
-      : '',
-    sourceBucketLabel: sourceKey
-      ? sourceBucketLabel || String(source.bucketLabel || '').trim()
-      : '',
-    userEdited: sourceKey
-      ? hasExplicitUserEdited
-        ? !!source.userEdited || inferredUserEdited
-        : inferredUserEdited
-      : false,
-    order: Number.isFinite(rawOrder) ? rawOrder : fallbackOrder,
-  };
-}
-
-function normalizeShoppingListDoc(rawDoc) {
-  const source =
-    rawDoc && typeof rawDoc === 'object' && !Array.isArray(rawDoc)
-      ? rawDoc
-      : {};
-  const rawRows = Array.isArray(source.rows) ? source.rows : [];
-  const rows = rawRows
-    .map((row, index) => normalizeShoppingListDocRow(row, index))
-    .filter(Boolean)
-    .sort((a, b) => {
-      const orderDelta = Number(a.order || 0) - Number(b.order || 0);
-      if (Math.abs(orderDelta) > 1e-9) return orderDelta;
-      return String(a.id || '').localeCompare(String(b.id || ''));
-    })
-    .map((row, index) => ({
-      ...row,
-      order: index,
-    }));
-  return {
-    version: SHOPPING_LIST_DOC_VERSION,
-    rows,
-  };
-}
-
-function loadShoppingListDocFromStorage() {
-  try {
-    const raw = localStorage.getItem(SHOPPING_LIST_DOC_STORAGE_KEY);
-    if (!raw) return null;
-    return normalizeShoppingListDoc(JSON.parse(raw));
-  } catch (_) {
-    return null;
-  }
-}
-
-function persistShoppingListDoc(doc) {
-  const normalized = normalizeShoppingListDoc(doc);
-  try {
-    localStorage.setItem(
-      SHOPPING_LIST_DOC_STORAGE_KEY,
-      JSON.stringify(normalized),
-    );
-  } catch (_) {}
-  return normalized;
-}
-
-function doesShoppingListRowHaveUserOverride(row) {
-  if (!row || typeof row !== 'object') return false;
-  const sourceKey = String(row.sourceKey || '').trim();
-  const text = String(row.text || '').trim();
-  const sourceText = String(row.sourceText || '').trim();
-  if (!sourceKey || !text || !sourceText) return false;
-  return !!row.userEdited && text !== sourceText;
-}
-
-function hydrateLegacyShoppingListDocSources(storedDoc, generatedDoc) {
-  const normalizedStoredDoc = normalizeShoppingListDoc(storedDoc);
-  const normalizedGeneratedDoc = normalizeShoppingListDoc(generatedDoc);
-  const storedRows = normalizedStoredDoc.rows;
-  const generatedRows = normalizedGeneratedDoc.rows;
-  const allRowsNeedSourceKeys =
-    storedRows.length > 0 &&
-    storedRows.every((row) => !String(row?.sourceKey || '').trim());
-  if (!allRowsNeedSourceKeys) return normalizedStoredDoc;
-  if (storedRows.length !== generatedRows.length) return normalizedStoredDoc;
-  const canHydrateByOrder = storedRows.every((row, index) => {
-    const generatedRow = generatedRows[index];
-    if (!generatedRow || !String(generatedRow.sourceKey || '').trim())
-      return false;
-    return (
-      String(row.storeLabel || '').trim() ===
-        String(generatedRow.storeLabel || '').trim() &&
-      String(row.bucketLabel || '').trim() ===
-        String(generatedRow.bucketLabel || '').trim()
-    );
-  });
-  if (!canHydrateByOrder) return normalizedStoredDoc;
-  return normalizeShoppingListDoc({
-    version: SHOPPING_LIST_DOC_VERSION,
-    rows: storedRows.map((row, index) => {
-      const generatedRow = generatedRows[index];
-      const generatedText = String(generatedRow?.text || '').trim();
-      return {
-        ...row,
-        sourceKey: String(generatedRow?.sourceKey || '').trim(),
-        sourceText: generatedText,
-        sourceStoreLabel: String(generatedRow?.sourceStoreLabel || '').trim(),
-        sourceBucketLabel: String(generatedRow?.sourceBucketLabel || '').trim(),
-        userEdited: generatedText
-          ? String(row?.text || '').trim() !== generatedText
-          : false,
-      };
-    }),
-  });
-}
-
-function buildShoppingListDocFromPlanRows(rows) {
-  const sourceRows = Array.isArray(rows) ? rows : [];
-  const docRows = [];
-  let currentStoreLabel = '';
-  let currentStoreId = null;
-  let currentBucketLabel = '';
-  let currentAisleId = null;
-  let currentAisleSortOrder = null;
-
-  sourceRows.forEach((row) => {
-    if (!row || typeof row !== 'object') return;
-    const rowType = String(row.rowType || '').trim();
-    const text = String(row.text || row.label || '').trim();
-    const className = String(row.className || '').trim();
-    const rowStoreId = Math.trunc(Number(row.storeId));
-    const rowAisleId = Math.trunc(Number(row.aisleId));
-    const rowAisleSortOrder = Number(row.aisleSortOrder);
-
-    if (rowType === 'section') {
-      if (!text) return;
-      if (className.includes('shopping-list-section--store')) {
-        currentStoreLabel = text;
-        currentStoreId =
-          Number.isFinite(rowStoreId) && rowStoreId > 0 ? rowStoreId : null;
-        currentBucketLabel = '';
-        currentAisleId = null;
-        currentAisleSortOrder = null;
-        return;
-      }
-      if (className.includes('shopping-list-section--unlisted')) {
-        currentStoreLabel = '';
-        currentStoreId = null;
-        currentBucketLabel = text;
-        currentAisleId = null;
-        currentAisleSortOrder = null;
-        return;
-      }
-      currentBucketLabel = text;
-      currentAisleId =
-        Number.isFinite(rowAisleId) && rowAisleId > 0 ? rowAisleId : null;
-      currentAisleSortOrder = Number.isFinite(rowAisleSortOrder)
-        ? rowAisleSortOrder
-        : null;
-      return;
-    }
-
-    if (!text) return;
-    docRows.push({
-      id: createShoppingListChecklistRowId(),
-      text,
-      checked: false,
-      storeLabel: currentStoreLabel,
-      storeId: currentStoreId,
-      bucketLabel: currentBucketLabel,
-      aisleId: currentAisleId,
-      aisleSortOrder: currentAisleSortOrder,
-      sourceKey: String(row.key || '').trim(),
-      sourceText: text,
-      sourceStoreLabel: currentStoreLabel,
-      sourceBucketLabel: currentBucketLabel,
-      userEdited: false,
-      order: docRows.length,
-    });
-  });
-
-  return normalizeShoppingListDoc({
-    version: SHOPPING_LIST_DOC_VERSION,
-    rows: docRows,
-  });
-}
-
-function mergeShoppingListDocWithGenerated(storedDoc, generatedDoc) {
-  const normalizedGeneratedDoc = normalizeShoppingListDoc(generatedDoc);
-  const normalizedStoredDoc = hydrateLegacyShoppingListDocSources(
-    storedDoc,
-    normalizedGeneratedDoc,
-  );
-  const generatedRows = normalizedGeneratedDoc.rows;
-  const storedRows = normalizedStoredDoc.rows;
-  const storedRowsBySourceKey = new Map();
-  const manualRows = [];
-  storedRows.forEach((row) => {
-    const sourceKey = String(row?.sourceKey || '').trim();
-    if (!sourceKey) {
-      manualRows.push(row);
-      return;
-    }
-    storedRowsBySourceKey.set(sourceKey, row);
-  });
-
-  const generatedSourceKeys = new Set();
-  const mergedRows = [];
-  const conflicts = [];
-
-  generatedRows.forEach((generatedRow) => {
-    const sourceKey = String(generatedRow?.sourceKey || '').trim();
-    if (!sourceKey) {
-      mergedRows.push(generatedRow);
-      return;
-    }
-    generatedSourceKeys.add(sourceKey);
-    const storedRow = storedRowsBySourceKey.get(sourceKey);
-    if (!storedRow) {
-      mergedRows.push(generatedRow);
-      return;
-    }
-
-    const hasUserOverride = doesShoppingListRowHaveUserOverride(storedRow);
-    const sourceChanged =
-      String(storedRow.sourceText || '').trim() !==
-        String(generatedRow.sourceText || '').trim() ||
-      String(storedRow.sourceStoreLabel || '').trim() !==
-        String(generatedRow.sourceStoreLabel || '').trim() ||
-      String(storedRow.sourceBucketLabel || '').trim() !==
-        String(generatedRow.sourceBucketLabel || '').trim();
-
-    if (hasUserOverride && sourceChanged) {
-      mergedRows.push(storedRow);
-      conflicts.push({
-        kind: 'update',
-        rowId: String(storedRow.id || '').trim(),
-        sourceKey,
-        currentText: String(storedRow.text || '').trim(),
-        previousGeneratedText: String(storedRow.sourceText || '').trim(),
-        nextGeneratedText: String(generatedRow.sourceText || '').trim(),
-        nextGeneratedDisplayText: String(generatedRow.text || '').trim(),
-        nextStoreLabel: String(generatedRow.sourceStoreLabel || '').trim(),
-        nextBucketLabel: String(generatedRow.sourceBucketLabel || '').trim(),
-        nextStoreId: generatedRow.storeId,
-        nextAisleId: generatedRow.aisleId,
-        nextAisleSortOrder: generatedRow.aisleSortOrder,
-      });
-      return;
-    }
-
-    mergedRows.push({
-      ...storedRow,
-      text: hasUserOverride
-        ? String(storedRow.text || '').trim()
-        : String(generatedRow.text || '').trim(),
-      checked: !!storedRow.checked,
-      storeLabel: String(generatedRow.storeLabel || '').trim(),
-      storeId: generatedRow.storeId,
-      bucketLabel: String(generatedRow.bucketLabel || '').trim(),
-      aisleId: generatedRow.aisleId,
-      aisleSortOrder: generatedRow.aisleSortOrder,
-      sourceKey,
-      sourceText: String(generatedRow.sourceText || '').trim(),
-      sourceStoreLabel: String(generatedRow.sourceStoreLabel || '').trim(),
-      sourceBucketLabel: String(generatedRow.sourceBucketLabel || '').trim(),
-      userEdited: hasUserOverride,
-    });
-  });
-
-  storedRows.forEach((storedRow) => {
-    const sourceKey = String(storedRow?.sourceKey || '').trim();
-    if (!sourceKey || generatedSourceKeys.has(sourceKey)) return;
-    if (!doesShoppingListRowHaveUserOverride(storedRow)) return;
-    mergedRows.push(storedRow);
-    conflicts.push({
-      kind: 'remove',
-      rowId: String(storedRow.id || '').trim(),
-      sourceKey,
-      currentText: String(storedRow.text || '').trim(),
-      previousGeneratedText: String(storedRow.sourceText || '').trim(),
-      nextGeneratedText: '',
-      nextGeneratedDisplayText: '',
-      nextStoreLabel: '',
-      nextBucketLabel: '',
-    });
-  });
-
-  manualRows
-    .slice()
-    .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0))
-    .forEach((row) => {
-      mergedRows.push(row);
-    });
-
-  return {
-    doc: normalizeShoppingListDoc({
-      version: SHOPPING_LIST_DOC_VERSION,
-      rows: mergedRows,
-    }),
-    conflicts,
-  };
-}
-
-function resolveShoppingListDocConflict(doc, conflict, resolution = 'keep') {
-  const normalizedDoc = normalizeShoppingListDoc(doc);
-  const rows = normalizedDoc.rows.slice();
-  const rowIndex = rows.findIndex(
-    (row) => String(row?.id || '') === String(conflict?.rowId || ''),
-  );
-  if (rowIndex === -1) return normalizedDoc;
-  const row = rows[rowIndex];
-  const mode = resolution === 'replace' ? 'replace' : 'keep';
-
-  if (String(conflict?.kind || '').trim() === 'remove') {
-    if (mode === 'replace') {
-      rows.splice(rowIndex, 1);
-      return normalizeShoppingListDoc({
-        version: SHOPPING_LIST_DOC_VERSION,
-        rows,
-      });
-    }
-    rows[rowIndex] = {
-      ...row,
-      sourceKey: '',
-      sourceText: '',
-      sourceStoreLabel: '',
-      sourceBucketLabel: '',
-      userEdited: false,
-    };
-    return normalizeShoppingListDoc({
-      version: SHOPPING_LIST_DOC_VERSION,
-      rows,
-    });
-  }
-
-  const nextGeneratedText = String(conflict?.nextGeneratedText || '').trim();
-  const nextStoreLabel = String(conflict?.nextStoreLabel || '').trim();
-  const nextBucketLabel = String(conflict?.nextBucketLabel || '').trim();
-  const nextStoreId = Math.trunc(Number(conflict?.nextStoreId));
-  const nextAisleId = Math.trunc(Number(conflict?.nextAisleId));
-  const nextAisleSortOrder = Number(conflict?.nextAisleSortOrder);
-  if (!nextGeneratedText) return normalizedDoc;
-
-  if (mode === 'replace') {
-    rows[rowIndex] = {
-      ...row,
-      text: nextGeneratedText,
-      storeLabel: nextStoreLabel,
-      storeId:
-        Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
-      bucketLabel: nextBucketLabel,
-      aisleId:
-        Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
-      aisleSortOrder: Number.isFinite(nextAisleSortOrder)
-        ? nextAisleSortOrder
-        : null,
-      sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
-      sourceText: nextGeneratedText,
-      sourceStoreLabel: nextStoreLabel,
-      sourceBucketLabel: nextBucketLabel,
-      userEdited: false,
-    };
-  } else {
-    rows[rowIndex] = {
-      ...row,
-      storeLabel: nextStoreLabel,
-      storeId:
-        Number.isFinite(nextStoreId) && nextStoreId > 0 ? nextStoreId : null,
-      bucketLabel: nextBucketLabel,
-      aisleId:
-        Number.isFinite(nextAisleId) && nextAisleId > 0 ? nextAisleId : null,
-      aisleSortOrder: Number.isFinite(nextAisleSortOrder)
-        ? nextAisleSortOrder
-        : null,
-      sourceKey: String(conflict?.sourceKey || row?.sourceKey || '').trim(),
-      sourceText: nextGeneratedText,
-      sourceStoreLabel: nextStoreLabel,
-      sourceBucketLabel: nextBucketLabel,
-      userEdited: true,
-    };
-  }
-
-  return normalizeShoppingListDoc({
-    version: SHOPPING_LIST_DOC_VERSION,
-    rows,
-  });
-}
-
-function shoppingListStoreCollapseKey(storeLabel) {
-  return `sl-store:\x00${String(storeLabel || '')}`;
-}
-
-function shoppingListAisleCollapseKey(storeLabel, bucketLabel) {
-  return `sl-aisle:\x00${String(storeLabel || '')}\x00${String(bucketLabel || '')}`;
-}
-
-function shoppingListPseudoUnlistedCollapseKey() {
-  return 'sl-pseudo-unlisted';
-}
-
-function shoppingListCompletedCollapseKey(storeLabel) {
-  return `completed\x00${String(storeLabel || '')}`;
-}
-
-function toShoppingListAisleTitleCase(value) {
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase();
-  if (!normalized) return '';
-  return normalized.replace(/\b([a-z])/g, (match) => match.toUpperCase());
-}
-
-function normalizeShoppingListBucketKey(bucketLabel) {
-  return String(bucketLabel || '')
-    .trim()
-    .toLowerCase();
-}
-
-function getShoppingListDocBucketKey(row) {
-  const aisleId = Math.trunc(Number(row?.aisleId));
-  if (Number.isFinite(aisleId) && aisleId > 0) {
-    return `aisle:${aisleId}`;
-  }
-  return `label:${normalizeShoppingListBucketKey(row?.bucketLabel)}`;
-}
-
-function getShoppingListBucketDescriptors(rows) {
-  const buckets = new Map();
-  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
-    const key = getShoppingListDocBucketKey(row);
-    const label = String(row?.bucketLabel || '').trim();
-    const aisleId = Math.trunc(Number(row?.aisleId));
-    const rawSortOrder = Number(row?.aisleSortOrder);
-    const hasExplicitSortOrder =
-      row?.aisleSortOrder != null && String(row.aisleSortOrder).trim() !== '';
-    const sortOrder =
-      hasExplicitSortOrder && Number.isFinite(rawSortOrder)
-        ? rawSortOrder
-        : 999999;
-    if (!buckets.has(key)) {
-      buckets.set(key, {
-        key,
-        label,
-        sortOrder,
-        aisleId: Number.isFinite(aisleId) && aisleId > 0 ? aisleId : null,
-        firstIndex: index,
-      });
-      return;
-    }
-    const bucket = buckets.get(key);
-    if (!bucket.label && label) {
-      bucket.label = label;
-    }
-    if (sortOrder < bucket.sortOrder) {
-      bucket.sortOrder = sortOrder;
-    }
-    if (
-      Number.isFinite(aisleId) &&
-      aisleId > 0 &&
-      (!Number.isFinite(bucket.aisleId) ||
-        bucket.aisleId == null ||
-        aisleId < bucket.aisleId)
-    ) {
-      bucket.aisleId = aisleId;
-    }
-  });
-  return Array.from(buckets.values()).sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) {
-      return a.sortOrder - b.sortOrder;
-    }
-    const aisleIdA = Number.isFinite(a.aisleId) ? a.aisleId : 999999;
-    const aisleIdB = Number.isFinite(b.aisleId) ? b.aisleId : 999999;
-    if (aisleIdA !== aisleIdB) {
-      return aisleIdA - aisleIdB;
-    }
-    const hasExplicitOrderA =
-      (Number.isFinite(a.sortOrder) && a.sortOrder < 999999) ||
-      Number.isFinite(a.aisleId);
-    const hasExplicitOrderB =
-      (Number.isFinite(b.sortOrder) && b.sortOrder < 999999) ||
-      Number.isFinite(b.aisleId);
-    if (!hasExplicitOrderA && !hasExplicitOrderB) {
-      return a.firstIndex - b.firstIndex;
-    }
-    const labelDelta = String(a.label || '').localeCompare(
-      String(b.label || ''),
-      undefined,
-      {
-        sensitivity: 'base',
-      },
-    );
-    if (labelDelta !== 0) {
-      return labelDelta;
-    }
-    return a.firstIndex - b.firstIndex;
-  });
-}
-
-function formatShoppingListPlainText(docRows) {
-  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
-    (row) => !row?.checked && String(row?.text || '').trim(),
-  );
-  if (!rows.length) return '';
-
-  const storeOrder = [];
-  const seenStores = new Set();
-  rows.forEach((row) => {
-    const key = String(row?.storeLabel || '');
-    if (seenStores.has(key)) return;
-    seenStores.add(key);
-    storeOrder.push(key);
-  });
-
-  const lines = [];
-  storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter(
-      (row) => String(row?.storeLabel || '') === storeLabel,
-    );
-    if (!storeRows.length) return;
-    if (lines.length) lines.push('');
-    const normalizedStoreLabel = String(storeLabel || '').trim();
-    lines.push((normalizedStoreLabel || 'Unlisted').toUpperCase());
-
-    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
-    const soleUnlistedPseudo =
-      !normalizedStoreLabel &&
-      bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
-        'unlisted';
-
-    bucketDescriptors.forEach((bucket) => {
-      const bucketLabel = String(bucket?.label || '').trim();
-      const normalizedBucketLabel = bucketLabel;
-      if (
-        normalizedBucketLabel &&
-        !(
-          soleUnlistedPseudo &&
-          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
-        )
-      ) {
-        lines.push(toShoppingListAisleTitleCase(normalizedBucketLabel));
-      }
-      storeRows
-        .filter((row) => getShoppingListDocBucketKey(row) === bucket.key)
-        .forEach((row) => {
-          lines.push(`- ${String(row?.text || '').trim()}`);
-        });
-    });
-  });
-
-  return lines.join('\n');
-}
-
-function formatShoppingListHtml(docRows) {
-  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
-    (row) => !row?.checked && String(row?.text || '').trim(),
-  );
-  if (!rows.length) return '';
-
-  const escapeHtml = (value) =>
-    String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-  const storeOrder = [];
-  const seenStores = new Set();
-  rows.forEach((row) => {
-    const key = String(row?.storeLabel || '');
-    if (seenStores.has(key)) return;
-    seenStores.add(key);
-    storeOrder.push(key);
-  });
-
-  const blocks = [];
-  storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter(
-      (row) => String(row?.storeLabel || '') === storeLabel,
-    );
-    if (!storeRows.length) return;
-    if (blocks.length) blocks.push('<br>');
-
-    const normalizedStoreLabel = String(storeLabel || '').trim();
-    blocks.push(
-      `<p>${escapeHtml((normalizedStoreLabel || 'Unlisted').toUpperCase())}</p>`,
-    );
-
-    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
-    const soleUnlistedPseudo =
-      !normalizedStoreLabel &&
-      bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
-        'unlisted';
-
-    bucketDescriptors.forEach((bucket) => {
-      const bucketLabel = String(bucket?.label || '').trim();
-      const normalizedBucketLabel = bucketLabel;
-      const shouldShowBucketLabel =
-        normalizedBucketLabel &&
-        !(
-          soleUnlistedPseudo &&
-          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
-        );
-      if (shouldShowBucketLabel) {
-        blocks.push(
-          `<p>${escapeHtml(toShoppingListAisleTitleCase(normalizedBucketLabel))}</p>`,
-        );
-      }
-      const bucketItems = storeRows.filter(
-        (row) => getShoppingListDocBucketKey(row) === bucket.key,
-      );
-      if (!bucketItems.length) return;
-      blocks.push('<ul>');
-      bucketItems.forEach((row) => {
-        blocks.push(`<li>${escapeHtml(String(row?.text || '').trim())}</li>`);
-      });
-      blocks.push('</ul>');
-    });
-  });
-
-  return blocks.join('');
-}
-
-function formatShoppingListDisplaySectionHeaderLine(row) {
-  if (row?.rowType !== 'section') return '';
-  const boundary = String(row.collapseBoundary || '').trim();
-  const text = String(row.text || row.label || '').trim();
-  if (
-    boundary === 'store' ||
-    boundary === 'home' ||
-    boundary === 'pseudo-unlisted-root'
-  ) {
-    return (text || 'Unlisted').toUpperCase();
-  }
-  if (boundary === 'aisle' || boundary === 'plain-aisle' || boundary === 'completed') {
-    return toShoppingListAisleTitleCase(text || (boundary === 'completed' ? 'completed' : ''));
-  }
-  return toShoppingListAisleTitleCase(text) || (text || '').toUpperCase();
-}
-
-function formatShoppingListPlainTextFromViewState(visibleRows, {
-  selectedRecipes = [],
-  recipesExpanded = false,
-} = {}) {
-  const lines = [];
-  if (recipesExpanded && Array.isArray(selectedRecipes) && selectedRecipes.length) {
-    lines.push('RECIPES');
-    selectedRecipes.forEach((recipe) => {
-      const title = String(recipe?.title || '').trim();
-      if (!title) return;
-      const parts = String(recipe?.servingsText || '').trim();
-      lines.push(
-        parts ? `- ${title} (${parts})` : `- ${title}`,
-      );
-    });
-  }
-  if (!Array.isArray(visibleRows)) return lines.join('\n');
-  visibleRows.forEach((row) => {
-    if (row?.rowType === 'section') {
-      const boundary = String(row.collapseBoundary || '').trim();
-      if (
-        boundary === 'store' ||
-        boundary === 'home' ||
-        boundary === 'pseudo-unlisted-root'
-      ) {
-        if (lines.length) {
-          lines.push('');
-        }
-      }
-      const header = formatShoppingListDisplaySectionHeaderLine(row);
-      if (header) {
-        lines.push(header);
-      }
-      return;
-    }
-    if (row?.rowType === 'item') {
-      if (row.checked) return;
-      const t = String(row.text || '').trim();
-      if (!t) return;
-      lines.push(`- ${t}`);
-    }
-  });
-  return lines.join('\n');
-}
-
-function formatShoppingListHtmlFromViewState(visibleRows, {
-  selectedRecipes = [],
-  recipesExpanded = false,
-} = {}) {
-  const escapeHtml = (value) =>
-    String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-  const blocks = [];
-  let openList = false;
-  const closeList = () => {
-    if (!openList) return;
-    blocks.push('</ul>');
-    openList = false;
-  };
-
-  if (recipesExpanded && Array.isArray(selectedRecipes) && selectedRecipes.length) {
-    blocks.push(`<p>${escapeHtml('RECIPES')}</p>`);
-    blocks.push('<ul>');
-    openList = true;
-    selectedRecipes.forEach((recipe) => {
-      const title = String(recipe?.title || '').trim();
-      if (!title) return;
-      const parts = String(recipe?.servingsText || '').trim();
-      const liText = parts
-        ? `${escapeHtml(title)} (${escapeHtml(parts)})`
-        : escapeHtml(title);
-      blocks.push(`<li>${liText}</li>`);
-    });
-    closeList();
-  }
-
-  if (!Array.isArray(visibleRows) || !visibleRows.length) {
-    return blocks.join('');
-  }
-
-  visibleRows.forEach((row) => {
-    if (row?.rowType === 'section') {
-      closeList();
-      const boundary = String(row.collapseBoundary || '').trim();
-      if (
-        boundary === 'store' ||
-        boundary === 'home' ||
-        boundary === 'pseudo-unlisted-root'
-      ) {
-        if (blocks.length) {
-          blocks.push('<br>');
-        }
-      }
-      const header = formatShoppingListDisplaySectionHeaderLine(row);
-      if (header) {
-        blocks.push(`<p>${escapeHtml(header)}</p>`);
-      }
-      return;
-    }
-    if (row?.rowType === 'item') {
-      if (row.checked) return;
-      const t = String(row.text || '').trim();
-      if (!t) return;
-      if (!openList) {
-        blocks.push('<ul>');
-        openList = true;
-      }
-      blocks.push(`<li>${escapeHtml(t)}</li>`);
-    }
-  });
-  closeList();
-  return blocks.join('');
-}
-
-function buildShoppingListExportPayload(docRows, options = {}) {
-  const rows = normalizeShoppingListDoc({ rows: docRows }).rows.filter(
-    (row) => !row?.checked && String(row?.text || '').trim(),
-  );
-  const title = String(options?.title || '').trim() || 'Shopping List';
-  if (!rows.length) {
-    return { title, stores: [] };
-  }
-
-  const storeOrder = [];
-  const seenStores = new Set();
-  rows.forEach((row) => {
-    const key = String(row?.storeLabel || '');
-    if (seenStores.has(key)) return;
-    seenStores.add(key);
-    storeOrder.push(key);
-  });
-
-  const stores = [];
-  storeOrder.forEach((storeLabel) => {
-    const storeRows = rows.filter(
-      (row) => String(row?.storeLabel || '') === storeLabel,
-    );
-    if (!storeRows.length) return;
-
-    const normalizedStoreLabel = String(storeLabel || '').trim();
-    const storeEntry = {
-      label: (normalizedStoreLabel || 'Unlisted').toUpperCase(),
-      aisles: [],
-    };
-
-    const bucketDescriptors = getShoppingListBucketDescriptors(storeRows);
-    const soleUnlistedPseudo =
-      !normalizedStoreLabel &&
-      bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
-        'unlisted';
-
-    bucketDescriptors.forEach((bucket) => {
-      const bucketRows = storeRows.filter(
-        (row) => getShoppingListDocBucketKey(row) === bucket.key,
-      );
-      if (!bucketRows.length) return;
-      const normalizedBucketLabel = String(bucket?.label || '').trim();
-      const shouldShowBucketLabel =
-        normalizedBucketLabel &&
-        !(
-          soleUnlistedPseudo &&
-          normalizeShoppingListBucketKey(normalizedBucketLabel) === 'unlisted'
-        );
-      storeEntry.aisles.push({
-        label: shouldShowBucketLabel
-          ? toShoppingListAisleTitleCase(normalizedBucketLabel)
-          : '',
-        items: bucketRows
-          .map((row) => String(row?.text || '').trim())
-          .filter(Boolean),
-      });
-    });
-
-    if (storeEntry.aisles.length) {
-      stores.push(storeEntry);
-    }
-  });
-
-  return { title, stores };
-}
-
-function filterShoppingListChecklistRowsForCollapse(
-  displayRows,
-  collapsedKeys,
-) {
-  const collapsed = new Set(
-    collapsedKeys == null
-      ? []
-      : typeof collapsedKeys[Symbol.iterator] === 'function'
-        ? collapsedKeys
-        : [],
-  );
-  const out = [];
-  let topCollapsed = false;
-  let aisleCollapsed = false;
-
-  displayRows.forEach((row) => {
-    if (row?.rowType === 'section') {
-      const boundary = String(row.collapseBoundary || '').trim();
-      if (
-        boundary === 'store' ||
-        boundary === 'pseudo-unlisted-root' ||
-        boundary === 'home'
-      ) {
-        const key = String(row.sectionCollapseKey || '');
-        topCollapsed = !!(key && collapsed.has(key));
-        aisleCollapsed = false;
-        out.push(row);
-        return;
-      }
-      if (topCollapsed) {
-        return;
-      }
-      if (boundary === 'completed') {
-        aisleCollapsed = false;
-        out.push(row);
-        return;
-      }
-      if (boundary === 'aisle') {
-        const key = String(row.sectionCollapseKey || '');
-        const canCollapse = !!row.collapsible && !!key;
-        aisleCollapsed = !!(canCollapse && collapsed.has(key));
-        out.push(row);
-        return;
-      }
-      if (boundary === 'plain-aisle') {
-        aisleCollapsed = false;
-        out.push(row);
-        return;
-      }
-      out.push(row);
-      return;
-    }
-
-    if (row?.rowType === 'item') {
-      if (topCollapsed) {
-        return;
-      }
-      if (
-        row.completedSectionKey &&
-        collapsed.has(String(row.completedSectionKey || ''))
-      ) {
-        return;
-      }
-      if (aisleCollapsed) {
-        return;
-      }
-      out.push(row);
-    }
-  });
-
-  return out;
-}
-
-const SHOPPING_LIST_HOME_LOCATION_DEFS =
-  typeof window !== 'undefined' &&
-  typeof window.getHomeLocationDefs === 'function'
-    ? window.getHomeLocationDefs()
-    : [
-        { id: 'fridge', label: 'fridge' },
-        { id: 'freezer', label: 'freezer' },
-        { id: 'above fridge', label: 'above fridge' },
-        { id: 'pantry', label: 'pantry' },
-        { id: 'cereal cabinet', label: 'cereal cabinet' },
-        { id: 'spices', label: 'spices' },
-        { id: 'fruit stand', label: 'fruit stand' },
-        { id: 'coffee bar', label: 'coffee bar' },
-        { id: 'none', label: 'no location' },
-      ];
-const SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP = '\x00';
-
-function normalizeShoppingHomeLocationId(raw) {
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.normalizeHomeLocationId === 'function'
-  ) {
-    return window.normalizeHomeLocationId(raw);
-  }
-  const value = String(raw || '')
-    .trim()
-    .toLowerCase();
-  if (!value || value === 'measures') return 'none';
-  return SHOPPING_LIST_HOME_LOCATION_DEFS.some((entry) => entry.id === value)
-    ? value
-    : 'none';
-}
-
-function normalizeIngredientVariantRows(rows, options = {}) {
-  const fallbackBaseHome = normalizeShoppingHomeLocationId(
-    options?.fallbackBaseHome || 'none',
-  );
-  const normalizeRowTags = (rawTags) =>
-    normalizeRecipeTagList(
-      Array.isArray(rawTags)
-        ? rawTags
-        : rawTags == null
-          ? []
-          : String(rawTags)
-              .split(/[\n,]/)
-              .map((value) => String(value || '').trim()),
-    );
-  const mergeTagLists = (left, right) =>
-    normalizeRecipeTagList([
-      ...(Array.isArray(left) ? left : []),
-      ...(Array.isArray(right) ? right : []),
-    ]);
-  const namedRows = [];
-  const namedRowsByKey = new Map();
-  let baseRow = null;
-
-  (Array.isArray(rows) ? rows : []).forEach((rawRow) => {
-    const row = rawRow && typeof rawRow === 'object' ? rawRow : {};
-    const isBase = !!row.isBase || isIngredientBaseVariantName(row.value);
-    const normalizedHome = normalizeShoppingHomeLocationId(
-      row.homeLocation != null
-        ? row.homeLocation
-        : row.home != null
-          ? row.home
-          : isBase
-            ? fallbackBaseHome
-            : 'none',
-    );
-    const normalizedTags = normalizeRowTags(
-      row.tags != null ? row.tags : row.tagNames != null ? row.tagNames : [],
-    );
-
-    const depFlag = !!row.isDeprecated;
-    const vId = Number(row.variantId);
-    if (isBase) {
-      if (!baseRow) {
-        baseRow = {
-          isBase: true,
-          value: '',
-          homeLocation: normalizedHome,
-          tags: normalizedTags,
-          variantId: Number.isFinite(vId) && vId > 0 ? vId : null,
-          isDeprecated: false,
-        };
-      } else {
-        if (Number.isFinite(vId) && vId > 0) baseRow.variantId = vId;
-        if (depFlag) baseRow.isDeprecated = true;
-        if (baseRow.homeLocation === 'none' && normalizedHome !== 'none') {
-          baseRow.homeLocation = normalizedHome;
-          baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
-        } else if (normalizedTags.length) {
-          baseRow.tags = mergeTagLists(baseRow.tags, normalizedTags);
-        }
-      }
-      return;
-    }
-
-    const normalizedValue = normalizeNamedIngredientVariant(row.value);
-    if (!normalizedValue) return;
-    const rowKey = normalizedValue.toLowerCase();
-    const existing = namedRowsByKey.get(rowKey);
-    if (existing) {
-      if (depFlag) existing.isDeprecated = true;
-      if (Number.isFinite(vId) && vId > 0) existing.variantId = vId;
-      if (existing.homeLocation === 'none' && normalizedHome !== 'none') {
-        existing.homeLocation = normalizedHome;
-      }
-      if (normalizedTags.length) {
-        existing.tags = mergeTagLists(existing.tags, normalizedTags);
-      }
-      return;
-    }
-
-    const normalizedRow = {
-      isBase: false,
-      value: normalizedValue,
-      homeLocation: normalizedHome,
-      tags: normalizedTags,
-      variantId: Number.isFinite(vId) && vId > 0 ? vId : null,
-      isDeprecated: depFlag,
-    };
-    namedRowsByKey.set(rowKey, normalizedRow);
-    namedRows.push(normalizedRow);
-  });
-
-  return [
-    baseRow || {
-      isBase: true,
-      value: '',
-      homeLocation: fallbackBaseHome,
-      tags: [],
-    },
-    ...namedRows,
-  ];
-}
-
-function serializeIngredientVariantRows(rows, options = {}) {
-  try {
-    return JSON.stringify(normalizeIngredientVariantRows(rows, options));
-  } catch (_) {
-    return JSON.stringify(
-      normalizeIngredientVariantRows([], {
-        fallbackBaseHome: options?.fallbackBaseHome || 'none',
-      }),
-    );
-  }
-}
-
-function parseIngredientVariantRowsSerialized(rawValue, options = {}) {
-  const fallbackBaseHome = normalizeShoppingHomeLocationId(
-    options?.fallbackBaseHome || 'none',
-  );
-  const serialized = String(rawValue || '').trim();
-  if (!serialized) {
-    return normalizeIngredientVariantRows([], { fallbackBaseHome });
-  }
-
-  try {
-    const parsed = JSON.parse(serialized);
-    if (Array.isArray(parsed)) {
-      return normalizeIngredientVariantRows(parsed, { fallbackBaseHome });
-    }
-  } catch (_) {}
-
-  return normalizeIngredientVariantRows(
-    serialized.split('\n').map((value) => ({
-      isBase: false,
-      value,
-      homeLocation: 'none',
-      tags: [],
-    })),
-    { fallbackBaseHome },
-  );
-}
-
-function getShoppingListSourceBaseKey(sourceKey) {
-  const normalized = String(sourceKey || '')
-    .trim()
-    .toLowerCase();
-  if (!normalized) return '';
-  const sepIndex = normalized.indexOf(SHOPPING_LIST_SOURCE_KEY_VARIANT_SEP);
-  return sepIndex === -1 ? normalized : normalized.slice(0, sepIndex);
-}
-
-function shoppingListHomeCollapseKey(locationId) {
-  return `home:${normalizeShoppingHomeLocationId(locationId)}`;
-}
-
-function shoppingListHomeCompletedCollapseKey() {
-  return 'completed:home';
-}
-
-function shoppingListRowMatchesSearch(row, query) {
-  const normalizedQuery = String(query || '')
-    .trim()
-    .toLowerCase();
-  if (!normalizedQuery) return true;
-  return String(row?.text || '')
-    .toLowerCase()
-    .includes(normalizedQuery);
-}
-
-function createShoppingListDisplayItemRow(row, extra = {}) {
-  return {
-    rowType: 'item',
-    id: row.id,
-    text: row.text,
-    checked: !!row.checked,
-    className: 'shopping-list-group-item shopping-list-doc-item',
-    sourceKey: String(row.sourceKey || '').trim(),
-    sourceText: String(row.sourceText || '').trim(),
-    userEdited: !!row.userEdited,
-    ...extra,
-  };
-}
-
-function buildShoppingListChecklistStoreDisplayRows(rows, options = {}) {
-  const normalizedQuery = String(options?.searchQuery || '')
-    .trim()
-    .toLowerCase();
-  const isSearchActive = !!normalizedQuery;
-  const visibleRows = isSearchActive
-    ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
-    : rows;
-  const out = [];
-
-  const storeOrder = [];
-  const seenStores = new Set();
-  visibleRows.forEach((row) => {
-    const key = String(row.storeLabel || '');
-    if (seenStores.has(key)) return;
-    seenStores.add(key);
-    storeOrder.push(key);
-  });
-
-  const pushItemRows = (items, extra = {}) => {
-    items.forEach((row) => {
-      out.push(createShoppingListDisplayItemRow(row, extra));
-    });
-  };
-
-  storeOrder.forEach((storeLabel) => {
-    const storeRows = visibleRows.filter(
-      (row) => String(row.storeLabel || '') === storeLabel,
-    );
-    if (!storeRows.length) return;
-
-    const activeRows = storeRows.filter((row) => !row.checked);
-    const completedRows = storeRows.filter((row) => row.checked);
-    const bucketDescriptors = getShoppingListBucketDescriptors([
-      ...(isSearchActive ? activeRows : [...activeRows, ...completedRows]),
-    ]);
-
-    const soleUnlistedPseudo =
-      !storeLabel &&
-      bucketDescriptors.length === 1 &&
-      normalizeShoppingListBucketKey(bucketDescriptors[0]?.label) ===
-        'unlisted';
-
-    if (storeLabel) {
-      out.push({
-        rowType: 'section',
-        text: storeLabel,
-        className: 'shopping-list-section--store',
-        sectionCollapseKey: shoppingListStoreCollapseKey(storeLabel),
-        collapseBoundary: 'store',
-        collapsible: true,
-      });
-    } else {
-      out.push({
-        rowType: 'section',
-        text: 'Unlisted',
-        className:
-          'shopping-list-section--unlisted shopping-list-section--pseudo-unlisted-root',
-        sectionCollapseKey: shoppingListPseudoUnlistedCollapseKey(),
-        collapseBoundary: 'pseudo-unlisted-root',
-        collapsible: true,
-      });
-    }
-
-    const pushBucket = (bucket, items) => {
-      const list = Array.isArray(items) ? items : [];
-      const label = String(bucket?.label || '').trim();
-      if (!label) {
-        if (!list.length) return;
-        pushItemRows(list);
-        return;
-      }
-      if (!storeLabel) {
-        if (
-          soleUnlistedPseudo &&
-          normalizeShoppingListBucketKey(label) === 'unlisted'
-        ) {
-          if (!list.length) return;
-          pushItemRows(list);
-          return;
-        }
-        out.push({
-          rowType: 'section',
-          text: label,
-          className:
-            normalizeShoppingListBucketKey(label) === 'unlisted'
-              ? 'shopping-list-section--unlisted'
-              : 'shopping-list-section--aisle',
-          collapseBoundary: 'plain-aisle',
-          collapsible: false,
-        });
-      } else {
-        out.push({
-          rowType: 'section',
-          text: label,
-          className: 'shopping-list-section--aisle',
-          sectionCollapseKey: shoppingListAisleCollapseKey(storeLabel, label),
-          collapseBoundary: 'aisle',
-          collapsible: list.length > 0,
-        });
-      }
-      if (!list.length) return;
-      pushItemRows(list);
-    };
-
-    bucketDescriptors.forEach((bucket) => {
-      pushBucket(
-        bucket,
-        activeRows.filter(
-          (row) => getShoppingListDocBucketKey(row) === bucket.key,
-        ),
-      );
-    });
-
-    if (completedRows.length) {
-      const completedSectionKey = shoppingListCompletedCollapseKey(storeLabel);
-      out.push({
-        rowType: 'section',
-        text: 'completed',
-        className: 'shopping-list-section--completed',
-        sectionKey: completedSectionKey,
-        sectionCollapseKey: completedSectionKey,
-        collapseBoundary: 'completed',
-        collapsible: true,
-      });
-      completedRows.forEach((row) => {
-        out.push(
-          createShoppingListDisplayItemRow(row, {
-            completedSectionKey,
-          }),
-        );
-      });
-    }
-  });
-
-  return out;
-}
-
-function getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) {
-  const sourceKey = String(row?.sourceKey || '')
-    .trim()
-    .toLowerCase();
-  const lookup =
-    homeLocationBySourceKey instanceof Map
-      ? homeLocationBySourceKey
-      : new Map(Object.entries(homeLocationBySourceKey || {}));
-  const baseKey = getShoppingListSourceBaseKey(sourceKey);
-
-  let resolved = 'none';
-  if (sourceKey && lookup.has(sourceKey)) {
-    resolved = normalizeShoppingHomeLocationId(lookup.get(sourceKey));
-  }
-  if (resolved === 'none' && baseKey && lookup.has(baseKey)) {
-    resolved = normalizeShoppingHomeLocationId(lookup.get(baseKey));
-  }
-  return resolved;
-}
-
-function buildShoppingListChecklistHomeDisplayRows(rows, options = {}) {
-  const normalizedQuery = String(options?.searchQuery || '')
-    .trim()
-    .toLowerCase();
-  const visibleRows = normalizedQuery
-    ? rows.filter((row) => shoppingListRowMatchesSearch(row, normalizedQuery))
-    : rows;
-  const out = [];
-  const activeRows = visibleRows.filter((row) => !row.checked);
-  const completedRows = visibleRows.filter((row) => row.checked);
-  const homeLocationBySourceKey =
-    options?.homeLocationBySourceKey instanceof Map
-      ? options.homeLocationBySourceKey
-      : new Map(Object.entries(options?.homeLocationBySourceKey || {}));
-
-  SHOPPING_LIST_HOME_LOCATION_DEFS.forEach((locationDef) => {
-    const locationRows = activeRows.filter(
-      (row) =>
-        getShoppingListHomeLocationIdForRow(row, homeLocationBySourceKey) ===
-        locationDef.id,
-    );
-    if (!locationRows.length) return;
-    out.push({
-      rowType: 'section',
-      text: locationDef.label,
-      className: 'shopping-list-section--store',
-      sectionCollapseKey: shoppingListHomeCollapseKey(locationDef.id),
-      collapseBoundary: 'home',
-      collapsible: true,
-    });
-    locationRows.forEach((row) => {
-      out.push(
-        createShoppingListDisplayItemRow(row, {
-          homeLocationId: locationDef.id,
-          homeLocationLabel: locationDef.label,
-        }),
-      );
-    });
-  });
-
-  if (completedRows.length) {
-    const completedSectionKey = shoppingListHomeCompletedCollapseKey();
-    out.push({
-      rowType: 'section',
-      text: 'completed',
-      className: 'shopping-list-section--completed',
-      sectionKey: completedSectionKey,
-      sectionCollapseKey: completedSectionKey,
-      collapseBoundary: 'completed',
-      collapsible: true,
-    });
-    completedRows.forEach((row) => {
-      out.push(
-        createShoppingListDisplayItemRow(row, {
-          completedSectionKey,
-          homeLocationId: getShoppingListHomeLocationIdForRow(
-            row,
-            homeLocationBySourceKey,
-          ),
-        }),
-      );
-    });
-  }
-
-  return out;
-}
-
-function getShoppingListChecklistDisplayRows(docRows, options = {}) {
-  const rows = normalizeShoppingListDoc({ rows: docRows }).rows;
-  const mode = String(options?.mode || 'stores')
-    .trim()
-    .toLowerCase();
-  if (mode === 'home') {
-    return buildShoppingListChecklistHomeDisplayRows(rows, options);
-  }
-  return buildShoppingListChecklistStoreDisplayRows(rows, options);
-}
-
-function createSectionToggleButton({
-  label = '',
-  expanded = true,
-  onToggle,
-  completed = false,
-}) {
-  const toggleBtn = document.createElement('button');
-  toggleBtn.type = 'button';
-  toggleBtn.className = completed
-    ? 'shopping-list-section-toggle shopping-list-section-toggle--completed'
-    : 'shopping-list-section-toggle';
-  toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  const toggleLabel = document.createElement('span');
-  toggleLabel.className = 'shopping-list-section-toggle__label';
-  toggleLabel.textContent = String(label || '').trim();
-  toggleBtn.appendChild(toggleLabel);
-  const toggleIcon = document.createElement('span');
-  toggleIcon.className =
-    'material-symbols-outlined shopping-list-section-toggle__icon';
-  toggleIcon.setAttribute('aria-hidden', 'true');
-  toggleIcon.textContent = 'expand_more';
-  toggleBtn.appendChild(toggleIcon);
-  if (typeof onToggle === 'function') {
-    toggleBtn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onToggle(event);
-    });
-  }
-  return toggleBtn;
-}
-
-function getShoppingListSelectedRecipeSummaryRows({
-  db = window.dbInstance,
-} = {}) {
-  const selections = Object.values(
-    getEffectiveMenuPlanRecipeSelections(),
-  ).filter((entry) => Number(entry?.recipeId) > 0);
-  if (!selections.length) return [];
-  const formatServingsValue = (rawValue) => {
-    const numeric = Number(rawValue);
-    if (!Number.isFinite(numeric) || numeric <= 0) return '';
-    if (typeof window.formatShoppingQtyForDisplay === 'function') {
-      return String(window.formatShoppingQtyForDisplay(numeric) || '').trim();
-    }
-    return Number.isInteger(numeric)
-      ? String(numeric)
-      : String(Number(numeric.toFixed(2)));
-  };
-  return selections
-    .map((selection) => {
-      const recipeId = Math.trunc(Number(selection?.recipeId));
-      if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
-      const recipe =
-        db && typeof db.exec === 'function'
-          ? loadShoppingPlanRecipeFromDB(db, recipeId)
-          : null;
-      const title =
-        String(selection?.title || '').trim() ||
-        String(recipe?.title || '').trim() ||
-        `Recipe ${recipeId}`;
-      const recipeDefaultServings = Number(
-        recipe?.servings?.default != null
-          ? recipe.servings.default
-          : recipe?.servingsDefault,
-      );
-      const selectedServings = getRecipeWebServingsStoredValue(
-        recipeId,
-        recipe,
-      );
-      const servingsValue =
-        Number.isFinite(selectedServings) && selectedServings > 0
-          ? selectedServings
-          : Number.isFinite(recipeDefaultServings) && recipeDefaultServings > 0
-            ? recipeDefaultServings
-            : null;
-      const formattedServings = formatServingsValue(servingsValue);
-      return {
-        recipeId,
-        title,
-        servingsText: formattedServings ? `${formattedServings} svg` : '',
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const titleDelta = String(a?.title || '').localeCompare(
-        String(b?.title || ''),
-        undefined,
-        {
-          sensitivity: 'base',
-        },
-      );
-      if (titleDelta !== 0) return titleDelta;
-      return Number(a?.recipeId || 0) - Number(b?.recipeId || 0);
-    });
-}
-
-if (typeof window !== 'undefined') {
-  window.__shoppingListChecklistHelpers = {
-    createEmptyShoppingListDoc,
-    normalizeShoppingListDoc,
-    doesShoppingListRowHaveUserOverride,
-    buildShoppingListDocFromPlanRows,
-    mergeShoppingListDocWithGenerated,
-    resolveShoppingListDocConflict,
-    formatShoppingListPlainText,
-    formatShoppingListHtml,
-    buildShoppingListExportPayload,
-    getShoppingListChecklistDisplayRows,
-    getShoppingListHomeLocationIdForRow,
-    filterShoppingListChecklistRowsForCollapse,
-    normalizeShoppingHomeLocationId,
-    getShoppingListSourceBaseKey,
-    shoppingListCompletedCollapseKey,
-    shoppingListStoreCollapseKey,
-    shoppingListAisleCollapseKey,
-    shoppingListHomeCollapseKey,
-    shoppingListPseudoUnlistedCollapseKey,
-  };
-}
-// --- End shopping list checklist helpers ---
 
 // --- Shared helper for child editor pages (e.g. recipe editor) ---
 function wireChildEditorPage({
