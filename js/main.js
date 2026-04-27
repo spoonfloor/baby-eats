@@ -1,6 +1,4 @@
-// Set by loadStoresPage: if Cmd+↑/↓ should reorder a selected row instead of changing tabs.
-/** @type {null | ((e: KeyboardEvent) => boolean)} */
-let consumeCmdVerticalArrowBeforeTopLevelNav = null;
+// Web bundle: recipe catalog via Supabase (`js/supabaseDataApi.js`); no local SQLite in the browser.
 
 // --- Unified user messaging helpers (dialogs/toasts) ---
 function uiToast(message, opts = {}) {
@@ -3168,7 +3166,7 @@ function detectPageIdFromBody() {
   return null;
 }
 
-function shouldDeferSqlBootForCurrentPage() {
+function shouldDeferMainJsBootForCurrentPage() {
   const pageId = detectPageIdFromBody();
   return pageId === 'welcome' || pageId === 'web-db-error';
 }
@@ -3411,7 +3409,7 @@ function enableTopLevelListKeyboardNav(listEl, options = {}) {
   };
 }
 
-function bootFavoriteEatsAfterSqlReady() {
+function bootFavoriteEatsForCurrentPage() {
   // --- page load routing ---
 
   const pageId = detectPageIdFromBody();
@@ -3435,47 +3433,6 @@ function bootFavoriteEatsAfterSqlReady() {
       e.preventDefault();
       e.stopPropagation();
       saveBtn.click();
-    },
-    { capture: true },
-  );
-
-  // --- Cmd+← / Cmd+→ / Cmd+↑ / Cmd+↓: move between top-level pages ---
-  const TOP_LEVEL_PAGES = getTopLevelPageOrder();
-
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      // Cmd only (avoid stealing Ctrl/Alt/Shift combos)
-      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (e.isComposing) return;
-
-      if (
-        !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
-      )
-        return;
-      if (isTypingContext(e.target) && !isAppBarSearchContext(e.target))
-        return;
-      if (TOP_LEVEL_PAGES.length <= 1) return;
-      const idx = TOP_LEVEL_PAGES.indexOf(pageId);
-      if (idx === -1) return; // only act on top-level list pages
-
-      // Stores: Cmd+↑/↓ reorders when a row has keyboard selection (red), not tab switching.
-      if (
-        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-        typeof consumeCmdVerticalArrowBeforeTopLevelNav === 'function'
-      ) {
-        try {
-          if (consumeCmdVerticalArrowBeforeTopLevelNav(e)) return;
-        } catch (_) {}
-      }
-
-      // Treat Up like Left, and Down like Right.
-      const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-      const nextIdx =
-        (idx + delta + TOP_LEVEL_PAGES.length) % TOP_LEVEL_PAGES.length;
-
-      e.preventDefault();
-      window.location.href = getTopLevelPageHref(TOP_LEVEL_PAGES[nextIdx]);
     },
     { capture: true },
   );
@@ -3518,12 +3475,11 @@ function bootFavoriteEatsAfterSqlReady() {
   }
 }
 
-if (!shouldDeferSqlBootForCurrentPage()) {
-  bootFavoriteEatsAfterSqlReady();
+if (!shouldDeferMainJsBootForCurrentPage()) {
+  bootFavoriteEatsForCurrentPage();
 }
 
-// Browser-only database loading and static web builds have been removed;
-// use `npm start` (Electron) only.
+// Welcome / static error shells skip boot above; loaded pages run loadRecipesPage or loadRecipeEditorPage.
 
 // Recipes page logic
 async function loadRecipesPage() {
@@ -4702,15 +4658,6 @@ async function loadRecipesPage() {
     recipesMenuBtn.addEventListener('click', () => {
       void openMenuPlanDialog();
     });
-  }
-}
-
-// Defunct list/editor pages — keep named loaders for stale `*.html` bookmarks; all redirect to recipes.
-async function loadShoppingPage() {
-  try {
-    window.location.replace('recipes.html');
-  } catch (_) {
-    window.location.href = 'recipes.html';
   }
 }
 
@@ -6258,15 +6205,7 @@ if (typeof window !== 'undefined') {
 }
 // --- End shopping list checklist helpers ---
 
-async function loadShoppingListPage() {
-  try {
-    window.location.replace('recipes.html');
-  } catch (_) {
-    window.location.href = 'recipes.html';
-  }
-}
-
-// --- Shared helper for child editor pages (shopping, units, stores, …) ---
+// --- Shared helper for child editor pages (e.g. recipe editor) ---
 function wireChildEditorPage({
   backBtn,
   cancelBtn,
