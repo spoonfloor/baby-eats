@@ -1182,10 +1182,13 @@ if (typeof window !== 'undefined') {
     fields = null, // [{ key, label, type, value, placeholder, required, autocapitalize, options, validate }]
     confirmText = 'OK',
     cancelText = 'Cancel',
+    tertiaryText = '',
     showCancel = true,
     danger = false,
     validate = null, // (values) => string|''|null
     onConfirm = null, // (values) => void|Promise
+    onTertiary = null, // (values) => void|Promise
+    tertiaryClose = false,
     closeOnBackdrop = true,
   } = {}) => {
     return new Promise((resolve) => {
@@ -1373,11 +1376,17 @@ if (typeof window !== 'undefined') {
       cancelBtn.className = 'button button--secondary';
       cancelBtn.textContent = cancelText || 'Cancel';
 
+      const tertiaryBtn = document.createElement('button');
+      tertiaryBtn.type = 'button';
+      tertiaryBtn.className = 'button button--secondary';
+      tertiaryBtn.textContent = tertiaryText || '';
+
       const confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = `button ${danger ? 'button--danger' : ''}`.trim();
       confirmBtn.textContent = confirmText || 'OK';
 
+      if (tertiaryText) actions.appendChild(tertiaryBtn);
       if (showCancel) actions.appendChild(cancelBtn);
       actions.appendChild(confirmBtn);
       panel.appendChild(actions);
@@ -1479,7 +1488,30 @@ if (typeof window !== 'undefined') {
         resolve(values);
       };
 
+      const doTertiary = async () => {
+        if (!tertiaryText) return;
+        try {
+          if (typeof onTertiary === 'function') {
+            await onTertiary(values);
+          }
+        } catch (err) {
+          setError(err?.message || 'Something went wrong.');
+          return;
+        }
+        if (!tertiaryClose) {
+          syncValidity();
+          return;
+        }
+        cleanup();
+        resolve({ ...values, __dialogAction: 'tertiary' });
+      };
+
       cancelBtn.addEventListener('click', doCancel);
+      if (tertiaryText) {
+        tertiaryBtn.addEventListener('click', () => {
+          void doTertiary();
+        });
+      }
       confirmBtn.addEventListener('click', () => {
         void doConfirm();
       });
@@ -1503,6 +1535,7 @@ if (typeof window !== 'undefined') {
             // Enter on inputs should submit; on buttons is handled by click anyway.
             const t = e.target;
             if (t && t instanceof HTMLInputElement) {
+              if (t.dataset?.dialogEnterCommitsInline === '1') return;
               e.preventDefault();
               void doConfirm();
             }

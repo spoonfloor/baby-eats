@@ -109,6 +109,7 @@ function readFavoriteEatsBuildConfig() {
 }
 
 const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
+const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favorite-eats:force-web-mode';
 const SINGLE_UI_STATE = Object.freeze({
   pageSet: 'web',
   platform: 'planner',
@@ -2291,6 +2292,7 @@ function createEmptyShoppingPlan() {
     version: 1,
     itemSelections: {},
     recipeSelections: {},
+    recipeMenuOverrides: {},
     storeOrder: [],
     selectedStoreIds: [],
   };
@@ -2313,12 +2315,19 @@ function normalizeShoppingPlan(rawPlan) {
     !Array.isArray(source.recipeSelections)
       ? source.recipeSelections
       : {};
+  const rawRecipeMenuOverrides =
+    source.recipeMenuOverrides &&
+    typeof source.recipeMenuOverrides === 'object' &&
+    !Array.isArray(source.recipeMenuOverrides)
+      ? source.recipeMenuOverrides
+      : {};
   const storeOrder = normalizeShoppingPlanStoreOrder(source.storeOrder);
   const selectedStoreIds = normalizeShoppingPlanSelectedStoreIds(
     source.selectedStoreIds,
   );
   const itemSelections = {};
   const recipeSelections = {};
+  const recipeMenuOverrides = {};
 
   Object.keys(rawSelections).forEach((rawKey) => {
     const key = String(rawKey || '').trim();
@@ -2361,10 +2370,32 @@ function normalizeShoppingPlan(rawPlan) {
     };
   });
 
+  Object.keys(rawRecipeMenuOverrides).forEach((rawKey) => {
+    const key = String(rawKey || '').trim();
+    if (!key) return;
+    const rawEntry = rawRecipeMenuOverrides[rawKey];
+    const entry =
+      rawEntry && typeof rawEntry === 'object' && !Array.isArray(rawEntry)
+        ? rawEntry
+        : {};
+    const recipeId = Number(entry.recipeId != null ? entry.recipeId : key);
+    const quantity = Math.max(0, Math.min(99, Number(entry.quantity || 0)));
+    if (!Number.isFinite(recipeId) || recipeId <= 0) return;
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    const normalizedKey = String(Math.trunc(recipeId));
+    if (!recipeSelections[normalizedKey]) return;
+    recipeMenuOverrides[normalizedKey] = {
+      key: normalizedKey,
+      recipeId: Math.trunc(recipeId),
+      quantity,
+    };
+  });
+
   return {
     version: 1,
     itemSelections,
     recipeSelections,
+    recipeMenuOverrides,
     storeOrder,
     selectedStoreIds,
   };
@@ -2507,9 +2538,16 @@ function setShoppingPlanRecipeSelection({
     if (!plan.recipeSelections || typeof plan.recipeSelections !== 'object') {
       plan.recipeSelections = {};
     }
+    if (
+      !plan.recipeMenuOverrides ||
+      typeof plan.recipeMenuOverrides !== 'object'
+    ) {
+      plan.recipeMenuOverrides = {};
+    }
     const nextQty = Math.max(0, Math.min(99, Number(quantity || 0)));
     if (!Number.isFinite(nextQty) || nextQty <= 0) {
       delete plan.recipeSelections[normalizedKey];
+      delete plan.recipeMenuOverrides[normalizedKey];
       return;
     }
     plan.recipeSelections[normalizedKey] = {
@@ -2528,13 +2566,42 @@ function getShoppingPlanRecipeSelections() {
     : {};
 }
 
+function getShoppingPlanRecipeMenuOverrides() {
+  const plan = getShoppingPlan();
+  return plan?.recipeMenuOverrides &&
+    typeof plan.recipeMenuOverrides === 'object'
+    ? plan.recipeMenuOverrides
+    : {};
+}
+
+function getEffectiveMenuPlanRecipeSelections() {
+  const selections = getShoppingPlanRecipeSelections();
+  const overrides = getShoppingPlanRecipeMenuOverrides();
+  const result = {};
+  Object.keys(selections).forEach((key) => {
+    const canonical = selections[key];
+    if (!canonical) return;
+    const overrideEntry = overrides[key];
+    const overrideQty = Number(overrideEntry?.quantity);
+    const effectiveQty =
+      Number.isFinite(overrideQty) && overrideQty > 0
+        ? overrideQty
+        : Number(canonical.quantity || 0);
+    result[key] = { ...canonical, quantity: effectiveQty };
+  });
+  return result;
+}
+
 function clearShoppingPlanSelections({
   clearItems = false,
   clearRecipes = false,
 } = {}) {
   return updateShoppingPlan((plan) => {
     if (clearItems) plan.itemSelections = {};
-    if (clearRecipes) plan.recipeSelections = {};
+    if (clearRecipes) {
+      plan.recipeSelections = {};
+      plan.recipeMenuOverrides = {};
+    }
   });
 }
 
@@ -2690,7 +2757,7 @@ function getRecipeDerivedShoppingPlanRows({ db = window.dbInstance } = {}) {
   if (!db || typeof db.exec !== 'function') return [];
   const aggregate = new Map();
 
-  Object.values(getShoppingPlanRecipeSelections()).forEach((selection) => {
+  Object.values(getEffectiveMenuPlanRecipeSelections()).forEach((selection) => {
     const recipeId = Number(selection?.recipeId);
     const recipeCount = Number(selection?.quantity || 0);
     if (!Number.isFinite(recipeId) || recipeId <= 0) return;
@@ -3459,7 +3526,7 @@ function getShoppingPlanSelectionRows(options = {}) {
   Object.values(getShoppingPlanItemSelections()).forEach(addSelectedItemBucket);
 
   if (db && typeof db.exec === 'function') {
-    Object.values(getShoppingPlanRecipeSelections()).forEach((selection) => {
+    Object.values(getEffectiveMenuPlanRecipeSelections()).forEach((selection) => {
       const recipeId = Number(selection?.recipeId);
       const recipeCount = Number(selection?.quantity || 0);
       if (!Number.isFinite(recipeId) || recipeId <= 0) return;
@@ -4295,7 +4362,7 @@ async function loadRecipesPage() {
   const addBtnRecipes = document.getElementById('appBarAddBtn');
   const recipesActionBtn = addBtnRecipes;
   const recipesMenuBtn = document.getElementById('appBarMenuPlanBtn');
-  if (recipesMenuBtn) recipesMenuBtn.hidden = true;
+  if (recipesMenuBtn) recipesMenuBtn.hidden = false;
 
   const list = document.getElementById('recipeList');
   if (!list) return;
@@ -4405,18 +4472,31 @@ async function loadRecipesPage() {
       ? window.formatShoppingQtyForDisplay(rawValue)
       : String(rawValue == null ? '' : rawValue);
   };
-  const getMenuPlanDialogBody = () => {
-    const selectionEntries = Object.values(getShoppingPlanRecipeSelections())
+  const getMenuPlanDialogEntries = () => {
+    const overrides = getShoppingPlanRecipeMenuOverrides();
+    return Object.values(getShoppingPlanRecipeSelections())
       .map((entry) => {
         const recipeId = Number(entry?.recipeId);
-        const quantity = Math.max(0, Number(entry?.quantity || 0));
+        const canonicalQuantity = Math.max(0, Number(entry?.quantity || 0));
         if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
-        if (!Number.isFinite(quantity) || quantity <= 0) return null;
+        if (!Number.isFinite(canonicalQuantity) || canonicalQuantity <= 0) {
+          return null;
+        }
         const row = getRecipeRowById(recipeId);
         const title =
           String(entry?.title || '').trim() || String(row?.title || '').trim();
         if (!title) return null;
-        return { title, quantity };
+        const overrideEntry = overrides[String(Math.trunc(recipeId))];
+        const overrideRaw = Number(overrideEntry?.quantity);
+        const hasOverride =
+          Number.isFinite(overrideRaw) && overrideRaw > 0;
+        const quantity = hasOverride ? overrideRaw : canonicalQuantity;
+        return {
+          recipeId,
+          title,
+          quantity,
+          baselineQuantity: canonicalQuantity,
+        };
       })
       .filter(Boolean)
       .sort((a, b) =>
@@ -4424,23 +4504,248 @@ async function loadRecipesPage() {
           sensitivity: 'base',
         }),
       );
-    const lines = selectionEntries.map(
-      ({ title, quantity }) =>
-        `${title} (${formatRecipeRowServings(quantity)} servings)`,
-    );
-    return [
-      "Here's what's on the menu. Bon apetit!",
-      '',
-      ...(lines.length ? lines : ['No recipes selected yet.']),
-    ].join('\n');
+  };
+  const buildMenuPlanDialogListNode = (selectionEntries) => {
+    const draftEntries = Array.isArray(selectionEntries) ? selectionEntries : [];
+    const listEl = document.createElement('ul');
+    listEl.className = 'menu-plan-dialog-list';
+
+    const normalizeQuantity = (rawQty) => {
+      const parsed = Number(rawQty);
+      if (!Number.isFinite(parsed)) return 0.25;
+      const rounded = Math.round(parsed * 4) / 4;
+      return Math.max(0.25, Math.min(99, rounded));
+    };
+    const formatQuantityDisplay = (value) => {
+      if (typeof window.decimalToFractionDisplay === 'function') {
+        const formatted = window.decimalToFractionDisplay(value, [2, 4]);
+        if (formatted) return formatted;
+      }
+      if (typeof window.formatShoppingQtyForDisplay === 'function') {
+        return window.formatShoppingQtyForDisplay(value);
+      }
+      return String(value);
+    };
+    const formatQuantityForInput = (value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return '';
+      if (Number.isInteger(numeric)) return String(numeric);
+      return String(Number(numeric.toFixed(2)));
+    };
+    const quantitiesAreEqual = (a, b) =>
+      Math.abs(Number(a) - Number(b)) < 1e-6;
+
+    if (!draftEntries.length) {
+      const itemEl = document.createElement('li');
+      itemEl.textContent = 'No recipes selected yet.';
+      listEl.appendChild(itemEl);
+      return {
+        listEl,
+        readEntries: () => [],
+        resetFrom: () => {},
+      };
+    }
+
+    const rowDrafts = [];
+    draftEntries.forEach((entry) => {
+      const recipeId = Number(entry?.recipeId);
+      const title = String(entry?.title || '').trim();
+      if (!Number.isFinite(recipeId) || recipeId <= 0 || !title) return;
+      const quantity = normalizeQuantity(entry?.quantity);
+      const baselineRaw = Number(entry?.baselineQuantity);
+      const initialQuantity =
+        Number.isFinite(baselineRaw) && baselineRaw > 0
+          ? normalizeQuantity(baselineRaw)
+          : quantity;
+      const draft = {
+        recipeId,
+        title,
+        quantity,
+        initialQuantity,
+        qtyValueBtn: null,
+        qtyValueInput: null,
+      };
+      rowDrafts.push(draft);
+
+      const itemEl = document.createElement('li');
+      if (!quantitiesAreEqual(quantity, initialQuantity)) {
+        itemEl.classList.add('is-edited');
+      }
+      const titleEl = document.createElement('span');
+      titleEl.className = 'menu-plan-dialog-row-title';
+      titleEl.textContent = `${title} (`;
+      itemEl.appendChild(titleEl);
+
+      const qtyValueBtn = document.createElement('button');
+      qtyValueBtn.type = 'button';
+      qtyValueBtn.className = 'menu-plan-dialog-qty-value';
+      qtyValueBtn.setAttribute('aria-label', `Edit servings for ${title}`);
+      qtyValueBtn.textContent = formatQuantityDisplay(quantity);
+
+      const qtyValueInput = document.createElement('input');
+      qtyValueInput.type = 'text';
+      qtyValueInput.inputMode = 'decimal';
+      qtyValueInput.className = 'menu-plan-dialog-qty-input';
+      qtyValueInput.style.display = 'none';
+      qtyValueInput.dataset.dialogEnterCommitsInline = '1';
+      qtyValueInput.setAttribute('aria-label', `Servings for ${title}`);
+
+      const updateEditedState = () => {
+        const isEdited = !quantitiesAreEqual(draft.quantity, draft.initialQuantity);
+        itemEl.classList.toggle('is-edited', isEdited);
+      };
+      const showButtonOnly = () => {
+        qtyValueInput.style.display = 'none';
+        qtyValueBtn.style.display = '';
+      };
+      const showInputOnly = () => {
+        qtyValueBtn.style.display = 'none';
+        qtyValueInput.style.display = '';
+      };
+      const syncQtyDisplay = () => {
+        qtyValueBtn.textContent = formatQuantityDisplay(draft.quantity);
+        qtyValueInput.value = formatQuantityForInput(draft.quantity);
+      };
+      const commitInput = () => {
+        draft.quantity = normalizeQuantity(qtyValueInput.value);
+        syncQtyDisplay();
+        updateEditedState();
+        showButtonOnly();
+      };
+      const enterEditMode = () => {
+        syncQtyDisplay();
+        showInputOnly();
+        window.setTimeout(() => {
+          try {
+            qtyValueInput.focus();
+            qtyValueInput.select();
+          } catch (_) {}
+        }, 0);
+      };
+
+      qtyValueBtn.addEventListener('click', enterEditMode);
+      qtyValueInput.addEventListener('blur', commitInput);
+      qtyValueInput.addEventListener('keydown', (event) => {
+        if (!event) return;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commitInput();
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          showButtonOnly();
+        }
+      });
+
+      itemEl.appendChild(qtyValueBtn);
+      itemEl.appendChild(qtyValueInput);
+      draft.qtyValueBtn = qtyValueBtn;
+      draft.qtyValueInput = qtyValueInput;
+
+      const unitEl = document.createElement('span');
+      unitEl.className = 'menu-plan-dialog-row-unit';
+      unitEl.textContent = ' serv.)';
+      itemEl.appendChild(unitEl);
+      listEl.appendChild(itemEl);
+    });
+
+    return {
+      listEl,
+      readEntries: () =>
+        rowDrafts.map(({ recipeId, title, quantity }) => ({
+          recipeId,
+          title,
+          quantity,
+        })),
+      resetFrom: (nextEntries) => {
+        const quantityByRecipeId = new Map(
+          (Array.isArray(nextEntries) ? nextEntries : [])
+            .map((entry) => {
+              const recipeId = Number(entry?.recipeId);
+              if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
+              return [recipeId, normalizeQuantity(entry?.quantity)];
+            })
+            .filter(Boolean),
+        );
+        rowDrafts.forEach((draft) => {
+          draft.quantity = quantityByRecipeId.has(draft.recipeId)
+            ? quantityByRecipeId.get(draft.recipeId)
+            : draft.initialQuantity;
+          const qtyBtn = draft.qtyValueBtn;
+          const qtyInput = draft.qtyValueInput;
+          if (qtyBtn) qtyBtn.textContent = formatQuantityDisplay(draft.quantity);
+          if (qtyInput) qtyInput.value = formatQuantityForInput(draft.quantity);
+          if (qtyInput) qtyInput.style.display = 'none';
+          if (qtyBtn) qtyBtn.style.display = '';
+          const itemEl = qtyBtn ? qtyBtn.closest('li') : null;
+          if (itemEl) {
+            const isEdited = !quantitiesAreEqual(draft.quantity, draft.initialQuantity);
+            itemEl.classList.toggle('is-edited', isEdited);
+          }
+        });
+      },
+    };
+  };
+  const persistMenuPlanDialogEntries = (entries) => {
+    const nextEntries = Array.isArray(entries) ? entries : [];
+    updateShoppingPlan((plan) => {
+      if (
+        !plan.recipeMenuOverrides ||
+        typeof plan.recipeMenuOverrides !== 'object'
+      ) {
+        plan.recipeMenuOverrides = {};
+      }
+      const canonical =
+        plan.recipeSelections && typeof plan.recipeSelections === 'object'
+          ? plan.recipeSelections
+          : {};
+      nextEntries.forEach((entry) => {
+        const recipeId = Number(entry?.recipeId);
+        const numericQty = Number(entry?.quantity);
+        if (!Number.isFinite(recipeId) || recipeId <= 0) return;
+        if (!Number.isFinite(numericQty) || numericQty <= 0) return;
+        const key = String(Math.trunc(recipeId));
+        if (!canonical[key]) return;
+        const quartered = Math.round(numericQty * 4) / 4;
+        const quantity = Math.max(0.25, Math.min(99, quartered));
+        const canonicalQty = Number(canonical[key]?.quantity || 0);
+        if (Math.abs(quantity - canonicalQty) < 1e-6) {
+          delete plan.recipeMenuOverrides[key];
+          return;
+        }
+        plan.recipeMenuOverrides[key] = {
+          key,
+          recipeId: Math.trunc(recipeId),
+          quantity,
+        };
+      });
+    });
   };
   const openMenuPlanDialog = async () => {
     if (!window.ui || typeof window.ui.dialog !== 'function') return;
+    const autoGeneratedEntries = getMenuPlanDialogEntries();
+    const listState = buildMenuPlanDialogListNode(autoGeneratedEntries);
     await window.ui.dialog({
       title: 'Menu plan',
-      message: getMenuPlanDialogBody(),
-      confirmText: 'Okay',
-      showCancel: false,
+      message: "Here's what's on the menu. Bon appétit!",
+      messageNode: listState.listEl,
+      tertiaryText: 'Revert',
+      cancelText: 'Cancel',
+      confirmText: 'Save',
+      onTertiary: () => {
+        const baselineEntries = autoGeneratedEntries.map((entry) => ({
+          ...entry,
+          quantity:
+            Number.isFinite(Number(entry?.baselineQuantity)) &&
+            Number(entry.baselineQuantity) > 0
+              ? Number(entry.baselineQuantity)
+              : Number(entry?.quantity || 0),
+        }));
+        listState.resetFrom(baselineEntries);
+      },
+      onConfirm: () => {
+        persistMenuPlanDialogEntries(listState.readEntries());
+      },
       closeOnBackdrop: true,
     });
   };
@@ -5179,6 +5484,12 @@ async function loadRecipesPage() {
         rerenderFilteredRecipes();
       },
     );
+  }
+  if (recipesMenuBtn) {
+    ensureAppBarTextActionPair(recipesMenuBtn, 'Menu', 'restaurant_menu');
+    recipesMenuBtn.addEventListener('click', () => {
+      void openMenuPlanDialog();
+    });
   }
 }
 
@@ -6733,9 +7044,9 @@ function createSectionToggleButton({
 function getShoppingListSelectedRecipeSummaryRows({
   db = window.dbInstance,
 } = {}) {
-  const selections = Object.values(getShoppingPlanRecipeSelections()).filter(
-    (entry) => Number(entry?.recipeId) > 0,
-  );
+  const selections = Object.values(
+    getEffectiveMenuPlanRecipeSelections(),
+  ).filter((entry) => Number(entry?.recipeId) > 0);
   if (!selections.length) return [];
   const formatServingsValue = (rawValue) => {
     const numeric = Number(rawValue);

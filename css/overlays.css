@@ -149,6 +149,70 @@
   margin: 0 0 14px 0;
 }
 
+.menu-plan-dialog-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.5rem;
+}
+
+.ui-dialog-extra .menu-plan-dialog-list {
+  margin-top: 1.6rem;
+  margin-bottom: 1.6rem;
+}
+
+.menu-plan-dialog-list li {
+  line-height: 1.45;
+}
+
+.menu-plan-dialog-list li.is-edited,
+.menu-plan-dialog-list li.is-edited .menu-plan-dialog-row-title,
+.menu-plan-dialog-list li.is-edited .menu-plan-dialog-row-unit,
+.menu-plan-dialog-list li.is-edited .menu-plan-dialog-qty-value,
+.menu-plan-dialog-list li.is-edited .menu-plan-dialog-qty-input {
+  color: var(--theme-primary);
+}
+
+.menu-plan-dialog-list li.is-edited::marker {
+  color: var(--theme-primary);
+}
+
+.menu-plan-dialog-row-title {
+  white-space: normal;
+}
+
+.menu-plan-dialog-qty-value {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  cursor: text;
+}
+
+.menu-plan-dialog-qty-input {
+  width: 2.8ch;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  padding: 0;
+}
+
+.menu-plan-dialog-qty-input:focus {
+  outline: none;
+  border-bottom-color: var(--border-soft-strong);
+}
+
 .ui-dialog-fields {
   display: flex;
   flex-direction: column;
