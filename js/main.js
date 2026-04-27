@@ -4283,6 +4283,8 @@ async function loadRecipesPage() {
 
   const addBtnRecipes = document.getElementById('appBarAddBtn');
   const recipesActionBtn = addBtnRecipes;
+  const recipesMenuBtn = document.getElementById('appBarMenuPlanBtn');
+  if (recipesMenuBtn) recipesMenuBtn.hidden = false;
 
   const list = document.getElementById('recipeList');
   if (!list) return;
@@ -4356,6 +4358,45 @@ async function loadRecipesPage() {
     return typeof window.formatShoppingQtyForDisplay === 'function'
       ? window.formatShoppingQtyForDisplay(rawValue)
       : String(rawValue == null ? '' : rawValue);
+  };
+  const getMenuPlanDialogBody = () => {
+    const selectionEntries = Object.values(getShoppingPlanRecipeSelections())
+      .map((entry) => {
+        const recipeId = Number(entry?.recipeId);
+        const quantity = Math.max(0, Number(entry?.quantity || 0));
+        if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
+        if (!Number.isFinite(quantity) || quantity <= 0) return null;
+        const row = getRecipeRowById(recipeId);
+        const title =
+          String(entry?.title || '').trim() || String(row?.title || '').trim();
+        if (!title) return null;
+        return { title, quantity };
+      })
+      .filter(Boolean)
+      .sort((a, b) =>
+        String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+          sensitivity: 'base',
+        }),
+      );
+    const lines = selectionEntries.map(
+      ({ title, quantity }) =>
+        `${title} (${formatRecipeRowServings(quantity)} servings)`,
+    );
+    return [
+      "Here's what's on the menu. Bon apetit!",
+      '',
+      ...(lines.length ? lines : ['No recipes selected yet.']),
+    ].join('\n');
+  };
+  const openMenuPlanDialog = async () => {
+    if (!window.ui || typeof window.ui.dialog !== 'function') return;
+    await window.ui.dialog({
+      title: 'Menu plan',
+      message: getMenuPlanDialogBody(),
+      confirmText: 'Okay',
+      showCancel: false,
+      closeOnBackdrop: true,
+    });
   };
   const initializeRecipeRowServings = (recipeRow) => {
     const bounds = getRecipeRowBounds(recipeRow);
@@ -5102,6 +5143,11 @@ async function loadRecipesPage() {
         rerenderFilteredRecipes();
       },
     );
+  }
+  if (recipesMenuBtn) {
+    recipesMenuBtn.addEventListener('click', () => {
+      void openMenuPlanDialog();
+    });
   }
 }
 
