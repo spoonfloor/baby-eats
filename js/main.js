@@ -8774,9 +8774,17 @@ async function loadRecipeEditorPage() {
   let editorRefreshInFlight = false;
   let editorRefreshQueued = false;
   let editorRealtimeReady = true;
+  const hasLocalDirtyRecipeChanges = () =>
+    typeof window.recipeEditorGetIsDirty === 'function' &&
+    window.recipeEditorGetIsDirty();
   const refreshEditorRecipeFromRemote = async () => {
     if (editorRefreshInFlight || !editorRealtimeReady) {
       editorRefreshQueued = true;
+      return;
+    }
+    // Never clobber in-progress local edits with background realtime/poll refreshes.
+    if (hasLocalDirtyRecipeChanges()) {
+      editorRefreshQueued = false;
       return;
     }
     editorRefreshInFlight = true;
@@ -8785,6 +8793,9 @@ async function loadRecipeEditorPage() {
       if (!latest) {
         uiToast('Recipe was deleted.');
         window.location.href = 'recipes.html';
+        return;
+      }
+      if (hasLocalDirtyRecipeChanges()) {
         return;
       }
       const nextRecipe = JSON.parse(JSON.stringify(latest));
