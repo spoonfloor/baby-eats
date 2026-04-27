@@ -2212,6 +2212,17 @@ function getRecipeIngredientShoppingCount(line) {
 const SHOPPING_PLAN_LINKED_RECIPE_MAX_DEPTH = 2;
 
 function loadShoppingPlanRecipeFromDB(db, recipeId) {
+  if (
+    typeof window !== 'undefined' &&
+    window.bridge &&
+    typeof window.bridge.loadRecipeFromDB === 'function'
+  ) {
+    try {
+      return window.bridge.loadRecipeFromDB(db, recipeId) || null;
+    } catch (_) {
+      return null;
+    }
+  }
   void db;
   void recipeId;
   return null;
@@ -7132,7 +7143,7 @@ function createIngredientLookupHelpers(db) {
   return { getVisibleCanonicalId, anyIngredientNamed };
 }
 
-// --- Recipe editor loader (full editor when `recipe_steps` exists; else title + tags only) ---
+// --- Recipe editor loader (title-only shell) ---
 async function loadRecipeEditorPage() {
   const dataApi = getFavoriteEatsDataApi();
 
@@ -7151,9 +7162,13 @@ async function loadRecipeEditorPage() {
   let recipe = null;
   try {
     recipe = await dataApi.getRecipeById(Number(recipeId));
-    window.recipeEditorTagOptions = (await dataApi.listVisibleTags()) || [];
   } catch (err) {
     console.error('❌ Failed to load recipe from Supabase:', err);
+  }
+  try {
+    window.recipeEditorTagOptions = (await dataApi.listVisibleTags()) || [];
+  } catch (err) {
+    console.warn('⚠️ Failed to load tag catalog:', err);
     window.recipeEditorTagOptions = [];
   }
   if (!recipe) {
@@ -7170,80 +7185,9 @@ async function loadRecipeEditorPage() {
     recipe.servingsDefault = recipe.servings.default;
   }
 
-  const isNewRecipe = sessionStorage.getItem('selectedRecipeIsNew') === '1';
-  if (window.recipeEditorCatalogOnlyMode) {
-    try {
-      sessionStorage.removeItem('selectedRecipeIsNew');
-    } catch (_) {}
-  } else {
-    const hasAnySteps =
-      (Array.isArray(recipe.sections) &&
-        recipe.sections.some(
-          (section) =>
-            Array.isArray(section.steps) && section.steps.length > 0,
-        )) ||
-      (Array.isArray(recipe.steps) && recipe.steps.length > 0);
-    const hasAnyIngredients =
-      Array.isArray(recipe.sections) &&
-      recipe.sections.some(
-        (section) =>
-          Array.isArray(section.ingredients) && section.ingredients.length > 0,
-      );
-    const shouldSeedStepPlaceholder =
-      !isRecipeWebMode && (isNewRecipe || !hasAnySteps);
-    const shouldSeedIngredientPlaceholder =
-      !isRecipeWebMode && !hasAnyIngredients;
-    if (shouldSeedStepPlaceholder || shouldSeedIngredientPlaceholder) {
-      if (isNewRecipe) {
-        sessionStorage.removeItem('selectedRecipeIsNew');
-      }
-      if (!Array.isArray(recipe.sections) || recipe.sections.length === 0) {
-        recipe.sections = [
-          {
-            ID: null,
-            id: null,
-            name: '',
-            steps: [],
-            ingredients: [],
-          },
-        ];
-      }
-      const firstSection = recipe.sections[0];
-      if (
-        shouldSeedStepPlaceholder &&
-        (!Array.isArray(firstSection.steps) || firstSection.steps.length === 0)
-      ) {
-        const tempId = `tmp-step-${Date.now()}`;
-        firstSection.steps = [
-          {
-            ID: null,
-            id: tempId,
-            section_id: firstSection.ID ?? firstSection.id ?? null,
-            step_number: 1,
-            instructions: '',
-            type: 'step',
-          },
-        ];
-      }
-    }
-  }
-
-  if (
-    isRecipeWebMode &&
-    typeof window.recipeWebModePrimeRecipe === 'function'
-  ) {
-    window.recipeWebModePrimeRecipe(recipe);
-  }
-
-  if (!window.recipeEditorCatalogOnlyMode) {
-    try {
-      if (typeof window.recipeEditorSortIngredientsOnLoad === 'function') {
-        window.recipeEditorSortIngredientsOnLoad(recipe);
-      }
-    } catch (err) {
-      console.warn('⚠️ Ingredient load-order normalization failed:', err);
-    }
-  }
+  try {
+    sessionStorage.removeItem('selectedRecipeIsNew');
+  } catch (_) {}
 
   // Do not await waitForAppBarReady() before initAppBar: the bar is injected by
   // initAppBar/ensureAppBarInjected, so #appBarTitle does not exist yet and the
