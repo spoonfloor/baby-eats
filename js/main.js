@@ -549,6 +549,12 @@ function wireAppBarSearch(searchInput, options = {}) {
     }
   };
 
+  const clearSearchQuery = () => {
+    searchInput.value = '';
+    emitQueryChange();
+    searchInput.focus();
+  };
+
   syncClearBtn();
   searchInput.addEventListener('input', emitQueryChange, {
     signal: controller.signal,
@@ -570,9 +576,7 @@ function wireAppBarSearch(searchInput, options = {}) {
       'click',
       () => {
         if (searchInput.value) {
-          searchInput.value = '';
-          emitQueryChange();
-          searchInput.focus();
+          clearSearchQuery();
           return;
         }
         collapseCompactSearch({ restoreFocus: true });
@@ -589,7 +593,9 @@ function wireAppBarSearch(searchInput, options = {}) {
         e.preventDefault();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        if (isCompactExpanded()) {
+        if (searchInput.value) {
+          clearSearchQuery();
+        } else if (isCompactExpanded()) {
           collapseCompactSearch({ restoreFocus: true });
           syncClearBtn();
         } else {
