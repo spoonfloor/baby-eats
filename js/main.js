@@ -4704,9 +4704,7 @@ async function loadRecipesPage() {
     rerenderFilteredRecipes();
   });
 
-  try {
-    const remoteRows = await dataApi.listRecipes();
-    const remoteTagPool = await dataApi.listVisibleTags();
+  const applyRemoteRecipesAndTags = (remoteRows, remoteTagPool) => {
     allVisibleTagNames = Array.isArray(remoteTagPool)
       ? remoteTagPool
           .map((name) => String(name || '').trim())
@@ -4726,15 +4724,69 @@ async function loadRecipesPage() {
         },
       };
     });
-  } catch (err) {
-    console.error('❌ Failed to load recipes from Supabase:', err);
-    uiToast('Failed to load recipes.');
-    allVisibleTagNames = [];
-    recipeRows = [];
-  }
+    const validSelectionKeys = new Set(
+      recipeRows.map((row) => getRecipeQtyKey(row?.id)).filter(Boolean)
+    );
+    Array.from(recipeSelectionKeys).forEach((key) => {
+      if (!validSelectionKeys.has(key)) {
+        recipeSelectionKeys.delete(key);
+      }
+    });
+  };
+
+  let recipeRefreshInFlight = false;
+  let recipeRefreshQueued = false;
+  const refreshRecipesFromRemote = async ({ showErrorToast = true } = {}) => {
+    if (recipeRefreshInFlight) {
+      recipeRefreshQueued = true;
+      return;
+    }
+    recipeRefreshInFlight = true;
+    try {
+      const remoteRows = await dataApi.listRecipes();
+      const remoteTagPool = await dataApi.listVisibleTags();
+      applyRemoteRecipesAndTags(remoteRows, remoteTagPool);
+    } catch (err) {
+      console.error('❌ Failed to load recipes from Supabase:', err);
+      if (showErrorToast) uiToast('Failed to load recipes.');
+      allVisibleTagNames = [];
+      recipeRows = [];
+    } finally {
+      recipeRefreshInFlight = false;
+      if (recipeRefreshQueued) {
+        recipeRefreshQueued = false;
+        queueMicrotask(() => {
+          void refreshRecipesFromRemote({ showErrorToast: false });
+        });
+      }
+      syncRecipesActionButtonState();
+      rerenderFilteredRecipes();
+    }
+  };
+
+  await refreshRecipesFromRemote();
   hydrateRecipeSelectionsFromPlan();
   syncRecipesActionButtonState();
   rerenderFilteredRecipes();
+
+  let unsubscribeRecipeCatalogRealtime = null;
+  if (typeof dataApi.subscribeRecipeCatalogChanges === 'function') {
+    unsubscribeRecipeCatalogRealtime = dataApi.subscribeRecipeCatalogChanges({
+      onChange: () => {
+        void refreshRecipesFromRemote({ showErrorToast: false });
+      },
+    });
+  }
+  window.addEventListener(
+    'pagehide',
+    () => {
+      if (typeof unsubscribeRecipeCatalogRealtime === 'function') {
+        unsubscribeRecipeCatalogRealtime();
+      }
+      unsubscribeRecipeCatalogRealtime = null;
+    },
+    { once: true }
+  );
 
   // --- Recipes action button stub ---
 
@@ -8713,6 +8765,65 @@ async function loadRecipeEditorPage() {
   if (!isRecipeWebMode && typeof revertChanges === 'function') {
     revertChanges();
   }
+
+  let editorRefreshInFlight = false;
+  let editorRefreshQueued = false;
+  let editorRealtimeReady = true;
+  const refreshEditorRecipeFromRemote = async () => {
+    if (editorRefreshInFlight || !editorRealtimeReady) {
+      editorRefreshQueued = true;
+      return;
+    }
+    editorRefreshInFlight = true;
+    try {
+      const latest = await dataApi.getRecipeById(Number(recipeId));
+      if (!latest) {
+        uiToast('Recipe was deleted.');
+        window.location.href = 'recipes.html';
+        return;
+      }
+      const nextRecipe = JSON.parse(JSON.stringify(latest));
+      recipe = nextRecipe;
+      window.recipeData = JSON.parse(JSON.stringify(nextRecipe));
+      window.originalRecipeSnapshot = JSON.parse(JSON.stringify(nextRecipe));
+      if (typeof renderRecipe === 'function') {
+        renderRecipe(nextRecipe);
+      }
+      if (typeof window.recipeEditorResetDirty === 'function') {
+        window.recipeEditorResetDirty();
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to refresh recipe from realtime update:', err);
+    } finally {
+      editorRefreshInFlight = false;
+      if (editorRefreshQueued && editorRealtimeReady) {
+        editorRefreshQueued = false;
+        queueMicrotask(() => {
+          void refreshEditorRecipeFromRemote();
+        });
+      }
+    }
+  };
+
+  let unsubscribeRecipeRealtime = null;
+  if (typeof dataApi.subscribeRecipeById === 'function') {
+    unsubscribeRecipeRealtime = dataApi.subscribeRecipeById(Number(recipeId), {
+      onChange: () => {
+        void refreshEditorRecipeFromRemote();
+      },
+    });
+  }
+  window.addEventListener(
+    'pagehide',
+    () => {
+      editorRealtimeReady = false;
+      if (typeof unsubscribeRecipeRealtime === 'function') {
+        unsubscribeRecipeRealtime();
+      }
+      unsubscribeRecipeRealtime = null;
+    },
+    { once: true }
+  );
 
   try {
     window.scrollTo({ top: 0, behavior: 'auto' });

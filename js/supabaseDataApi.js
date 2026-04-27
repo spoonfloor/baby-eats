@@ -278,6 +278,88 @@
     return getRecipeById(rid);
   }
 
+  function buildRecipeCatalogRealtimeChannelName() {
+    const nonce = Math.random().toString(36).slice(2);
+    return `favorite-eats-recipes-${Date.now()}-${nonce}`;
+  }
+
+  function subscribeRecipeCatalogChanges({ onChange } = {}) {
+    const client = getSupabase();
+    if (!client || typeof client.channel !== 'function') {
+      return () => {};
+    }
+    const handler = typeof onChange === 'function' ? onChange : () => {};
+    const channel = client
+      .channel(buildRecipeCatalogRealtimeChannelName())
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'recipes' },
+        handler
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'recipe_tag_map' },
+        handler
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tags' },
+        handler
+      );
+    channel.subscribe();
+    return () => {
+      try {
+        if (typeof client.removeChannel === 'function') {
+          client.removeChannel(channel);
+        } else if (typeof channel.unsubscribe === 'function') {
+          channel.unsubscribe();
+        }
+      } catch (_) {}
+    };
+  }
+
+  function subscribeRecipeById(recipeId, { onChange } = {}) {
+    const rid = Number(recipeId);
+    if (!Number.isFinite(rid) || rid <= 0) return () => {};
+    const client = getSupabase();
+    if (!client || typeof client.channel !== 'function') {
+      return () => {};
+    }
+    const handler = typeof onChange === 'function' ? onChange : () => {};
+    const channel = client
+      .channel(`${buildRecipeCatalogRealtimeChannelName()}-id-${rid}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'recipes', filter: `id=eq.${rid}` },
+        handler
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recipe_tag_map',
+          filter: `recipe_id=eq.${rid}`,
+        },
+        handler
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tags' },
+        handler
+      );
+    channel.subscribe();
+    return () => {
+      try {
+        if (typeof client.removeChannel === 'function') {
+          client.removeChannel(channel);
+        } else if (typeof channel.unsubscribe === 'function') {
+          channel.unsubscribe();
+        }
+      } catch (_) {}
+    };
+  }
+
   global.favoriteEatsDataApi = Object.freeze({
     listVisibleTags: () =>
       listVisibleTags().catch((err) => {
@@ -303,5 +385,7 @@
       saveRecipeMeta(payload).catch((err) => {
         throw new Error(toErrorMessage(err, 'Failed to save recipe metadata.'));
       }),
+    subscribeRecipeCatalogChanges: (options) => subscribeRecipeCatalogChanges(options),
+    subscribeRecipeById: (recipeId, options) => subscribeRecipeById(recipeId, options),
   });
 })(typeof window !== 'undefined' ? window : globalThis);
