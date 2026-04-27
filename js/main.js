@@ -112,8 +112,7 @@ const FAVORITE_EATS_BUILD = Object.freeze(readFavoriteEatsBuildConfig());
 const FAVORITE_EATS_FORCE_WEB_MODE_EVENT = 'favoriteEatsForceWebModeChanged';
 
 function isForceWebModeEnabled() {
-  // Single-mode app: force-web/planner split removed.
-  return false;
+  return true;
 }
 
 /** Wide recipe-list servings header from this width; keep in sync with `css/styles.css`. */
@@ -4410,14 +4409,8 @@ async function loadRecipesPage() {
   };
   const syncRecipesActionButtonState = () => {
     if (!(recipesActionBtn instanceof HTMLButtonElement)) return;
-    if (!isRecipeWebSelectMode()) {
-      recipesActionBtn.disabled = false;
-      recipesActionBtn.removeAttribute('aria-disabled');
-      return;
-    }
-    const disabled = recipeSelectionKeys.size === 0;
-    recipesActionBtn.disabled = disabled;
-    recipesActionBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    recipesActionBtn.disabled = false;
+    recipesActionBtn.removeAttribute('aria-disabled');
   };
   const makeRecipeStepperDOM = () => {
     const { stepper, minusBtn, qtySpan, plusBtn } =
@@ -5092,44 +5085,11 @@ async function loadRecipesPage() {
   }
 
   const onRecipesActionClick = () => {
-    if (isRecipeWebSelectMode()) {
-      if (!recipeSelectionKeys.size) {
-        uiToast('No recipe selections to clear.');
-        return;
-      }
-      const previousPlan = cloneForUndo(getShoppingPlan(), () =>
-        createEmptyShoppingPlan(),
-      );
-      const previousRecipeSelections = new Set(recipeSelectionKeys);
-      const restoreClearedRecipes = () => {
-        persistShoppingPlan(previousPlan);
-        recipeSelectionKeys.clear();
-        previousRecipeSelections.forEach((key) => {
-          recipeSelectionKeys.add(key);
-        });
-        recipeRowEditingKey = '';
-        recipeRowStepperController?.collapseAll?.();
-        syncRecipesActionButtonState();
-        rerenderFilteredRecipes();
-      };
-      clearShoppingPlanSelections({ clearRecipes: true });
-      recipeSelectionKeys.clear();
-      recipeRowEditingKey = '';
-      recipeRowStepperController?.collapseAll?.();
-      syncRecipesActionButtonState();
-      rerenderFilteredRecipes();
-      uiToastUndo('Recipe selections cleared.', restoreClearedRecipes);
-    } else {
-      void openCreateRecipeDialog();
-    }
+    void openCreateRecipeDialog();
   };
   const syncRecipesAppBarActionChrome = () => {
     if (!recipesActionBtn) return;
-    if (isRecipeWebSelectMode()) {
-      ensureAppBarTextActionPair(recipesActionBtn, 'Reset', 'restart_alt');
-    } else {
-      ensureAppBarTextActionPair(recipesActionBtn, 'Add', 'add');
-    }
+    ensureAppBarTextActionPair(recipesActionBtn, 'Add', 'add');
     syncRecipesActionButtonState();
   };
   if (recipesActionBtn) {
