@@ -1965,7 +1965,6 @@ function normalizeShoppingPlan(rawPlan) {
     if (!Number.isFinite(recipeId) || recipeId <= 0) return;
     if (!Number.isFinite(quantity) || quantity <= 0) return;
     const normalizedKey = String(Math.trunc(recipeId));
-    if (!recipeSelections[normalizedKey]) return;
     recipeMenuOverrides[normalizedKey] = {
       key: normalizedKey,
       recipeId: Math.trunc(recipeId),
@@ -2140,7 +2139,7 @@ function setShoppingPlanRecipeSelection({
     }
     if (!Number.isFinite(nextQty) || nextQty <= 0) {
       delete plan.recipeSelections[normalizedKey];
-      delete plan.recipeMenuOverrides[normalizedKey];
+      // Keep recipeMenuOverrides; modal servings can stay overridden while plan qty is 0.
       return;
     }
     plan.recipeSelections[normalizedKey] = {
@@ -2259,7 +2258,7 @@ function applyRemoteMenuPlanStateToCache(remote, recipeRowsForTitles) {
     const quantity = Number(v.quantity);
     if (!(recipeId > 0) || !(quantity > 0) || !Number.isFinite(quantity)) return;
     const selKey = String(recipeId);
-    if (!recipeSelections[selKey]) return;
+    // Allow override when plan row is absent (plan qty 0); modal still references recipe id.
     recipeMenuOverrides[selKey] = {
       key: selKey,
       recipeId,
@@ -3731,51 +3730,126 @@ async function loadRecipesPage() {
       ? window.formatShoppingQtyForDisplay(rawValue)
       : String(rawValue == null ? '' : rawValue);
   };
+
+  /** Modal servings editing uses quarter steps (matches persistMenuPlanDialogEntries). */
+  const normalizeMenuPlanDialogQty = (rawQty) => {
+    const parsed = Number(rawQty);
+    if (!Number.isFinite(parsed)) return 0.25;
+    const rounded = Math.round(parsed * 4) / 4;
+    return Math.max(0.25, Math.min(99, rounded));
+  };
+
+  const normalizeMenuPlanDialogPlanQty = (rawQty) => {
+    const parsed = Number(rawQty);
+    if (!Number.isFinite(parsed)) return 0;
+    const rounded = Math.round(parsed * 4) / 4;
+    return Math.max(0, Math.min(99, rounded));
+  };
+
+  /** Frozen snapshot of persisted modal overrides at dialog open (recipe id -> qty). */
+  function snapshotOpenModalOverrideQtyByKey() {
+    const raw = getShoppingPlanRecipeMenuOverrides();
+    const out = Object.create(null);
+    Object.keys(raw || {}).forEach((k) => {
+      const e = raw[k];
+      const id = Math.trunc(Number(e?.recipeId != null ? e.recipeId : k));
+      const q = normalizeMenuPlanDialogQty(e?.quantity);
+      if (!(id > 0) || !(q > 0)) return;
+      out[String(id)] = q;
+    });
+    return out;
+  }
+
+  function buildDesiredModalOverrideQtyMapFromDrafts(rowDrafts, eqSameQty) {
+    const out = Object.create(null);
+    rowDrafts.forEach((d) => {
+      if (eqSameQty(d.quantity, d.planQty)) return;
+      out[String(Math.trunc(d.recipeId))] = d.quantity;
+    });
+    return out;
+  }
+
+  function modalOverrideQtyMapsDiffer(desiredMap, openMap, eqSameQty) {
+    const keys = new Set([
+      ...Object.keys(desiredMap || {}),
+      ...Object.keys(openMap || {}),
+    ]);
+    for (const key of keys) {
+      const d = desiredMap[key];
+      const o = openMap[key];
+      const hasD = d !== undefined && Number.isFinite(Number(d));
+      const hasO = o !== undefined && Number.isFinite(Number(o));
+      if (hasD !== hasO) return true;
+      if (!hasD) continue;
+      if (!eqSameQty(Number(d), Number(o))) return true;
+    }
+    return false;
+  }
+
   const getMenuPlanDialogEntries = () => {
     const overrides = getShoppingPlanRecipeMenuOverrides();
-    return Object.values(getShoppingPlanRecipeSelections())
-      .map((entry) => {
-        const recipeId = Number(entry?.recipeId);
-        const canonicalQuantity = Math.max(0, Number(entry?.quantity || 0));
-        if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
-        if (!Number.isFinite(canonicalQuantity) || canonicalQuantity <= 0) {
-          return null;
-        }
-        const row = getRecipeRowById(recipeId);
-        const title =
-          String(entry?.title || '').trim() || String(row?.title || '').trim();
-        if (!title) return null;
-        const overrideEntry = overrides[String(Math.trunc(recipeId))];
-        const overrideRaw = Number(overrideEntry?.quantity);
-        const hasOverride =
-          Number.isFinite(overrideRaw) && overrideRaw > 0;
-        const quantity = hasOverride ? overrideRaw : canonicalQuantity;
-        return {
-          recipeId,
-          title,
-          quantity,
-          baselineQuantity: canonicalQuantity,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) =>
-        String(a.title || '').localeCompare(String(b.title || ''), undefined, {
-          sensitivity: 'base',
-        }),
+    const selections = getShoppingPlanRecipeSelections();
+    const byRecipeId = new Map();
+
+    const tryAdd = (recipeId, canonicalQuantity, titleHint) => {
+      const rid = Number(recipeId);
+      if (!Number.isFinite(rid) || rid <= 0) return;
+      const overrideEntry = overrides[String(Math.trunc(rid))];
+      const overrideRaw = Number(overrideEntry?.quantity);
+      const hasOverride =
+        Number.isFinite(overrideRaw) && overrideRaw > 0;
+      const canonicalQty = Math.max(0, Number(canonicalQuantity || 0));
+      if (!(canonicalQty > 0 || hasOverride)) return;
+
+      const row = getRecipeRowById(rid);
+      const title =
+        String(titleHint || '').trim() ||
+        String(row?.title || '').trim();
+      if (!title) return;
+
+      const quantity = hasOverride ? overrideRaw : canonicalQty;
+      byRecipeId.set(rid, {
+        recipeId: rid,
+        title,
+        quantity,
+        baselineQuantity: canonicalQty,
+      });
+    };
+
+    Object.values(selections).forEach((entry) => {
+      tryAdd(entry?.recipeId, entry?.quantity, entry?.title);
+    });
+
+    Object.keys(overrides).forEach((key) => {
+      const overrideEntry = overrides[key];
+      const rid = Math.trunc(
+        Number(overrideEntry?.recipeId != null ? overrideEntry.recipeId : key),
       );
+      if (!(rid > 0) || byRecipeId.has(rid)) return;
+      const overrideRaw = Number(overrideEntry?.quantity);
+      if (!Number.isFinite(overrideRaw) || overrideRaw <= 0) return;
+      const sel = selections[String(rid)];
+      const canonicalQty = sel ? Math.max(0, Number(sel.quantity || 0)) : 0;
+      tryAdd(rid, canonicalQty, sel?.title);
+    });
+
+    return [...byRecipeId.values()].sort((a, b) =>
+      String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+        sensitivity: 'base',
+      }),
+    );
   };
-  const buildMenuPlanDialogListNode = (selectionEntries) => {
+  const buildMenuPlanDialogListNode = (
+    selectionEntries,
+    openModalOverrideQtyByKey,
+  ) => {
     const draftEntries = Array.isArray(selectionEntries) ? selectionEntries : [];
+    const openSnapshot = openModalOverrideQtyByKey || Object.create(null);
     const listEl = document.createElement('ul');
     listEl.className = 'menu-plan-dialog-list';
     let onChange = null;
 
-    const normalizeQuantity = (rawQty) => {
-      const parsed = Number(rawQty);
-      if (!Number.isFinite(parsed)) return 0.25;
-      const rounded = Math.round(parsed * 4) / 4;
-      return Math.max(0.25, Math.min(99, rounded));
-    };
+    const normalizeQuantity = normalizeMenuPlanDialogQty;
     const formatQuantityDisplay = (value) => {
       if (typeof window.decimalToFractionDisplay === 'function') {
         const formatted = window.decimalToFractionDisplay(value, [2, 4]);
@@ -3795,6 +3869,10 @@ async function loadRecipesPage() {
     const quantitiesAreEqual = (a, b) =>
       Math.abs(Number(a) - Number(b)) < 1e-6;
 
+    /** One source of truth: row matches Revert target (plan) iff this is false. */
+    const draftDiffersFromPlan = (d) =>
+      !quantitiesAreEqual(d.quantity, d.planQty);
+
     if (!draftEntries.length) {
       const itemEl = document.createElement('li');
       itemEl.textContent = 'No recipes selected yet.';
@@ -3802,36 +3880,61 @@ async function loadRecipesPage() {
       return {
         listEl,
         readEntries: () => [],
-        isDirty: () => false,
+        canMenuPlanSave: () => false,
+        canMenuPlanRevert: () => false,
         setOnChange: (listener) => {
           onChange = typeof listener === 'function' ? listener : null;
-          if (onChange) onChange({ isDirty: false });
+          if (onChange) {
+            onChange({
+              canMenuPlanSave: false,
+              canMenuPlanRevert: false,
+            });
+          }
         },
         resetFrom: () => {},
       };
     }
 
     const rowDrafts = [];
-    const isDirty = () =>
-      rowDrafts.some(
-        (draft) => !quantitiesAreEqual(draft.quantity, draft.initialQuantity),
+
+    /** Save enabled iff persisted modal overrides would change vs snapshot at dialog open. */
+    const canMenuPlanSave = () =>
+      modalOverrideQtyMapsDiffer(
+        buildDesiredModalOverrideQtyMapFromDrafts(
+          rowDrafts,
+          quantitiesAreEqual,
+        ),
+        openSnapshot,
+        quantitiesAreEqual,
       );
+
+    /** Revert enabled iff some row's draft still differs from plan (stepper), independent of Save. */
+    const canMenuPlanRevert = () => rowDrafts.some(draftDiffersFromPlan);
+
     const notifyChanged = () => {
-      if (typeof onChange === 'function') onChange({ isDirty: isDirty() });
+      if (typeof onChange === 'function') {
+        onChange({
+          canMenuPlanSave: canMenuPlanSave(),
+          canMenuPlanRevert: canMenuPlanRevert(),
+        });
+      }
     };
     draftEntries.forEach((entry) => {
       const recipeId = Number(entry?.recipeId);
       const title = String(entry?.title || '').trim();
       if (!Number.isFinite(recipeId) || recipeId <= 0 || !title) return;
-      // initialQuantity = effective value at dialog open (for unsaved dirty only). Plan/stepper
-      // baseline stays on the entry as `baselineQuantity` for Revert.
-      const quantity = normalizeQuantity(entry?.quantity);
-      const initialQuantity = quantity;
+      const savedEffectiveQty = normalizeQuantity(entry?.quantity);
+      const baselineRaw = Number(entry?.baselineQuantity);
+      const planQty = Number.isFinite(baselineRaw)
+        ? normalizeMenuPlanDialogPlanQty(baselineRaw)
+        : savedEffectiveQty;
+      const quantity = savedEffectiveQty;
       const draft = {
         recipeId,
         title,
+        planQty,
+        savedEffectiveQty,
         quantity,
-        initialQuantity,
         qtyValueBtn: null,
         qtyValueInput: null,
       };
@@ -3857,9 +3960,9 @@ async function loadRecipesPage() {
       qtyValueInput.dataset.dialogEnterCommitsInline = '1';
       qtyValueInput.setAttribute('aria-label', `Servings for ${title}`);
 
+      /** Purple row = same as per-row revertability (draft differs from plan). */
       const updateEditedState = () => {
-        const isEdited = !quantitiesAreEqual(draft.quantity, draft.initialQuantity);
-        itemEl.classList.toggle('is-edited', isEdited);
+        itemEl.classList.toggle('is-edited', draftDiffersFromPlan(draft));
       };
       const showButtonOnly = () => {
         qtyValueInput.style.display = 'none';
@@ -3916,6 +4019,7 @@ async function loadRecipesPage() {
       unitEl.textContent = ' serv.)';
       itemEl.appendChild(unitEl);
       listEl.appendChild(itemEl);
+      updateEditedState();
     });
 
     return {
@@ -3926,7 +4030,8 @@ async function loadRecipesPage() {
           title,
           quantity,
         })),
-      isDirty,
+      canMenuPlanSave,
+      canMenuPlanRevert,
       setOnChange: (listener) => {
         onChange = typeof listener === 'function' ? listener : null;
         notifyChanged();
@@ -3937,14 +4042,14 @@ async function loadRecipesPage() {
             .map((entry) => {
               const recipeId = Number(entry?.recipeId);
               if (!Number.isFinite(recipeId) || recipeId <= 0) return null;
-              return [recipeId, normalizeQuantity(entry?.quantity)];
+              return [recipeId, normalizeMenuPlanDialogPlanQty(entry?.quantity)];
             })
             .filter(Boolean),
         );
         rowDrafts.forEach((draft) => {
           draft.quantity = quantityByRecipeId.has(draft.recipeId)
             ? quantityByRecipeId.get(draft.recipeId)
-            : draft.initialQuantity;
+            : draft.savedEffectiveQty;
           const qtyBtn = draft.qtyValueBtn;
           const qtyInput = draft.qtyValueInput;
           if (qtyBtn) qtyBtn.textContent = formatQuantityDisplay(draft.quantity);
@@ -3953,8 +4058,7 @@ async function loadRecipesPage() {
           if (qtyBtn) qtyBtn.style.display = '';
           const itemEl = qtyBtn ? qtyBtn.closest('li') : null;
           if (itemEl) {
-            const isEdited = !quantitiesAreEqual(draft.quantity, draft.initialQuantity);
-            itemEl.classList.toggle('is-edited', isEdited);
+            itemEl.classList.toggle('is-edited', draftDiffersFromPlan(draft));
           }
         });
         notifyChanged();
@@ -3978,9 +4082,14 @@ async function loadRecipesPage() {
         const recipeId = Number(entry?.recipeId);
         const numericQty = Number(entry?.quantity);
         if (!Number.isFinite(recipeId) || recipeId <= 0) return;
-        if (!Number.isFinite(numericQty) || numericQty <= 0) return;
+        if (!Number.isFinite(numericQty) || numericQty <= 0) {
+          const k0 = String(Math.trunc(recipeId));
+          if (plan.recipeMenuOverrides && plan.recipeMenuOverrides[k0]) {
+            delete plan.recipeMenuOverrides[k0];
+          }
+          return;
+        }
         const key = String(Math.trunc(recipeId));
-        if (!canonical[key]) return;
         const quartered = Math.round(numericQty * 4) / 4;
         const quantity = Math.max(0.25, Math.min(99, quartered));
         const canonicalQty = Number(canonical[key]?.quantity || 0);
@@ -4008,8 +4117,12 @@ async function loadRecipesPage() {
   };
   const openMenuPlanDialog = async () => {
     if (!window.ui || typeof window.ui.dialog !== 'function') return;
+    const openModalOverrideQtyByKey = snapshotOpenModalOverrideQtyByKey();
     const autoGeneratedEntries = getMenuPlanDialogEntries();
-    const listState = buildMenuPlanDialogListNode(autoGeneratedEntries);
+    const listState = buildMenuPlanDialogListNode(
+      autoGeneratedEntries,
+      openModalOverrideQtyByKey,
+    );
     await window.ui.dialog({
       title: 'Menu plan',
       message: "Here's what's on the menu. Bon appétit!",
@@ -4017,11 +4130,11 @@ async function loadRecipesPage() {
       tertiaryText: 'Revert',
       cancelText: 'Cancel',
       confirmText: 'Save',
-      confirmDisabled: !listState.isDirty(),
-      tertiaryDisabled: !listState.isDirty(),
+      confirmDisabled: !listState.canMenuPlanSave(),
+      tertiaryDisabled: !listState.canMenuPlanRevert(),
       showClose: true,
       beforeDismiss: async (surface) => {
-        if (!listState.isDirty()) return true;
+        if (!listState.canMenuPlanSave()) return true;
         surface.detach();
         const discardChoice = await window.ui.dialog({
           title: 'Discard changes',
@@ -4041,20 +4154,19 @@ async function loadRecipesPage() {
         return true;
       },
       onReady: ({ setConfirmDisabled, setTertiaryDisabled }) => {
-        listState.setOnChange(({ isDirty }) => {
-          const disableActions = !isDirty;
-          setConfirmDisabled(disableActions);
-          setTertiaryDisabled(disableActions);
-        });
+        listState.setOnChange(
+          ({ canMenuPlanSave: canSave, canMenuPlanRevert: canRevert }) => {
+            setConfirmDisabled(!canSave);
+            setTertiaryDisabled(!canRevert);
+          },
+        );
       },
       onTertiary: () => {
         const baselineEntries = autoGeneratedEntries.map((entry) => ({
           ...entry,
-          quantity:
-            Number.isFinite(Number(entry?.baselineQuantity)) &&
-            Number(entry.baselineQuantity) > 0
-              ? Number(entry.baselineQuantity)
-              : Number(entry?.quantity || 0),
+          quantity: Number.isFinite(Number(entry?.baselineQuantity))
+            ? Number(entry.baselineQuantity)
+            : Number(entry?.quantity || 0),
         }));
         listState.resetFrom(baselineEntries);
       },

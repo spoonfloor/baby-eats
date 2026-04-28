@@ -92,6 +92,29 @@ function run() {
     helpers.normalizeShoppingPlan({
       itemSelections: {},
       recipeSelections: {},
+      recipeMenuOverrides: {
+        42: {
+          recipeId: 42,
+          quantity: 2,
+        },
+      },
+      storeOrder: ['9', 4, 'bad', 4, 1],
+      selectedStoreIds: ['5', 9, 5, 0, 'nope'],
+    }).recipeMenuOverrides,
+    {
+      42: {
+        key: '42',
+        recipeId: 42,
+        quantity: 2,
+      },
+    },
+    'shopping plan normalization should preserve override-only recipe rows'
+  );
+
+  assertJsonEqual(
+    helpers.normalizeShoppingPlan({
+      itemSelections: {},
+      recipeSelections: {},
       storeOrder: ['9', 4, 'bad', 4, 1],
       selectedStoreIds: ['5', 9, 5, 0, 'nope'],
     }).storeOrder,
