@@ -286,28 +286,6 @@ function ensurePresenceNickname() {
   }
 }
 
-function setPresenceIndicatorText(text) {
-  const label = document.getElementById('appBarPresenceIndicator');
-  if (!(label instanceof HTMLElement)) return;
-  const next = String(text || '').trim();
-  label.textContent = next;
-  label.hidden = !next;
-}
-
-function ensurePresenceIndicatorMount() {
-  const title = document.getElementById('appBarTitle');
-  if (!(title instanceof HTMLElement)) return;
-  const existing = document.getElementById('appBarPresenceIndicator');
-  if (existing instanceof HTMLElement) return existing;
-  const indicator = document.createElement('span');
-  indicator.id = 'appBarPresenceIndicator';
-  indicator.className = 'app-bar-presence-indicator nav-text';
-  indicator.hidden = true;
-  indicator.setAttribute('aria-live', 'polite');
-  title.insertAdjacentElement('afterend', indicator);
-  return indicator;
-}
-
 async function bootSharedPresence({ pageId } = {}) {
   if (!['recipes', 'recipe-editor'].includes(String(pageId || ''))) return;
   let dataApi;
@@ -321,14 +299,6 @@ async function bootSharedPresence({ pageId } = {}) {
   const localNickname = ensurePresenceNickname();
   let lastToastAt = 0;
   let lastSignature = '';
-  const mountProbe = window.setInterval(() => {
-    const mounted = ensurePresenceIndicatorMount();
-    if (mounted) {
-      try {
-        clearInterval(mountProbe);
-      } catch (_) {}
-    }
-  }, 1000);
 
   const cleanup = dataApi.subscribeSharedPresence({
     clientId: localClientId,
@@ -346,16 +316,6 @@ async function bootSharedPresence({ pageId } = {}) {
       });
       const uniqueOthers = Array.from(new Set(others)).sort((a, b) => a.localeCompare(b));
       const signature = uniqueOthers.join('|');
-      const indicator = ensurePresenceIndicatorMount();
-      if (indicator) {
-        if (uniqueOthers.length === 0) {
-          setPresenceIndicatorText('');
-        } else if (uniqueOthers.length === 1) {
-          setPresenceIndicatorText(`${uniqueOthers[0]} active now`);
-        } else {
-          setPresenceIndicatorText(`${uniqueOthers.length} active now`);
-        }
-      }
       const now = Date.now();
       const changed = signature !== lastSignature;
       if (
@@ -379,9 +339,6 @@ async function bootSharedPresence({ pageId } = {}) {
   });
 
   const onPageHide = () => {
-    try {
-      clearInterval(mountProbe);
-    } catch (_) {}
     try {
       cleanup?.();
     } catch (_) {}
