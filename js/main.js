@@ -367,7 +367,11 @@ async function bootSharedPresence({ pageId } = {}) {
           uniqueOthers.length === 1
             ? `${uniqueOthers[0]} is active right now`
             : `${uniqueOthers.length} others are active right now`;
-        uiToast(headline, { timeoutMs: 5000 });
+        uiToast(headline, {
+          timeoutMs: 8000,
+          actionText: 'Dismiss',
+          onAction: () => {},
+        });
         lastToastAt = now;
       }
       lastSignature = signature;
@@ -3655,6 +3659,7 @@ async function loadRecipesPage() {
   let activeRecipeKey = '';
   let recipeRowInlineEditInput = null;
   let recipeRenderDeferred = false;
+  let menuPlanDialogListStateRef = null;
   const recipeWebServingsUi = window.recipeWebModeServings || {};
   const recipeWebServingsChangedEventName =
     window.favoriteEatsRecipeWebServings?.changeEventName ||
@@ -3746,7 +3751,7 @@ async function loadRecipesPage() {
     return Math.max(0, Math.min(99, rounded));
   };
 
-  /** Frozen snapshot of persisted modal overrides at dialog open (recipe id -> qty). */
+  /** Snapshot of persisted modal overrides at dialog open / latest clean resync (recipe id -> qty). */
   function snapshotOpenModalOverrideQtyByKey() {
     const raw = getShoppingPlanRecipeMenuOverrides();
     const out = Object.create(null);
@@ -3873,32 +3878,12 @@ async function loadRecipesPage() {
     const draftDiffersFromPlan = (d) =>
       !quantitiesAreEqual(d.quantity, d.planQty);
 
-    if (!draftEntries.length) {
-      const itemEl = document.createElement('li');
-      itemEl.textContent = 'No recipes selected yet.';
-      listEl.appendChild(itemEl);
-      return {
-        listEl,
-        readEntries: () => [],
-        canMenuPlanSave: () => false,
-        canMenuPlanRevert: () => false,
-        setOnChange: (listener) => {
-          onChange = typeof listener === 'function' ? listener : null;
-          if (onChange) {
-            onChange({
-              canMenuPlanSave: false,
-              canMenuPlanRevert: false,
-            });
-          }
-        },
-        resetFrom: () => {},
-      };
-    }
-
     const rowDrafts = [];
+    let remoteResyncPending = false;
 
-    /** Save enabled iff persisted modal overrides would change vs snapshot at dialog open. */
+    /** Save enabled iff local drafts differ from the last saved modal baseline. */
     const canMenuPlanSave = () =>
+      rowDrafts.length > 0 &&
       modalOverrideQtyMapsDiffer(
         buildDesiredModalOverrideQtyMapFromDrafts(
           rowDrafts,
@@ -3919,7 +3904,47 @@ async function loadRecipesPage() {
         });
       }
     };
-    draftEntries.forEach((entry) => {
+
+    const hasActiveQtyInput = () =>
+      rowDrafts.some(
+        (draft) =>
+          draft.qtyValueInput instanceof HTMLElement &&
+          draft.qtyValueInput.style.display !== 'none',
+      );
+
+    const replaceOpenSnapshot = (nextSnapshot) => {
+      Object.keys(openSnapshot).forEach((key) => delete openSnapshot[key]);
+      Object.assign(openSnapshot, nextSnapshot || {});
+    };
+
+    const tryApplyPendingRemoteResync = () => {
+      if (
+        !remoteResyncPending ||
+        canMenuPlanSave() ||
+        hasActiveQtyInput()
+      ) {
+        return;
+      }
+      remoteResyncPending = false;
+      replaceOpenSnapshot(snapshotOpenModalOverrideQtyByKey());
+      syncListBodyFromEntries(getMenuPlanDialogEntries());
+      notifyChanged();
+    };
+
+    const syncDraftDisplay = (draft) => {
+      const qtyBtn = draft.qtyValueBtn;
+      const qtyInput = draft.qtyValueInput;
+      if (qtyBtn) qtyBtn.textContent = formatQuantityDisplay(draft.quantity);
+      if (qtyInput) qtyInput.value = formatQuantityForInput(draft.quantity);
+      if (qtyInput) qtyInput.style.display = 'none';
+      if (qtyBtn) qtyBtn.style.display = '';
+      const itemEl = qtyBtn ? qtyBtn.closest('li') : null;
+      if (itemEl) {
+        itemEl.classList.toggle('is-edited', draftDiffersFromPlan(draft));
+      }
+    };
+
+    function attachRow(entry) {
       const recipeId = Number(entry?.recipeId);
       const title = String(entry?.title || '').trim();
       if (!Number.isFinite(recipeId) || recipeId <= 0 || !title) return;
@@ -3982,6 +4007,7 @@ async function loadRecipesPage() {
         updateEditedState();
         showButtonOnly();
         notifyChanged();
+        tryApplyPendingRemoteResync();
       };
       const enterEditMode = () => {
         syncQtyDisplay();
@@ -4006,6 +4032,7 @@ async function loadRecipesPage() {
           event.preventDefault();
           event.stopPropagation();
           showButtonOnly();
+          tryApplyPendingRemoteResync();
         }
       });
 
@@ -4020,7 +4047,22 @@ async function loadRecipesPage() {
       itemEl.appendChild(unitEl);
       listEl.appendChild(itemEl);
       updateEditedState();
-    });
+    }
+
+    function syncListBodyFromEntries(entries) {
+      const nextEntries = Array.isArray(entries) ? entries : [];
+      listEl.replaceChildren();
+      rowDrafts.length = 0;
+      if (!nextEntries.length) {
+        const itemEl = document.createElement('li');
+        itemEl.textContent = 'No recipes selected yet.';
+        listEl.appendChild(itemEl);
+        return;
+      }
+      nextEntries.forEach((entry) => attachRow(entry));
+    }
+
+    syncListBodyFromEntries(draftEntries);
 
     return {
       listEl,
@@ -4032,6 +4074,15 @@ async function loadRecipesPage() {
         })),
       canMenuPlanSave,
       canMenuPlanRevert,
+      resyncFromRemotePlan: () => {
+        if (canMenuPlanSave() || hasActiveQtyInput()) {
+          remoteResyncPending = true;
+          return;
+        }
+        replaceOpenSnapshot(snapshotOpenModalOverrideQtyByKey());
+        syncListBodyFromEntries(getMenuPlanDialogEntries());
+        notifyChanged();
+      },
       setOnChange: (listener) => {
         onChange = typeof listener === 'function' ? listener : null;
         notifyChanged();
@@ -4050,18 +4101,10 @@ async function loadRecipesPage() {
           draft.quantity = quantityByRecipeId.has(draft.recipeId)
             ? quantityByRecipeId.get(draft.recipeId)
             : draft.savedEffectiveQty;
-          const qtyBtn = draft.qtyValueBtn;
-          const qtyInput = draft.qtyValueInput;
-          if (qtyBtn) qtyBtn.textContent = formatQuantityDisplay(draft.quantity);
-          if (qtyInput) qtyInput.value = formatQuantityForInput(draft.quantity);
-          if (qtyInput) qtyInput.style.display = 'none';
-          if (qtyBtn) qtyBtn.style.display = '';
-          const itemEl = qtyBtn ? qtyBtn.closest('li') : null;
-          if (itemEl) {
-            itemEl.classList.toggle('is-edited', draftDiffersFromPlan(draft));
-          }
+          syncDraftDisplay(draft);
         });
         notifyChanged();
+        tryApplyPendingRemoteResync();
       },
     };
   };
@@ -4123,58 +4166,65 @@ async function loadRecipesPage() {
       autoGeneratedEntries,
       openModalOverrideQtyByKey,
     );
-    await window.ui.dialog({
-      title: 'Menu plan',
-      message: "Here's what's on the menu. Bon appétit!",
-      messageNode: listState.listEl,
-      tertiaryText: 'Revert',
-      cancelText: 'Cancel',
-      confirmText: 'Save',
-      confirmDisabled: !listState.canMenuPlanSave(),
-      tertiaryDisabled: !listState.canMenuPlanRevert(),
-      showClose: true,
-      beforeDismiss: async (surface) => {
-        if (!listState.canMenuPlanSave()) return true;
-        surface.detach();
-        const discardChoice = await window.ui.dialog({
-          title: 'Discard changes',
-          message:
-            'You have unsaved changes. Are you sure you want to discard them?',
-          cancelText: 'Go back',
-          confirmText: 'Discard',
-          danger: true,
-          showCancel: true,
-          closeOnBackdrop: true,
-        });
-        if (discardChoice == null) {
-          surface.attach();
-          surface.focusPrimary();
-          return false;
-        }
-        return true;
-      },
-      onReady: ({ setConfirmDisabled, setTertiaryDisabled }) => {
-        listState.setOnChange(
-          ({ canMenuPlanSave: canSave, canMenuPlanRevert: canRevert }) => {
-            setConfirmDisabled(!canSave);
-            setTertiaryDisabled(!canRevert);
-          },
-        );
-      },
-      onTertiary: () => {
-        const baselineEntries = autoGeneratedEntries.map((entry) => ({
-          ...entry,
-          quantity: Number.isFinite(Number(entry?.baselineQuantity))
-            ? Number(entry.baselineQuantity)
-            : Number(entry?.quantity || 0),
-        }));
-        listState.resetFrom(baselineEntries);
-      },
-      onConfirm: () => {
-        persistMenuPlanDialogEntries(listState.readEntries());
-      },
-      closeOnBackdrop: true,
-    });
+    menuPlanDialogListStateRef = listState;
+    try {
+      await window.ui.dialog({
+        title: 'Menu plan',
+        message: "Here's what's on the menu. Bon appétit!",
+        messageNode: listState.listEl,
+        tertiaryText: 'Revert',
+        cancelText: 'Cancel',
+        confirmText: 'Save',
+        confirmDisabled: !listState.canMenuPlanSave(),
+        tertiaryDisabled: !listState.canMenuPlanRevert(),
+        showClose: true,
+        beforeDismiss: async (surface) => {
+          if (!listState.canMenuPlanSave()) return true;
+          surface.detach();
+          const discardChoice = await window.ui.dialog({
+            title: 'Discard changes',
+            message:
+              'You have unsaved changes. Are you sure you want to discard them?',
+            cancelText: 'Go back',
+            confirmText: 'Discard',
+            danger: true,
+            showCancel: true,
+            closeOnBackdrop: true,
+          });
+          if (discardChoice == null) {
+            surface.attach();
+            surface.focusPrimary();
+            return false;
+          }
+          return true;
+        },
+        onReady: ({ setConfirmDisabled, setTertiaryDisabled }) => {
+          listState.setOnChange(
+            ({ canMenuPlanSave: canSave, canMenuPlanRevert: canRevert }) => {
+              setConfirmDisabled(!canSave);
+              setTertiaryDisabled(!canRevert);
+            },
+          );
+        },
+        onTertiary: () => {
+          const baselineEntries = getMenuPlanDialogEntries().map((entry) => ({
+            ...entry,
+            quantity: Number.isFinite(Number(entry?.baselineQuantity))
+              ? Number(entry.baselineQuantity)
+              : Number(entry?.quantity || 0),
+          }));
+          listState.resetFrom(baselineEntries);
+        },
+        onConfirm: () => {
+          persistMenuPlanDialogEntries(listState.readEntries());
+        },
+        closeOnBackdrop: true,
+      });
+    } finally {
+      if (menuPlanDialogListStateRef === listState) {
+        menuPlanDialogListStateRef = null;
+      }
+    }
   };
   const initializeRecipeRowServings = (recipeRow) => {
     const bounds = getRecipeRowBounds(recipeRow);
@@ -4303,6 +4353,7 @@ async function loadRecipesPage() {
     if (changed) rerenderFilteredRecipes();
   };
   const hydrateRecipeSelectionsFromPlan = () => {
+    recipeSelectionKeys.clear();
     Object.values(getShoppingPlanRecipeSelections()).forEach((entry) => {
       const recipeId = Number(entry?.recipeId);
       const quantity = Math.max(0, Math.min(99, Number(entry?.quantity || 0)));
@@ -4819,6 +4870,13 @@ async function loadRecipesPage() {
             applyRemoteMenuPlanStateToCache(remote, recipeRows);
             hydrateRecipeSelectionsFromPlan();
             rerenderFilteredRecipes();
+            if (
+              menuPlanDialogListStateRef &&
+              typeof menuPlanDialogListStateRef.resyncFromRemotePlan ===
+                'function'
+            ) {
+              menuPlanDialogListStateRef.resyncFromRemotePlan();
+            }
           } catch (err) {
             console.error('❌ Menu plan refresh failed:', err);
           }
